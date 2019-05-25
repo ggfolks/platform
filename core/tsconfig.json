@@ -19,6 +19,14 @@
     "downlevelIteration": true,
     "suppressImplicitAnyIndexErrors": true
   },
+  "typedocOptions": {
+    "mode": "modules",
+    "module": "commonjs",
+    "out": "docs",
+    "exclude": "**/test.*",
+    "excludeNotExported": true,
+    "excludePrivate": true
+  }
   "exclude": [
     "node_modules",
     "static"

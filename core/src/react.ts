@@ -328,11 +328,11 @@ export function join (...sources :Array<Value<any>>) :Value<any[]> {
   return new JoinedValue(sources)
 }
 
-export function join2<A,B>(a :Value<A>, b :Value<B>) :Value<[A,B]> {
+export function join2<A,B> (a :Value<A>, b :Value<B>) :Value<[A,B]> {
   return join(a, b) as Value<[A,B]>
 }
 
-export function join3<A,B,C>(a :Value<A>, b :Value<B>, c :Value<C>) :Value<[A,B,C]> {
+export function join3<A,B,C> (a :Value<A>, b :Value<B>, c :Value<C>) :Value<[A,B,C]> {
   return join(a, b, c) as Value<[A,B,C]>
 }
 
