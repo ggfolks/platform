@@ -1,0 +1,171 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN" "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd">
+<svg version="1.1" xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:xl="http://www.w3.org/1999/xlink" xmlns="http://www.w3.org/2000/svg" viewBox="79 -8 660 491" width="660" height="491">
+  <defs>
+    <font-face font-family="Helvetica Neue" font-size="16" panose-1="2 0 5 3 0 0 0 2 0 4" units-per-em="1000" underline-position="-100" underline-thickness="50" slope="0" x-height="517" cap-height="714" ascent="951.9958" descent="-212.99744" font-weight="400">
+      <font-face-src>
+        <font-face-name name="HelveticaNeue"/>
+      </font-face-src>
+    </font-face>
+    <marker orient="auto" overflow="visible" markerUnits="strokeWidth" id="FilledArrow_Marker" stroke-linejoin="miter" stroke-miterlimit="10" viewBox="-1 -4 10 8" markerWidth="10" markerHeight="8" color="black">
+      <g>
+        <path d="M 8 0 L 0 -3 L 0 3 Z" fill="currentColor" stroke="currentColor" stroke-width="1"/>
+      </g>
+    </marker>
+  </defs>
+  <metadata> Produced by OmniGraffle 7.10.2 
+    <dc:date>2019-05-25 15:37:47 +0000</dc:date>
+  </metadata>
+  <g id="Canvas_1" fill="none" stroke-opacity="1" stroke-dasharray="none" fill-opacity="1" stroke="none">
+    <title>Canvas 1</title>
+    <g id="Canvas_1: Layer 1">
+      <title>Layer 1</title>
+      <g id="Graphic_2">
+        <path d="M 265 -7 L 375 -7 C 379.97056 -7 384 -2.9705627 384 2 L 384 32 C 384 36.970563 379.97056 41 375 41 L 265 41 C 260.02944 41 256 36.970563 256 32 L 256 2 C 256 -2.9705627 260.02944 -7 265 -7 Z" fill="white"/>
+        <path d="M 265 -7 L 375 -7 C 379.97056 -7 384 -2.9705627 384 2 L 384 32 C 384 36.970563 379.97056 41 375 41 L 265 41 C 260.02944 41 256 36.970563 256 32 L 256 2 C 256 -2.9705627 260.02944 -7 265 -7 Z" stroke="black" stroke-linecap="round" stroke-linejoin="round" stroke-width="1"/>
+        <text transform="translate(261 7)" fill="black">
+          <tspan font-family="Helvetica Neue" font-size="16" font-weight="400" fill="black" x="30.56" y="15">tfw.core</tspan>
+        </text>
+      </g>
+      <g id="Graphic_3">
+        <path d="M 442 113.5 L 552 113.5 C 556.97056 113.5 561 117.52944 561 122.5 L 561 152.5 C 561 157.47056 556.97056 161.5 552 161.5 L 442 161.5 C 437.02944 161.5 433 157.47056 433 152.5 L 433 122.5 C 433 117.52944 437.02944 113.5 442 113.5 Z" fill="white"/>
+        <path d="M 442 113.5 L 552 113.5 C 556.97056 113.5 561 117.52944 561 122.5 L 561 152.5 C 561 157.47056 556.97056 161.5 552 161.5 L 442 161.5 C 437.02944 161.5 433 157.47056 433 152.5 L 433 122.5 C 433 117.52944 437.02944 113.5 442 113.5 Z" stroke="black" stroke-linecap="round" stroke-linejoin="round" stroke-width="1"/>
+        <text transform="translate(438 127.5)" fill="black">
+          <tspan font-family="Helvetica Neue" font-size="16" font-weight="400" fill="black" x="30.408" y="15">tfw.data</tspan>
+        </text>
+      </g>
+      <g id="Graphic_4">
+        <path d="M 265 113 L 375 113 C 379.97056 113 384 117.02944 384 122 L 384 152 C 384 156.97056 379.97056 161 375 161 L 265 161 C 260.02944 161 256 156.97056 256 152 L 256 122 C 256 117.02944 260.02944 113 265 113 Z" fill="white"/>
+        <path d="M 265 113 L 375 113 C 379.97056 113 384 117.02944 384 122 L 384 152 C 384 156.97056 379.97056 161 375 161 L 265 161 C 260.02944 161 256 156.97056 256 152 L 256 122 C 256 117.02944 260.02944 113 265 113 Z" stroke="black" stroke-linecap="round" stroke-linejoin="round" stroke-width="1"/>
+        <text transform="translate(261 127)" fill="black">
+          <tspan font-family="Helvetica Neue" font-size="16" font-weight="400" fill="black" x="24.632" y="15">tfw.space</tspan>
+        </text>
+      </g>
+      <g id="Graphic_5">
+        <path d="M 442 -7 L 552 -7 C 556.97056 -7 561 -2.9705627 561 2 L 561 32 C 561 36.970563 556.97056 41 552 41 L 442 41 C 437.02944 41 433 36.970563 433 32 L 433 2 C 433 -2.9705627 437.02944 -7 442 -7 Z" fill="white"/>
+        <path d="M 442 -7 L 552 -7 C 556.97056 -7 561 -2.9705627 561 2 L 561 32 C 561 36.970563 556.97056 41 552 41 L 442 41 C 437.02944 41 433 36.970563 433 32 L 433 2 C 433 -2.9705627 437.02944 -7 442 -7 Z" stroke="black" stroke-linecap="round" stroke-linejoin="round" stroke-width="1"/>
+        <text transform="translate(438 7)" fill="black">
+          <tspan font-family="Helvetica Neue" font-size="16" font-weight="400" fill="black" x="30.552" y="15">tfw.auth</tspan>
+        </text>
+      </g>
+      <g id="Graphic_6">
+        <path d="M 619 113 L 729 113 C 733.9706 113 738 117.02944 738 122 L 738 152 C 738 156.97056 733.9706 161 729 161 L 619 161 C 614.02944 161 610 156.97056 610 152 L 610 122 C 610 117.02944 614.02944 113 619 113 Z" fill="white"/>
+        <path d="M 619 113 L 729 113 C 733.9706 113 738 117.02944 738 122 L 738 152 C 738 156.97056 733.9706 161 729 161 L 619 161 C 614.02944 161 610 156.97056 610 152 L 610 122 C 610 117.02944 614.02944 113 619 113 Z" stroke="black" stroke-linecap="round" stroke-linejoin="round" stroke-width="1"/>
+        <text transform="translate(615 127)" fill="black">
+          <tspan font-family="Helvetica Neue" font-size="16" font-weight="400" fill="black" x="28.48" y="15">tfw.ident</tspan>
+        </text>
+      </g>
+      <g id="Graphic_9">
+        <path d="M 89 193 L 199 193 C 203.97056 193 208 197.02944 208 202 L 208 232 C 208 236.97056 203.97056 241 199 241 L 89 241 C 84.02944 241 80 236.97056 80 232 L 80 202 C 80 197.02944 84.02944 193 89 193 Z" fill="white"/>
+        <path d="M 89 193 L 199 193 C 203.97056 193 208 197.02944 208 202 L 208 232 C 208 236.97056 203.97056 241 199 241 L 89 241 C 84.02944 241 80 236.97056 80 232 L 80 202 C 80 197.02944 84.02944 193 89 193 Z" stroke="black" stroke-linecap="round" stroke-linejoin="round" stroke-width="1"/>
+        <text transform="translate(85 207)" fill="black">
+          <tspan font-family="Helvetica Neue" font-size="16" font-weight="400" fill="black" x="24.192" y="15">tfw.config</tspan>
+        </text>
+      </g>
+      <g id="Graphic_10">
+        <path d="M 266 354 L 376 354 C 380.97056 354 385 358.02944 385 363 L 385 393 C 385 397.97056 380.97056 402 376 402 L 266 402 C 261.02944 402 257 397.97056 257 393 L 257 363 C 257 358.02944 261.02944 354 266 354 Z" fill="white"/>
+        <path d="M 266 354 L 376 354 C 380.97056 354 385 358.02944 385 363 L 385 393 C 385 397.97056 380.97056 402 376 402 L 266 402 C 261.02944 402 257 397.97056 257 393 L 257 363 C 257 358.02944 261.02944 354 266 354 Z" stroke="black" stroke-linecap="round" stroke-linejoin="round" stroke-width="1"/>
+        <text transform="translate(262 368)" fill="black">
+          <tspan font-family="Helvetica Neue" font-size="16" font-weight="400" fill="black" x="20.48" y="15">tfw.scene2</tspan>
+        </text>
+      </g>
+      <g id="Graphic_11">
+        <path d="M 266 274 L 376 274 C 380.97056 274 385 278.02944 385 283 L 385 313 C 385 317.97056 380.97056 322 376 322 L 266 322 C 261.02944 322 257 317.97056 257 313 L 257 283 C 257 278.02944 261.02944 274 266 274 Z" fill="white"/>
+        <path d="M 266 274 L 376 274 C 380.97056 274 385 278.02944 385 283 L 385 313 C 385 317.97056 380.97056 322 376 322 L 266 322 C 261.02944 322 257 317.97056 257 313 L 257 283 C 257 278.02944 261.02944 274 266 274 Z" stroke="black" stroke-linecap="round" stroke-linejoin="round" stroke-width="1"/>
+        <text transform="translate(262 288)" fill="black">
+          <tspan font-family="Helvetica Neue" font-size="16" font-weight="400" fill="black" x="20.48" y="15">tfw.scene3</tspan>
+        </text>
+      </g>
+      <g id="Graphic_12">
+        <path d="M 443 354 L 553 354 C 557.97056 354 562 358.02944 562 363 L 562 393 C 562 397.97056 557.97056 402 553 402 L 443 402 C 438.02944 402 434 397.97056 434 393 L 434 363 C 434 358.02944 438.02944 354 443 354 Z" fill="white"/>
+        <path d="M 443 354 L 553 354 C 557.97056 354 562 358.02944 562 363 L 562 393 C 562 397.97056 557.97056 402 553 402 L 443 402 C 438.02944 402 434 397.97056 434 393 L 434 363 C 434 358.02944 438.02944 354 443 354 Z" stroke="black" stroke-linecap="round" stroke-linejoin="round" stroke-width="1"/>
+        <text transform="translate(439 368)" fill="black">
+          <tspan font-family="Helvetica Neue" font-size="16" font-weight="400" fill="black" x="14.552" y="15">tfw.physics2</tspan>
+        </text>
+      </g>
+      <g id="Graphic_13">
+        <path d="M 442 274 L 552 274 C 556.97056 274 561 278.02944 561 283 L 561 313 C 561 317.97056 556.97056 322 552 322 L 442 322 C 437.02944 322 433 317.97056 433 313 L 433 283 C 433 278.02944 437.02944 274 442 274 Z" fill="white"/>
+        <path d="M 442 274 L 552 274 C 556.97056 274 561 278.02944 561 283 L 561 313 C 561 317.97056 556.97056 322 552 322 L 442 322 C 437.02944 322 433 317.97056 433 313 L 433 283 C 433 278.02944 437.02944 274 442 274 Z" stroke="black" stroke-linecap="round" stroke-linejoin="round" stroke-width="1"/>
+        <text transform="translate(438 288)" fill="black">
+          <tspan font-family="Helvetica Neue" font-size="16" font-weight="400" fill="black" x="14.552" y="15">tfw.physics3</tspan>
+        </text>
+      </g>
+      <g id="Graphic_14">
+        <path d="M 89 274 L 199 274 C 203.97056 274 208 278.02944 208 283 L 208 313 C 208 317.97056 203.97056 322 199 322 L 89 322 C 84.02944 322 80 317.97056 80 313 L 80 283 C 80 278.02944 84.02944 274 89 274 Z" fill="white"/>
+        <path d="M 89 274 L 199 274 C 203.97056 274 208 278.02944 208 283 L 208 313 C 208 317.97056 203.97056 322 199 322 L 89 322 C 84.02944 322 80 317.97056 80 313 L 80 283 C 80 278.02944 84.02944 274 89 274 Z" stroke="black" stroke-linecap="round" stroke-linejoin="round" stroke-width="1"/>
+        <text transform="translate(85 288)" fill="black">
+          <tspan font-family="Helvetica Neue" font-size="16" font-weight="400" fill="black" x="26.704" y="15">tfw.entity</tspan>
+        </text>
+      </g>
+      <g id="Graphic_15">
+        <path d="M 442 193 L 552 193 C 556.97056 193 561 197.02944 561 202 L 561 232 C 561 236.97056 556.97056 241 552 241 L 442 241 C 437.02944 241 433 236.97056 433 232 L 433 202 C 433 197.02944 437.02944 193 442 193 Z" fill="white"/>
+        <path d="M 442 193 L 552 193 C 556.97056 193 561 197.02944 561 202 L 561 232 C 561 236.97056 556.97056 241 552 241 L 442 241 C 437.02944 241 433 236.97056 433 232 L 433 202 C 433 197.02944 437.02944 193 442 193 Z" stroke="black" stroke-linecap="round" stroke-linejoin="round" stroke-width="1"/>
+        <text transform="translate(438 207)" fill="black">
+          <tspan font-family="Helvetica Neue" font-size="16" font-weight="400" fill="black" x="32.48" y="15">tfw.app</tspan>
+        </text>
+      </g>
+      <g id="Graphic_16">
+        <path d="M 266 193 L 376 193 C 380.97056 193 385 197.02944 385 202 L 385 232 C 385 236.97056 380.97056 241 376 241 L 266 241 C 261.02944 241 257 236.97056 257 232 L 257 202 C 257 197.02944 261.02944 193 266 193 Z" fill="white"/>
+        <path d="M 266 193 L 376 193 C 380.97056 193 385 197.02944 385 202 L 385 232 C 385 236.97056 380.97056 241 376 241 L 266 241 C 261.02944 241 257 236.97056 257 232 L 257 202 C 257 197.02944 261.02944 193 266 193 Z" stroke="black" stroke-linecap="round" stroke-linejoin="round" stroke-width="1"/>
+        <text transform="translate(262 207)" fill="black">
+          <tspan font-family="Helvetica Neue" font-size="16" font-weight="400" fill="black" x="27.152" y="15">tfw.asset</tspan>
+        </text>
+      </g>
+      <g id="Line_17">
+        <line x1="144" y1="274" x2="144" y2="241" stroke="black" stroke-linecap="round" stroke-linejoin="round" stroke-width="1"/>
+      </g>
+      <g id="Line_19">
+        <path d="M 321 354 L 321 340.45 L 144 340.45 L 144 331.9" marker-end="url(#FilledArrow_Marker)" stroke="black" stroke-linecap="round" stroke-linejoin="round" stroke-width="1"/>
+      </g>
+      <g id="Line_20">
+        <line x1="434" y1="378" x2="394.9" y2="378" marker-end="url(#FilledArrow_Marker)" stroke="black" stroke-linecap="round" stroke-linejoin="round" stroke-width="1"/>
+      </g>
+      <g id="Line_21">
+        <line x1="433" y1="298" x2="394.9" y2="298" marker-end="url(#FilledArrow_Marker)" stroke="black" stroke-linecap="round" stroke-linejoin="round" stroke-width="1"/>
+      </g>
+      <g id="Line_26">
+        <line x1="497" y1="193" x2="497" y2="171.4" marker-end="url(#FilledArrow_Marker)" stroke="black" stroke-linecap="round" stroke-linejoin="round" stroke-width="1"/>
+      </g>
+      <g id="Line_27">
+        <path d="M 321 274 L 321 256 L 407 256 L 407 175.9 L 320 175.9 L 320 170.9" marker-end="url(#FilledArrow_Marker)" stroke="black" stroke-linecap="round" stroke-linejoin="round" stroke-width="1"/>
+      </g>
+      <g id="Line_28">
+        <path d="M 144 193 L 144 17 L 246.1 17" marker-end="url(#FilledArrow_Marker)" stroke="black" stroke-linecap="round" stroke-linejoin="round" stroke-width="1"/>
+      </g>
+      <g id="Line_30">
+        <path d="M 497 113.5 L 497 77 L 320 77 L 320 50.9" marker-end="url(#FilledArrow_Marker)" stroke="black" stroke-linecap="round" stroke-linejoin="round" stroke-width="1"/>
+      </g>
+      <g id="Line_32">
+        <path d="M 610 137.72405 L 575.9 137.5 L 570.9 137.5" marker-end="url(#FilledArrow_Marker)" stroke="black" stroke-linecap="round" stroke-linejoin="round" stroke-width="1"/>
+      </g>
+      <g id="Graphic_8">
+        <path d="M 266 434 L 376 434 C 380.97056 434 385 438.02944 385 443 L 385 473 C 385 477.97056 380.97056 482 376 482 L 266 482 C 261.02944 482 257 477.97056 257 473 L 257 443 C 257 438.02944 261.02944 434 266 434 Z" fill="white"/>
+        <path d="M 266 434 L 376 434 C 380.97056 434 385 438.02944 385 443 L 385 473 C 385 477.97056 380.97056 482 376 482 L 266 482 C 261.02944 482 257 477.97056 257 473 L 257 443 C 257 438.02944 261.02944 434 266 434 Z" stroke="black" stroke-linecap="round" stroke-linejoin="round" stroke-width="1"/>
+        <text transform="translate(262 448)" fill="black">
+          <tspan font-family="Helvetica Neue" font-size="16" font-weight="400" fill="black" x="40.04" y="15">tfw.ui</tspan>
+        </text>
+      </g>
+      <g id="Line_35">
+        <line x1="497" y1="113.5" x2="497" y2="41" stroke="black" stroke-linecap="round" stroke-linejoin="round" stroke-width="1"/>
+      </g>
+      <g id="Line_37">
+        <line x1="257" y1="217" x2="217.9" y2="217" marker-end="url(#FilledArrow_Marker)" stroke="black" stroke-linecap="round" stroke-linejoin="round" stroke-width="1"/>
+      </g>
+      <g id="Line_38">
+        <line x1="433" y1="217" x2="394.9" y2="217" marker-end="url(#FilledArrow_Marker)" stroke="black" stroke-linecap="round" stroke-linejoin="round" stroke-width="1"/>
+      </g>
+      <g id="Line_39">
+        <line x1="321" y1="434" x2="321" y2="411.9" marker-end="url(#FilledArrow_Marker)" stroke="black" stroke-linecap="round" stroke-linejoin="round" stroke-width="1"/>
+      </g>
+      <g id="Line_40">
+        <line x1="257" y1="298" x2="217.9" y2="298" marker-end="url(#FilledArrow_Marker)" stroke="black" stroke-linecap="round" stroke-linejoin="round" stroke-width="1"/>
+      </g>
+      <g id="Line_41">
+        <line x1="320" y1="113" x2="320" y2="41" stroke="black" stroke-linecap="round" stroke-linejoin="round" stroke-width="1"/>
+      </g>
+      <g id="Line_42">
+        <path d="M 320 113 L 320 77 L 497 77 L 497 50.9" marker-end="url(#FilledArrow_Marker)" stroke="black" stroke-linecap="round" stroke-linejoin="round" stroke-width="1"/>
+      </g>
+    </g>
+  </g>
+</svg>
