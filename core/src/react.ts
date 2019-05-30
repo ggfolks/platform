@@ -1,7 +1,12 @@
-import { dataEquals } from "./data"
+import { Data, dataEquals } from "./data"
 
 export type Remover = () => void
 export const NoopRemover :Remover = () => true
+
+// TEMP: we'd like to constrain the type of all reactive values to being of type Data
+// but when we do that we run into a TS bug (https://github.com/microsoft/TypeScript/issues/31678)
+// so for now we leave the type unconstrained and coerce the values to Data when needed
+const coerceDataEquals = (a :any, b :any) => dataEquals(a as Data, b as Data)
 
 //
 // Listener plumbing
@@ -23,7 +28,7 @@ export class MultiError extends Error {
   }
 }
 
-export type ValueFn<T> = (value :T)=> any
+export type ValueFn<T> = (value :T) => any
 
 function dispatchValue<T> (listeners :Array<ValueFn<T>>, value :T) {
   let errors
@@ -123,7 +128,7 @@ export class Stream<T> implements Source<T> {
       _connectToSource () {
         return stream.onValue(value => {
           const previous = this._current
-          if (!dataEquals(previous, value)) {
+          if (!coerceDataEquals(previous, value)) {
             this._current = value
             this._dispatchValue(value, previous)
           }
@@ -222,7 +227,7 @@ export abstract class Value<T> implements Source<T> {
         // if it has not changed, we reuse the mapped value; this assumes referential
         // transparency on the part of fn
         let sourceValue = source.current
-        if (!dataEquals(sourceValue, savedSourceValue)) {
+        if (!coerceDataEquals(sourceValue, savedSourceValue)) {
           savedSourceValue = sourceValue
           mappedValue = fn(sourceValue)
         }
@@ -241,7 +246,7 @@ export abstract class Value<T> implements Source<T> {
           disconnect()
           let previous = latest, current = onValue(value)
           disconnect = mappedValue.onChange(dispatcher)
-          if (!dataEquals(current, previous)) {
+          if (!coerceDataEquals(current, previous)) {
             this._dispatchValue(current, previous)
           }
         })
@@ -349,7 +354,7 @@ class LocalMutable<T> extends Mutable<T> {
 
   update (newValue :T) {
     const oldValue = this._value
-    if (!dataEquals(oldValue, newValue)) {
+    if (!coerceDataEquals(oldValue, newValue)) {
       this._value = newValue
       dispatchChange(this._listeners, newValue, oldValue)
     }
@@ -380,7 +385,7 @@ class MappedValue<S,T> extends DerivedValue<T> {
     this._prev = this.current
     return this.source.onChange((value :S, ovalue :S) => {
       let current = this.fn(value), previous = this._prev
-      if (!dataEquals(current, previous)) {
+      if (!coerceDataEquals(current, previous)) {
         this._prev = current
         this._dispatchValue(current, previous)
       }

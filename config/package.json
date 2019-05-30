@@ -1,7 +1,7 @@
 {
-  "name": "@tfw/core",
+  "name": "@tfw/config",
   "version": "1.0.0",
-  "description": "Core components for tfw platform",
+  "description": "Prototype config system for tfw platform",
   "author": "tfw, inc. (https://tfw.dev)",
   "license": "MIT",
   "repository": {
@@ -10,5 +10,6 @@
   },
   "sideEffects": false,
   "dependencies": {
+    "@tfw/core": "1.0.0"
   }
 }
