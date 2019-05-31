@@ -9,7 +9,7 @@
     "url": "https://github.com/tfwdev/platform.git"
   },
   "sideEffects": false,
-  "dependencies": {
+  "peerDependencies": {
     "@tfw/core": "1.0.0"
   }
 }
