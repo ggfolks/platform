@@ -3,10 +3,14 @@ import { Data, dataEquals } from "./data"
 export type Remover = () => void
 export const NoopRemover :Remover = () => true
 
-// TEMP: we'd like to constrain the type of all reactive values to being of type Data
-// but when we do that we run into a TS bug (https://github.com/microsoft/TypeScript/issues/31678)
-// so for now we leave the type unconstrained and coerce the values to Data when needed
-const coerceDataEquals = (a :any, b :any) => dataEquals(a as Data, b as Data)
+// TypeScript infers literal types for type parameters with bounds, so when we bound our reactive
+// value types by Data, that causes calls like `mutable("")` to yield types like `Mutable<"">`
+// instead of `Mutable<string>` which is not desirable. This helper type allows us to force the type
+// checker to widen the types in places where we need it.
+type Widen<T> =
+  T extends string  ? string :
+  T extends number  ? number :
+  T extends boolean ? boolean : T;
 
 //
 // Listener plumbing
@@ -75,7 +79,7 @@ function dispatchChange<T> (listeners :Array<ChangeFn<T>>, value :T, oldValue :T
 export interface Source<T> {
   onValue (fn :ValueFn<T>) :Remover
   onNextValue (fn :ValueFn<T>) :Remover
-  map<F> (fn :(v:T) => F) :Source<F>
+  map<F extends Data> (fn :(v:T) => F) :Source<F>
 }
 
 export function when<T> (value :Source<T>, pred :(v:T) => boolean, fn :ValueFn<T>) :Remover {
@@ -99,7 +103,7 @@ export function onceDefined<T> (value :Source<T|undefined>, fn :ValueFn<T>) :Rem
 //
 // Reactive streams
 
-export class Stream<T> implements Source<T> {
+export class Stream<T extends Data> implements Source<T> {
 
   constructor (readonly onValue :(fn :ValueFn<T>) => Remover) {}
 
@@ -112,7 +116,7 @@ export class Stream<T> implements Source<T> {
     return (remover = this.onValue(once))
   }
 
-  map<F> (fn :(v:T) => F) :Stream<F> {
+  map<F extends Data> (fn :(v:T) => F) :Stream<F> {
     return deriveStream(dispatch => this.onValue(value => dispatch(fn(value))))
   }
 
@@ -128,7 +132,7 @@ export class Stream<T> implements Source<T> {
       _connectToSource () {
         return stream.onValue(value => {
           const previous = this._current
-          if (!coerceDataEquals(previous, value)) {
+          if (!dataEquals(previous, value)) {
             this._current = value
             this._dispatchValue(value, previous)
           }
@@ -139,14 +143,14 @@ export class Stream<T> implements Source<T> {
   }
 }
 
-export function merge<E> (...sources :Array<Stream<E>>) :Stream<E> {
+export function merge<E extends Data> (...sources :Array<Stream<E>>) :Stream<E> {
   return deriveStream(dispatch => {
     let removers :Remover[] = sources.map(s => s.onValue(dispatch))
     return () => removers.forEach(r => r())
   })
 }
 
-export class Emitter<T> extends Stream<T> {
+export class Emitter<T extends Data> extends Stream<T> {
   private _listeners :Array<ValueFn<T>> = []
 
   constructor () { super(lner => addListener(this._listeners, lner)) }
@@ -156,11 +160,11 @@ export class Emitter<T> extends Stream<T> {
   }
 }
 
-export function emitter<T> () :Emitter<T> {
+export function emitter<T extends Data> () :Emitter<T> {
   return new Emitter<T>()
 }
 
-function deriveStream<T> (connect :(dispatch :(value :T) => void) => Remover) :Stream<T> {
+function deriveStream<T extends Data> (connect :(dispatch :(value :T) => void) => Remover) :Stream<T> {
   const listeners :Array<(v :T) => any> = []
   let disconnect :Remover = NoopRemover
   const dispatch = (value :T) => { dispatchValue(listeners, value) }
@@ -182,7 +186,7 @@ function deriveStream<T> (connect :(dispatch :(value :T) => void) => Remover) :S
 //
 // Reactive values
 
-export abstract class Value<T> implements Source<T> {
+export abstract class Value<T extends Data> implements Source<T> {
 
   abstract get current () :T
 
@@ -205,11 +209,11 @@ export abstract class Value<T> implements Source<T> {
     return this.onChange(fn)
   }
 
-  map<U> (fn :(v:T) => U) :Value<U> {
+  map<U extends Data> (fn :(v:T) => U) :Value<U> {
     return new MappedValue(this, fn)
   }
 
-  switchMap<R> (fn :(v:T) => Value<R>) :Value<R> {
+  switchMap<R extends Data> (fn :(v:T) => Value<R>) :Value<R> {
     const source = this
     let savedSourceValue = source.current
     let mappedValue = fn(savedSourceValue)
@@ -227,7 +231,7 @@ export abstract class Value<T> implements Source<T> {
         // if it has not changed, we reuse the mapped value; this assumes referential
         // transparency on the part of fn
         let sourceValue = source.current
-        if (!coerceDataEquals(sourceValue, savedSourceValue)) {
+        if (!dataEquals(sourceValue, savedSourceValue)) {
           savedSourceValue = sourceValue
           mappedValue = fn(sourceValue)
         }
@@ -246,7 +250,7 @@ export abstract class Value<T> implements Source<T> {
           disconnect()
           let previous = latest, current = onValue(value)
           disconnect = mappedValue.onChange(dispatcher)
-          if (!coerceDataEquals(current, previous)) {
+          if (!dataEquals(current, previous)) {
             this._dispatchValue(current, previous)
           }
         })
@@ -279,7 +283,7 @@ export abstract class Value<T> implements Source<T> {
   }
 }
 
-abstract class DerivedValue<T> extends Value<T> {
+abstract class DerivedValue<T extends Data> extends Value<T> {
   private _listeners :Array<ChangeFn<T>> = []
   private _disconnect = NoopRemover
 
@@ -303,13 +307,13 @@ abstract class DerivedValue<T> extends Value<T> {
   }
 }
 
-class ConstantValue<T> extends Value<T> {
+class ConstantValue<T extends Data> extends Value<T> {
   constructor (readonly current :T) { super() }
   onChange (fn :ChangeFn<T>) :Remover { return NoopRemover }
 }
 
-export function constant<T> (value :T) :Value<T> {
-  return new ConstantValue(value)
+export function constant<T extends Data> (value :T) :Value<Widen<T>> {
+  return new ConstantValue(value as Widen<T>)
 }
 
 class JoinedValue extends DerivedValue<any[]> {
@@ -333,19 +337,19 @@ export function join (...sources :Array<Value<any>>) :Value<any[]> {
   return new JoinedValue(sources)
 }
 
-export function join2<A,B> (a :Value<A>, b :Value<B>) :Value<[A,B]> {
+export function join2<A extends Data,B extends Data> (a :Value<A>, b :Value<B>) :Value<[A,B]> {
   return join(a, b) as Value<[A,B]>
 }
 
-export function join3<A,B,C> (a :Value<A>, b :Value<B>, c :Value<C>) :Value<[A,B,C]> {
+export function join3<A extends Data,B extends Data,C extends Data> (a :Value<A>, b :Value<B>, c :Value<C>) :Value<[A,B,C]> {
   return join(a, b, c) as Value<[A,B,C]>
 }
 
-export abstract class Mutable<T> extends Value<T> {
+export abstract class Mutable<T extends Data> extends Value<T> {
   abstract update (newValue :T) :void
 }
 
-class LocalMutable<T> extends Mutable<T> {
+class LocalMutable<T extends Data> extends Mutable<T> {
   private _listeners :Array<ChangeFn<T>> = []
 
   constructor (private _value :T) { super() }
@@ -354,7 +358,7 @@ class LocalMutable<T> extends Mutable<T> {
 
   update (newValue :T) {
     const oldValue = this._value
-    if (!coerceDataEquals(oldValue, newValue)) {
+    if (!dataEquals(oldValue, newValue)) {
       this._value = newValue
       dispatchChange(this._listeners, newValue, oldValue)
     }
@@ -365,11 +369,11 @@ class LocalMutable<T> extends Mutable<T> {
   }
 }
 
-export function mutable<T> (start :T) :Mutable<T> {
-  return new LocalMutable(start)
+export function mutable<T extends Data> (start :T) :Mutable<Widen<T>> {
+  return new LocalMutable(start as Widen<T>)
 }
 
-class MappedValue<S,T> extends DerivedValue<T> {
+class MappedValue<S extends Data,T extends Data> extends DerivedValue<T> {
   private _prev :T
 
   // note: we cannot use this._prev here because that's only updated when we have listeners
@@ -385,7 +389,7 @@ class MappedValue<S,T> extends DerivedValue<T> {
     this._prev = this.current
     return this.source.onChange((value :S, ovalue :S) => {
       let current = this.fn(value), previous = this._prev
-      if (!coerceDataEquals(current, previous)) {
+      if (!dataEquals(current, previous)) {
         this._prev = current
         this._dispatchValue(current, previous)
       }
