@@ -1,5 +1,5 @@
 {
-  "name": "@tfw/platform",
+  "name": "tfw-platform",
   "version": "1.0.0",
   "description": "The tfw multiplayer game platform",
   "author": "tfw, inc. (https://tfw.dev)",
@@ -10,9 +10,23 @@
   },
   "sideEffects": false,
   "scripts": {
-    "bootstrap": "lerna bootstrap",
     "build": "tsc -b",
+    "test": "jest --verbose",
     "docs": "typedoc src"
+  },
+  "jest": {
+    "moduleFileExtensions": [ "ts", "tsx", "js" ],
+    "transform": {
+      "^.+\\.(ts|tsx)$": "ts-jest"
+    },
+    "globals": {
+      "ts-jest": {
+        "tsConfig": "tsconfig.json"
+      }
+    },
+    "testMatch": [
+      "**/test.*.(ts|tsx|js)"
+    ]
   },
   "dependencies": {},
   "devDependencies": {

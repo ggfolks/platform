@@ -1,4 +1,4 @@
-import { Data, Record, isSet } from "@tfw/core/data"
+import { Data, Record, isSet } from "../core/data"
 
 /** Indicates that a record property should not inherit from a record property with the same name in
   * a parent config. */
