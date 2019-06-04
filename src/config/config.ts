@@ -1,108 +1,51 @@
-import { Data, Record, isSet } from "../core/data"
+import { Data, Record, isSet, isMap } from "../core/data"
 
 /** Indicates that a record property should not inherit from a record property with the same name in
-  * a parent config. */
-const REPLACE_PROP = '__replace__'
-
-/** A marker property defined on a record to indicate that it is a config object. */
-const IS_CONFIG_PROP = '__is_config__'
-
-/** A marker property defined on a record to indicate that it is an immutable value and can be used
-  * as is in a deep copy of a containing object. */
-const IS_VALUE_PROP = '__is_value__'
+  * a parent config, but rather should replace it outright. */
+const REPLACE_PROP = "__replace__"
 
 /**
- * Creates a deep copy of the specified value. This deep copies all array, set and object valued
- * properties. It copies all enumerable properties and disconnects from any config inheritance.
- * @param value the value to copy.
- * @return the copied value.
+ * Merges a chain of inherited config records. `configs` must be ordered from child-most to
+ * parent-most. Records are merged property by property, with child values overriding parent values.
+ * In the case of set-valued properties, child sets are unioned with parent sets. Record-valued
+ * properties are recursively merged with parent records. For both record- and set-valued
+ * properties, if the child declares an explicit empty record or set, that property _overrides_ the
+ * parent property instead of being merged with it.
  */
-export function deepCopy (value :Data) :Data {
-  if (typeof value !== 'object' || value === null || value[IS_VALUE_PROP]) {
-    return value
-  }
-
-  let copy :Data
-  if (Array.isArray(value)) {
-    copy = (value as Array<Data>).map(deepCopy)
-
-  } else if (isSet(value)) {
-    const setv = value as Set<Data>, setc = new Set<Data>()
-    setv.forEach(elem => setc.add(deepCopy(elem)))
-    copy = setc
-
-  // } else if (isMap(value)) {
-  //   const mapv = value as Map<Data,Data>, mapc = new Map<Data,Data>()
-  //   mapv.forEach((elem, key) => mapc.set(deepCopy(key), deepCopy(elem)))
-  //   copy = mapc
-
-  } else if (value[IS_CONFIG_PROP]) {
-    // this is an inherited config object: we need to deep copy all props, including inherited ones
-    copy = {}
-    for (const key in value) {
-      copy[key] = deepCopy(value[key])
-    }
-
-  } else {
-    // this is just a regular object: we only want to deep copy own-props and preserve inheritance
-    copy = Object.create(Object.getPrototypeOf(value))
-    for (const key in value) {
-      if (value.hasOwnProperty(key)) {
-        copy[key] = deepCopy(value[key])
+export function inheritMerge (configs :Record[]) :Record {
+  function merge (target :Record, source :Record) :Record {
+    for (const key in source) {
+      const sprop = source[key], tprop = target[key]
+      const sourceIsObject = typeof sprop === "object"
+      if (!sourceIsObject || sprop === null) {
+        target[key] = sprop
+      }
+      // TODO: support custom _merge property
+      // else if (sprop._merge) {
+      //   target[key] = sprop._merge(tprop)
+      // }
+      else if (isSet(sprop)) {
+        const sset = sprop as Set<Data>, merged = new Set(tprop as Set<Data>)
+        sset.forEach(elem => merged.add(elem))
+        target[key] = merged
+      }
+      else if (isMap(sprop)) {
+        throw new Error("TODO")
+      }
+      else if (Array.isArray(sprop)) {
+        target[key] = sprop.slice(0)
+      }
+      // if the target prop is not a record, overwrite it; otherwise merge
+      else if (typeof tprop !== "object" || Array.isArray(tprop) || isSet(tprop) ||
+               tprop[REPLACE_PROP] === true) {
+        // TODO: warn about invalid merge?
+        target[key] = merge({}, sprop as Record)
+      }
+      else {
+        target[key] = merge(tprop as Record, sprop as Record)
       }
     }
+    return target
   }
-  return copy
-}
-
-/**
- * Creates a deep copy of `child` which inherits from `parent` at every point where `child` and
- * `parent` share the same 'paths'. `child` inherits from `parent` (the empty path), and if both
- * child and parent have a subobject with key `foo` then that child subobject is made to inherit
- * from the corresponding `foo` in the parent. This proceedes recursively through the entire child
- * object tree.
- *
- * If a child subobject contains a special marker property: `__replace__: true` or it is an empty
- * object it will not inherit from the parent subobject (and will instead effectively replace it).
- *
- * Special handling is also performed for properties with `Set` values: if a parent defines a
- * property with a `Set` value, any `Set` or `array` valued 'override' of that property by a child
- * will merge in the values from the parent and be `Set` valued itself.
- *
- * *NOTE*: this also freezes the returned deep copy of `child`, preventing it from being further
- * modified. It is assumed that the parent is already frozen, having been loaded as a config
- * object itself.
- */
-export function deepInherit (child :Record, parent :Record) {
-  if (child[REPLACE_PROP]) {
-    return Object.freeze(deepCopy(child))
-  }
-
-  const heir = Object.create(parent)
-  // define a non-enumerable property we can use to identify config objects;
-  // this is needed to do The Right Thing(tm) in deepCopy
-  Object.defineProperty(heir, IS_CONFIG_PROP, {value: true})
-
-  for (const key in child) {
-    // note: we don't check hasOwnProperty on the parent, we want to search as far up the parent
-    // chain as necessary to find a sub-parent
-    if (child.hasOwnProperty(key)) {
-      const subChild = child[key], subParent = parent[key]
-      let subValue :Readonly<Data>
-      if (isSet(subParent) && (isSet(subChild) || Array.isArray(subChild))) {
-        const subSet = new Set(subChild as Iterable<Data>)
-        if (subSet.size > 0) {
-          (subParent as Set<Data>).forEach(elem => subSet.add(elem))
-        }
-        subValue = Object.freeze(subSet)
-      } else if (typeof subChild === 'object' && typeof subParent === 'object' &&
-                 !Array.isArray(subChild) && Object.keys(subChild).length > 0) {
-        subValue = deepInherit(subChild as Record, subParent as Record)
-      } else {
-        subValue = Object.freeze(deepCopy(subChild))
-      }
-      Object.defineProperty(heir, key, {value: subValue, enumerable: true})
-    }
-  }
-  return Object.freeze(heir)
+  return Object.freeze(configs.reverse().reduce(merge, {}))
 }

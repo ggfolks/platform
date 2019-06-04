@@ -1,6 +1,6 @@
 # Config notes
 
-- (Q: Should we call this library tfw.proto and refer to config objects as prototypes ala mvrs?)
+- Q: Should we call this library tfw.proto and refer to config objects as prototypes ala mvrs?
 
 - Config objects are collections of key/value pairs where the keys are strings and the values are
   of a restricted set of types:
