@@ -1,8 +1,8 @@
 
-interface DataArray extends Array<Data> {}
-interface DataSet extends Set<Data> {}
+export interface DataArray extends Array<Data> {}
+export interface DataSet extends Set<Data> {}
 export type DataMapKey = number | string
-interface DataMap extends Map<DataMapKey,Data> {}
+export interface DataMap extends Map<DataMapKey,Data> {}
 export interface Record { [key :string] :Data }
 
 export type Data = void | boolean | number | string | DataArray | DataSet | DataMap | Record
