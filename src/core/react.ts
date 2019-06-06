@@ -333,16 +333,16 @@ class JoinedValue extends DerivedValue<any[]> {
   }
 }
 
-export function join (...sources :Array<Value<any>>) :Value<any[]> {
+export function join<A extends Data> (...sources :Array<Value<A>>) :Value<A[]> {
   return new JoinedValue(sources)
 }
 
 export function join2<A extends Data,B extends Data> (a :Value<A>, b :Value<B>) :Value<[A,B]> {
-  return join(a, b) as Value<[A,B]>
+  return join<A|B>(a, b) as Value<[A,B]>
 }
 
 export function join3<A extends Data,B extends Data,C extends Data> (a :Value<A>, b :Value<B>, c :Value<C>) :Value<[A,B,C]> {
-  return join(a, b, c) as Value<[A,B,C]>
+  return join<A|B|C>(a, b, c) as Value<[A,B,C]>
 }
 
 export abstract class Mutable<T extends Data> extends Value<T> {
