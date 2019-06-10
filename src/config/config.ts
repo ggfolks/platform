@@ -1,5 +1,5 @@
 import { Data, DataMap, DataSet, Record, isSet, isMap } from "../core/data"
-import { Value, join, constant } from "../core/react"
+import { Value, constant } from "../core/react"
 
 /** Indicates that a record property should not inherit from a record property with the same name in
   * a parent config, but rather should replace it outright. */
