@@ -218,7 +218,7 @@ export abstract class Value<T extends Data> implements Source<T> {
     let savedSourceValue = source.current
     let mappedValue = fn(savedSourceValue)
     let latest = mappedValue.current
-    function onValue (value :T) :R {
+    function onSourceValue (value :T) :R {
       savedSourceValue = value
       mappedValue = fn(value)
       return latest = mappedValue.current
@@ -239,7 +239,7 @@ export abstract class Value<T extends Data> implements Source<T> {
       }
 
       _connectToSource () {
-        onValue(source.current)
+        if (!dataEquals(source.current, savedSourceValue)) onSourceValue(source.current)
         const dispatcher = (value :R, ovalue :R) => {
           const previous = latest
           latest = value
@@ -248,7 +248,7 @@ export abstract class Value<T extends Data> implements Source<T> {
         let disconnect = mappedValue.onChange(dispatcher)
         let unlisten = source.onChange((value, ovalue) => {
           disconnect()
-          let previous = latest, current = onValue(value)
+          let previous = latest, current = onSourceValue(value)
           disconnect = mappedValue.onChange(dispatcher)
           if (!dataEquals(current, previous)) {
             this._dispatchValue(current, previous)
@@ -305,6 +305,8 @@ abstract class DerivedValue<T extends Data> extends Value<T> {
       }
     }
   }
+
+  protected get isConnected () :boolean { return this._disconnect !== NoopRemover }
 }
 
 class ConstantValue<T extends Data> extends Value<T> {
@@ -374,23 +376,18 @@ export function mutable<T extends Data> (start :T) :Mutable<Widen<T>> {
 }
 
 class MappedValue<S extends Data,T extends Data> extends DerivedValue<T> {
-  private _prev :T
+  private _latest! :T // initialized in _connectToSource; only used when connected
 
-  // note: we cannot use this._prev here because that's only updated when we have listeners
-  // we must report the correct 'mapped' value from our underlying source regardless
-  get current () :T { return this.fn(this.source.current) }
+  get current () :T { return this.isConnected ? this._latest : this.fn(this.source.current) }
 
-  constructor (readonly source :Value<S>, readonly fn :(value :S) => T) {
-    super()
-    this._prev = fn(source.current)
-  }
+  constructor (readonly source :Value<S>, readonly fn :(value :S) => T) { super() }
 
   _connectToSource () {
-    this._prev = this.current
+    this._latest = this.current
     return this.source.onChange((value :S, ovalue :S) => {
-      let current = this.fn(value), previous = this._prev
+      let current = this.fn(value), previous = this._latest
       if (!dataEquals(current, previous)) {
-        this._prev = current
+        this._latest = current
         this._dispatchValue(current, previous)
       }
     })
