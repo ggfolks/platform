@@ -1,5 +1,5 @@
-import {Record} from "../core/data"
-import * as R from "../core/react"
+import {Record} from "./data"
+import * as R from "./react"
 import {makeConfig, resolveConfig} from "./config"
 
 test("config inheritance", () => {
