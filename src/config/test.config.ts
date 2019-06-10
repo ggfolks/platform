@@ -1,8 +1,10 @@
-import {inheritMerge} from "./config"
+import {Record} from "../core/data"
+import * as R from "../core/react"
+import {makeConfig, resolveConfig} from "./config"
 
 test("config inheritance", () => {
   // top-level record merging
-  expect(inheritMerge([
+  expect(makeConfig([
     {child:  true, a: "a", uno: 1},
     {parent: true, b: "b", dos: 2},
     {grand:  true, c: "c", tre: 3}
@@ -10,7 +12,7 @@ test("config inheritance", () => {
     {child: true, parent: true, grand: true, a: "a", b: "b", c: "c", uno: 1, dos: 2, tre: 3})
 
   // sub-record merging
-  expect(inheritMerge([
+  expect(makeConfig([
     {child:  true, sub: {a: 1}},
     {parent: true, sub: {b: 2}},
     {grand:  true, sub: {c: 3}}
@@ -18,7 +20,7 @@ test("config inheritance", () => {
     {child: true, parent: true, grand: true, sub: {a: 1, b:2, c:3}})
 
   // property overrides
-  expect(inheritMerge([
+  expect(makeConfig([
     {child: true,    sub: {a: 1}},
     {name: "parent", sub: {a: 2}},
     {name: "grand",  sub: {c: 3}}
@@ -26,20 +28,63 @@ test("config inheritance", () => {
     {child: true, name: "parent", sub: {a: 1, c: 3}})
 
   // set merging
-  expect(inheritMerge([
+  expect(makeConfig([
     {set: new Set(["a"]), sub: {set: new Set([1])}},
     {set: new Set(["b"]), sub: {set: new Set([2])}},
     {set: new Set(["c"]), sub: {set: new Set([3])}}
   ])).toEqual(
-    // NOTE: we rely here on implementation details of set merging, but JavaScript has no sane set
-    // equality test, certainly not built into Jest; so we have no great alternatives
-    {set: new Set(["c", "b", "a"]), sub: {set: new Set([3, 2, 1])}})
+    {set: new Set(["a", "b", "c"]), sub: {set: new Set([1, 2, 3])}})
+
+  // map merging
+  expect(makeConfig([
+    {set: new Map([["a", 1], ["d", 4]]), sub: {set: new Map([[1, "a"]])}},
+    {set: new Map([["b", 2], ["d", 3]]), sub: {set: new Map([[2, "b"]])}},
+    {set: new Map([["c", 3], ["d", 2]]), sub: {set: new Map([[3, "c"]])}}
+  ])).toEqual(
+    {set: new Map([["c", 3], ["b", 2], ["a", 1], ["d", 4]]), sub: {
+      set: new Map([[3, "c"], [2, "b"], [1, "a"]])}})
 
   // array overriding (arrays don't merge)
-  expect(inheritMerge([
+  expect(makeConfig([
     {lets: ["a"], sub: {nums: [1]}},
     {lets: ["b"], sub: {nums: [2]}},
     {lets: ["c"], sub: {nums: [3]}}
   ])).toEqual(
     {lets: ["a"], sub: {nums: [1]}})
+})
+
+test("config resolution", () => {
+  const cfgA = {name: "a", prototype: "b", a: "a"}, cfgAV = R.mutable<Record>(cfgA)
+  const cfgB = {name: "b", prototype: "c", b: "b"}, cfgBV = R.mutable<Record|undefined>(undefined)
+  const cfgC = {name: "c", c: "c"}, cfgCV = R.mutable<Record|undefined>(undefined)
+  const cfgD = {name: "d", d: "d"}, cfgDV = R.mutable<Record>(cfgD)
+
+  const source = {
+    load: (path :String) => {
+      switch (path) {
+      case "a": return cfgAV
+      case "b": return cfgBV
+      case "c": return cfgCV
+      case "d": return cfgDV
+      default:  return R.constant(undefined)
+      }
+    }
+  }
+
+  const expectA = {name: "a", prototype: "b", a: "a", b: "b", c: "c"}
+  expect(makeConfig([cfgA, cfgB, cfgC])).toEqual(expectA)
+
+  const cfgHistory :Array<Record|undefined> = []
+  const cfgV = resolveConfig(source, "a")
+  cfgV.onValue(cfg => cfgHistory.push(cfg))
+  expect(cfgHistory).toEqual([undefined])
+
+  cfgBV.update(cfgB)
+  expect(cfgHistory).toEqual([undefined])
+  cfgCV.update(cfgC)
+  expect(cfgHistory).toEqual([undefined, expectA])
+
+  cfgAV.update({name: "a", prototype: "d", a: "a"})
+  const expectD = {name: "a", prototype: "d", a: "a", d: "d"}
+  expect(cfgHistory).toEqual([undefined, expectA, expectD])
 })
