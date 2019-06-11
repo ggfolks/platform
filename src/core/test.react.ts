@@ -143,7 +143,7 @@ test("basic value", () => {
   testValue(rm, v => rm.update(v))
 
   const em = R.emitter<string>()
-  testValue(em.toValue(""), v => em.emit(v))
+  testValue(R.valueFromStream(em, ""), v => em.emit(v))
 })
 
 test("value as promise", () => {

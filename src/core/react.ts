@@ -1,4 +1,4 @@
-import { Data, dataEquals } from "./data"
+import { Data, dataEquals, refEquals } from "./data"
 
 export type Remover = () => void
 export const NoopRemover :Remover = () => true
@@ -11,6 +11,10 @@ type Widen<T> =
   T extends string  ? string :
   T extends number  ? number :
   T extends boolean ? boolean : T;
+
+/** An equality function, used to test whether values have actually changed during reactive value
+  * propagation. */
+export type Eq<T> = (a:T,b:T) => boolean
 
 //
 // Listener plumbing
@@ -103,7 +107,7 @@ export function onceDefined<T> (value :Source<T|undefined>, fn :ValueFn<T>) :Rem
 //
 // Reactive streams
 
-export class Stream<T extends Data> implements Source<T> {
+export class Stream<T> implements Source<T> {
 
   constructor (readonly onValue :(fn :ValueFn<T>) => Remover) {}
 
@@ -116,7 +120,7 @@ export class Stream<T extends Data> implements Source<T> {
     return (remover = this.onValue(once))
   }
 
-  map<F extends Data> (fn :(v:T) => F) :Stream<F> {
+  map<F> (fn :(v:T) => F) :Stream<F> {
     return deriveStream(dispatch => this.onValue(value => dispatch(fn(value))))
   }
 
@@ -124,7 +128,7 @@ export class Stream<T extends Data> implements Source<T> {
     return deriveStream(dispatch => this.onValue(value => pred(value) && dispatch(value)))
   }
 
-  toValue (start :T) :Value<T> {
+  toValue (start :T, eq :Eq<T>) :Value<T> {
     const stream = this
     class StreamValue extends DerivedValue<T> {
       private _current = start
@@ -132,25 +136,37 @@ export class Stream<T extends Data> implements Source<T> {
       _connectToSource () {
         return stream.onValue(value => {
           const previous = this._current
-          if (!dataEquals(previous, value)) {
+          if (!this.eq(previous, value)) {
             this._current = value
             this._dispatchValue(value, previous)
           }
         })
       }
     }
-    return new StreamValue()
+    return new StreamValue(eq)
   }
 }
 
-export function merge<E extends Data> (...sources :Array<Stream<E>>) :Stream<E> {
+export function valueFromStream<T extends Data> (stream :Stream<T>, start :T) :Value<T> {
+  return stream.toValue(start, dataEquals)
+}
+
+export function valueFromStreamRef<T> (stream :Stream<T>, start :T) :Value<T> {
+  return stream.toValue(start, refEquals)
+}
+
+/**
+ * Merges `sources` streams into a single stream that emits a value whenever any of the underlying
+ * streams emit a value.
+ */
+export function merge<E> (...sources :Array<Stream<E>>) :Stream<E> {
   return deriveStream(dispatch => {
     let removers :Remover[] = sources.map(s => s.onValue(dispatch))
     return () => removers.forEach(r => r())
   })
 }
 
-export class Emitter<T extends Data> extends Stream<T> {
+export class Emitter<T> extends Stream<T> {
   private _listeners :Array<ValueFn<T>> = []
 
   constructor () { super(lner => addListener(this._listeners, lner)) }
@@ -160,11 +176,11 @@ export class Emitter<T extends Data> extends Stream<T> {
   }
 }
 
-export function emitter<T extends Data> () :Emitter<T> {
+export function emitter<T> () :Emitter<T> {
   return new Emitter<T>()
 }
 
-function deriveStream<T extends Data> (connect :(dispatch :(value :T) => void) => Remover) :Stream<T> {
+function deriveStream<T> (connect :(dispatch :(v:T) => void) => Remover) :Stream<T> {
   const listeners :Array<(v :T) => any> = []
   let disconnect :Remover = NoopRemover
   const dispatch = (value :T) => { dispatchValue(listeners, value) }
@@ -186,7 +202,9 @@ function deriveStream<T extends Data> (connect :(dispatch :(value :T) => void) =
 //
 // Reactive values
 
-export abstract class Value<T extends Data> implements Source<T> {
+export abstract class Value<T> implements Source<T> {
+
+  constructor (readonly eq :Eq<T>) {}
 
   abstract get current () :T
 
@@ -210,10 +228,16 @@ export abstract class Value<T extends Data> implements Source<T> {
   }
 
   map<U extends Data> (fn :(v:T) => U) :Value<U> {
-    return new MappedValue(this, fn)
+    return new MappedValue(this, fn, dataEquals)
+  }
+  mapRef<U> (fn :(v:T) => U) :Value<U> {
+    return new MappedValue(this, fn, refEquals)
+  }
+  mapEq<U> (fn :(v:T) => U, eq :Eq<U>) :Value<U> {
+    return new MappedValue(this, fn, eq)
   }
 
-  switchMap<R extends Data> (fn :(v:T) => Value<R>) :Value<R> {
+  switchMap<R> (fn :(v:T) => Value<R>) :Value<R> {
     const source = this
     let savedSourceValue = source.current
     let mappedValue = fn(savedSourceValue)
@@ -231,7 +255,7 @@ export abstract class Value<T extends Data> implements Source<T> {
         // if it has not changed, we reuse the mapped value; this assumes referential
         // transparency on the part of fn
         let sourceValue = source.current
-        if (!dataEquals(sourceValue, savedSourceValue)) {
+        if (!source.eq(sourceValue, savedSourceValue)) {
           savedSourceValue = sourceValue
           mappedValue = fn(sourceValue)
         }
@@ -239,7 +263,7 @@ export abstract class Value<T extends Data> implements Source<T> {
       }
 
       _connectToSource () {
-        if (!dataEquals(source.current, savedSourceValue)) onSourceValue(source.current)
+        if (!source.eq(source.current, savedSourceValue)) onSourceValue(source.current)
         const dispatcher = (value :R, ovalue :R) => {
           const previous = latest
           latest = value
@@ -250,7 +274,7 @@ export abstract class Value<T extends Data> implements Source<T> {
           disconnect()
           let previous = latest, current = onSourceValue(value)
           disconnect = mappedValue.onChange(dispatcher)
-          if (!dataEquals(current, previous)) {
+          if (!mappedValue.eq(current, previous)) {
             this._dispatchValue(current, previous)
           }
         })
@@ -260,7 +284,7 @@ export abstract class Value<T extends Data> implements Source<T> {
         }
       }
     }
-    return new SwitchMappedValue()
+    return new SwitchMappedValue(refEquals)
   }
 
   toStream () :Stream<T> {
@@ -283,7 +307,7 @@ export abstract class Value<T extends Data> implements Source<T> {
   }
 }
 
-abstract class DerivedValue<T extends Data> extends Value<T> {
+abstract class DerivedValue<T> extends Value<T> {
   private _listeners :Array<ChangeFn<T>> = []
   private _disconnect = NoopRemover
 
@@ -309,17 +333,36 @@ abstract class DerivedValue<T extends Data> extends Value<T> {
   protected get isConnected () :boolean { return this._disconnect !== NoopRemover }
 }
 
-class ConstantValue<T extends Data> extends Value<T> {
-  constructor (readonly current :T) { super() }
+class ConstantValue<T> extends Value<T> {
+  constructor (readonly current :T, eq :Eq<T>) { super(eq) }
   onChange (fn :ChangeFn<T>) :Remover { return NoopRemover }
 }
 
 export function constant<T extends Data> (value :T) :Value<Widen<T>> {
-  return new ConstantValue(value as Widen<T>)
+  return new ConstantValue(value as Widen<T>, dataEquals)
+}
+
+export function constantOpt<T extends Data> (value :T|undefined) :Value<Widen<T|undefined>> {
+  return new ConstantValue(value as Widen<T|undefined>, dataEquals)
+}
+
+export function constantRef<T> (value :T) :Value<T> {
+  return new ConstantValue(value, refEquals)
+}
+
+export function constantEq<T> (value :T, eq :Eq<T>) :Value<T> {
+  return new ConstantValue(value, eq)
 }
 
 class JoinedValue extends DerivedValue<any[]> {
-  constructor (readonly sources :Value<any>[]) { super() }
+  constructor (readonly sources :Value<any>[]) {
+    super((as, bs) => {
+      for (let ii = 0, ll = sources.length; ii < ll; ii += 1) {
+        if (!sources[ii].eq(as[ii], bs[ii])) return false
+      }
+      return true
+    })
+  }
 
   get current () { return this.sources.map(source => source.current) }
 
@@ -335,32 +378,32 @@ class JoinedValue extends DerivedValue<any[]> {
   }
 }
 
-export function join<A extends Data> (...sources :Array<Value<A>>) :Value<A[]> {
+export function join<A> (...sources :Array<Value<A>>) :Value<A[]> {
   return new JoinedValue(sources)
 }
 
-export function join2<A extends Data,B extends Data> (a :Value<A>, b :Value<B>) :Value<[A,B]> {
-  return join<A|B>(a, b) as Value<[A,B]>
+export function join2<A,B> (a :Value<A>, b :Value<B>) :Value<[A,B]> {
+  return (new JoinedValue([a, b]) as any) as Value<[A,B]>
 }
 
-export function join3<A extends Data,B extends Data,C extends Data> (a :Value<A>, b :Value<B>, c :Value<C>) :Value<[A,B,C]> {
-  return join<A|B|C>(a, b, c) as Value<[A,B,C]>
+export function join3<A,B,C> (a :Value<A>, b :Value<B>, c :Value<C>) :Value<[A,B,C]> {
+  return (new JoinedValue([a, b, c]) as any) as Value<[A,B,C]>
 }
 
-export abstract class Mutable<T extends Data> extends Value<T> {
+export abstract class Mutable<T> extends Value<T> {
   abstract update (newValue :T) :void
 }
 
-class LocalMutable<T extends Data> extends Mutable<T> {
+class LocalMutable<T> extends Mutable<T> {
   private _listeners :Array<ChangeFn<T>> = []
 
-  constructor (private _value :T) { super() }
+  constructor (private _value :T, eq :Eq<T>) { super(eq) }
 
   get current () :T { return this._value }
 
   update (newValue :T) {
     const oldValue = this._value
-    if (!dataEquals(oldValue, newValue)) {
+    if (!this.eq(oldValue, newValue)) {
       this._value = newValue
       dispatchChange(this._listeners, newValue, oldValue)
     }
@@ -372,21 +415,33 @@ class LocalMutable<T extends Data> extends Mutable<T> {
 }
 
 export function mutable<T extends Data> (start :T) :Mutable<Widen<T>> {
-  return new LocalMutable(start as Widen<T>)
+  return new LocalMutable(start as Widen<T>, dataEquals)
 }
 
-class MappedValue<S extends Data,T extends Data> extends DerivedValue<T> {
+export function mutableOpt<T extends Data> (start :T|undefined) :Mutable<Widen<T|undefined>> {
+  return new LocalMutable(start as Widen<T|undefined>, dataEquals)
+}
+
+export function mutableRef<T> (start :T) :Mutable<T> {
+  return new LocalMutable(start, refEquals)
+}
+
+export function mutableEq<T> (start :T, eq :Eq<T>) :Mutable<T> {
+  return new LocalMutable(start, eq)
+}
+
+class MappedValue<S,T> extends DerivedValue<T> {
   private _latest! :T // initialized in _connectToSource; only used when connected
 
   get current () :T { return this.isConnected ? this._latest : this.fn(this.source.current) }
 
-  constructor (readonly source :Value<S>, readonly fn :(value :S) => T) { super() }
+  constructor (readonly source :Value<S>, readonly fn :(value :S) => T, eq :Eq<T>) { super(eq) }
 
   _connectToSource () {
     this._latest = this.current
     return this.source.onChange((value :S, ovalue :S) => {
       let current = this.fn(value), previous = this._latest
-      if (!dataEquals(current, previous)) {
+      if (!this.eq(current, previous)) {
         this._latest = current
         this._dispatchValue(current, previous)
       }

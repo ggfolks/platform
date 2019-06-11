@@ -54,6 +54,14 @@ export function dataCopy<T extends Data> (value :T) :T {
 }
 
 /**
+ * Tests the reference equality of two arbitrary values (using `===`). Value types (numbers,
+ * strings, booleans) use JavaScript's built-in value-based equality.
+ */
+export function refEquals<T> (a :T, b :T) :boolean {
+  return a === b
+}
+
+/**
  * Tests the structural equality of two data values. This compares all elements of arrays, sets,
  * maps and record valued subproperties.
  */

@@ -54,10 +54,10 @@ test("config inheritance", () => {
 })
 
 test("config resolution", () => {
-  const cfgA = {name: "a", prototype: "b", a: "a"}, cfgAV = R.mutable<Record>(cfgA)
-  const cfgB = {name: "b", prototype: "c", b: "b"}, cfgBV = R.mutable<Record|undefined>(undefined)
-  const cfgC = {name: "c", c: "c"}, cfgCV = R.mutable<Record|undefined>(undefined)
-  const cfgD = {name: "d", d: "d"}, cfgDV = R.mutable<Record>(cfgD)
+  const cfgA = {name: "a", prototype: "b", a: "a"}, cfgAV = R.mutableOpt<Record>(cfgA)
+  const cfgB = {name: "b", prototype: "c", b: "b"}, cfgBV = R.mutableOpt<Record>(undefined)
+  const cfgC = {name: "c", c: "c"},                 cfgCV = R.mutableOpt<Record>(undefined)
+  const cfgD = {name: "d", d: "d"},                 cfgDV = R.mutableOpt<Record>(cfgD)
 
   const source = {
     load: (path :String) => {
@@ -66,7 +66,7 @@ test("config resolution", () => {
       case "b": return cfgBV
       case "c": return cfgCV
       case "d": return cfgDV
-      default:  return R.constant(undefined)
+      default:  return R.constantOpt<Record>(undefined)
       }
     }
   }
