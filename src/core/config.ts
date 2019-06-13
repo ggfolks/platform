@@ -1,5 +1,5 @@
-import { Data, DataMap, DataSet, Record, isSet, isMap } from "./data"
-import { Value, constantOpt } from "./react"
+import {Data, DataMap, DataSet, Record, isSet, isMap} from "./data"
+import {Value} from "./react"
 
 /** Indicates that a record property should not inherit from a record property with the same name in
   * a parent config, but rather should replace it outright. */
@@ -85,11 +85,11 @@ export interface Source {
 export function resolveConfig (source :Source, path :string) :Value<Record|undefined> {
   function resolveProtos (path :string, protos :Record[]) :Value<Record[]|undefined> {
     return source.load(path).switchMap(config => {
-      if (!config) return constantOpt<Record[]>(undefined)
+      if (!config) return Value.constantOpt<Record[]>(undefined)
       const newProtos = protos.concat([config])
       const nextPath = config[PROTOTYPE_PROP] as string
       if (nextPath) return resolveProtos(nextPath, newProtos)
-      return constantOpt(newProtos)
+      return Value.constantOpt(newProtos)
     })
   }
   return resolveProtos(path, []).map(cfgs => cfgs && makeConfig(cfgs))

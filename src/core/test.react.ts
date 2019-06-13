@@ -1,10 +1,10 @@
-import * as R from "./react"
+import {Stream, Value, Emitter, Mutable} from "./react"
 
 //
 // Reactive stream tests
 
 test("basic stream", () => {
-  function testStream (stream :R.Stream<string>, emit :(v :string) => any) {
+  function testStream (stream :Stream<string>, emit :(v :string) => any) {
     const history :string[] = []
     const remover = stream.onValue(a => history.push(a))
     emit("a")
@@ -44,25 +44,25 @@ test("basic stream", () => {
     expect(filterHistory).toEqual(["five", "nineteen"])
 
     let onceCount = 0
-    stream.onNextValue(c => onceCount++)
+    Stream.next(stream, c => onceCount++)
     emit("hello")
     expect(onceCount).toBe(1)
     emit("goodbye")
     expect(onceCount).toBe(1)
   }
 
-  const em = R.emitter<string>()
+  const em = new Emitter<string>()
   testStream(em, v => em.emit(v))
 
-  const rv = R.mutable("")
+  const rv = Mutable.local("")
   testStream(rv.toStream(), v => rv.update(v))
 })
 
 test("merged stream", () => {
-  const em1 = R.emitter<string>()
-  const em2 = R.emitter<string>()
-  const em3 = R.emitter<string>()
-  const emm = R.merge(em1, em2, em3)
+  const em1 = new Emitter<string>()
+  const em2 = new Emitter<string>()
+  const em3 = new Emitter<string>()
+  const emm = Stream.merge(em1, em2, em3)
 
   let history :string[] = []
   emm.onValue(v => history.push(v))
@@ -83,7 +83,14 @@ test("merged stream", () => {
 // Reactive value tests
 
 test("basic value", () => {
-  function testValue (value :R.Value<string>, update :(v :string) => any) {
+  function testValue (value :Value<string>, update :(v :string) => any) {
+    let onceCount = 0
+    Value.next(value, c => onceCount++)
+    update("hello")
+    expect(onceCount).toBe(1)
+    update("goodbye")
+    expect(onceCount).toBe(1)
+
     let prev = value.current
     const history :string[] = []
     value.onChange((nv, ov) => {
@@ -125,7 +132,7 @@ test("basic value", () => {
     expect(mapValue.current).toEqual(value.current.length)
 
     let filterHistory :string[] = []
-    let filterRemover = R.when(value, b => b.length % 2 == 0, b => filterHistory.push(b))
+    let filterRemover = Value.when(value, b => b.length % 2 == 0, b => filterHistory.push(b))
     update("one")
     expect(filterHistory).toEqual([])
     update("five")
@@ -139,17 +146,17 @@ test("basic value", () => {
     expect(filterHistory).toEqual(["five", "nineteen"])
   }
 
-  const rm = R.mutable("")
+  const rm = Mutable.local("")
   testValue(rm, v => rm.update(v))
 
-  const em = R.emitter<string>()
-  testValue(R.valueFromStream(em, ""), v => em.emit(v))
+  const em = new Emitter<string>()
+  testValue(Value.fromStream(em, ""), v => em.emit(v))
 })
 
 test("value as promise", () => {
   // exercise the "the value already meets the promise criteria" code path
   let rez1 = false
-  const rm1 = R.mutable(3)
+  const rm1 = Mutable.local(3)
   rm1.toPromise(baz => baz === 3).then(baz => {
     expect(baz).toBe(3)
     rez1 = true
@@ -157,7 +164,7 @@ test("value as promise", () => {
 
   // exercise the "the value eventually meets the promise criteria" code path
   let rez2 = false
-  const rm2 = R.mutable("bar")
+  const rm2 = Mutable.local("bar")
   const rm2p = rm2.toPromise(bar => bar === "bang!")
   const rm2pp = rm2p.then(bar => {
     expect(bar).toEqual("bang!")
@@ -180,9 +187,9 @@ test("value as promise", () => {
 })
 
 test("switch mapped values", () => {
-  const useBar = R.mutable(false)
-  const bar = R.mutable("")
-  const baz = R.mutable("")
+  const useBar = Mutable.local(false)
+  const bar = Mutable.local("")
+  const baz = Mutable.local("")
   const barOrBaz = useBar.switchMap(useBar => useBar ? bar : baz)
   const barOrBazLength = barOrBaz.map(v => v.length)
 
@@ -221,12 +228,12 @@ test("switch mapped values", () => {
 })
 
 test("joined values", () => {
-  const foo = R.mutable(true)
-  const bar = R.mutable("")
-  const baz = R.mutable(0)
+  const foo = Mutable.local(true)
+  const bar = Mutable.local("")
+  const baz = Mutable.local(0)
 
   const history :Array<[boolean, string, number]> = []
-  R.join3(foo, bar, baz).onValue(fbb => history.push([...fbb] as [boolean, string, number]))
+  Value.join3(foo, bar, baz).onValue(fbb => history.push([...fbb] as [boolean, string, number]))
 
   // make some changes
   foo.update(false)
@@ -248,7 +255,7 @@ test("joined values", () => {
 
   // make sure joined values reflect changes to their underlying values even when they have no
   // listeners
-  let fooBarBaz = R.join3(foo, bar, baz)
+  let fooBarBaz = Value.join3(foo, bar, baz)
   expect(fooBarBaz.current).toEqual([true, "yay", 42])
   foo.update(false)
   expect(fooBarBaz.current).toEqual([false, "yay", 42])

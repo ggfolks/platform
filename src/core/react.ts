@@ -1,6 +1,10 @@
-import { Data, dataEquals, refEquals } from "./data"
+import {Data, dataEquals, refEquals} from "./data"
 
+/** A thunk that is invoked with no arguments to remove a listener registration. */
 export type Remover = () => void
+
+/** A no-op remover thunk. This is useful when doing manual plumbing to avoid having to maintain a
+  * potentially undefined remover thunk. */
 export const NoopRemover :Remover = () => true
 
 // TypeScript infers literal types for type parameters with bounds, so when we bound our reactive
@@ -12,7 +16,7 @@ type Widen<T> =
   T extends number  ? number :
   T extends boolean ? boolean : T;
 
-/** An equality function, used to test whether values have actually changed during reactive value
+/** An equality function used to test whether values have actually changed during reactive value
   * propagation. */
 export type Eq<T> = (a:T,b:T) => boolean
 
@@ -30,15 +34,19 @@ function addListener<T> (listeners :T[], listener :T) :Remover {
   }
 }
 
+/** An error that encapsulates multiple errors. Thrown when dispatching to reactive callbacks
+  * triggers multiple failures. */
 export class MultiError extends Error {
   constructor (readonly errors :Error[]) {
     super(`${errors.length} errors`)
   }
 }
 
+/** A callback "function" that consumes a value from a reactive source. Return value may be
+  * anything, but is ignored. */
 export type ValueFn<T> = (value :T) => any
 
-function dispatchValue<T> (listeners :Array<ValueFn<T>>, value :T) {
+function dispatchValue<T> (listeners :ValueFn<T>[], value :T) {
   let errors
   for (let listener of listeners.slice()) {
     try {
@@ -54,9 +62,11 @@ function dispatchValue<T> (listeners :Array<ValueFn<T>>, value :T) {
   }
 }
 
+/** A callback "function" that consumes a change in value, from a reactive source. Return value may
+  * be anything, but is ignored. */
 export type ChangeFn<T> = (value :T, oldValue :T) => any
 
-function dispatchChange<T> (listeners :Array<ChangeFn<T>>, value :T, oldValue :T) {
+function dispatchChange<T> (listeners :ChangeFn<T>[], value :T, oldValue :T) {
   let errors
   for (let listener of listeners.slice()) {
     try {
@@ -78,63 +88,138 @@ function dispatchChange<T> (listeners :Array<ChangeFn<T>>, value :T, oldValue :T
 }
 
 //
-// Reactive listenable
+// Reactive source & helpers
 
-export interface Source<T> {
-  onValue (fn :ValueFn<T>) :Remover
-  onNextValue (fn :ValueFn<T>) :Remover
-  map<F extends Data> (fn :(v:T) => F) :Source<F>
-}
+/** A function used to dispatch new values on reactive primitives. */
+export type DispatchFn<T> = (value :T) => void
 
-export function when<T> (value :Source<T>, pred :(v:T) => boolean, fn :ValueFn<T>) :Remover {
-  return value.onValue(v => { if (pred(v)) fn(v) })
-}
+/** A predicate which tests something about a `value`. */
+export type Pred<T> = (value :T) => boolean
 
-export function whenDefined<T> (value :Source<T|undefined>, fn :ValueFn<T>) :Remover {
-  return value.onValue(v => { if (v !== undefined) fn(v) })
-}
+/** A reactive source: an API that abstracts over `Stream` and `Value`. */
+export abstract class Source<T> {
 
-export function once<T> (value :Source<T>, pred :(v:T) => boolean, fn :ValueFn<T>) :Remover {
-  let remover :Remover
-  return (remover = value.onValue(v => { if (pred(v)) { remover() ; fn(v) } }))
-}
+  /** Registers `fn` to be called the next time `source` emits a value. If source contains a current
+    * value `fn` will _not_ be called with the current value.
+    * @return a remover thunk (invoke with no args to unregister `fn`). */
+  static next<T> (source :Source<T>, fn :ValueFn<T>) :Remover {
+    let remover :Remover
+    return (remover = source.onEmit(v => { remover() ; fn(v) }))
+  }
 
-export function onceDefined<T> (value :Source<T|undefined>, fn :ValueFn<T>) :Remover {
-  let remover :Remover
-  return (remover = value.onValue(v => { if (v !== undefined) { remover() ; fn(v) } }))
+  /** Registers `fn` to be called when `source` contains or emits values which satisfy `pred`.
+    * @return a remover thunk (invoke with no args to unregister `fn`). */
+  static when<T> (source :Source<T>, pred :Pred<T>, fn :ValueFn<T>) :Remover {
+    return source.onValue(v => { if (pred(v)) fn(v) })
+  }
+
+  /** Registers `fn` to be called when `source` contains or emits non-`undefined` values.
+    * @return a remover thunk (invoke with no args to unregister `fn`). */
+  static whenDefined<T> (source :Source<T|undefined>, fn :ValueFn<T>) :Remover {
+    return source.onValue(v => { if (v !== undefined) fn(v) })
+  }
+
+  /** Registers `fn` to be called the first time `source` contains or emits a value which satisfies
+    * `pred`. `fn` will be called zero or one times.
+    * @return a remover thunk (invoke with no args to unregister `fn`). */
+  static once<T> (source :Source<T>, pred :Pred<T>, fn :ValueFn<T>) :Remover {
+    let remover :Remover
+    return (remover = source.onValue(v => { if (pred(v)) { remover() ; fn(v) } }))
+  }
+
+  /** Registers `fn` to be called the first time `source` contains or emits a non-`undefined` value.
+    * `fn` will be called zero or one times.
+    * @return a remover thunk (invoke with no args to unregister `fn`). */
+  static onceDefined<T> (source :Source<T|undefined>, fn :ValueFn<T>) :Remover {
+    let remover :Remover
+    return (remover = source.onValue(v => { if (v !== undefined) { remover() ; fn(v) } }))
+  }
+
+  /** Registers `fn` to be called with values emitted by this source. If the source has a current
+    * value, `fn` will _not_ be called with the current value. */
+  abstract onEmit (fn :ValueFn<T>) :Remover
+
+  /** Registers `fn` to be called with values emitted by this source. If the source has a current
+    * value, `fn` will also be called immediately with the current value. */
+  abstract onValue (fn :ValueFn<T>) :Remover
+
+  /** Returns a new source that transforms the value of this source via `fn`. */
+  abstract map<F extends Data> (fn :(v:T) => F) :Source<F>
 }
 
 //
 // Reactive streams
 
-export class Stream<T> implements Source<T> {
+/** A reactive primitive that emits a stream of values. A stream does not have a current value, it
+  * emits values which are distributed to any registered listeners and then forgotten. */
+export class Stream<T> extends Source<T> {
 
-  constructor (readonly onValue :(fn :ValueFn<T>) => Remover) {}
-
-  onNextValue (fn :ValueFn<T>) :Remover {
-    let remover :Remover
-    const once = (value :T) => {
-      remover()
-      fn(value)
-    }
-    return (remover = this.onValue(once))
+  /** Creates a stream derived from one or more external event sources.
+    * @param connect a function called when the stream receives its first listener. This should
+    * subscribe to the underlying source and call the supplied `dispatch` function to dispatch
+    * values as they are received. It should return a remover thunk that can be used to clear the
+    * subscription, which will be called when the last listener is removed. */
+  static derive<T> (connect :(dispatch :DispatchFn<T>) => Remover) :Stream<T> {
+    const listeners :ValueFn<T>[] = []
+    let disconnect :Remover = NoopRemover
+    const dispatch = (value :T) => { dispatchValue(listeners, value) }
+    return new Stream(listener => {
+      const needConnect = listeners.length === 0
+      const remover = addListener(listeners, listener)
+      if (needConnect) disconnect = connect(dispatch)
+      return () => {
+        remover()
+        if (listeners.length == 0) {
+          disconnect()
+          disconnect = NoopRemover
+        }
+      }
+    })
   }
 
+  /** Merges `sources` streams into a single stream that emits a value whenever any of the
+    * underlying streams emit a value. */
+  static merge<E> (...sources :Stream<E>[]) :Stream<E> {
+    return Stream.derive(dispatch => {
+      let removers :Remover[] = sources.map(s => s.onEmit(dispatch))
+      return () => removers.forEach(r => r())
+    })
+  }
+
+  constructor (private readonly _onEmit :(fn :ValueFn<T>) => Remover) { super() }
+
+  /** Registers `fn` to be invoked when this stream emits a value.
+    * @return a remover thunk (invoke with no args to unregister `fn`). */
+  onEmit (fn :ValueFn<T>) :Remover { return this._onEmit(fn) }
+
+  /** Registers `fn` to be invoked when this stream emits a value.
+    * @return a remover thunk (invoke with no args to unregister `fn`). */
+  onValue (fn :ValueFn<T>) :Remover { return this._onEmit(fn) }
+
+  /** Returns a stream which transforms the values of this stream via `fn`. Whenever this stream
+    * emits a `value`, the returned stream will emit `fn(value)`. */
   map<F> (fn :(v:T) => F) :Stream<F> {
-    return deriveStream(dispatch => this.onValue(value => dispatch(fn(value))))
+    return Stream.derive(dispatch => this.onEmit(value => dispatch(fn(value))))
   }
 
-  filter (pred :(v:T) => Boolean) :Stream<T> {
-    return deriveStream(dispatch => this.onValue(value => pred(value) && dispatch(value)))
+  /** Returns a stream which filters the values of this stream via `pred`. Only the values emitted
+    * by this stream that satisfy `pred` (cause it to return `true`) will be emitted by the returned
+    * stream. */
+  filter (pred :Pred<T>) :Stream<T> {
+    return Stream.derive(dispatch => this.onEmit(value => pred(value) && dispatch(value)))
   }
 
+  /** Returns a reactive value which starts with value `start` and is updated by values emitted by
+    * this stream whenever they arrive.
+    * @param eq used to check whether successive values from this stream have actually changed.
+    * `Value`s emit notifications only when values change. */
   toValue (start :T, eq :Eq<T>) :Value<T> {
     const stream = this
     class StreamValue extends DerivedValue<T> {
       private _current = start
       get current () :T { return this._current }
       _connectToSource () {
-        return stream.onValue(value => {
+        return stream.onEmit(value => {
           const previous = this._current
           if (!this.eq(previous, value)) {
             this._current = value
@@ -147,96 +232,210 @@ export class Stream<T> implements Source<T> {
   }
 }
 
-export function valueFromStream<T extends Data> (stream :Stream<T>, start :T) :Value<T> {
-  return stream.toValue(start, dataEquals)
-}
-
-export function valueFromStreamRef<T> (stream :Stream<T>, start :T) :Value<T> {
-  return stream.toValue(start, refEquals)
-}
-
-/**
- * Merges `sources` streams into a single stream that emits a value whenever any of the underlying
- * streams emit a value.
- */
-export function merge<E> (...sources :Array<Stream<E>>) :Stream<E> {
-  return deriveStream(dispatch => {
-    let removers :Remover[] = sources.map(s => s.onValue(dispatch))
-    return () => removers.forEach(r => r())
-  })
-}
-
+/* A stream which can have values emitted on it by external callers. */
 export class Emitter<T> extends Stream<T> {
-  private _listeners :Array<ValueFn<T>> = []
+  private _listeners :ValueFn<T>[] = []
 
   constructor () { super(lner => addListener(this._listeners, lner)) }
 
+  /** Emits `value` on this stream. Any current listeners will be notified of the value. */
   emit (value :T) {
     dispatchValue(this._listeners, value)
   }
+
+  // TODO: should we provide onWake/onSleep callbacks?
 }
 
-export function emitter<T> () :Emitter<T> {
-  return new Emitter<T>()
-}
+//
+// Reactive subjects - an intermediate point between streams and values
 
-function deriveStream<T> (connect :(dispatch :(v:T) => void) => Remover) :Stream<T> {
-  const listeners :Array<(v :T) => any> = []
-  let disconnect :Remover = NoopRemover
-  const dispatch = (value :T) => { dispatchValue(listeners, value) }
+/** A reactive primitive that contains a value which may subsequently change. The current value of
+  * the subject may only be observed by listening to the subject. This allows the subject to
+  * materialize its value on demand, only when there are listeners. This is its fundamental
+  * difference from [[Value]] which can be polled at any time for its current value, regardless of
+  * whether it has listeners. */
+export class Subject<T> extends Source<T> {
 
-  return new Stream(listener => {
-    const needConnect = listeners.length === 0
-    const remover = addListener(listeners, listener)
-    if (needConnect) disconnect = connect(dispatch)
-    return () => {
-      remover()
-      if (listeners.length == 0) {
-        disconnect()
-        disconnect = NoopRemover
+  /** Creates a subject derived from an initial value function and an external event source.
+    * @param connect called when the stream receives its first listener. This should subscribe to
+    * the underlying source and call the supplied `dispatch` function to dispatch values as they are
+    * received. It should return a remover thunk that can be used to clear the subscription, which
+    * will be called when the last listener is removed. */
+  static derive<T> (connect :(dispatch :DispatchFn<T>) => [T,Remover]) :Subject<T> {
+    const listeners :ValueFn<T>[] = []
+    let disconnect = NoopRemover
+    let latest :T // initialized when connected; only used thereafter
+    const onEmit = (listener :ValueFn<T>) :Remover => {
+      const needConnect = listeners.length === 0
+      const remover = addListener(listeners, listener)
+      if (needConnect) {
+        const [init, discon] = connect(
+          value => dispatchValue(listeners, latest = value))
+        latest = init
+        disconnect = discon
+      }
+      return () => {
+        remover()
+        if (listeners.length > 0) {
+          disconnect()
+          disconnect = NoopRemover
+          latest = undefined as any // don't retain a reference to latest
+        }
       }
     }
-  })
+    return new Subject(onEmit, (fn :ValueFn<T>) :Remover => {
+      const remover = onEmit(fn) // this will connect and init latest if needed
+      fn(latest)
+      return remover
+    })
+  }
+
+  constructor (private readonly _onEmit :(fn :ValueFn<T>) => Remover,
+               private readonly _onValue :(fn :ValueFn<T>) => Remover) { super() }
+
+  /** Registers `fn` to be called with new values whenever this subject changes, but _not_ with the
+    * latest observed value.
+    * @return a remover thunk (invoke with no args to unregister `fn`). */
+  onEmit (fn :ValueFn<T>) :Remover { return this._onEmit(fn) }
+
+  /** Registers `fn` to be called immediately with the current value, and with new values whenever
+    * this subject changes.
+    * @return a remover thunk (invoke with no args to unregister `fn`). */
+  onValue (fn :ValueFn<T>) :Remover { return this._onValue(fn) }
+
+  /** Creates a subject which transforms this subject via `fn`. The new subject will emit changes
+    * whenever this subject changes and the transformed value differs from the previous transformed
+    * value.
+    * @param fn a referentially transparent transformer function. */
+  map<U> (fn :(v:T) => U) :Subject<U> {
+    const source = this
+    return Subject.derive<U>(dispatch => {
+      let initted = false, init :U = undefined as any
+      const remover = source.onValue(value => {
+        // if we're connecting the first listener, we want to capture the latest value but not
+        // dispatch it; the first listener may be calling onEmit which means they only want future
+        // changes, and if they're calling onValue, that will take care of dispatching the latest
+        // value after we're connected
+        if (initted) dispatch(fn(value))
+        else {
+          init = fn(value)
+          initted = true
+        }
+      })
+      return [init, remover]
+    })
+  }
+
+  // TODO: switchMap &c?
 }
 
 //
 // Reactive values
 
-export abstract class Value<T> implements Source<T> {
+/** A reactive primitive that contains a value, which may subsequently change. The current value may
+  * be observed by listening via [[Value.onValue]], or by calling [[Value.current]]. */
+export abstract class Value<T> extends Source<T> {
 
-  constructor (readonly eq :Eq<T>) {}
+  /** Creates a constant value which always contains `value`. */
+  static constant<T extends Data> (value :T) :Value<Widen<T>> {
+    return new ConstantValue(value as Widen<T>)
+  }
 
+  /** Creates a constant (data) value which always contains `value` or `undefined`. */
+  static constantOpt<T extends Data> (value :T|undefined) :Value<Widen<T|undefined>> {
+    return new ConstantValue(value as Widen<T|undefined>)
+  }
+
+  /** Creates a value from `stream` which starts with the value `start` and is updated by values
+    * emitted by `stream` whenever they arrive. The values emitted by `stream` are `Data` and are
+    * compared for equality structurally (via [dataEquals]). */
+  static fromStream<T extends Data> (stream :Stream<T>, start :T) :Value<T> {
+    return stream.toValue(start, dataEquals)
+  }
+
+  /** Creates a value from `stream` which starts with the value `start` and is updated by values
+    * emitted by `stream` whenever they arrive. The values emitted by `stream` may be of any type,
+    * but are compared for equality by reference. */
+  static fromStreamRef<T> (stream :Stream<T>, start :T) :Value<T> {
+    return stream.toValue(start, refEquals)
+  }
+
+  /** Joins `sources` into a single value which contains the underlying values combined into a
+    * single array. When any of the underlying values changes, this value will change and the
+    * changed element will be reflected in its new value. */
+  static join<A> (...sources :Value<A>[]) :Value<A[]> {
+    return new JoinedValue(sources)
+  }
+
+  /** Joins two values into a single "tuple" value. When either of the underlying values changes,
+    * this value will change and the changed element will be reflected in its new value. */
+  static join2<A,B> (a :Value<A>, b :Value<B>) :Value<[A,B]> {
+    return (new JoinedValue([a, b]) as any) as Value<[A,B]>
+  }
+
+  /** Joins three values into a single "triple" value. When any of the underlying values changes,
+    * this value will change and the changed element will be reflected in its new value. */
+  static join3<A,B,C> (a :Value<A>, b :Value<B>, c :Value<C>) :Value<[A,B,C]> {
+    return (new JoinedValue([a, b, c]) as any) as Value<[A,B,C]>
+  }
+
+  constructor (readonly eq :Eq<T>) { super() }
+
+  /** The current value contained by this value. */
   abstract get current () :T
 
+  /** Registers `fn` to be called with old and new values whenever this subject changes.
+    * @return a remover thunk (invoke with no args to unregister `fn`). */
   abstract onChange (fn :ChangeFn<T>) :Remover
 
-  onChangeOnce (fn :ChangeFn<T>) :Remover {
-    let remover :Remover
-    return (remover = this.onChange((value, ovalue) => {
-      remover()
-      fn(value, ovalue)
-    }))
+  /** Registers `fn` to be called with the new value whenever this subject changes.
+    * @return a remover thunk (invoke with no args to unregister `fn`). */
+  onEmit (fn :ValueFn<T>) :Remover {
+    return this.onChange(fn)
   }
 
+  /** Registers `fn` to be called with the most recently observed value (immediately) and again with
+    * the new value whenever this subject changes.
+    * @return a remover thunk (invoke with no args to unregister `fn`). */
   onValue (fn :ValueFn<T>) :Remover {
+    const remover = this.onChange(fn)
     fn(this.current)
-    return this.onChange(fn)
+    return remover
   }
 
-  onNextValue (fn :ValueFn<T>) :Remover {
-    return this.onChange(fn)
-  }
-
+  /** Creates a value which transforms this value via `fn`. The new value will emit changes
+    * whenever this value changes and the transformed value differs from the previous transformed
+    * value. [[dataEquals]] will be used to determine when the transformed value changes.
+    * @param fn a referentially transparent transformer function. */
   map<U extends Data> (fn :(v:T) => U) :Value<U> {
     return new MappedValue(this, fn, dataEquals)
   }
+
+  /** Creates a value which transforms this value via `fn`. The new value will emit changes
+    * whenever this value changes and the transformed value differs from the previous transformed
+    * value. [[refEquals]] will be used to determine when the transformed value changes.
+    * @param fn a referentially transparent transformer function. */
   mapRef<U> (fn :(v:T) => U) :Value<U> {
     return new MappedValue(this, fn, refEquals)
   }
+
+  /** Creates a value which transforms this value via `fn`. The new value will emit changes
+    * whenever this value changes and the transformed value differs from the previous transformed
+    * value.
+    * @param fn a referentially transparent transformer function.
+    * @param eq used to determine when the transformed value changes. */
   mapEq<U> (fn :(v:T) => U, eq :Eq<U>) :Value<U> {
     return new MappedValue(this, fn, eq)
   }
 
+  /** Creates a value which transforms this value via `fn` into a result value. The value of the
+    * transformed value will be the value of the most recent result value. When the result value
+    * changes, the transformed value will change. When this underlying value changes, a new result
+    * value will be computed and this value will emit a change at that time iff the current value
+    * of the new result value differs from the current value of the old result value. Note: this
+    * equality test is performed using the equality testing function of the new result value. To
+    * avoid unexpected behavior, all values returned by `fn` should use the same equality testing
+    * semantics. */
   switchMap<R> (fn :(v:T) => Value<R>) :Value<R> {
     const source = this
     let savedSourceValue = source.current
@@ -287,11 +486,16 @@ export abstract class Value<T> implements Source<T> {
     return new SwitchMappedValue(refEquals)
   }
 
+  /** Returns a `Stream` that emits values whenever this value changes. */
   toStream () :Stream<T> {
     return new Stream<T>(fn => this.onChange(fn))
   }
 
-  toPromise (pred :(value :T) => boolean) :Promise<T> {
+  /** Returns a `Promise` that completes when this value's current value satisfies `pred`. If the
+    * current value satisfies pred, a completed promise will be returned. Otherwise an uncompleted
+    * promise is returned and that promise is completed when this value next changes to a
+    * satisfying value. */
+  toPromise (pred :Pred<T>) :Promise<T> {
     let current = this.current
     if (pred(current)) {
       return Promise.resolve(current)
@@ -308,7 +512,7 @@ export abstract class Value<T> implements Source<T> {
 }
 
 abstract class DerivedValue<T> extends Value<T> {
-  private _listeners :Array<ChangeFn<T>> = []
+  private _listeners :ChangeFn<T>[] = []
   private _disconnect = NoopRemover
 
   abstract _connectToSource () :Remover
@@ -334,24 +538,10 @@ abstract class DerivedValue<T> extends Value<T> {
 }
 
 class ConstantValue<T> extends Value<T> {
-  constructor (readonly current :T, eq :Eq<T>) { super(eq) }
+  // note: we always use refEquals here as some equality fn is needed, but it is never used because
+  // constant values never change and thus never have to compare an old value and a new value
+  constructor (readonly current :T) { super(refEquals) }
   onChange (fn :ChangeFn<T>) :Remover { return NoopRemover }
-}
-
-export function constant<T extends Data> (value :T) :Value<Widen<T>> {
-  return new ConstantValue(value as Widen<T>, dataEquals)
-}
-
-export function constantOpt<T extends Data> (value :T|undefined) :Value<Widen<T|undefined>> {
-  return new ConstantValue(value as Widen<T|undefined>, dataEquals)
-}
-
-export function constantRef<T> (value :T) :Value<T> {
-  return new ConstantValue(value, refEquals)
-}
-
-export function constantEq<T> (value :T, eq :Eq<T>) :Value<T> {
-  return new ConstantValue(value, eq)
 }
 
 class JoinedValue extends DerivedValue<any[]> {
@@ -378,24 +568,40 @@ class JoinedValue extends DerivedValue<any[]> {
   }
 }
 
-export function join<A> (...sources :Array<Value<A>>) :Value<A[]> {
-  return new JoinedValue(sources)
-}
-
-export function join2<A,B> (a :Value<A>, b :Value<B>) :Value<[A,B]> {
-  return (new JoinedValue([a, b]) as any) as Value<[A,B]>
-}
-
-export function join3<A,B,C> (a :Value<A>, b :Value<B>, c :Value<C>) :Value<[A,B,C]> {
-  return (new JoinedValue([a, b, c]) as any) as Value<[A,B,C]>
-}
-
+/** A `Value` which can be mutated by external callers. */
 export abstract class Mutable<T> extends Value<T> {
+
+  /** Creates a local mutable value, which starts with value `start`.
+    * Changes to this value will be determined using [[dataEquals]]. */
+  static local<T extends Data> (start :T) :Mutable<Widen<T>> {
+    return new LocalMutable(start as Widen<T>, dataEquals)
+  }
+
+  /** Creates a local mutable value, which starts with value `start` or `undefined`.
+    * Changes to this value will be determined using [[dataEquals]]. */
+  static localOpt<T extends Data> (start :T|undefined) :Mutable<Widen<T|undefined>> {
+    return new LocalMutable(start as Widen<T|undefined>, dataEquals)
+  }
+
+  /** Creates a local mutable value, which starts with value `start`.
+    * Changes to this value will be determined using [[refEquals]]. */
+  static localRef<T> (start :T) :Mutable<T> {
+    return new LocalMutable(start, refEquals)
+  }
+
+  /** Creates a local mutable value, which starts with value `start`.
+    * Changes to this value will be determined using `eq`. */
+  static localEq<T> (start :T, eq :Eq<T>) :Mutable<T> {
+    return new LocalMutable(start, eq)
+  }
+
+  /** Updates this mutable value to `newValue`. If `newValue` differs from the current value,
+    * listeners will be notified of the change. */
   abstract update (newValue :T) :void
 }
 
 class LocalMutable<T> extends Mutable<T> {
-  private _listeners :Array<ChangeFn<T>> = []
+  private _listeners :ChangeFn<T>[] = []
 
   constructor (private _value :T, eq :Eq<T>) { super(eq) }
 
@@ -412,22 +618,6 @@ class LocalMutable<T> extends Mutable<T> {
   onChange (listener :ChangeFn<T>) :Remover {
     return addListener(this._listeners, listener)
   }
-}
-
-export function mutable<T extends Data> (start :T) :Mutable<Widen<T>> {
-  return new LocalMutable(start as Widen<T>, dataEquals)
-}
-
-export function mutableOpt<T extends Data> (start :T|undefined) :Mutable<Widen<T|undefined>> {
-  return new LocalMutable(start as Widen<T|undefined>, dataEquals)
-}
-
-export function mutableRef<T> (start :T) :Mutable<T> {
-  return new LocalMutable(start, refEquals)
-}
-
-export function mutableEq<T> (start :T, eq :Eq<T>) :Mutable<T> {
-  return new LocalMutable(start, eq)
 }
 
 class MappedValue<S,T> extends DerivedValue<T> {
