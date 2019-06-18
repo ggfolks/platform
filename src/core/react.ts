@@ -122,7 +122,7 @@ export abstract class Source<T> {
   abstract onValue (fn :ValueFn<T>) :Remover
 
   /** Returns a new source that transforms the value of this source via `fn`. */
-  abstract map<F extends Data> (fn :(v:T) => F) :Source<F>
+  abstract map<U> (fn :(v:T) => U) :Source<U>
 
   /** Registers `fn` to be called the first time this source contains or emits a value. If the
     * source contains a current value, `fn` will be called before this call returns. `fn` will be
@@ -205,9 +205,9 @@ export class Stream<T> extends Source<T> {
     * @return a remover thunk (invoke with no args to unregister `fn`). */
   onValue (fn :ValueFn<T>) :Remover { return this._onEmit(fn) }
 
-  /** Returns a stream which transforms the values of this stream via `fn`. Whenever this stream
+  /** Returns a stream which transforms the values of this stream via `fn`. Whenever `this` stream
     * emits a `value`, the returned stream will emit `fn(value)`. */
-  map<F> (fn :(v:T) => F) :Stream<F> {
+  map<U> (fn :(v:T) => U) :Stream<U> {
     return Stream.derive(dispatch => this.onEmit(value => dispatch(fn(value))))
   }
 
@@ -370,8 +370,27 @@ export abstract class Subject<T> extends Source<T> {
   /** Creates a subject which transforms this subject via `fn`. The new subject will emit
     * transformed changes whenever this subject changes.
     * @param fn a referentially transparent transformer function. */
-  map<U extends Data> (fn :(v:T) => U) :Subject<U> {
+  map<U> (fn :(v:T) => U) :Subject<U> {
     return Subject.derive(dispatch => this.onValue(value => dispatch(fn(value))))
+  }
+
+  /** Creates a subject which transforms this subject via `fn`. The new subject will emit
+    * transformed changes whenever this subject changes.
+    * @param onWake a function called when the mapped subject receives its first listener. It can
+    * optionally return an initial value for the mapped subject.
+    * @param fn a referentially transparent transformer function.
+    * @param onSleep a function called when the mapped subject loses its last listener. It is passed
+    * the most recently computed mapped value, if one is available. */
+  mapTrace<U> (onWake :() => U|void, fn :(v:T) => U, onSleep :(v:U|void) => void) :Subject<U> {
+    return Subject.derive(dispatch => {
+      let latest = onWake()
+      if (latest) dispatch(latest)
+      const unsub = this.onValue(value => dispatch(latest = fn(value)))
+      return () => {
+        unsub()
+        onSleep(latest)
+      }
+    })
   }
 
   // TODO: switchMap &c?
@@ -385,13 +404,13 @@ export abstract class Subject<T> extends Source<T> {
 export abstract class Value<T> extends Subject<T> {
 
   /** Creates a constant value which always contains `value`. */
-  static constant<T extends Data> (value :T) :Value<Widen<T>> {
-    return new ConstantValue(value as Widen<T>)
+  static constant<T> (value :T) :Value<T> {
+    return new ConstantValue(value)
   }
 
   /** Creates a constant (data) value which always contains `value` or `undefined`. */
-  static constantOpt<T extends Data> (value :T|undefined) :Value<Widen<T|undefined>> {
-    return new ConstantValue(value as Widen<T|undefined>)
+  static constantOpt<T> (value :T|undefined) :Value<T|undefined> {
+    return new ConstantValue(value)
   }
 
   /** Creates a value from `stream` which starts with the value `start` and is updated by values
@@ -453,18 +472,18 @@ export abstract class Value<T> extends Subject<T> {
 
   /** Creates a value which transforms this value via `fn`. The new value will emit changes
     * whenever this value changes and the transformed value differs from the previous transformed
-    * value. [[dataEquals]] will be used to determine when the transformed value changes.
+    * value. [[refEquals]] will be used to determine when the transformed value changes.
     * @param fn a referentially transparent transformer function. */
-  map<U extends Data> (fn :(v:T) => U) :Value<U> {
-    return new MappedValue(this, fn, dataEquals)
+  map<U> (fn :(v:T) => U) :Value<U> {
+    return new MappedValue(this, fn, refEquals)
   }
 
   /** Creates a value which transforms this value via `fn`. The new value will emit changes
     * whenever this value changes and the transformed value differs from the previous transformed
-    * value. [[refEquals]] will be used to determine when the transformed value changes.
+    * value. [[dataEquals]] will be used to determine when the transformed value changes.
     * @param fn a referentially transparent transformer function. */
-  mapRef<U> (fn :(v:T) => U) :Value<U> {
-    return new MappedValue(this, fn, refEquals)
+  mapData<U extends Data> (fn :(v:T) => U) :Value<U> {
+    return new MappedValue(this, fn, dataEquals)
   }
 
   /** Creates a value which transforms this value via `fn`. The new value will emit changes
