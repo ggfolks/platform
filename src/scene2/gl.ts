@@ -964,8 +964,8 @@ export class Renderer {
     const target = this.target = new DefaultRenderTarget()
     const scale = this.scale = new Scale(attrs.scaleFactor || window.devicePixelRatio)
 
-    const size = this.size = Mutable.local([attrs.width || window.innerWidth,
-                                            attrs.height || window.innerHeight])
+    const size = this.size = Mutable.local<[number, number]>(
+      [attrs.width || window.innerWidth, attrs.height || window.innerHeight])
     size.onValue(([width, height]) => {
       // the frame buffer may be larger (or smaller) than the logical size, depending on whether
       // we're on a HiDPI display, or how the game has configured things (maybe they're scaling down
