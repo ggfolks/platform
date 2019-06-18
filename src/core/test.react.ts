@@ -1,4 +1,4 @@
-import {Stream, Value, Emitter, Mutable} from "./react"
+import {Emitter, Mutable, Stream, Subject, Value} from "./react"
 
 //
 // Reactive stream tests
@@ -44,7 +44,7 @@ test("basic stream", () => {
     expect(filterHistory).toEqual(["five", "nineteen"])
 
     let onceCount = 0
-    Stream.next(stream, c => onceCount++)
+    stream.next(c => onceCount++)
     emit("hello")
     expect(onceCount).toBe(1)
     emit("goodbye")
@@ -80,12 +80,75 @@ test("merged stream", () => {
 })
 
 //
+// Reactive subject tests
+
+test("basic subject", () => {
+  function testSubject (subject :Subject<string>, update :(v :string) => any) {
+    let onceCount = 0
+    subject.next(c => onceCount++)
+    update("hello")
+    expect(onceCount).toBe(1)
+    update("goodbye")
+    expect(onceCount).toBe(1)
+
+    const history :string[] = []
+    subject.onValue(nv => history.push(nv))
+    // we don't know if our subject retains values across observerlessness,
+    // so we have to account for an empty history here or a size one history
+    const exphistory = history.slice()
+
+    update("a") ; exphistory.push("a")
+    expect(history).toEqual(exphistory)
+    update("b") ; exphistory.push("b")
+    expect(history).toEqual(exphistory)
+    update("c") ; exphistory.push("c")
+    expect(history).toEqual(exphistory)
+
+    let mapSubject = subject.map(a => a.length)
+    let mapHistory :number[] = []
+    let mapRemover = mapSubject.onValue(l => mapHistory.push(l))
+    // our subject is still observed by the first history observer, so we know for sure that the
+    // above onValue call will immediately append to mapHistory
+    expect(mapHistory).toEqual([1])
+    update("ant")
+    expect(mapHistory).toEqual([1, 3])
+    update("bear")
+    expect(mapHistory).toEqual([1, 3, 4])
+    update("condor")
+    expect(mapHistory).toEqual([1, 3, 4, 6])
+    mapRemover()
+    update("iguanae")
+    expect(mapHistory).toEqual([1, 3, 4, 6])
+
+    let filterHistory :string[] = []
+    let filterRemover = subject.when(b => b.length % 2 == 0, b => filterHistory.push(b))
+    update("one")
+    expect(filterHistory).toEqual([])
+    update("five")
+    expect(filterHistory).toEqual(["five"])
+    update("nineteen")
+    expect(filterHistory).toEqual(["five", "nineteen"])
+    update("seven")
+    expect(filterHistory).toEqual(["five", "nineteen"])
+    filterRemover()
+    update("four")
+    expect(filterHistory).toEqual(["five", "nineteen"])
+  }
+
+  const rm = Mutable.local("")
+  testSubject(rm, v => rm.update(v))
+
+  const em = new Emitter<string>()
+  testSubject(em.toSubject(), v => em.emit(v))
+})
+
+//
 // Reactive value tests
 
 test("basic value", () => {
   function testValue (value :Value<string>, update :(v :string) => any) {
     let onceCount = 0
-    Value.next(value, c => onceCount++)
+    value.next(c => onceCount++)
     update("hello")
     expect(onceCount).toBe(1)
     update("goodbye")
@@ -132,7 +195,7 @@ test("basic value", () => {
     expect(mapValue.current).toEqual(value.current.length)
 
     let filterHistory :string[] = []
-    let filterRemover = Value.when(value, b => b.length % 2 == 0, b => filterHistory.push(b))
+    let filterRemover = value.when(b => b.length % 2 == 0, b => filterHistory.push(b))
     update("one")
     expect(filterHistory).toEqual([])
     update("five")
