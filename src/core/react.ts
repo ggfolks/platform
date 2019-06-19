@@ -349,12 +349,12 @@ export abstract class Subject<T> extends Source<T> {
 
   /** Joins two subjects into a single "tuple" subject. See [[Subject.join]] for details. */
   static join2<A,B> (a :Subject<A>, b :Subject<B>) :Subject<[A,B]> {
-    return Subject.join([a, b] as any) as Subject<[A, B]>
+    return Subject.join(a as any, b as any) as Subject<[A, B]>
   }
 
   /** Joins three subjects into a single "triple" subject. See [[Subject.join]] for details. */
   static join3<A,B,C> (a :Subject<A>, b :Subject<B>, c :Subject<C>) :Subject<[A,B,C]> {
-    return Subject.join([a, b, c] as any) as Subject<[A, B, C]>
+    return Subject.join(a as any, b as any, c as any) as Subject<[A, B, C]>
   }
 
   /** Registers `fn` to be called only with new values whenever this subject changes, _not_ with the
