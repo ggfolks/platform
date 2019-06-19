@@ -9,6 +9,9 @@
     "url": "https://github.com/tfwdev/platform.git"
   },
   "sideEffects": false,
+  "files": [
+    "lib"
+  ],
   "scripts": {
     "build": "tsc -b",
     "test": "jest --verbose",
@@ -18,11 +21,10 @@
   "jest": {
     "moduleFileExtensions": [
       "ts",
-      "tsx",
       "js"
     ],
     "transform": {
-      "^.+\\.(ts|tsx)$": "ts-jest"
+      "^.+\\.ts$": "ts-jest"
     },
     "globals": {
       "ts-jest": {
@@ -30,7 +32,7 @@
       }
     },
     "testMatch": [
-      "**/test.*.(ts|tsx|js)"
+      "**/test.*.(ts|js)"
     ]
   },
   "dependencies": {
