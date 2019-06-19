@@ -87,7 +87,7 @@ export class Program implements Disposable {
     * @throws Error if no attribute exists with the supplied name. */
   getAttribLocation (name :string) :number {
     const loc = this.glc.getAttribLocation(this.prog, name)
-    if (loc) return loc
+    if (loc >= 0) return loc
     throw new Error(`Failed to get ${name} attribute.`)
   }
 
@@ -114,7 +114,7 @@ export interface RenderTarget extends Disposable {
   xscale :number
   /** The y-scale between display units and pixels for this target. */
   yscale :number
-  /** Whether or nmot to flip the y-axis when rendering to this target. When rendering to textures
+  /** Whether or not to flip the y-axis when rendering to this target. When rendering to textures
     * we do not want to flip the y-axis, when rendering to the screen we do (so that the origin is
     * at the upper left). */
   flip :boolean
@@ -509,11 +509,11 @@ export abstract class QuadBatch extends TexturedBatch {
   addQuad (tint :Color, xf :mat2d,
            left :number, top :number, right :number, bottom :number,
            sl :number, st :number, sr :number, sb :number) {
-    this.addQuadCoords(tint, xf[0], xf[1], xf[2], xf[3], xf[4], xf[5],
-                       left, top, sl, st,
-                       right, top, sr, st,
-                       left, bottom, sl, sb,
-                       right, bottom, sr, sb)
+    this.addQuadVerts(tint, xf[0], xf[1], xf[2], xf[3], xf[4], xf[5],
+                      left, top, sl, st,
+                      right, top, sr, st,
+                      left, bottom, sl, sb,
+                      right, bottom, sr, sb)
   }
 
   /** Adds a transformed axis-aligned quad to this batch.
@@ -524,23 +524,23 @@ export abstract class QuadBatch extends TexturedBatch {
              a :number, b :number, c :number, d :number, tx :number, ty :number,
              left :number, top :number, right :number, bottom :number,
              sl :number, st :number, sr :number, sb :number) {
-    this.addQuadCoords(tint, a, b, c, d, tx, ty,
-                       left,  top,    sl, st,
-                       right, top,    sr, st,
-                       left,  bottom, sl, sb,
-                       right, bottom, sr, sb)
+    this.addQuadVerts(tint, a, b, c, d, tx, ty,
+                      left,  top,    sl, st,
+                      right, top,    sr, st,
+                      left,  bottom, sl, sb,
+                      right, bottom, sr, sb)
   }
 
   /** Adds a transformed axis-aligned quad to this batch.
     * `a, b, c, d, tx, ty` define the affine transform applied to the quad.
     * `x1, y1, .., x4, y4` define the corners of the quad.
     * `sx1, sy1, .., sx4, sy4` define the texture coordinate of the quad. */
-  abstract addQuadCoords (tint :Color,
-                          a :number, b :number, c :number, d :number, tx :number, ty :number,
-                          x1 :number, y1 :number, s1 :number, t1 :number,
-                          x2 :number, y2 :number, s2 :number, t2 :number,
-                          x3 :number, y3 :number, s3 :number, t3 :number,
-                          x4 :number, y4 :number, s4 :number, t4 :number) :void
+  abstract addQuadVerts (tint :Color,
+                         a :number, b :number, c :number, d :number, tx :number, ty :number,
+                         x1 :number, y1 :number, s1 :number, t1 :number,
+                         x2 :number, y2 :number, s2 :number, t2 :number,
+                         x3 :number, y3 :number, s3 :number, t3 :number,
+                         x4 :number, y4 :number, s4 :number, t4 :number) :void
 }
 
 /** The source for the stock triangle batch shader program. */
@@ -647,7 +647,7 @@ export class TriangleBatch extends QuadBatch {
 
   readonly stableAttrs :Float32Array
   private vertices :Float32Array
-  private elements :Int16Array
+  private elements :Uint16Array
 
   readonly vertBuffer :WebGLBuffer
   readonly elemBuffer :WebGLBuffer
@@ -673,7 +673,7 @@ export class TriangleBatch extends QuadBatch {
     // create our vertex and index buffers
     this.stableAttrs = new Float32Array(this.stableAttrsSize)
     this.vertices    = new Float32Array(START_VERTS * this.vertexSize)
-    this.elements    = new Int16Array(START_ELEMS)
+    this.elements    = new Uint16Array(START_ELEMS)
 
     // create our GL buffers
     const vertBuffer = glc.createBuffer()
@@ -727,7 +727,7 @@ export class TriangleBatch extends QuadBatch {
     * how to interpret indices. The index into `xys` will be computed as:
     * `2*(indices[ii] - indexBase)`, so if your indices reference vertices relative to the
     * whole array you should pass `xysOffset/2` for `indexBase`, but if your indices
-    * reference vertices relative to <em>the slice</em> then you should pass zero.
+    * reference vertices relative to _the slice_ then you should pass zero.
     * @param indicesOffset the offset of the indices array, must not be negative and no greater
     * than `indices.length`.
     * @param indicesLen the number of indices to read, must be no less than zero and no greater
@@ -788,12 +788,12 @@ export class TriangleBatch extends QuadBatch {
     this.addElems(vertIdx, indices, indicesOffset, indicesLen, indexBase)
   }
 
-  addQuadCoords (tint :Color,
-                 m00 :number, m01 :number, m10 :number, m11 :number, tx :number, ty :number,
-                 x1 :number, y1 :number, s1 :number, t1 :number,
-                 x2 :number, y2 :number, s2 :number, t2 :number,
-                 x3 :number, y3 :number, s3 :number, t3 :number,
-                 x4 :number, y4 :number, s4 :number, t4 :number) {
+  addQuadVerts (tint :Color,
+                m00 :number, m01 :number, m10 :number, m11 :number, tx :number, ty :number,
+                x1 :number, y1 :number, s1 :number, t1 :number,
+                x2 :number, y2 :number, s2 :number, t2 :number,
+                x3 :number, y3 :number, s3 :number, t3 :number,
+                x4 :number, y4 :number, s4 :number, t4 :number) {
     this.prepareXf(tint, m00, m01, m10, m11, tx, ty)
     const vertIdx = this.beginPrimitive(4, 6)
     let offset = this.vertPos
@@ -874,7 +874,7 @@ export class TriangleBatch extends QuadBatch {
   toString () { return `tris/${this.elements.length/QUAD_INDICES.length}` }
 
   protected get stableAttrsSize () :number { return 8 }
-  protected get vertexSize () :number { return this.stableAttrsSize * 4 }
+  protected get vertexSize () :number { return this.stableAttrsSize + 4 }
   protected get vertexStride () :number { return this.vertexSize * FLOAT_SIZE_BYTES }
 
   protected addExtraStableAttrs (buf :Float32Array, sidx :number) {
@@ -920,7 +920,7 @@ export class TriangleBatch extends QuadBatch {
   private expandElems (elemCount :number) {
     let newElems = this.elements.length
     while (newElems < elemCount) newElems += EXPAND_ELEMS
-    this.elements = new Int16Array(newElems)
+    this.elements = new Uint16Array(newElems)
   }
 }
 
@@ -958,7 +958,10 @@ export class Renderer {
       get xscale () :number { return rend.scale.factor }
       get yscale () :number { return rend.scale.factor }
       get flip () :boolean { return true }
-      bind () { rend.glc.bindFramebuffer(GLC.FRAMEBUFFER, null) }
+      bind () {
+        rend.glc.bindFramebuffer(GLC.FRAMEBUFFER, null)
+        rend.glc.viewport(0, 0, this.width, this.height)
+      }
       dispose () {}
     }
     const target = this.target = new DefaultRenderTarget()
