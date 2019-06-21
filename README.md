@@ -13,9 +13,9 @@ code, and a separate demo project which depends on the `tfw-platform` package. T
 change in the future when I finally determine the least terrible way to ship non-trivial software
 with NPM, but that's already looking like a long road.
 
-Thanks to a number of "forward thinking" design decisions on the part of NPM and a trail of
+Thanks to a number of not so forward thinking design decisions on the part of NPM and a trail of
 evolutionary tears as new complexities in the JavaScript ecosystem were shoe-horned into the meager
-initial design, running the demo app is somewhat complex.
+initial design, the layout of the platform project is a bit strange.
 
 Assuming you've checked out the `platform` Github project somewhere, you must first build it (these
 instructions are for Unix-like OSes, if you're on Windows you'll have to translate into your
