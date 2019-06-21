@@ -55,3 +55,7 @@ yarn link tfw-platform
 Now when you make changes to code in `platform/src`, you run `yarn build` (in `platform/src`) and
 they will be detected by the webpack hot reloader in `platform/demo` and the demo app will be
 automatically reloaded.
+
+## License
+
+The platform is licensed under the MIT License. See the [LICENSE](LICENSE.md) file for details.
