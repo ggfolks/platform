@@ -1,12 +1,15 @@
-import {mat2d} from "gl-matrix"
+import {clamp, dim2, mat2d, vec2, vec2one, vec2zero} from "../core/math"
 import {Disposable} from "../core/util"
 import {Mutable, Subject} from "../core/react"
+
+// TODO:
+// core - ?.ts : Clock (for frame timing?)
 
 //
 // Basic GL machinery: shader programs, render targets, etc.
 
-type GLC = WebGLRenderingContext
-const GLC = WebGLRenderingContext
+export type GLC = WebGLRenderingContext
+export const GLC = WebGLRenderingContext
 
 const checkErrors = true
 
@@ -106,14 +109,10 @@ export class Program implements Disposable {
 
 /** Reprenents a GL render target (i.e. frame buffer). */
 export interface RenderTarget extends Disposable {
-  /** The width of this render target in pixels. */
-  width :number
-  /** The height of this render target in pixels. */
-  height :number
-  /** The x-scale between display units and pixels for this target. */
-  xscale :number
-  /** The y-scale between display units and pixels for this target. */
-  yscale :number
+  /** The size of this render target in pixels. */
+  size :dim2
+  /** The scale between display units and pixels for this target. */
+  scale :vec2
   /** Whether or not to flip the y-axis when rendering to this target. When rendering to textures
     * we do not want to flip the y-axis, when rendering to the screen we do (so that the origin is
     * at the upper left). */
@@ -132,23 +131,18 @@ export class Scale {
   /** An unscaled (1.0) scale factor singleton. */
   static ONE = new Scale(1)
 
-  constructor (readonly factor :number) {
+  /** The inverse of `this` scale. */
+  readonly inv :Scale
+
+  constructor (readonly factor :number, _inv? :Scale) {
     if (factor <= 0) throw new Error(`Scale factor must be > 0 (got ${factor}`)
+    this.inv = _inv || new Scale(1/factor, this)
   }
 
   /** Returns `length` scaled by this scale factor. */
   scaled (length :number) :number { return length * this.factor }
-  /** Returns `length` scaled by our scale factor and rounded up. */
-  scaledCeil (length :number) :number { return Math.ceil(this.scaled(length)) }
-  /** Returns `length` scaled by our scale factor and rounded down. */
-  scaledFloor (length :number) :number { return Math.floor(this.scaled(length)) }
-
-  /** Returns `length` inverse scaled by this scale factor. */
-  invScaled (length :number) :number { return length / this.factor }
-  /** Returns `length` inverse scaled by this scale factor, then rounded up. */
-  invScaledCeil (length :number) :number { return Math.ceil(this.invScaled(length)) }
-  /** Returns `length` inverse scaled by this scale factor, then rounded down. */
-  invScaledFloor (length :number) :number { return Math.floor(this.invScaled(length)) }
+  /** Returns `size` scaled by this scale factor. */
+  scaledDim (size :dim2) :dim2 { return dim2.scale(dim2.create(), size, this.factor) }
 
   /** Rounds the supplied length to the nearest length that corresponds to an integer pixel length
     * after this scale factor is applied. For example, for a scale factor of 3,
@@ -193,8 +187,34 @@ export const UnmanagedTexConfig :TextureConfig = Object.freeze({
   managed: false
 })
 
+/** A square region of a texture. Simplifies rendering tiles from texture atlases. */
+export interface Tile {
+
+  /** The texture which contains this tile. */
+  texture :Texture
+  /** The display size of this tile (in display units, not pixels). */
+  size :dim2
+  /** The `s` texture coordinate. */
+  s :vec2
+  /** The `t` texture coordinate. */
+  t :vec2
+
+  /** Adds this tile to `batch`, tinted by `tint` and transformed by `trans`.
+    * @param pos the position at which to add the tile.
+    * @param size the size at which to add the tile (scaling it from its default size). */
+  addToBatch (batch :QuadBatch, tint :number, trans :mat2d, pos :vec2, size :dim2) :void
+
+  /** Adds a sub-region of this tile to `batch`, tinted by `tint` and transformed by `trans`.
+    * @param pos the position at which to add the tile.
+    * @param size the size at which to add the tile (scaling it from its default size).
+    * @param spos the position in the source tile of the subregion.
+    * @param ssize the size in teh source tile of the subregion. */
+  addSubToBatch (batch :QuadBatch, tint :number, trans :mat2d,
+                 pos :vec2, size :dim2, spos :vec2, ssize :dim2) :void
+}
+
 /** Wraps up  a GL context, texture, and config. */
-export class Texture {
+export class Texture implements Tile {
 
   constructor (
     /** The GL context in which this texture resides. */
@@ -203,15 +223,25 @@ export class Texture {
     readonly tex :WebGLTexture,
     /** The configuration of this texture. */
     readonly config :TextureConfig,
-    /** The pixel width of the underlying GL texture. */
-    readonly pixWidth :number,
-    /** The pixel height of the underlying GL texture. */
-    readonly pixHeight :number,
-    /** The display width of this texture in display units (not pixels). */
-    readonly width :number = config.scale.invScaled(pixWidth),
-    /** The display height of this texture in display units (not pixels). */
-    readonly height :number = config.scale.invScaled(pixHeight)
+    /** The pixel size of the underlying GL texture. */
+    readonly pixSize :dim2,
+    /** The display size of this texture (in display units, not pixels). */
+    readonly size :dim2 = config.scale.inv.scaledDim(pixSize)
   ) {}
+
+  get texture () :Texture { return this }
+  get s () :vec2 { return vec2zero }
+  get t () :vec2 { return vec2one }
+
+  addToBatch (batch :QuadBatch, tint :number, trans :mat2d, pos :vec2, size :dim2) {
+    batch.addTexQuad(this, tint, trans, pos[0], pos[1], size[0], size[1])
+  }
+
+  addSubToBatch (batch :QuadBatch, tint :number, trans :mat2d,
+                 pos :vec2, size :dim2, spos :vec2, ssize :dim2) {
+    batch.addSubTexQuad(this, tint, trans, pos[0], pos[1], size[0], size[1],
+                        spos[0], spos[1], ssize[0], ssize[1])
+  }
 }
 
 /** Returns next largest power of two, or `value` if `value` is already a POT. Note: this is limited
@@ -227,14 +257,12 @@ export function nextPOT (value :number) :number {
   return (count > 1) ? (1 << (highest+1)) : value
 }
 
-/** Returns `sourceWidth` rounded up to a POT if necessary (per `config`). */
-export function toTexWidth (config :TextureConfig, sourceWidth :number) :number {
-  return (config.repeatX || config.mipmaps) ? nextPOT(sourceWidth) : sourceWidth
-}
-
-/** Returns `sourceHeight` rounded up to a POT if necessary (per `config`). */
-export function toTexHeight (config :TextureConfig, sourceHeight :number) :number {
-  return (config.repeatY || config.mipmaps) ? nextPOT(sourceHeight) : sourceHeight
+/** Returns `sourceSize` rounded up to a POT if necessary (per `config`). */
+export function toTexSize (config :TextureConfig, sourceSize :dim2) :dim2 {
+  return dim2.fromValues(
+    (config.repeatX || config.mipmaps) ? nextPOT(sourceSize[0]) : sourceSize[0],
+    (config.repeatY || config.mipmaps) ? nextPOT(sourceSize[1]) : sourceSize[1]
+  )
 }
 
 /** Creates a GL texture based on the supplied `config`.
@@ -263,7 +291,7 @@ export function createTexture (glc :GLC, config :TextureConfig) :WebGLTexture {
   return tex
 }
 
-function imageToTexture (
+export function imageToTexture (
   glc :GLC, source :TexImageSource, config :TextureConfig, tex :WebGLTexture
 ) :Texture {
   // if we're a repeating texture (or we want mipmaps) and this image is non-POT on the relevant
@@ -271,17 +299,17 @@ function imageToTexture (
   // a second texture, a frame buffer to render into it, sending a GPU batch and doing all the
   // blah blah blah seems likely to be more expensive overall
   const {repeatX, repeatY, mipmaps, scale} = config
-  const pixWidth = source.width, pixHeight = source.height
-  const potWidth = toTexWidth(config, pixWidth), potHeight = toTexWidth(config, pixHeight)
+  const pixSize = dim2.fromValues(source.width, source.height)
+  const potSize = toTexSize(config, pixSize)
   function texImage2D (image :TexImageSource) {
     glc.bindTexture(GLC.TEXTURE_2D, tex)
     glc.texImage2D(GLC.TEXTURE_2D, 0, GLC.RGBA, GLC.RGBA, GLC.UNSIGNED_BYTE, image)
     if (mipmaps) glc.generateMipmap(GLC.TEXTURE_2D)
   }
-  if ((repeatX || repeatY || mipmaps) && (potWidth != pixWidth && potHeight != pixHeight)) {
+  if ((repeatX || repeatY || mipmaps) && (potSize[0] != pixSize[0] && potSize[1] != pixSize[1])) {
     const scaled = new HTMLCanvasElement()
-    scaled.width = potWidth
-    scaled.height = potHeight
+    scaled.width = potSize[0]
+    scaled.height = potSize[1]
     const ctx = scaled.getContext("2d")
     if (!ctx) console.warn(`Failed to obtain Canvas2DContext`)
     else {
@@ -289,32 +317,31 @@ function imageToTexture (
         // TODO: how to properly handle ImageData?
         console.warn(`Cannot currently handle non-POT ImageData sources.`)
       } else {
-        ctx.drawImage(source, 0, 0, potWidth, potHeight)
+        ctx.drawImage(source, 0, 0, potSize[0], potSize[1])
         texImage2D(scaled)
       }
     }
-    return new Texture(glc, tex, config, potWidth, potHeight,
-                       scale.invScaled(pixWidth), scale.invScaled(pixHeight))
+    return new Texture(glc, tex, config, potSize, scale.inv.scaledDim(pixSize))
   } else {
     texImage2D(source) // fast path, woo!
-    return new Texture(glc, tex, config, pixWidth, pixHeight)
+    return new Texture(glc, tex, config, pixSize)
   }
 }
 
 function makeErrorTexture (
-  glc :GLC, config :TextureConfig, tex :WebGLTexture, width = 100, height = 50
+  glc :GLC, config :TextureConfig, tex :WebGLTexture, size :dim2 = dim2.fromValues(100, 50)
 ) :Texture {
   const error = new HTMLCanvasElement()
-  error.width = width
-  error.height = height
+  error.width = size[0]
+  error.height = size[1]
   const ctx = error.getContext("2d")
   if (!ctx) console.warn(`Failed to obtain Canvas2DContext`) // ffs
   else {
     ctx.fillStyle = "red"
-    ctx.fillRect(0, 0, width, height)
+    ctx.fillRect(0, 0, error.width, error.height)
     ctx.textAlign = "center"
     ctx.fillStyle = "white"
-    ctx.fillText("!ERROR!", width/2, height/2)
+    ctx.fillText("!ERROR!", error.width/2, error.height/2)
   }
   return imageToTexture(glc, error, config, tex)
 }
@@ -339,6 +366,7 @@ export function makeTexture (
 /** A [[RenderTarget]] that renders to a [[Texture]]. */
 export class TextureRenderTarget implements RenderTarget, Disposable {
   readonly fb :WebGLFramebuffer
+  readonly scale :vec2
 
   constructor (readonly tex :Texture) {
     const glc = tex.glc
@@ -348,17 +376,16 @@ export class TextureRenderTarget implements RenderTarget, Disposable {
     glc.bindFramebuffer(GLC.FRAMEBUFFER, fb)
     glc.framebufferTexture2D(GLC.FRAMEBUFFER, GLC.COLOR_ATTACHMENT0, GLC.TEXTURE_2D, tex, 0)
     checkError(glc, "framebufferTexture2D")
+    const scale = this.tex.config.scale.factor
+    this.scale = vec2.fromValues(scale, scale)
   }
 
-  get width () :number { return this.tex.pixWidth }
-  get height () :number { return this.tex.pixHeight }
-  get xscale () :number { return this.tex.config.scale.factor }
-  get yscale () :number { return this.tex.config.scale.factor }
+  get size () :dim2 { return this.tex.size }
   get flip () :boolean { return false }
 
   bind () :void {
     this.tex.glc.bindFramebuffer(GLC.FRAMEBUFFER, this.fb)
-    this.tex.glc.viewport(0, 0, this.width, this.height)
+    this.tex.glc.viewport(0, 0, this.size[0], this.size[1])
   }
 
   dispose () {
@@ -373,7 +400,7 @@ export class Batch implements Disposable {
 
   constructor (readonly glc :GLC) {}
 
-  begin (fbufWidth :number, fbufHeight :number, flip :boolean) {
+  begin (fbufSize :dim2, flip :boolean) {
     if (this.begun) throw new Error(`${this.constructor.name} mismatched begin()`)
     this.begun = true
   }
@@ -476,7 +503,42 @@ export class TexturedBatch extends Batch {
   }
 }
 
+/** A number that represents a color, in `ARGB` order. For example `0xFFFFFFFF` is white that is
+  * fully non-transparent (full alpha). `0x00FFFFFF` is white that is fully transparent. */
 export type Color = number
+
+/** Tint related utility methods. */
+export class Tint {
+
+  /** A tint that does not change the underlying color. */
+  static NOOP_TINT :Color = 0xFFFFFFFF
+
+  /** Returns the combination of `curTint` and `tint`. */
+  static combine (curTint :Color, tint :Color) :Color {
+    const newA = ((((curTint >> 24) & 0xFF) * (((tint >> 24) & 0xFF)+1)) & 0xFF00) << 16;
+    if ((tint & 0xFFFFFF) == 0xFFFFFF) { // fast path to just combine alpha
+      return newA | (curTint & 0xFFFFFF)
+    }
+
+    // otherwise combine all the channels (beware the bit mask-and-shiftery!)
+    const newR = ((((curTint >> 16) & 0xFF) * (((tint >> 16) & 0xFF)+1)) & 0xFF00) << 8
+    const newG =  (((curTint >>  8) & 0xFF) * (((tint >>  8) & 0xFF)+1)) & 0xFF00
+    const newB =  (((curTint        & 0xFF) * ((tint         & 0xFF)+1)) >> 8) & 0xFF
+    return newA | newR | newG | newB
+  }
+
+  /** Sets the alpha component of `tint` to `alpha`.
+    * @return the new tint. */
+  static setAlpha (tint :Color, alpha :Color) :Color {
+    const ialpha = (0xFF * clamp(alpha, 0, 1))
+    return (ialpha << 24) | (tint & 0xFFFFFF)
+  }
+
+  /** Returns the alpha component of `tint` as a float between `[0, 1]`. */
+  static getAlpha (tint :Color) :Color {
+    return ((tint >> 24) & 0xFF) / 255
+  }
+}
 
 /** A batch which can render textured quads. Since that's a common thing to do in 2D, we factor out
   * this API, and allow for different implementations. */
@@ -486,8 +548,8 @@ export abstract class QuadBatch extends TexturedBatch {
     * `x, y, w, h` define the size and position of the quad. */
   addTexQuad (tex :Texture, tint :Color, xf :mat2d, x :number, y :number, w :number, h :number) {
     this.setTexture(tex)
-    const sr = tex.config.repeatX ? w/tex.width : 1
-    const sb = tex.config.repeatY ? h/tex.height : 1
+    const sr = tex.config.repeatX ? w/tex.size[0] : 1
+    const sb = tex.config.repeatY ? h/tex.size[1] : 1
     this.addQuad(tint, xf, x, y, x+w, y+h, 0, 0, sr, sb)
   }
 
@@ -498,9 +560,8 @@ export abstract class QuadBatch extends TexturedBatch {
                  dx :number, dy :number, dw :number, dh :number,
                  sx :number, sy :number, sw :number, sh :number) {
     this.setTexture(tex)
-    const texWidth = tex.width, texHeight = tex.height
-    this.addQuad(tint, xf, dx, dy, dx+dw, dy+dh,
-                 sx/texWidth, sy/texHeight, (sx+sw)/texWidth, (sy+sh)/texHeight)
+    const [tw, th] = tex.size
+    this.addQuad(tint, xf, dx, dy, dx+dw, dy+dh, sx/tw, sy/th, (sx+sw)/tw, (sy+sh)/th)
   }
 
   /** Adds a transformed axis-aligned quad to this batch.
@@ -772,8 +833,8 @@ export class TriangleBatch extends QuadBatch {
   }
 
   /**
-   * Adds triangle primitives to a prepared batch. This must be preceded by calls to
-   * {@link #setTexture} and {@link #prepare} to configure the texture and stable attributes.
+   * Adds triangle primitives to a prepared batch. This must be preceded by calls to [[setTexture]]
+   * and [[prepare]] to configure the texture and stable attributes.
    */
   addTrisST (xys :number[], sts :number[], xysOffset :number, xysLen :number,
              indices :number[], indicesOffset :number, indicesLen :number, indexBase :number) {
@@ -806,10 +867,10 @@ export class TriangleBatch extends QuadBatch {
     this.addElems(vertIdx, QUAD_INDICES, 0, QUAD_INDICES.length, 0)
   }
 
-  begin (fbufWidth :number, fbufHeight :number, flip :boolean) {
-    super.begin(fbufWidth, fbufHeight, flip)
+  begin (fbufSize :dim2, flip :boolean) {
+    super.begin(fbufSize, flip)
     this.program.activate()
-    this.glc.uniform2f(this.uHScreenSize, fbufWidth/2, fbufHeight/2)
+    this.glc.uniform2f(this.uHScreenSize, fbufSize[0]/2, fbufSize[1]/2)
     this.glc.uniform1f(this.uFlip, flip ? -1 : 1)
 
     // TODO: avoid rebinding if this buffer is already bound?
@@ -924,14 +985,8 @@ export class TriangleBatch extends QuadBatch {
   }
 }
 
-// TODO:
-// UniformQuadBatch?
-// Surface - immediate mode drawing API atop batches
-// core - ?.ts : Clock (for frame timing?)
-
 export type RendererConfig = {
-  width? :number,
-  height? :number,
+  size? :dim2,
   scaleFactor? :number,
   gl? :WebGLContextAttributes
 }
@@ -941,7 +996,7 @@ export class Renderer {
   readonly glc :GLC
   readonly target :RenderTarget
   readonly scale :Scale // TODO: support change in scale factor?
-  readonly size :Mutable<[number, number]>
+  readonly size :Mutable<dim2>
 
   constructor (attrs :RendererConfig = {}) {
     const canvas = this.canvas = document.createElement("canvas")
@@ -951,37 +1006,36 @@ export class Renderer {
 
     const rend = this
     class DefaultRenderTarget implements RenderTarget {
-      pixelWidth :number = 0
-      pixelHeight :number = 0
-      get width () :number { return this.pixelWidth }
-      get height () :number { return this.pixelHeight }
-      get xscale () :number { return rend.scale.factor }
-      get yscale () :number { return rend.scale.factor }
-      get flip () :boolean { return true }
+      pixelSize = dim2.create()
+      get size () { return this.pixelSize }
+      get scale () { return vec2.fromValues(rend.scale.factor, rend.scale.factor) }
+      get flip () { return true }
       bind () {
         rend.glc.bindFramebuffer(GLC.FRAMEBUFFER, null)
-        rend.glc.viewport(0, 0, this.width, this.height)
+        rend.glc.viewport(0, 0, this.pixelSize[0], this.pixelSize[1])
       }
       dispose () {}
     }
     const target = this.target = new DefaultRenderTarget()
     const scale = this.scale = new Scale(attrs.scaleFactor || window.devicePixelRatio)
 
-    const size = this.size = Mutable.local<[number, number]>(
-      [attrs.width || window.innerWidth, attrs.height || window.innerHeight])
-    size.onValue(([width, height]) => {
+    const size = this.size = Mutable.localEq(
+      attrs.size ? attrs.size : dim2.fromValues(window.innerWidth, window.innerHeight), dim2.eq)
+    size.onValue(rsize => {
       // the frame buffer may be larger (or smaller) than the logical size, depending on whether
       // we're on a HiDPI display, or how the game has configured things (maybe they're scaling down
       // from native resolution to improve performance)
-      canvas.width = target.pixelWidth = scale.scaledCeil(width)
-      canvas.height = target.pixelHeight = scale.scaledCeil(height)
+      const psize = scale.scaledDim(rsize)
+      target.pixelSize = dim2.ceil(psize, psize)
+      canvas.width = target.pixelSize[0]
+      canvas.height = target.pixelSize[1]
       // set the canvas's CSS size to the logical size; the browser works in logical pixels
-      canvas.style.width = `${width}px`
-      canvas.style.height = `${height}px`
+      canvas.style.width = `${rsize[0]}px`
+      canvas.style.height = `${rsize[1]}px`
     })
   }
 
-  setSize (width :number, height :number) {
-    this.size.update([width, height])
+  setSize (size :dim2) {
+    this.size.update(size) // TODO: clone?
   }
 }
