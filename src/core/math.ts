@@ -44,6 +44,10 @@ export class dim2 extends Float32Array {
     out[1] = Math.floor(d[1])
     return out
   }
+
+  static toString (d :dim2) :string {
+    return `${d[0]}x${d[1]}`
+  }
 }
 
 export class rect extends Float32Array {
@@ -102,6 +106,11 @@ export class rect extends Float32Array {
 
   static bottom (r :rect) :number {
     return r[3] + r[1]
+  }
+
+  static toString (d :dim2) :string {
+    const [x, y] = d, pre = (x :number) => x<0 ? "" : "+"
+    return `${d[3]}x${d[4]}${pre(x)}${x}${pre(y)}${y}`
   }
 }
 

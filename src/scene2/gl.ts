@@ -154,11 +154,6 @@ export class Scale {
 
 /** Config data used when creating textures. */
 export type TextureConfig = {
-  /** Whether or not this texture's lifecycle is automatically managed via reference counting. If
-    * the texture will be used in a `Layer`, it should be reference counted unless you are doing
-    * something special. If you are using it as part of custom rendering code, you can decide
-    * whether or not you want to use the reference counting mechanism or dispose manually. */
-  managed :boolean
   /** Whether the texture repeat's in the x-direction. */
   repeatX :boolean
   /** Whether the texture repeat's in the y-direction. */
@@ -173,19 +168,6 @@ export type TextureConfig = {
     * scale of its pixel dimensions. */
   scale :Scale
 }
-
-export const DefaultTexConfig :TextureConfig = Object.freeze({
-  managed: true,
-  repeatX: false, repeatY: false,
-  minFilter: GLC.LINEAR, magFilter: GLC.LINEAR,
-  mipmaps: false,
-  scale: Scale.ONE
-})
-
-export const UnmanagedTexConfig :TextureConfig = Object.freeze({
-  ...DefaultTexConfig,
-  managed: false
-})
 
 /** A square region of a texture. Simplifies rendering tiles from texture atlases. */
 export interface Tile {
@@ -215,6 +197,14 @@ export interface Tile {
 
 /** Wraps up  a GL context, texture, and config. */
 export class Texture implements Tile {
+
+  /** The default texture config. */
+  static DefaultConfig :TextureConfig = Object.freeze({
+    repeatX: false, repeatY: false,
+    minFilter: GLC.LINEAR, magFilter: GLC.LINEAR,
+    mipmaps: false,
+    scale: Scale.ONE
+  })
 
   constructor (
     /** The GL context in which this texture resides. */
@@ -693,7 +683,6 @@ function add (into :Float32Array, offset :number, x :number, y :number, sx :numb
 }
 
 export class TriangleBatch extends QuadBatch {
-
   readonly program :Program
   readonly uTexture :WebGLUniformLocation
   readonly uHScreenSize :WebGLUniformLocation
@@ -1019,8 +1008,8 @@ export class Renderer {
     const target = this.target = new DefaultRenderTarget()
     const scale = this.scale = new Scale(attrs.scaleFactor || window.devicePixelRatio)
 
-    const size = this.size = Mutable.localEq(
-      attrs.size ? attrs.size : dim2.fromValues(window.innerWidth, window.innerHeight), dim2.eq)
+    const winSize = dim2.fromValues(window.innerWidth, window.innerHeight)
+    const size = this.size = Mutable.localEq(attrs.size || winSize, dim2.eq)
     size.onValue(rsize => {
       // the frame buffer may be larger (or smaller) than the logical size, depending on whether
       // we're on a HiDPI display, or how the game has configured things (maybe they're scaling down

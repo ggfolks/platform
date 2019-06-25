@@ -1,6 +1,6 @@
 import {mat2, mat2d, vec2, dim2, rect} from "../core/math"
-import {DefaultTexConfig, GLC, RenderTarget, Texture, Tint, Tile, QuadBatch, checkError,
-        createTexture, imageToTexture} from "./gl"
+import {GLC, RenderTarget, Texture, Tint, Tile, QuadBatch,
+        checkError, createTexture, imageToTexture} from "./gl"
 
 let _colorTex :Texture|null = null
 
@@ -15,7 +15,8 @@ function colorTex (glc :GLC) :Texture {
       ctx.fillStyle = 'white'
       ctx.fillRect(0, 0, 1, 1)
     }
-    _colorTex = imageToTexture(glc, scaled, DefaultTexConfig, createTexture(glc, DefaultTexConfig))
+    const tcfg = Texture.DefaultConfig
+    _colorTex = imageToTexture(glc, scaled, tcfg, createTexture(glc, tcfg))
   }
   return _colorTex
 }
@@ -27,7 +28,7 @@ function colorTex (glc :GLC) :Texture {
   * [[Surface.end]]. This ensures that the batch into which the surface is rendering is properly
   * flushed to the GPU at the right times. */
 export class Surface {
-  private lastTrans = new mat2d()
+  private lastTrans = mat2d.create()
   private readonly transformStack :mat2d[] = [this.lastTrans]
   private batch :QuadBatch
 
@@ -247,9 +248,8 @@ export class Surface {
   /** Clears the entire surface to the specified color.
     * The channels are values in the range `[0,1]`. */
   clearTo (red :number, green :number, blue :number, alpha :number) :Surface {
-    const glc = this.batch.glc
-    glc.clearColor(red, green, blue, alpha)
-    glc.clear(GLC.COLOR_BUFFER_BIT)
+    this.glc.clearColor(red, green, blue, alpha)
+    this.glc.clear(GLC.COLOR_BUFFER_BIT)
     return this
   }
 
