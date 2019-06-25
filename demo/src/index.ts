@@ -1,39 +1,39 @@
-import {mat2d} from "gl-matrix"
-import * as R from "tfw-platform/core/react"
-import * as G from "tfw-platform/scene2/gl"
-
-const GLC = WebGLRenderingContext
+import {dim2, vec2} from "tfw/core/math"
+import {Subject, Value} from "tfw/core/react"
+import {Renderer, Texture, TriangleBatch, TriangleBatchSource, makeTexture} from "tfw/scene2/gl"
+import {Surface} from "tfw/scene2/surface"
 
 const root = document.getElementById("root")
 if (root) {
-  const renderer = new G.Renderer({
-    width: root.offsetWidth,
-    height: root.offsetHeight
-  })
+  const renderer = new Renderer({size: dim2.fromValues(root.offsetWidth, root.offsetHeight)})
   root.appendChild(renderer.canvas)
 
-  const watS = R.Subject.derive<HTMLImageElement>(disp => {
+  const watS = Subject.derive<HTMLImageElement>(disp => {
     const wat = new Image()
     wat.src = "./wat.jpg"
     wat.onload = () => disp(wat)
     return () => {} // TODO: dispose image?
   })
 
-  const batch = new G.TriangleBatch(renderer.glc, new G.TriangleBatchSource())
+  const batch = new TriangleBatch(renderer.glc, new TriangleBatchSource())
+  const surf = new Surface(renderer.target, batch)
 
-  const texS = R.Value.constant(G.DefaultTexConfig)
-  const watT = G.makeTexture(renderer.glc, watS, texS)
+  const texS = Value.constant(Texture.DefaultConfig)
+  const watT = makeTexture(renderer.glc, watS, texS)
+  const pos = vec2.create(), size = dim2.create()
   watT.onValue(wat => {
-    setInterval(() => {
-      requestAnimationFrame(() => {
-        renderer.glc.clearColor(1, 0, 1, 1)
-        renderer.glc.clear(GLC.COLOR_BUFFER_BIT)
-        renderer.target.bind()
-        batch.begin(renderer.target.width, renderer.target.height, renderer.target.flip)
-        batch.addTexQuad(wat, 0xFFFFFFFF, mat2d.create(), 0, 0, wat.width, wat.height)
-        batch.end()
-      })
-    }, 1000)
+    const render = (time :number) => {
+      surf.begin()
+      surf.clearTo(1, 0, 1, 1)
+      const secs = time/1000
+      const sin = Math.sin(secs), cos = Math.cos(secs)
+      vec2.set(pos, 250+sin*50, 250+cos*50)
+      dim2.set(size, wat.size[0]*cos, wat.size[1]*sin)
+      surf.draw(wat, pos, size)
+      surf.end()
+      requestAnimationFrame(render)
+    }
+    requestAnimationFrame(render)
   })
 
 } else {
