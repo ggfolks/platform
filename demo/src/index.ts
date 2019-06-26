@@ -1,5 +1,6 @@
 import {dim2, vec2} from "tfw/core/math"
-import {Subject, Value} from "tfw/core/react"
+import {Value} from "tfw/core/react"
+import {loadImage} from "tfw/core/assets"
 import {Renderer, Texture, TriangleBatch, TriangleBatchSource, makeTexture} from "tfw/scene2/gl"
 import {Surface} from "tfw/scene2/surface"
 
@@ -8,16 +9,10 @@ if (root) {
   const renderer = new Renderer({size: dim2.fromValues(root.offsetWidth, root.offsetHeight)})
   root.appendChild(renderer.canvas)
 
-  const watS = Subject.derive<HTMLImageElement>(disp => {
-    const wat = new Image()
-    wat.src = "./wat.jpg"
-    wat.onload = () => disp(wat)
-    return () => {} // TODO: dispose image?
-  })
-
   const batch = new TriangleBatch(renderer.glc, new TriangleBatchSource())
   const surf = new Surface(renderer.target, batch)
 
+  const watS = loadImage("./wat.jpg")
   const texS = Value.constant(Texture.DefaultConfig)
   const watT = makeTexture(renderer.glc, watS, texS)
   const pos = vec2.create(), size = dim2.create()

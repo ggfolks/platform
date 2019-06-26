@@ -297,7 +297,7 @@ export function imageToTexture (
     if (mipmaps) glc.generateMipmap(GLC.TEXTURE_2D)
   }
   if ((repeatX || repeatY || mipmaps) && (potSize[0] != pixSize[0] && potSize[1] != pixSize[1])) {
-    const scaled = new HTMLCanvasElement()
+    const scaled = document.createElement("canvas")
     scaled.width = potSize[0]
     scaled.height = potSize[1]
     const ctx = scaled.getContext("2d")
@@ -321,7 +321,7 @@ export function imageToTexture (
 function makeErrorTexture (
   glc :GLC, config :TextureConfig, tex :WebGLTexture, size :dim2 = dim2.fromValues(100, 50)
 ) :Texture {
-  const error = new HTMLCanvasElement()
+  const error = document.createElement("canvas")
   error.width = size[0]
   error.height = size[1]
   const ctx = error.getContext("2d")
@@ -336,17 +336,18 @@ function makeErrorTexture (
   return imageToTexture(glc, error, config, tex)
 }
 
-export type ImageSource = TexImageSource | Error
-
 export function makeTexture (
-  glc :GLC, image :Subject<ImageSource>, config :Subject<TextureConfig>
+  glc :GLC, image :Subject<TexImageSource|Error>, config :Subject<TextureConfig>
 ) :Subject<Texture> {
   let tex :WebGLTexture|void = undefined
   return Subject.join2(image, config).mapTrace(() => {
     // nothing to do in onWake, we'll create our texture when we have our first `cfg`
   }, ([img, cfg]) => {
     if (!tex) tex = createTexture(glc, cfg)
-    if (img instanceof Error) return makeErrorTexture(glc, cfg, tex)
+    if (img instanceof Error) {
+      console.log(`makeTexture() got error: ${img.message}`)
+      return makeErrorTexture(glc, cfg, tex)
+    }
     else return imageToTexture(glc, img, cfg, tex)
   }, _ => {
     if (tex) glc.deleteTexture(tex)
