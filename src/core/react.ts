@@ -409,7 +409,7 @@ export abstract class Value<T> extends Subject<T> {
   }
 
   /** Creates a constant (data) value which always contains `value` or `undefined`. */
-  static constantOpt<T> (value :T|undefined) :Value<T|undefined> {
+  static constantOpt<T> (value? :T) :Value<T|undefined> {
     return new ConstantValue(value)
   }
 
@@ -646,7 +646,7 @@ export abstract class Mutable<T> extends Value<T> {
 
   /** Creates a local mutable value, which starts with value `start` or `undefined`.
     * Changes to this value will be determined using [[dataEquals]]. */
-  static localOpt<T extends Data> (start :T|undefined) :Mutable<Widen<T|undefined>> {
+  static localOpt<T extends Data> (start? :T) :Mutable<Widen<T|undefined>> {
     return new LocalMutable(start as Widen<T|undefined>, dataEquals)
   }
 
