@@ -1,11 +1,11 @@
-import {ID, Domain, EntityEvent, FlatValueComponent} from "./entity"
+import {ID, Domain, EntityEvent, EntityConfig, FlatValueComponent, Matcher, System} from "./entity"
 
 function mkEv<T> (type :T, id :ID) { return {type, id} }
 
 const EmptyConfig = {components: {}}
 
 test("entity lifecycle events", () => {
-  const domain = new Domain(EmptyConfig)
+  const domain = new Domain({}, {})
   const history :EntityEvent[] = []
   domain.events.onEmit(ev => history.push(ev))
   const exhist :EntityEvent[] = []
@@ -29,6 +29,7 @@ test("entity lifecycle events", () => {
   expect(history).toEqual(exhist)
   domain.enable(id2)
   exhist.push(mkEv("enabled", id2))
+  domain.enable(id2) // should not emit another event
   expect(history).toEqual(exhist)
   domain.delete(id2)
   exhist.push(mkEv("disabled", id2), mkEv("deleted", id2))
@@ -36,7 +37,7 @@ test("entity lifecycle events", () => {
 })
 
 test("entity id reuse", () => {
-  const domain = new Domain(EmptyConfig)
+  const domain = new Domain({}, {})
 
   const ids = []
   for (let ii = 0; ii < 100; ii += 1) ids.push(domain.add(EmptyConfig))
@@ -48,7 +49,7 @@ test("flat value component", () => {
   const DefaultName = "default"
   const name = new FlatValueComponent<string>("name", DefaultName)
   const age = new FlatValueComponent<number|undefined>("age", 0)
-  const domain = new Domain({components: {name, age}})
+  const domain = new Domain({}, {name, age})
 
   const id0 = domain.add({components: {name: {}}})
   expect(name.read(id0)).toEqual(DefaultName)
@@ -65,4 +66,30 @@ test("flat value component", () => {
 
   const id3 = domain.add({components: {age: {initial: undefined}}})
   expect(age.read(id3)).toBe(undefined)
+})
+
+test("system iteration", () => {
+  const name = new FlatValueComponent<string>("name", "<noname>")
+  const age = new FlatValueComponent<number>("age", 0)
+  const domain = new Domain({}, {name, age})
+  const sys1 = new System(domain, Matcher.hasAllC("name", "age"))
+  const sys2 = new System(domain, Matcher.hasC("name"))
+
+  const configs :EntityConfig[] = [{components: {name: {}}},
+                                   {components: {age: {}}},
+                                   {components: {name: {}, age: {}}}]
+  const ids = configs.map(_ => new Set<ID>())
+
+  for (let ii = 0; ii < 100; ii += 1) {
+    const cidx = ii%configs.length
+    ids[cidx].add(domain.add(configs[cidx]))
+  }
+
+  let sys1count = 0
+  sys1.onEntities(id => { sys1count += 1 ; expect(ids[2].has(id)).toBe(true) })
+  expect(sys1count).toBe(ids[2].size)
+
+  let sys2count = 0
+  sys2.onEntities(id => { sys2count += 1 ; expect(ids[0].has(id) || ids[2].has(id)).toBe(true) })
+  expect(sys2count).toBe(ids[0].size + ids[2].size)
 })
