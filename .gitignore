@@ -3,4 +3,5 @@ docs
 */lib
 */tsconfig.tsbuildinfo
 lib/core
+lib/entity
 lib/scene2
