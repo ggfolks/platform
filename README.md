@@ -8,10 +8,10 @@ The twisty maze of passages will eventually look something like this:
 
 ## Building
 
-Presently the code consists of a single NPM package, `tfw-platform`, which exposes all platform
-code, and a separate demo project which depends on the `tfw-platform` package. This will probably
-change in the future when I finally determine the least terrible way to ship non-trivial software
-with NPM, but that's already looking like a long road.
+Presently the code consists of a single NPM package, `tfw`, which exposes all platform code, and a
+separate demo project which depends on the `tfw` package. This will probably change in the future
+when I finally determine the least terrible way to ship non-trivial software with NPM, but that's
+already looking like a long road.
 
 Thanks to a number of not so forward thinking design decisions on the part of NPM and a trail of
 evolutionary tears as new complexities in the JavaScript ecosystem were shoe-horned into the meager
@@ -49,7 +49,7 @@ Note: we need to link the `platform/lib` directory *not* the `platform/src` dire
 cd platform/lib
 yarn link
 cd ../demo
-yarn link tfw-platform
+yarn link tfw
 ```
 
 Now when you make changes to code in `platform/src`, you run `yarn build` (in `platform/src`) and
