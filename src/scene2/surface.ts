@@ -6,7 +6,7 @@ let _colorTex :Texture|null = null
 
 function colorTex (glc :GLC) :Texture {
   if (_colorTex == null) {
-    const scaled = new HTMLCanvasElement()
+    const scaled = document.createElement("canvas")
     scaled.width = 1
     scaled.height = 1
     const ctx = scaled.getContext("2d")
