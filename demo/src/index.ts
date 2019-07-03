@@ -1,7 +1,8 @@
 import {dim2, vec2} from "tfw/core/math"
 import {Value} from "tfw/core/react"
 import {loadImage} from "tfw/core/assets"
-import {Renderer, Texture, TriangleBatch, TriangleBatchSource, makeTexture} from "tfw/scene2/gl"
+import {Renderer, Texture, makeTexture} from "tfw/scene2/gl"
+import {TriangleBatch, TriangleBatchSource} from "tfw/scene2/batch"
 import {Surface} from "tfw/scene2/surface"
 
 const root = document.getElementById("root")

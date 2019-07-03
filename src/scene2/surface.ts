@@ -1,6 +1,6 @@
-import {mat2, mat2d, vec2, dim2, rect} from "../core/math"
-import {GLC, RenderTarget, Texture, Tint, Tile, QuadBatch,
-        checkError, createTexture, imageToTexture} from "./gl"
+import {mat2, mat2d, dim2, rect, vec2, vec2zero} from "../core/math"
+import {GLC, RenderTarget, Texture, Tile, checkError, createTexture, imageToTexture} from "./gl"
+import {Tint, QuadBatch} from "./batch"
 
 let _colorTex :Texture|null = null
 
@@ -253,44 +253,17 @@ export class Surface {
     return this
   }
 
-  /** Draws `tile` at the specified `pos` and `size`. */
-  draw (tile :Tile, pos :vec2, size :dim2) :Surface {
-    return this.drawTint(tile, this.tint, pos, size)
-  }
-
-  /** Draws `tile` at the specified `pos` and `size`, with `tint`. _Note:_ this will override any
-    * tint and alpha currently configured on this surface. */
-  drawTint (tile :Tile, tint :number, pos :vec2, size :dim2) {
-    if (!this.checkIntersection || this.intersects(pos, size)) {
-      tile.addToBatch(this.batch, tint, this.tx, pos, size)
-    }
-    return this
-  }
-
-  /** Draws a region of `tile` (defined by `spos` and `ssize`) scaled to fit into `size`
-    * at `pos`. */
-  drawSub (tile :Tile, pos :vec2, size :dim2, spos :vec2, ssize :dim2) :Surface {
-    if (!this.checkIntersection || this.intersects(pos, size)) {
-      tile.addSubToBatch(this.batch, this.tint, this.tx, pos, size, spos, ssize)
-    }
-    return this
-  }
-
-  /**
-   * Draws a scaled subset of an image (defined by {@code (sx, sy)} and {@code (w x h)}) at the
-   * specified location {@code (dx, dy)} and size {@code (dw x dh)}, with tint {@code tint}.
-   * <em>Note:</em> this will override any tint and alpha currently configured on this surface.
-   */
-  drawSubTint (tile :Tile, tint :number, pos :vec2, size :dim2, spos :vec2, ssize :dim2) :Surface {
-    if (!this.checkIntersection || this.intersects(pos, size)) {
-      tile.addSubToBatch(this.batch, tint, this.tx, pos, size, spos, ssize)
-    }
-    return this
-  }
-
   /** Draws a tile at the specified `pos`. */
   drawAt (tile :Tile, pos :vec2) :Surface {
     return this.draw(tile, pos, tile.size)
+  }
+
+  /** Draws `tile` at the specified `pos` and `size`. */
+  draw (tile :Tile, pos :vec2, size :dim2) :Surface {
+    if (!this.checkIntersection || this.intersects(pos, size)) {
+      this.batch.addTile(tile, this.tint, this.tx, pos, size)
+    }
+    return this
   }
 
   /** Draws `tile`, centered at the specified `pos`. */
@@ -301,7 +274,6 @@ export class Surface {
 
   /** Fills a line between `a` and `b`, with the specified (display unit) `width`. */
   drawLine (a :vec2, b :vec2, width :number) :Surface {
-  // drawLineXY (float x0, float y0, float bx, float y1, float width) {
     // swap the line end points if bx is less than x0
     const swap = b[0] < a[0]
     const [ax, ay] = swap ? b : a, [bx, by] = swap ? a : b
@@ -318,7 +290,7 @@ export class Surface {
     const [tex, tint] = this.patternTex == null ?
       [colorTex(this.glc), Tint.combine(this.fillColor, this.tint)] :
       [this.patternTex, this.tint]
-    this.batch.addTexQuad(tex, tint, xf, 0, 0, length, width)
+    this.batch.addTexQuad(tex, tint, xf, vec2zero, dim2.fromValues(length, width))
     return this
   }
 
@@ -327,7 +299,7 @@ export class Surface {
     const [tex, tint] = this.patternTex == null ?
       [colorTex(this.glc), Tint.combine(this.fillColor, this.tint)] :
       [this.patternTex, this.tint]
-    this.batch.addTexQuad(tex, tint, this.tx, pos[0], pos[1], size[0], size[1])
+    this.batch.addTexQuad(tex, tint, this.tx, pos, size)
     return this
   }
 
