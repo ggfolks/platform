@@ -1,4 +1,5 @@
-import {clamp, dim2, mat2d, vec2} from "../core/math"
+import {dim2, mat2d, vec2} from "../core/math"
+import {Color} from "../core/color"
 import {Disposable} from "../core/util"
 import {GLC, Program, Texture, Tile, checkError} from "./gl"
 
@@ -112,43 +113,6 @@ export class TexturedBatch extends Batch {
   }
 }
 
-/** A number that represents a color, in `ARGB` order. For example `0xFFFFFFFF` is white that is
-  * fully non-transparent (full alpha). `0x00FFFFFF` is white that is fully transparent. */
-export type Color = number
-
-/** Tint related utility methods. */
-export class Tint {
-
-  /** A tint that does not change the underlying color. */
-  static NOOP_TINT :Color = 0xFFFFFFFF
-
-  /** Returns the combination of `curTint` and `tint`. */
-  static combine (curTint :Color, tint :Color) :Color {
-    const newA = ((((curTint >> 24) & 0xFF) * (((tint >> 24) & 0xFF)+1)) & 0xFF00) << 16;
-    if ((tint & 0xFFFFFF) == 0xFFFFFF) { // fast path to just combine alpha
-      return newA | (curTint & 0xFFFFFF)
-    }
-
-    // otherwise combine all the channels (beware the bit mask-and-shiftery!)
-    const newR = ((((curTint >> 16) & 0xFF) * (((tint >> 16) & 0xFF)+1)) & 0xFF00) << 8
-    const newG =  (((curTint >>  8) & 0xFF) * (((tint >>  8) & 0xFF)+1)) & 0xFF00
-    const newB =  (((curTint        & 0xFF) * ((tint         & 0xFF)+1)) >> 8) & 0xFF
-    return newA | newR | newG | newB
-  }
-
-  /** Sets the alpha component of `tint` to `alpha`.
-    * @return the new tint. */
-  static setAlpha (tint :Color, alpha :Color) :Color {
-    const ialpha = (0xFF * clamp(alpha, 0, 1))
-    return (ialpha << 24) | (tint & 0xFFFFFF)
-  }
-
-  /** Returns the alpha component of `tint` as a float between `[0, 1]`. */
-  static getAlpha (tint :Color) :Color {
-    return ((tint >> 24) & 0xFF) / 255
-  }
-}
-
 /** A batch which can render textured quads. Since that's a common thing to do in 2D, we factor out
   * this API, and allow for different implementations. */
 export abstract class QuadBatch extends TexturedBatch {
@@ -241,7 +205,7 @@ export class TriangleBatchSource extends TexturedBatchSource {
 
   /** The shader code that computes {@code v_Color}. */
   static VERT_SETCOLOR = [
-    // tint is encoded as two floats A*R and G*B where A, R, G, B are (0 - 255)
+    // tint is encoded as two floats A*256+R and G*256+B where A, R, G, B are (0 - 255)
     "float red = mod(a_Color.x, 256.0);",
     "float alpha = (a_Color.x - red) / 256.0;",
     "float blue = mod(a_Color.y, 256.0);",
@@ -343,8 +307,8 @@ export class TriangleBatch extends QuadBatch {
   prepare (tint :Color, xf :mat2d) {
     const stables = this.stableAttrs
     stables.set(xf)
-    stables[6] = (tint >> 16) & 0xFFFF // ar
-    stables[7] = (tint >>  0) & 0xFFFF // gb
+    stables[6] = Color.toAR(tint)
+    stables[7] = Color.toGB(tint)
     this.addExtraStableAttrs(stables, 8)
   }
 

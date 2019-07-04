@@ -1,6 +1,7 @@
-import {mat2, mat2d, dim2, rect, vec2, vec2zero} from "../core/math"
+import {clamp, mat2, mat2d, dim2, rect, vec2, vec2zero} from "../core/math"
+import {Color} from "../core/color"
 import {GLC, RenderTarget, Texture, Tile, checkError, createTexture, imageToTexture} from "./gl"
-import {Tint, QuadBatch} from "./batch"
+import {QuadBatch} from "./batch"
 
 let _colorTex :Texture|null = null
 
@@ -34,8 +35,8 @@ export class Surface {
 
   private scissors :rect[] = []
   private scissorDepth = 0
-  private _tint = Tint.NOOP_TINT
-  private fillColor = 0
+  private fillColor = Color.fromRGB(0, 0, 0)
+  private tempColor = Color.fromRGB(0, 0, 0)
   private patternTex :Texture|null = null
 
   private checkIntersection = false
@@ -48,6 +49,10 @@ export class Surface {
     this.scale(target.scale)
     this.batch = defaultBatch
   }
+
+  /** A tint applied to all textured or filled quads (and lines). The tint color is combined with the color from the
+    * texture or the fill color for a filled shape. Defaults to white which results in no tint. */
+  readonly tint = Color.fromRGB(1, 1, 1)
 
   get glc () :GLC { return this.batch.glc }
 
@@ -175,45 +180,22 @@ export class Surface {
 
   /** Returns the currently configured alpha. */
   get alpha () :number {
-    return Tint.getAlpha(this._tint)
+    return this.tint[0]
   }
 
-  /** Set the alpha component of this surface's current tint. Note that this value will be quantized
-    * to an integer between 0 and 255. Also see [setTint]]. Values outside the range `[0,1]` will be
-    * clamped to the range `[0,1]`.
-    * @param alpha value in range `[0,1]` where 0 is transparent and 1 is opaque.
-    */
+  /** Set the alpha component of this surface's current tint.
+    * @param alpha value in range `[0,1]` where 0 is transparent and 1 is opaque. Values outside the range `[0,1]`
+    * will be clamped to the range `[0,1]`. */
   setAlpha (alpha :number) :Surface {
-    this._tint = Tint.setAlpha(this._tint, alpha)
+    this.tint[0] = clamp(alpha, 0, 1)
     return this
-  }
-
-  /** Returns the currently configured tint. */
-  get tint () :number {
-    return this._tint
-  }
-
-  /** Sets the tint to be applied to draw operations, as `ARGB`. _NOTE:_ this will overwrite any
-    * value configured via [[setAlpha]]. Either include your desired alpha in the high bits of
-    * `tint` or call [[setAlpha]] after calling this method. */
-  setTint (tint :number) :Surface {
-    this._tint = tint
-    return this
-  }
-
-  /** Combines `tint` with the current tint via [[Tint.combine]].
-    * @return the tint prior to combination. */
-  combineTint (tint :number) :number {
-    const otint = this._tint
-    if (tint != Tint.NOOP_TINT) this._tint = Tint.combine(tint, otint)
-    return otint
   }
 
   /** Sets the color to be used for fill operations. This replaces any existing fill color or
     * pattern. */
-  setFillColor (color :number) :Surface {
+  setFillColor (color :Color) :Surface {
     // TODO: add this to state stack
-    this.fillColor = color
+    Color.copy(this.fillColor, color)
     this.patternTex = null
     return this
   }
@@ -288,7 +270,7 @@ export class Surface {
     mat2d.multiply(xf, this.tx, xf)
 
     const [tex, tint] = this.patternTex == null ?
-      [colorTex(this.glc), Tint.combine(this.fillColor, this.tint)] :
+      [colorTex(this.glc), Color.combine(Color.copy(this.tempColor, this.fillColor), this.tint)] :
       [this.patternTex, this.tint]
     this.batch.addTexQuad(tex, tint, xf, vec2zero, dim2.fromValues(length, width))
     return this
@@ -297,7 +279,7 @@ export class Surface {
   /** Fills the specified rectangle. */
   fillRect (pos :vec2, size :dim2) :Surface {
     const [tex, tint] = this.patternTex == null ?
-      [colorTex(this.glc), Tint.combine(this.fillColor, this.tint)] :
+      [colorTex(this.glc), Color.combine(Color.copy(this.tempColor, this.fillColor), this.tint)] :
       [this.patternTex, this.tint]
     this.batch.addTexQuad(tex, tint, this.tx, pos, size)
     return this

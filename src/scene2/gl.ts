@@ -2,9 +2,6 @@ import {dim2, vec2} from "../core/math"
 import {Disposable} from "../core/util"
 import {Mutable, Subject} from "../core/react"
 
-// TODO:
-// core - ?.ts : Clock (for frame timing?)
-
 //
 // Basic GL machinery: shader programs, render targets, etc.
 
