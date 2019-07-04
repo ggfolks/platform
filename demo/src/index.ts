@@ -48,7 +48,7 @@ function squares (time :number, surf :Surface) {
 }
 
 function wat (glc :GLC) :Subject<RenderFn> {
-  const watS = loadImage("./wat.jpg")
+  const watS = loadImage("https://i.imgur.com/uT5mXXG.jpg")
   const texS = Value.constant(Texture.DefaultConfig)
   const watT = makeTexture(glc, watS, texS)
   const pos = vec2.create(), size = dim2.create()
