@@ -8,6 +8,7 @@ function eventToError (pre :string, err :Event|string) :Error {
 export function loadImage (url :string) :Subject<HTMLImageElement|Error> {
   return Subject.derive(disp => {
     const image = new Image()
+    image.crossOrigin = ''
     image.src = url
     image.onload = () => disp(image)
     image.onerror = err => disp(eventToError(`Failed to load '${url}'`, err))
