@@ -52,7 +52,7 @@ function wat (glc :GLC) :Subject<RenderFn> {
   const texS = Value.constant(Texture.DefaultConfig)
   const watT = makeTexture(glc, watS, texS)
   const pos = vec2.create(), size = dim2.create()
-  return watT.map(wat => (time :number, surf :Surface) => {
+  return watT.map(wat => (time, surf) => {
     const secs = time/1000, sin = Math.sin(secs), cos = Math.cos(secs)
     vec2.set(pos, 250+sin*50, 250+cos*50)
     dim2.set(size, wat.size[0]*cos, wat.size[1]*sin)
