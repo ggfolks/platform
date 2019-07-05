@@ -4,8 +4,8 @@ import {Stream, Emitter} from "../core/react"
 
 export type ID = number
 
-export type EntityEventType = "added" | "enabled" | "disabled" | "deleted"
-export type EntityEvent = {type :EntityEventType, id :ID}
+export type LifecycleType = "added" | "enabled" | "disabled" | "deleted"
+export type LifecycleEvent = {type :LifecycleType, id :ID}
 
 export type DomainConfig = {
   // TODO
@@ -18,11 +18,12 @@ export type EntityConfig = {
   tags? :Set<string>
 }
 
-/** A collection of entities and their configuration records. Entity ids are only unique within a single domain, and
-  * systems operate in a single domain. A game can safely use a single domain for all of its entities, at the cost of
-  * some memory and/or performance overhead. If a game contains multiple separate entity domains, it can opt to use
-  * separate `Domain` instances for those domains to achieve better memory locality and more compact component data
-  * arrays within each domain, but must simply be careful never to mix entity ids from separate domains. */
+/** A collection of entities and their configuration records. Entity ids are only unique within a
+  * single domain, and systems operate in a single domain. A game can safely use a single domain for
+  * all of its entities, at the cost of some memory and/or performance overhead. If a game contains
+  * multiple separate entity domains, it can opt to use separate `Domain` instances for those
+  * domains to achieve better memory locality and more compact component data arrays within each
+  * domain, but must simply be careful never to mix entity ids from separate domains. */
 export class Domain {
   private _enabled = new BitSet()
   private _configs :EntityConfig[] = []
@@ -30,9 +31,10 @@ export class Domain {
   private _endID = 0
 
   /** Emits events when entities are added, enabled, disabled or deleted. */
-  readonly events :Stream<EntityEvent> = new Emitter<EntityEvent>()
+  readonly events :Stream<LifecycleEvent> = new Emitter<LifecycleEvent>()
 
-  constructor (readonly config :DomainConfig, readonly components :{[key :string] :Component<any>}) {}
+  constructor (readonly config :DomainConfig,
+               readonly components :{[key :string] :Component<any>}) {}
 
   /** Returns the configuration for entity `id`.
     * @throws Error if no entity exists with `id`. */
@@ -60,11 +62,12 @@ export class Domain {
       const ccfg = config.components[cid]
       const comp = this.components[cid]
       if (comp) comp.added(id, ccfg)
-      else throw new Error(`Unknown component for entity '${cid}' (have: ${Object.keys(this.components)})`)
+      else throw new Error(`Unknown component for entity '${cid}' ` +
+                           `(have: ${Object.keys(this.components)})`)
     }
     this.emit("added", id)
-    // TODO: it's possible that an `added` signal listener will manipulate this entity's enabled state, in which
-    // case we'll override that change on the next line... maybe that's OK?
+    // TODO: it's possible that an `added` signal listener will manipulate this entity's enabled
+    // state, in which case we'll override that change on the next line... maybe that's OK?
     if (enabled) this.enable(id)
     return id
   }
@@ -104,51 +107,48 @@ export class Domain {
     return id
   }
 
-  private emit (type :EntityEventType, id :ID) {
-    (this.events as Emitter<EntityEvent>).emit({type, id})
+  private emit (type :LifecycleType, id :ID) {
+    (this.events as Emitter<LifecycleEvent>).emit({type, id})
   }
 }
 
 export interface ComponentConfig<T> {}
 
-/** Maintains the values (numbers, strings, objects, typed arrays) for a particular component, for all entities in a
-  * signle domain. */
+/** Maintains the values (numbers, strings, objects, typed arrays) for a particular component, for
+  * all entities in a single domain. */
 export abstract class Component<T> {
 
-  /** An identifer for this component that distinguishes it from all other components used on a collection of
-    * entities (e.g. `trans` or `hp` or `texture`). This is used to reference this component in entity
-    * configuration metadata. */
+  /** An identifer for this component that distinguishes it from all other components used on a
+    * collection of entities (e.g. `trans` or `hp` or `texture`). This is used to reference this
+    * component in entity configuration metadata. */
   abstract get id () :string
 
-  /** Returns the value of this component for entity `id`. If entity `id` does not have this component, the return
-    * value is undefined (as in, it can be anything, not that it is `undefined`) and the component may throw an
-    * error. Correct code must not read component values for invalid components. */
+  /** Returns the value of this component for entity `id`. If entity `id` does not have this
+    * component, the return value is undefined (as in, it can be anything, not that it is
+    * `undefined`) and the component may throw an error. Correct code must not read component values
+    * for invalid components. */
   abstract read (id :ID) :T
 
-  /** Updates the value of this component for entity `id`. If entity `id` does not have this component, the behavior
-    * of this method is undefined and may throw an error. Correct code must not update component values for invalid
-    * components. */
+  /** Updates the value of this component for entity `id`. If entity `id` does not have this
+    * component, the behavior of this method is undefined and may throw an error. Correct code must
+    * not update component values for invalid components. */
   abstract update (id :ID, value :T) :void
 
-  /** Called when an entity which has this component is added to this component's owning domain.
+  /** Called when an entity which has this component is added to the owning domain.
     * @param config any component configuration data supplied for the entity. */
   abstract added (id :ID, config? :ComponentConfig<T>) :void
 
-  /** Called when an entity which has this component is deleted from this component's owning domain. */
+  /** Called when an entity which has this component is deleted from the owning domain. */
   abstract removed (id :ID) :void
-
-  /** Applies `fn` to the ids of all entities with this component. The component controls the iteration order so that
-    * it can do so efficiently based on its data layout. */
-  abstract onEntities (fn :(id :ID) => any) :void
 }
 
 export interface ValueComponentConfig<T> extends ComponentConfig<T> {
   initial? :T
 }
 
-/** Maintains simple JavaScript values in a single flat array. This is useful for components which will be used by
-  * the majority of entities */
-export class FlatValueComponent<T> extends Component<T> {
+/** Maintains simple JavaScript values in a single flat array.
+  * Useful for components which will be used by the majority of entities */
+export class DenseValueComponent<T> extends Component<T> {
   private values :T[] = []
 
   constructor (readonly id :string, private readonly defval :T) { super() }
@@ -157,35 +157,117 @@ export class FlatValueComponent<T> extends Component<T> {
   update (index :number, value :T) { this.values[index] = value }
 
   added (id :ID, config? :ValueComponentConfig<T>) {
-    // typescript doesn't treat ('initial' in config) as proof that config.initial contains a value of T, but we need
-    // to `in` because we want to allow configs to explicitly express that the initial value is something falsey
     const init = config && 'initial' in config ? config.initial : this.defval
     this.values[id] = init as T
   }
-
   removed (id :ID) { delete this.values[id] }
+}
 
-  onEntities (fn :(id :ID) => any) {
+/** Maintains simple JavaScript values in a hash map. Useful for components that are sparsely
+  * occupied. */
+export class SparseValueComponent<T> extends Component<T> {
+  private readonly values :Map<ID, T> = new Map()
+
+  constructor (readonly id :string, private readonly defval :T) { super() }
+
+  read (id :ID) :T {
+    return this.values.get(id) as T
+  }
+  update (id :ID, value :T) {
+    this.values.set(id, value)
+  }
+
+  added (id :ID, config? :ValueComponentConfig<T>) {
+    const init = config && 'initial' in config ? config.initial : this.defval
+    this.values.set(id, init as T)
+  }
+  removed (id :ID) {
+    this.values.delete(id)
   }
 }
 
-/** A component that remaps */
-export abstract class BatchedComponent<T> extends Component<T> {
+export class Float32Component extends Component<number> {
+  private readonly values :Float32Array[] = []
+  private readonly batchMask :number
+
+  constructor (readonly id :string, private readonly batchBits :number,
+               private readonly defval :number) {
+    super()
+    this.batchMask = (1 << batchBits) - 1
+  }
+
+  read (id :ID) :number {
+    return this.values[id >> this.batchBits][id & this.batchMask]
+  }
+  update (id :ID, value :number) {
+    this.values[id >> this.batchBits][id & this.batchMask] = value
+  }
+
+  added (id :ID, config? :ValueComponentConfig<number>) {
+    const init = config && 'initial' in config ? config.initial : this.defval
+    const arrix = id >> this.batchBits
+    const array = this.values[arrix] || (this.values[arrix] = new Float32Array(1 << this.batchBits))
+    array[id & this.batchMask] = init as number
+  }
+  // could remove empty batches but that would require tracking batch occupancy; more trouble than
+  // its worth
+  removed (id :ID) {}
 }
 
-/** Maintains a "batch" of component values. The values for a component are stored in batches in contiguous
-  * arrays, so as to maintain good memory locality. A mapping is maintained from component id to batch index (and
-  * vice versa), to allow dense packing of values even for a sparse component array. */
-export abstract class Batch<T> {
-  abstract read (index :number) :T
-  abstract update (index :number, value :T) :void
+export class Float32ArrayComponent extends Component<Float32Array> {
+  private readonly values :Float32Array[] = []
+  private readonly batchMask :number
+
+  constructor (readonly id :string, private readonly batchBits :number,
+               private readonly defval :Float32Array) {
+    super()
+    this.batchMask = (1 << batchBits) - 1
+  }
+
+  read (id :ID) :Float32Array {
+    const idx = id & this.batchMask, size = this.defval.length, start = idx * size
+    // TODO: how expensive is it to make subarrays? maybe we want to cache them?
+    return this.values[id >> this.batchBits].subarray(start, start + size)
+  }
+  update (id :ID, value :Float32Array|number[]) {
+    const idx = id & this.batchMask, size = this.defval.length
+    this.values[id >> this.batchBits].set(value, idx * size)
+  }
+
+  added (id :ID, config? :ValueComponentConfig<Float32Array>) {
+    const init = config && 'initial' in config ? config.initial : this.defval
+    const arrix = id >> this.batchBits
+    const array = this.values[arrix] || (this.values[arrix] = new Float32Array(1 << this.batchBits))
+    const idx = id & this.batchMask, size = this.defval.length
+    array.set(init as Float32Array, idx * size)
+  }
+  // could remove empty batches but that would require tracking batch occupancy; more trouble than
+  // its worth
+  removed (id :ID) {}
+
+  /** Applies `fn` to every individual component in bulk. `fn` is called whether or not the
+    * components are in use, so the caller must either determine on its own whether a component
+    * should be operated upon, or function correctly even if called on uninitialized components. To
+    * avoid creating unnecessary garbage, `fn` is called with the underlying bulk `Float32Array` and
+    * an offset and size into that array which identifies the component data. */
+  onComponents (fn :(id :ID, data :Float32Array, offset :number, size :number) => void) {
+    const size = this.defval.length
+    for (let bb = 0, bm = this.values.length; bb < bm; bb += 1) {
+      const batch = this.values[bb]
+      const bid = bb << this.batchBits
+      for (let vv = 0, vm = batch.length; vv < vm; vv += 1) {
+        const vid = bid | vv, offset = vv * size
+        fn(vid, batch, offset, size)
+      }
+    }
+  }
 }
 
 /** Determines whether an entity should be operated upon by a system. */
 type MatchFn = (cfg :EntityConfig) => boolean
 
-/** Combinators for creating functions that match entities based on which tags and components they contain.
-  * Used by systems to determine which entities on which to operate. */
+/** Combinators for creating functions that match entities based on which tags and components they
+  * contain. Used by systems to determine which entities on which to operate. */
 export class Matcher {
 
   /** Matches an entity if it has a component with `id`. */
@@ -243,7 +325,8 @@ export class Matcher {
   }
 }
 
-/** Defines a subset of entities (based on a supplied matching function) and enables bulk operation on them. */
+/** Defines a subset of entities (based on a supplied matching function) and enables bulk operation
+  * on them. */
 export class System {
   private _ids = new BitSet()
 

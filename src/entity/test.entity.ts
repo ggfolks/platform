@@ -1,4 +1,4 @@
-import {ID, Domain, EntityEvent, EntityConfig, FlatValueComponent, Matcher, System} from "./entity"
+import {ID, Domain, LifecycleEvent, EntityConfig, DenseValueComponent, Matcher, System} from "./entity"
 
 function mkEv<T> (type :T, id :ID) { return {type, id} }
 
@@ -6,9 +6,9 @@ const EmptyConfig = {components: {}}
 
 test("entity lifecycle events", () => {
   const domain = new Domain({}, {})
-  const history :EntityEvent[] = []
+  const history :LifecycleEvent[] = []
   domain.events.onEmit(ev => history.push(ev))
-  const exhist :EntityEvent[] = []
+  const exhist :LifecycleEvent[] = []
 
   const id0 = domain.add(EmptyConfig, true)
   exhist.push(mkEv("added", id0), mkEv("enabled", id0))
@@ -47,8 +47,8 @@ test("entity id reuse", () => {
 
 test("flat value component", () => {
   const DefaultName = "default"
-  const name = new FlatValueComponent<string>("name", DefaultName)
-  const age = new FlatValueComponent<number|undefined>("age", 0)
+  const name = new DenseValueComponent<string>("name", DefaultName)
+  const age = new DenseValueComponent<number|undefined>("age", 0)
   const domain = new Domain({}, {name, age})
 
   const id0 = domain.add({components: {name: {}}})
@@ -69,8 +69,8 @@ test("flat value component", () => {
 })
 
 test("system iteration", () => {
-  const name = new FlatValueComponent<string>("name", "<noname>")
-  const age = new FlatValueComponent<number>("age", 0)
+  const name = new DenseValueComponent<string>("name", "<noname>")
+  const age = new DenseValueComponent<number>("age", 0)
   const domain = new Domain({}, {name, age})
   const sys1 = new System(domain, Matcher.hasAllC("name", "age"))
   const sys2 = new System(domain, Matcher.hasC("name"))
