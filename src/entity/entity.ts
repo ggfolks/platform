@@ -1,5 +1,5 @@
 import {BitSet} from "../core/util"
-import {Record} from "../core/data"
+import {vec2} from "../core/math"
 import {Stream, Emitter} from "../core/react"
 
 export type ID = number
@@ -13,7 +13,7 @@ export type DomainConfig = {
 
 export type EntityConfig = {
   /** The components used by this entity, mapped to config for each component. */
-  components :{[key :string]: Record}
+  components :Object
   /** Tags assigned to this entity. */
   tags? :Set<string>
 }
@@ -118,6 +118,19 @@ export interface ComponentConfig<T> {}
   * all entities in a single domain. */
 export abstract class Component<T> {
 
+  /** Creates a component that returns `value` for all entities. Calls to `update` will throw an
+    * error. */
+  static constant<T> (id :string, value :T) :Component<T> {
+    class CC extends Component<T> {
+      get id () { return id }
+      read (id :ID) { return value }
+      update (id :ID, value :T) { throw new Error(`Cannot update constant component '${id}'`) }
+      added (id :ID, config? :ComponentConfig<T>) {}
+      removed (id :ID) {}
+    }
+    return new CC()
+  }
+
   /** An identifer for this component that distinguishes it from all other components used on a
     * collection of entities (e.g. `trans` or `hp` or `texture`). This is used to reference this
     * component in entity configuration metadata. */
@@ -186,27 +199,37 @@ export class SparseValueComponent<T> extends Component<T> {
   }
 }
 
+/** Specializes [[Component]] for handling of array values. Mainly this is the addition of a
+  * zero-allocation [[ArrayComponent.read]] method. */
+export abstract class ArrayComponent<T> extends Component<T> {
+
+  /** Returns the value of this component for entity `id`. If `into` is supplied, the value will be
+    * copied into `into` and `into` will be returned. */
+  abstract read (id :ID, into? :T) :T
+}
+
 export class Float32Component extends Component<number> {
-  private readonly values :Float32Array[] = []
+  private readonly batches :Float32Array[] = []
   private readonly batchMask :number
 
-  constructor (readonly id :string, private readonly batchBits :number,
-               private readonly defval :number) {
+  constructor (readonly id :string, private readonly defval :number,
+               private readonly batchBits :number = 8) {
     super()
     this.batchMask = (1 << batchBits) - 1
   }
 
   read (id :ID) :number {
-    return this.values[id >> this.batchBits][id & this.batchMask]
+    return this.batches[id >> this.batchBits][id & this.batchMask]
   }
   update (id :ID, value :number) {
-    this.values[id >> this.batchBits][id & this.batchMask] = value
+    this.batches[id >> this.batchBits][id & this.batchMask] = value
   }
 
   added (id :ID, config? :ValueComponentConfig<number>) {
     const init = config && 'initial' in config ? config.initial : this.defval
-    const arrix = id >> this.batchBits
-    const array = this.values[arrix] || (this.values[arrix] = new Float32Array(1 << this.batchBits))
+    const batix = id >> this.batchBits
+    const array = this.batches[batix] || (
+      this.batches[batix] = new Float32Array(1 << this.batchBits))
     array[id & this.batchMask] = init as number
   }
   // could remove empty batches but that would require tracking batch occupancy; more trouble than
@@ -214,36 +237,81 @@ export class Float32Component extends Component<number> {
   removed (id :ID) {}
 }
 
-export class Float32ArrayComponent extends Component<Float32Array> {
-  private readonly values :Float32Array[] = []
+export class Vec2Component extends ArrayComponent<vec2> {
+  private readonly batches :Float32Array[] = []
   private readonly batchMask :number
 
-  constructor (readonly id :string, private readonly batchBits :number,
-               private readonly defval :Float32Array) {
+  constructor (readonly id :string, private readonly defval :vec2,
+               private readonly batchBits :number = 8) {
     super()
     this.batchMask = (1 << batchBits) - 1
   }
 
-  read (id :ID) :Float32Array {
-    const idx = id & this.batchMask, size = this.defval.length, start = idx * size
-    // TODO: how expensive is it to make subarrays? maybe we want to cache them?
-    return this.values[id >> this.batchBits].subarray(start, start + size)
+  read (id :ID, into? :vec2) :vec2 {
+    const batch = this.batch(id), start = this.start(id)
+    if (into) {
+      into[0] = batch[start+0]
+      into[1] = batch[start+1]
+      return into
+    }
+    else return batch.subarray(start, start+2) as vec2
   }
   update (id :ID, value :Float32Array|number[]) {
-    const idx = id & this.batchMask, size = this.defval.length
-    this.values[id >> this.batchBits].set(value, idx * size)
+    const batch = this.batch(id), start = this.start(id)
+    batch[start+0] = value[0]
+    batch[start+1] = value[1]
   }
 
   added (id :ID, config? :ValueComponentConfig<Float32Array>) {
     const init = config && 'initial' in config ? config.initial : this.defval
-    const arrix = id >> this.batchBits
-    const array = this.values[arrix] || (this.values[arrix] = new Float32Array(1 << this.batchBits))
-    const idx = id & this.batchMask, size = this.defval.length
-    array.set(init as Float32Array, idx * size)
+    const batix = id >> this.batchBits
+    const batch = this.batches[batix] || (
+      this.batches[batix] = new Float32Array((1 << this.batchBits) * 2))
+    batch.set(init as Float32Array, (id & this.batchMask) * 2)
   }
-  // could remove empty batches but that would require tracking batch occupancy; more trouble than
-  // its worth
   removed (id :ID) {}
+
+  protected batch (id :ID) :Float32Array {
+    return this.batches[id >> this.batchBits]
+  }
+  protected start (id :ID) :number {
+    return (id & this.batchMask) * 2
+  }
+}
+
+export class Float32ArrayComponent extends ArrayComponent<Float32Array> {
+  private readonly batches :Float32Array[] = []
+  private readonly batchMask :number
+
+  constructor (readonly id :string, private readonly defval :Float32Array,
+               private readonly batchBits :number = 8) {
+    super()
+    this.batchMask = (1 << batchBits) - 1
+  }
+
+  read (id :ID, into? :Float32Array) :Float32Array {
+    const batch = this.batch(id), size = this.defval.length, start = (id & this.batchMask) * size
+    if (into) {
+      for (let ii = 0; ii < size; ii += 1) into[ii] = batch[start+ii]
+      return into
+    }
+    else return batch.subarray(start, start+size)
+  }
+  update (id :ID, value :Float32Array|number[]) {
+    this.batch(id).set(value, this.start(id))
+  }
+
+  added (id :ID, config? :ValueComponentConfig<Float32Array>) {
+    const init = config && 'initial' in config ? config.initial : this.defval
+    const size = this.defval.length, batix = id >> this.batchBits
+    const batch = this.batches[batix] || (
+      this.batches[batix] = new Float32Array((1 << this.batchBits) * size))
+    batch.set(init as Float32Array, (id & this.batchMask) * size)
+  }
+  removed (id :ID) {
+    // could remove empty batches but that would require tracking batch occupancy;
+    // more trouble than its worth
+  }
 
   /** Applies `fn` to every individual component in bulk. `fn` is called whether or not the
     * components are in use, so the caller must either determine on its own whether a component
@@ -252,14 +320,22 @@ export class Float32ArrayComponent extends Component<Float32Array> {
     * an offset and size into that array which identifies the component data. */
   onComponents (fn :(id :ID, data :Float32Array, offset :number, size :number) => void) {
     const size = this.defval.length
-    for (let bb = 0, bm = this.values.length; bb < bm; bb += 1) {
-      const batch = this.values[bb]
+    for (let bb = 0, bm = this.batches.length; bb < bm; bb += 1) {
+      const batch = this.batches[bb]
       const bid = bb << this.batchBits
       for (let vv = 0, vm = batch.length; vv < vm; vv += 1) {
         const vid = bid | vv, offset = vv * size
         fn(vid, batch, offset, size)
       }
     }
+  }
+
+  protected batch (id :ID) :Float32Array {
+    return this.batches[id >> this.batchBits]
+  }
+  protected start (id :ID) :number {
+    const idx = id & this.batchMask, size = this.defval.length
+    return idx * size
   }
 }
 
