@@ -85,18 +85,18 @@ export class rect extends Float32Array {
   }
 
   static intersects (r1 :rect, r2 :rect) :boolean {
-    const [x2, y2, w2, h2] = r2
+    const x2 = r2[0], y2 = r2[1], w2 = r2[2], h2 = r2[3]
     return rect.intersectsXYWH(r1, x2, y2, w2, h2)
   }
 
   static intersectsPS (r1 :rect, pos2 :vec2, size2 :dim2) :boolean {
-    const [x2, y2] = pos2, [w2, h2] = size2
+    const x2 = pos2[0], y2 = pos2[1], w2 = size2[0], h2 = size2[1]
     return rect.intersectsXYWH(r1, x2, y2, w2, h2)
   }
 
   static intersectsXYWH (r :rect, x :number, y :number, w :number, h :number) :boolean {
     if (rect.isEmpty(r)) return false
-    const [x1, y1, w1, h1] = r, x2 = x1+w1, y2 = y1+h1
+    const x1 = r[0], y1 = r[1], w1 = r[2], h1 = r[3], x2 = x1+w1, y2 = y1+h1
     return (x+w > x1) && (x < x2) && (y+h > y1) && (y < y2)
   }
 
@@ -109,7 +109,7 @@ export class rect extends Float32Array {
   }
 
   static toString (d :dim2) :string {
-    const [x, y] = d, pre = (x :number) => x<0 ? "" : "+"
+    const x = d[0], y = d[1], pre = (x :number) => x<0 ? "" : "+"
     return `${d[3]}x${d[4]}${pre(x)}${x}${pre(y)}${y}`
   }
 }

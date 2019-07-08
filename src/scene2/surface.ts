@@ -220,7 +220,8 @@ export class Surface {
       return rect.intersectsPS(scissor, pt, ps)
     }
 
-    const [ix, iy] = pt, [iw, ih] = ps, [tw, th] = this.target.size
+    const ix = pt[0], iy = pt[1], iw = ps[0], ih = ps[1]
+    const ts = this.target.size, tw = ts[0], th = ts[1]
     return (ix + iw > 0) && (ix < tw) && (iy + ih > 0) && (iy < th)
   }
 
@@ -257,8 +258,8 @@ export class Surface {
   /** Fills a line between `a` and `b`, with the specified (display unit) `width`. */
   drawLine (a :vec2, b :vec2, width :number) :Surface {
     // swap the line end points if bx is less than x0
-    const swap = b[0] < a[0]
-    const [ax, ay] = swap ? b : a, [bx, by] = swap ? a : b
+    const swap = b[0] < a[0], sa = swap ? b : a, sb = swap ? a : b
+    const ax = sa[0], ay = sa[1], bx = sb[0], by = sb[1]
 
     const dx = bx - ax, dy = by - ay
     const length = Math.sqrt(dx * dx + dy * dy)
@@ -269,18 +270,20 @@ export class Surface {
     mat2d.translate(xf, xf, vec2.fromValues(ax + wy, ay - wx))
     mat2d.multiply(xf, this.tx, xf)
 
-    const [tex, tint] = this.patternTex == null ?
-      [colorTex(this.glc), Color.combine(Color.copy(this.tempColor, this.fillColor), this.tint)] :
-      [this.patternTex, this.tint]
+    const patTex = this.patternTex
+    const tex = patTex == null ? colorTex(this.glc) : patTex
+    const tint = patTex == null ?
+      Color.combine(Color.copy(this.tempColor, this.fillColor), this.tint) : this.tint
     this.batch.addTexQuad(tex, tint, xf, vec2zero, dim2.fromValues(length, width))
     return this
   }
 
   /** Fills the specified rectangle. */
   fillRect (pos :vec2, size :dim2) :Surface {
-    const [tex, tint] = this.patternTex == null ?
-      [colorTex(this.glc), Color.combine(Color.copy(this.tempColor, this.fillColor), this.tint)] :
-      [this.patternTex, this.tint]
+    const patTex = this.patternTex
+    const tex = patTex == null ? colorTex(this.glc) : patTex
+    const tint = patTex == null ?
+      Color.combine(Color.copy(this.tempColor, this.fillColor), this.tint) : this.tint
     this.batch.addTexQuad(tex, tint, this.tx, pos, size)
     return this
   }
