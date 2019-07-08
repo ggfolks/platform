@@ -1,4 +1,5 @@
 import {dim2, vec2} from "tfw/core/math"
+import {Clock, Loop} from "tfw/core/clock"
 import {Color} from "tfw/core/color"
 import {Subject, Value} from "tfw/core/react"
 import {loadImage} from "tfw/core/assets"
@@ -6,7 +7,7 @@ import {GLC, Renderer, Texture, makeTexture} from "tfw/scene2/gl"
 import {TriangleBatch, TriangleBatchSource} from "tfw/scene2/batch"
 import {Surface} from "tfw/scene2/surface"
 
-type RenderFn = (time :number, surf :Surface) => void
+type RenderFn = (clock :Clock, surf :Surface) => void
 
 const root = document.getElementById("root")
 if (!root) throw new Error(`No root?`)
@@ -19,22 +20,22 @@ const surf = new Surface(renderer.target, batch)
 
 let renderfn :RenderFn = squares
 
-const loop = (time :number) => {
+const loop = new Loop()
+loop.clock.onEmit(clock => {
   surf.begin()
   surf.clearTo(1, 0, 1, 1)
-  renderfn(time, surf)
+  renderfn(clock, surf)
   surf.end()
-  requestAnimationFrame(loop)
-}
-requestAnimationFrame(loop)
+})
+loop.start()
 
 // little demo renderer functions
 
 const pos = vec2.create(), size = dim2.create()
 const color = Color.fromRGB(1, 1, 1)
 
-function squares (time :number, surf :Surface) {
-  const secs = time/1000, sin = (Math.sin(secs)+1)/2, cos = (Math.cos(secs)+1)/2
+function squares (clock :Clock, surf :Surface) {
+  const secs = clock.elapsed/1000, sin = (Math.sin(secs)+1)/2, cos = (Math.cos(secs)+1)/2
   const vsize = renderer.size.current
   const sqSize = 16, hCount = Math.ceil(vsize[0]/sqSize), vCount = Math.ceil(vsize[1]/sqSize)
   dim2.set(size, sqSize, sqSize)
@@ -52,8 +53,8 @@ function wat (glc :GLC) :Subject<RenderFn> {
   const texS = Value.constant(Texture.DefaultConfig)
   const watT = makeTexture(glc, watS, texS)
   const pos = vec2.create(), size = dim2.create()
-  return watT.map(wat => (time, surf) => {
-    const secs = time/1000, sin = Math.sin(secs), cos = Math.cos(secs)
+  return watT.map(wat => (clock, surf) => {
+    const secs = clock.elapsed/1000, sin = Math.sin(secs), cos = Math.cos(secs)
     vec2.set(pos, 250+sin*50, 250+cos*50)
     dim2.set(size, wat.size[0]*cos, wat.size[1]*sin)
     surf.draw(wat, pos, size)
@@ -64,5 +65,12 @@ document.onkeydown = ev => {
   switch (ev.key) {
   case "1": renderfn = squares ; break
   case "2": wat(renderer.glc).onValue(r => renderfn = r) ; break
+  }
+}
+
+document.onmousedown = ev => {
+  if (ev.button == 0) {
+    if (loop.active) loop.stop()
+    else loop.start()
   }
 }
