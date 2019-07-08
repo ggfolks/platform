@@ -35,14 +35,8 @@ export class Batch implements Disposable {
 
 
 const FRAGMENT_PREAMBLE = [
-  "#ifdef GL_ES",
-  "precision lowp float;",
-  "#else",
-  // Not all versions of regular OpenGL supports precision qualifiers, define placeholders
-  "#define lowp",
-  "#define mediump",
-  "#define highp",
-  "#endif"]
+  "precision lowp float;"
+]
 
 /** Provides some standard bits for a shader program that uses a tint and a texture. */
 export class TexturedBatchSource {
@@ -121,7 +115,8 @@ export abstract class QuadBatch extends TexturedBatch {
     * `pos, size` define the size and position of the quad. */
   addTile (tile :Tile, tint :Color, trans :mat2d, pos :vec2, size :dim2) {
     this.setTexture(tile.texture)
-    const [dx, dy] = pos, [dw, dh] = size, [sl, sr] = tile.s, [st, sb] = tile.t
+    const dx = pos[0], dy = pos[1], dw = size[0], dh = size[1]
+    const sl = tile.s[0], sr = tile.s[1], st = tile.t[0], sb = tile.t[1]
     // TODO: we should probably support repeat for tiles that are the whole texture
     this.addQuad(tint, trans, dx, dy, dx+dw, dy+dh, sl, st, sr, sb)
   }
@@ -130,7 +125,7 @@ export abstract class QuadBatch extends TexturedBatch {
     * `pos, size` define the size and position of the quad. */
   addTexQuad (tex :Texture, tint :Color, trans :mat2d, pos :vec2, size :dim2) {
     this.setTexture(tex)
-    const [x, y] = pos, [w, h] = size
+    const x = pos[0], y = pos[1], w = size[0], h = size[1]
     const sr = tex.config.repeatX ? w/tex.size[0] : 1
     const sb = tex.config.repeatY ? h/tex.size[1] : 1
     this.addQuad(tint, trans, x, y, x+w, y+h, 0, 0, sr, sb)
@@ -227,12 +222,7 @@ export class TriangleBatchSource extends TexturedBatchSource {
   }
 }
 
-const START_VERTS = 16*4
-const EXPAND_VERTS = 16*4
-const START_ELEMS = 6*START_VERTS/4
-const EXPAND_ELEMS = 6*EXPAND_VERTS/4
 const FLOAT_SIZE_BYTES = 4
-
 const QUAD_INDICES = [0, 1, 2, 1, 3, 2]
 
 function copy (into :Float32Array, offset :number, stables :Float32Array) {
@@ -246,6 +236,18 @@ function add (into :Float32Array, offset :number, x :number, y :number, sx :numb
   into[offset++] = sx
   into[offset++] = sy
   return offset
+}
+
+export type TriangleBatchConfig = {
+  startQuads :number
+  expandQuads :number
+  maxQuads :number
+}
+
+export const DefaultTriangleBatchConfig = {
+  startQuads: 64,
+  expandQuads: 128,
+  maxQuads: 1024
 }
 
 export class TriangleBatch extends QuadBatch {
@@ -271,7 +273,8 @@ export class TriangleBatch extends QuadBatch {
   private vertPos = 0
   private elemPos = 0
 
-  constructor (glc :GLC, source :TriangleBatchSource) {
+  constructor (glc :GLC, source :TriangleBatchSource,
+               readonly config = DefaultTriangleBatchConfig) {
     super(glc)
 
     const prog = this.program = new Program(
@@ -288,8 +291,8 @@ export class TriangleBatch extends QuadBatch {
 
     // create our vertex and index buffers
     this.stableAttrs = new Float32Array(this.stableAttrsSize)
-    this.vertices    = new Float32Array(START_VERTS * this.vertexSize)
-    this.elements    = new Uint16Array(START_ELEMS)
+    this.vertices    = new Float32Array(config.startQuads * 4 * this.vertexSize)
+    this.elements    = new Uint16Array(config.startQuads * 6)
 
     // create our GL buffers
     const vertBuffer = glc.createBuffer()
@@ -306,7 +309,7 @@ export class TriangleBatch extends QuadBatch {
     * [[stableAttrs]] with all of the attributes that are the same for every vertex. */
   prepare (tint :Color, xf :mat2d) {
     const stables = this.stableAttrs
-    stables.set(xf)
+    stables.set(xf, 0)
     stables[6] = Color.toAR(tint)
     stables[7] = Color.toGB(tint)
     this.addExtraStableAttrs(stables, 8)
@@ -483,15 +486,16 @@ export class TriangleBatch extends QuadBatch {
 
   protected beginPrimitive (vertexCount :number, elemCount :number) :number {
     // check whether we have enough room to hold this primitive
-    const vertIdx = this.vertPos / this.vertexSize
+    const vertSize = this.vertexSize, vertIdx = this.vertPos / vertSize
     const verts = vertIdx + vertexCount, elems = this.elemPos + elemCount
-    const availVerts = this.vertices.length / this.vertexSize, availElems = this.elements.length
+    const availVerts = this.vertices.length / vertSize, availElems = this.elements.length
     if (verts <= availVerts && elems <= availElems) return vertIdx
 
-    // otherwise, flush and expand our buffers if needed
+    // otherwise, flush and expand our buffers if needed (and possible)
     this.flush()
-    if (verts > availVerts) this.expandVerts(verts)
-    if (elems > availElems) this.expandElems(elems)
+    const canExpand = this.vertices.length < this.config.maxQuads * 4 * this.vertexSize
+    if (canExpand && verts > availVerts) this.expandVerts(verts)
+    if (canExpand && elems > availElems) this.expandElems(elems)
     return 0
   }
 
@@ -513,13 +517,13 @@ export class TriangleBatch extends QuadBatch {
 
   private expandVerts (vertCount :number) {
     let newVerts = this.vertices.length / this.vertexSize
-    while (newVerts < vertCount) newVerts += EXPAND_VERTS
+    while (newVerts < vertCount) newVerts += 4*this.config.expandQuads
     this.vertices = new Float32Array(newVerts*this.vertexSize)
   }
 
   private expandElems (elemCount :number) {
     let newElems = this.elements.length
-    while (newElems < elemCount) newElems += EXPAND_ELEMS
+    while (newElems < elemCount) newElems += 6*this.config.expandQuads
     this.elements = new Uint16Array(newElems)
   }
 }
