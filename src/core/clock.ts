@@ -2,12 +2,12 @@ import {Emitter, Stream} from "./react"
 
 /** Timing information for an animated system. */
 export interface Clock {
-  /** A millisecond timestamp, obtained from [[renderAnimationFrame]]. */
+  /** A _millisecond_ timestamp, obtained from [[renderAnimationFrame]]. */
   time :number
-  /** The number of milliseconds that have elapsed since the loop was first started.
+  /** The number of _seconds_ that have elapsed since the loop was first started.
     * This does not advance when the loop is paused. */
   elapsed :number
-  /** The number of milliseconds that have elapsed since the last frame.
+  /** The number of _seconds_ that have elapsed since the last frame.
     * Will be `0` on the first frame after starting and the first frame after unpausing. */
   dt :number
 }
@@ -15,14 +15,14 @@ export interface Clock {
 /** Handles the top-level render loop. */
 export class Loop {
   private running = false
-  private stamp = {time: 0, elapsed: 0, dt: 0}
+  private stamp = {time: 0, elapsed: 0, dt: 0, dts: 0}
   private wasRunning = false
   private onFrame = (time :number) => {
     const {stamp, wasRunning} = this
-    const dt = wasRunning ? time-this.stamp.time : 0
+    const dt = wasRunning ? time-this.stamp.time : 0, dts = dt/1000
     stamp.time = time
-    stamp.elapsed += dt
-    stamp.dt = dt
+    stamp.elapsed += dts
+    stamp.dt = dts
     const clock = this.clock as Emitter<Clock>
     clock.emit(this.stamp)
     if (!wasRunning) this.wasRunning = true
