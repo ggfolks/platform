@@ -213,7 +213,7 @@ export class Texture implements Tile {
     * `x, y, width, height` define the bounds of the region (in display units). */
   tile (x :number, y :number, width :number, height :number) :Tile {
     const size = dim2.fromValues(width, height)
-    const [tw, th] = this.size
+    const tw = this.size[0], th = this.size[1]
     const s = vec2.fromValues(x/tw, (x+width)/tw), t = vec2.fromValues(y/th, (y+height)/th)
     return {texture: this, size, s, t}
   }
@@ -387,6 +387,11 @@ export class Renderer {
     const glc = this.canvas.getContext("webgl", attrs.gl)
     if (!glc) throw new Error(`Unable to create WebGL rendering context.`)
     this.glc = glc
+
+    // TODO: quad batch &c depends on this blend config, but maybe this is presumptuous?
+    glc.enable(GLC.BLEND)
+    glc.blendFunc(GLC.ONE, GLC.ONE_MINUS_SRC_ALPHA)
+    glc.disable(GLC.CULL_FACE)
 
     const rend = this
     class DefaultRenderTarget implements RenderTarget {
