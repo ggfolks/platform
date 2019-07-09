@@ -7,6 +7,7 @@ import {GLC, Renderer, Texture, makeTexture} from "tfw/scene2/gl"
 import {QuadBatch, UniformQuadBatch} from "tfw/scene2/batch"
 import {Surface} from "tfw/scene2/surface"
 import {entityDemo} from "./entity"
+import {spaceDemo} from "./space"
 
 type RenderFn = (clock :Clock, batch :QuadBatch, surf :Surface) => void
 
@@ -15,7 +16,7 @@ if (!root) throw new Error(`No root?`)
 
 const renderer = new Renderer({
   size: dim2.fromValues(root.offsetWidth, root.offsetHeight),
-  gl: {alpha: true}
+  gl: {alpha: true, depth: true, premultipliedAlpha: true}
 })
 root.appendChild(renderer.canvas)
 
@@ -70,6 +71,7 @@ document.onkeydown = ev => {
   case "1": renderfn = squares ; break
   case "2": wat(renderer.glc).onValue(r => renderfn = r) ; break
   case "3": entityDemo(renderer).onValue(r => renderfn = r) ; break
+  case "4": spaceDemo(renderer).onValue(r => renderfn = r) ; break
   }
   if (!loop.active) loop.start()
 }

@@ -37,7 +37,8 @@
   },
   "dependencies": {
     "@types/gl-matrix": "^2.4.5",
-    "gl-matrix": "^3.0.0"
+    "gl-matrix": "^3.0.0",
+    "three": "^0.106.2"
   },
   "devDependencies": {
     "@types/jest": "^24.0.11",
