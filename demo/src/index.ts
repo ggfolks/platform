@@ -3,7 +3,7 @@ import {Clock, Loop} from "tfw/core/clock"
 import {Color} from "tfw/core/color"
 import {Subject, Value} from "tfw/core/react"
 import {loadImage} from "tfw/core/assets"
-import {GLC, Renderer, Texture, makeTexture} from "tfw/scene2/gl"
+import {GLC, Renderer, Texture, makeTexture, windowSize} from "tfw/scene2/gl"
 import {QuadBatch, UniformQuadBatch} from "tfw/scene2/batch"
 import {Surface} from "tfw/scene2/surface"
 import {entityDemo} from "./entity"
@@ -15,7 +15,10 @@ const root = document.getElementById("root")
 if (!root) throw new Error(`No root?`)
 
 const renderer = new Renderer({
-  size: dim2.fromValues(root.offsetWidth, root.offsetHeight),
+  // kind of a hack: when the window size changes, we emit an update with our div size;
+  // browsers don't emit resize events for arbitrary divs (there's apparently a proposal, yay)
+  size: windowSize(window).map(size => dim2.set(size, root.clientWidth, root.clientHeight)),
+  scaleFactor: window.devicePixelRatio,
   gl: {alpha: true}
 })
 root.appendChild(renderer.canvas)

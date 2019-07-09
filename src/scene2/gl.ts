@@ -1,6 +1,6 @@
 import {dim2, vec2} from "../core/math"
 import {Disposable} from "../core/util"
-import {Mutable, Subject} from "../core/react"
+import {Value, Mutable, Subject} from "../core/react"
 
 //
 // Basic GL machinery: shader programs, render targets, etc.
@@ -138,7 +138,7 @@ export class Scale {
 
   /** Returns `length` scaled by this scale factor. */
   scaled (length :number) :number { return length * this.factor }
-  /** Returns `size` scaled by this scale factor. */
+  /** Returns a new `dim2` containing `size` scaled by this scale factor. */
   scaledDim (size :dim2) :dim2 { return dim2.scale(dim2.create(), size, this.factor) }
 
   /** Rounds the supplied length to the nearest length that corresponds to an integer pixel length
@@ -369,9 +369,21 @@ export class TextureRenderTarget implements RenderTarget, Disposable {
   }
 }
 
+/** Returns a value with the current size of `window`, which updates when the size changes. */
+export function windowSize (window :Window) :Value<dim2> {
+  const size = Mutable.localEq(dim2.fromValues(window.innerWidth, window.innerHeight), dim2.eq)
+  window.onresize = _ => size.update(dim2.fromValues(window.innerWidth, window.innerHeight))
+  return size
+}
+
+/** Configuration for the [[Renderer]]. */
 export type RendererConfig = {
-  size? :dim2,
-  scaleFactor? :number,
+  /** The size of the canvas into which we will render. For full screen windows, use [[windowSize]]. */
+  size :Value<dim2>,
+  /** The scale factor defining the ratio between display units and pixels. Usually
+    * [[Window.devicePixelRatio]]. */
+  scaleFactor :number,
+  /** WebGL context configuration. */
   gl? :WebGLContextAttributes
 }
 
@@ -380,11 +392,11 @@ export class Renderer {
   readonly glc :GLC
   readonly target :RenderTarget
   readonly scale :Scale // TODO: support change in scale factor?
-  readonly size :Mutable<dim2>
+  readonly size :Value<dim2>
 
-  constructor (attrs :RendererConfig = {}) {
+  constructor (config :RendererConfig) {
     const canvas = this.canvas = document.createElement("canvas")
-    const glc = this.canvas.getContext("webgl", attrs.gl)
+    const glc = this.canvas.getContext("webgl", config.gl)
     if (!glc) throw new Error(`Unable to create WebGL rendering context.`)
     this.glc = glc
 
@@ -405,11 +417,10 @@ export class Renderer {
       }
       dispose () {}
     }
-    const target = this.target = new DefaultRenderTarget()
-    const scale = this.scale = new Scale(attrs.scaleFactor || window.devicePixelRatio)
 
-    const winSize = dim2.fromValues(window.innerWidth, window.innerHeight)
-    const size = this.size = Mutable.localEq(attrs.size || winSize, dim2.eq)
+    const target = this.target = new DefaultRenderTarget()
+    const size = this.size = config.size
+    const scale = this.scale = new Scale(config.scaleFactor)
     size.onValue(rsize => {
       // the frame buffer may be larger (or smaller) than the logical size, depending on whether
       // we're on a HiDPI display, or how the game has configured things (maybe they're scaling down
@@ -422,9 +433,5 @@ export class Renderer {
       canvas.style.width = `${rsize[0]}px`
       canvas.style.height = `${rsize[1]}px`
     })
-  }
-
-  setSize (size :dim2) {
-    this.size.update(size) // TODO: clone?
   }
 }
