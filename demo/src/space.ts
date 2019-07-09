@@ -16,8 +16,11 @@ export function spaceDemo (renderer :Renderer) {
   const {canvas, glc} = renderer
   const scene = new Scene()
   scene.add(new GridHelper(100, 100))
-  const rendererSize = renderer.size.current
-  const camera = new PerspectiveCamera(50, rendererSize[0] / rendererSize[1])
+  const camera = new PerspectiveCamera()
+  renderer.size.onValue(size => {
+    camera.aspect = size[0] / size[1]
+    camera.updateProjectionMatrix()
+  })
   camera.position.y = 3
   const sphere = new Mesh(new SphereBufferGeometry())
   scene.add(sphere)
