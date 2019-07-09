@@ -239,12 +239,14 @@ function add (into :Float32Array, offset :number, x :number, y :number, sx :numb
 }
 
 export type TriangleBatchConfig = {
+  source :TriangleBatchSource,
   startQuads :number
   expandQuads :number
   maxQuads :number
 }
 
-export const DefaultTriangleBatchConfig = {
+export const DefaultTriangleBatchConfig :TriangleBatchConfig = {
+  source: new TriangleBatchSource(),
   startQuads: 64,
   expandQuads: 128,
   maxQuads: 1024
@@ -273,12 +275,11 @@ export class TriangleBatch extends QuadBatch {
   private vertPos = 0
   private elemPos = 0
 
-  constructor (glc :GLC, source :TriangleBatchSource,
-               readonly config = DefaultTriangleBatchConfig) {
+  constructor (glc :GLC, readonly config = DefaultTriangleBatchConfig) {
     super(glc)
 
-    const prog = this.program = new Program(
-      glc, source.vertex().join("\n"), source.fragment().join("\n"))
+    const vsrc = config.source.vertex().join("\n"), fsrc = config.source.fragment().join("\n")
+    const prog = this.program = new Program(glc, vsrc, fsrc)
 
     this.uTexture     = prog.getUniformLocation("u_Texture")
     this.uHScreenSize = prog.getUniformLocation("u_HScreenSize")
@@ -525,5 +526,279 @@ export class TriangleBatch extends QuadBatch {
     let newElems = this.elements.length
     while (newElems < elemCount) newElems += 6*this.config.expandQuads
     this.elements = new Uint16Array(newElems)
+  }
+}
+
+/** The source for the stock quad batch shader program. */
+export class UniformQuadBatchSource extends TexturedBatchSource {
+
+  /** Declares the uniform variables for our shader. */
+  static VERT_UNIFS = [
+    "uniform vec2 u_HScreenSize;",
+    "uniform float u_Flip;",
+    "uniform vec4 u_Data[_VEC4S_PER_QUAD_*_MAX_QUADS_];"
+  ]
+
+  /** Declares the attribute variables for our shader. */
+  static VERT_ATTRS = [
+    "attribute vec3 a_Vertex;"
+  ]
+
+  /** Declares the varying variables for our shader. */
+  static VERT_VARS = [
+    "varying vec2 v_TexCoord;",
+    "varying vec4 v_Color;"
+  ]
+
+  /** Extracts the values from our data buffer. */
+  static VERT_EXTRACTDATA = [
+    "int index = _VEC4S_PER_QUAD_*int(a_Vertex.z);",
+    "vec4 mat = u_Data[index+0];",
+    "vec4 txc = u_Data[index+1];",
+    "vec4 tcs = u_Data[index+2];"
+  ]
+
+  /** The shader code that computes {@code gl_Position}. */
+  static VERT_SETPOS = [
+    // Transform the vertex.
+    "mat3 transform = mat3(",
+    "  mat.x, mat.y, 0,",
+    "  mat.z, mat.w, 0,",
+    "  txc.x, txc.y, 1);",
+    "gl_Position = vec4(transform * vec3(a_Vertex.xy, 1.0), 1.0);",
+    // Scale from screen coordinates to [0, 2].
+    "gl_Position.xy /= u_HScreenSize.xy;",
+    // Offset to [-1, 1].
+    "gl_Position.xy -= 1.0;",
+    // If requested, flip the y-axis.
+    "gl_Position.y *= u_Flip;"
+  ]
+
+  /** The shader code that computes {@code v_TexCoord}. */
+  static VERT_SETTEX = [
+    "v_TexCoord = a_Vertex.xy * tcs.xy + txc.zw;"
+  ]
+
+  /** The shader code that computes {@code v_Color}. */
+  static VERT_SETCOLOR = [
+    // tint is encoded as two floats A*R and G*B where A, R, G, B are (0 - 255)
+    "float red = mod(tcs.z, 256.0);",
+    "float alpha = (tcs.z - red) / 256.0;",
+    "float blue = mod(tcs.w, 256.0);",
+    "float green = (tcs.w - blue) / 256.0;",
+    "v_Color = vec4(red / 255.0, green / 255.0, blue / 255.0, alpha / 255.0);"
+  ]
+
+  /** Returns the source to the vertex shader program. */
+  vertex (batch :UniformQuadBatch) {
+    return this.rawVertex().map(line => line.
+                                replace("_MAX_QUADS_", ""+batch.maxQuads).
+                                replace("_VEC4S_PER_QUAD_", ""+batch.vec4sPerQuad))
+  }
+
+  /** Returns the raw vertex source, which will have some parameters subbed into it. */
+  protected rawVertex () :string[] {
+    const UQBS = UniformQuadBatchSource
+    return UQBS.VERT_UNIFS.
+      concat(UQBS.VERT_ATTRS).
+      concat(UQBS.VERT_VARS).
+      concat("void main(void) {").
+      concat(UQBS.VERT_EXTRACTDATA).
+      concat(UQBS.VERT_SETPOS).
+      concat(UQBS.VERT_SETTEX).
+      concat(UQBS.VERT_SETCOLOR).
+      concat("}")
+  }
+}
+
+const VERTS_PER_QUAD = 4
+const ELEMS_PER_QUAD = 6
+const VERT_SIZE = 3 // 3 floats per vertex
+const BASE_VEC4S_PER_QUAD = 3 // 3 vec4s per matrix
+
+export type UniformQuadBatchConfig = {
+  source :UniformQuadBatchSource
+}
+
+export const DefaultUniformQuadBatchConfig :UniformQuadBatchConfig = {
+  source: new UniformQuadBatchSource()
+}
+
+/** A batch which renders quads by stuffing them into a big(ish) GLSL uniform variable. This turns
+  * out to work pretty well for 2D rendering as we rarely render more than a modest number of quads
+  * before flushing the shader and it allows us to avoid sending a lot of duplicated data as is
+  * necessary when rendering quads via a batch of triangles. */
+export class UniformQuadBatch extends QuadBatch {
+
+  /**
+   * Returns false if the GL context doesn't support sufficient numbers of vertex uniform vectors
+   * to allow this shader to run with good performance, true otherwise.
+   */
+  static isLikelyToPerform (glc :GLC) :boolean {
+    const maxVecs = UniformQuadBatch.usableMaxUniformVectors(glc)
+    // assume we're better off with indexed tris if we can't push at least 16 quads at a time
+    return (maxVecs >= 16*BASE_VEC4S_PER_QUAD)
+  }
+
+  readonly maxQuads :number
+
+  readonly program :Program
+  readonly uTexture :WebGLUniformLocation
+  readonly uHScreenSize :WebGLUniformLocation
+  readonly uFlip :WebGLUniformLocation
+  readonly uData :WebGLUniformLocation
+  readonly aVertex :number
+
+  private vertBuffer :WebGLBuffer
+  private elemBuffer :WebGLBuffer
+  private data :Float32Array
+  private quadCounter = 0
+
+  /** Creates a uniform quad batch with the supplied custom shader program builder. */
+  constructor (glc :GLC, readonly config = DefaultUniformQuadBatchConfig) {
+    super(glc)
+    const maxVecs = UniformQuadBatch.usableMaxUniformVectors(glc) - this.extraVec4s
+    const v4s = this.vec4sPerQuad
+    if (maxVecs < v4s) throw new Error(
+      `GL_MAX_VERTEX_UNIFORM_VECTORS too low: have ${maxVecs}, need at least ${v4s}`)
+    const maxQuads = this.maxQuads = Math.floor(maxVecs / v4s)
+
+    const vsrc = config.source.vertex(this).join("\n"), fsrc = config.source.fragment().join("\n")
+    const prog = this.program = new Program(glc, vsrc, fsrc)
+    this.uTexture = prog.getUniformLocation("u_Texture")
+    this.uHScreenSize = prog.getUniformLocation("u_HScreenSize")
+    this.uFlip = prog.getUniformLocation("u_Flip")
+    this.uData = prog.getUniformLocation("u_Data")
+    this.aVertex = prog.getAttribLocation("a_Vertex")
+
+    // create our stock supply of unit quads and stuff them into our buffers
+    const verts = new Uint16Array(maxQuads*VERTS_PER_QUAD*VERT_SIZE)
+    const elems = new Uint16Array(maxQuads*ELEMS_PER_QUAD)
+    let vv = 0, ee = 0
+    for (let ii = 0; ii < maxQuads; ii += 1) {
+      verts[vv++] = 0; verts[vv++] = 0; verts[vv++] = ii
+      verts[vv++] = 1; verts[vv++] = 0; verts[vv++] = ii
+      verts[vv++] = 0; verts[vv++] = 1; verts[vv++] = ii
+      verts[vv++] = 1; verts[vv++] = 1; verts[vv++] = ii
+      const base = ii * VERTS_PER_QUAD
+      elems[ee++] = base  ; elems[ee++] = base+1; elems[ee++] = base+2
+      elems[ee++] = base+1; elems[ee++] = base+3; elems[ee++] = base+2
+    }
+
+    this.data = new Float32Array(maxQuads*v4s*4)
+
+    // create our GL buffers
+    const vertBuffer = glc.createBuffer()
+    if (vertBuffer) this.vertBuffer = vertBuffer
+    else throw new Error(`Failed to create vertex buffer ${glc.getError()}`)
+    const elemBuffer = glc.createBuffer()
+    if (elemBuffer) this.elemBuffer = elemBuffer
+    else throw new Error(`Failed to create element buffer ${glc.getError()}`)
+
+    glc.bindBuffer(GLC.ARRAY_BUFFER, this.vertBuffer)
+    glc.bufferData(GLC.ARRAY_BUFFER, verts, GLC.STATIC_DRAW)
+
+    glc.bindBuffer(GLC.ELEMENT_ARRAY_BUFFER, this.elemBuffer)
+    glc.bufferData(GLC.ELEMENT_ARRAY_BUFFER, elems, GLC.STATIC_DRAW)
+
+    checkError(glc, "UniformQuadBatch end ctor");
+  }
+
+  get vec4sPerQuad () :number { return BASE_VEC4S_PER_QUAD }
+
+  addQuadVerts (tint :Color, trans :mat2d,
+                x1 :number, y1 :number, s1 :number, t1 :number,
+                x2 :number, y2 :number, s2 :number, t2 :number,
+                x3 :number, y3 :number, s3 :number, t3 :number,
+                x4 :number, y4 :number, s4 :number, t4 :number) {
+    const dw = x2 - x1, dh = y3 - y1
+    const data = this.data
+    let pos = this.quadCounter * this.vec4sPerQuad*4
+    const m00 = trans[0], m01 = trans[1], m10 = trans[2], m11 = trans[3]
+    const tx = trans[4], ty = trans[5]
+    data[pos++] = m00*dw
+    data[pos++] = m01*dw
+    data[pos++] = m10*dh
+    data[pos++] = m11*dh
+    data[pos++] = tx + m00*x1 + m10*y1
+    data[pos++] = ty + m01*x1 + m11*y1
+    data[pos++] = s1
+    data[pos++] = t1
+    data[pos++] = s2 - s1
+    data[pos++] = t3 - t1
+    data[pos++] = Color.toAR(tint)
+    data[pos++] = Color.toGB(tint)
+    pos = this.addExtraQuadData(data, pos)
+    this.quadCounter += 1
+
+    if (this.quadCounter >= this.maxQuads) this.flush()
+  }
+
+  begin (fbufSize :dim2, flip :boolean) {
+    super.begin(fbufSize, flip)
+    this.program.activate()
+    // TODO: apparently we can avoid glUniform calls because they're part of the program state; so
+    // we can cache the last set values for all these glUniform calls and only set them anew if
+    // they differ...
+    const glc = this.glc
+    glc.uniform2f(this.uHScreenSize, fbufSize[0]/2, fbufSize[1]/2)
+    glc.uniform1f(this.uFlip, flip ? -1 : 1)
+    glc.bindBuffer(GLC.ARRAY_BUFFER, this.vertBuffer)
+    glc.enableVertexAttribArray(this.aVertex)
+    glc.vertexAttribPointer(this.aVertex, VERT_SIZE, GLC.SHORT, false, 0, 0)
+    glc.bindBuffer(GLC.ELEMENT_ARRAY_BUFFER, this.elemBuffer)
+    glc.activeTexture(GLC.TEXTURE0)
+    glc.uniform1i(this.uTexture, 0)
+    checkError(glc, "UniformQuadBatch begin")
+  }
+
+  flush () {
+    super.flush()
+    if (this.quadCounter > 0) {
+      this.bindTexture()
+      const quads = this.quadCounter, vec4s = quads*this.vec4sPerQuad
+      const data = this.data.length === vec4s ? this.data : this.data.subarray(0, vec4s*4)
+      this.glc.uniform4fv(this.uData, data)
+      this.glc.drawElements(GLC.TRIANGLES, quads*ELEMS_PER_QUAD, GLC.UNSIGNED_SHORT, 0)
+      checkError(this.glc, "UniformQuadBatch flush")
+      this.quadCounter = 0
+    }
+  }
+
+  end () {
+    super.end()
+    this.glc.disableVertexAttribArray(this.aVertex)
+    checkError(this.glc, "UniformQuadBatch end")
+  }
+
+  dispose () {
+    super.dispose()
+    this.program.dispose()
+    this.glc.deleteBuffer(this.vertBuffer)
+    this.glc.deleteBuffer(this.elemBuffer)
+    checkError(this.glc, "UniformQuadBatch close")
+  }
+
+  toString () { return `uquad/${this.maxQuads}` }
+
+  /** Returns how many vec4s this shader uses above and beyond those in the base implementation. If
+    * you add any extra attributes or uniforms, your subclass will need to account for them here. */
+  protected get extraVec4s () :number { return 0 }
+
+  protected addExtraQuadData (data :Float32Array, pos :number) :number { return pos }
+
+  private static usableMaxUniformVectors (glc :GLC) :number {
+    // this returns the maximum number of vec4s; then we subtract one vec2 to account for the
+    // uHScreenSize uniform, and two more because some GPUs seem to need one for our vec3 attr
+    const maxVecs = glc.getParameter(GLC.MAX_VERTEX_UNIFORM_VECTORS) - 3
+    // we have to check errors always in this case, because if GL failed to return a value we would
+    // otherwise return the value of uninitialized memory which could be some huge number which we
+    // might turn around and try to compile into a shader causing GL to crash (you might think from
+    // such a careful description that such a thing has in fact come to pass, and you would not be
+    // incorrect)
+    const glErr = glc.getError()
+    if (glErr != GLC.NO_ERROR) throw new Error(
+      `Unable to query GL_MAX_VERTEX_UNIFORM_VECTORS,  error ${glErr}`)
+    return maxVecs
   }
 }

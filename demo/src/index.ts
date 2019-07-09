@@ -4,7 +4,7 @@ import {Color} from "tfw/core/color"
 import {Subject, Value} from "tfw/core/react"
 import {loadImage} from "tfw/core/assets"
 import {GLC, Renderer, Texture, makeTexture} from "tfw/scene2/gl"
-import {QuadBatch, TriangleBatch, TriangleBatchSource} from "tfw/scene2/batch"
+import {QuadBatch, UniformQuadBatch} from "tfw/scene2/batch"
 import {Surface} from "tfw/scene2/surface"
 import {entityDemo} from "./entity"
 
@@ -19,7 +19,7 @@ const renderer = new Renderer({
 })
 root.appendChild(renderer.canvas)
 
-const batch = new TriangleBatch(renderer.glc, new TriangleBatchSource())
+const batch = new UniformQuadBatch(renderer.glc)
 const surf = new Surface(renderer.target, batch)
 
 let renderfn :RenderFn = squares
