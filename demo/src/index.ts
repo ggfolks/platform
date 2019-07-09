@@ -16,7 +16,7 @@ if (!root) throw new Error(`No root?`)
 
 const renderer = new Renderer({
   size: dim2.fromValues(root.offsetWidth, root.offsetHeight),
-  gl: {alpha: true, depth: true, premultipliedAlpha: true}
+  gl: {alpha: true}
 })
 root.appendChild(renderer.canvas)
 
