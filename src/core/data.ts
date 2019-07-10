@@ -62,6 +62,20 @@ export function refEquals<T> (a :T, b :T) :boolean {
 }
 
 /**
+ * Determines whether the two arrays provided contain the same references in the same order. */
+export function arrayContentsRefEquals<T> (a :Array<T>, b :Array<T>) {
+  if (a.length !== b.length) {
+    return false
+  }
+  for (let ii = 0; ii < a.length; ii += 1) {
+    if (a[ii] !== b[ii]) {
+      return false
+    }
+  }
+  return true
+}
+
+/**
  * Tests the structural equality of two data values. This compares all elements of arrays, sets,
  * maps and record valued subproperties.
  */

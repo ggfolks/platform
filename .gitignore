@@ -4,6 +4,7 @@ docs
 */tsconfig.tsbuildinfo
 lib/core
 lib/entity
+lib/physics3
 lib/scene2
 lib/scene3
 lib/space
