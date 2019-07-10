@@ -1,13 +1,14 @@
 import {dim2, vec2} from "tfw/core/math"
 import {Clock, Loop} from "tfw/core/clock"
 import {Color} from "tfw/core/color"
-import {Subject, Value} from "tfw/core/react"
+import {Subject, Value, Remover, NoopRemover} from "tfw/core/react"
 import {loadImage} from "tfw/core/assets"
 import {GLC, Renderer, Texture, makeTexture, windowSize} from "tfw/scene2/gl"
 import {QuadBatch, UniformQuadBatch} from "tfw/scene2/batch"
 import {Surface} from "tfw/scene2/surface"
 import {entityDemo} from "./entity"
 import {spaceDemo} from "./space"
+import {uiDemo} from "./ui"
 
 type RenderFn = (clock :Clock, batch :QuadBatch, surf :Surface) => void
 
@@ -27,6 +28,12 @@ const batch = new UniformQuadBatch(renderer.glc)
 const surf = new Surface(renderer.target, batch)
 
 let renderfn :RenderFn = squares
+let cleaner :Remover = NoopRemover
+
+function setRenderFn (fn :Subject<RenderFn>) {
+  const ocleaner = cleaner
+  cleaner = fn.onValue(fn => { ocleaner() ; renderfn = fn })
+}
 
 const loop = new Loop()
 loop.clock.onEmit(clock => {
@@ -73,10 +80,11 @@ function wat (glc :GLC) :Subject<RenderFn> {
 
 document.onkeydown = ev => {
   switch (ev.key) {
-  case "1": renderfn = squares ; break
-  case "2": wat(renderer.glc).onValue(r => renderfn = r) ; break
-  case "3": entityDemo(renderer).onValue(r => renderfn = r) ; break
-  case "4": spaceDemo(renderer).onValue(r => renderfn = r) ; break
+  case "1": setRenderFn(Value.constant(squares)) ; break
+  case "2": setRenderFn(wat(renderer.glc)) ; break
+  case "3": setRenderFn(entityDemo(renderer)) ; break
+  case "4": setRenderFn(spaceDemo(renderer)) ; break
+  case "5": setRenderFn(uiDemo(renderer)) ; break
   }
   if (!loop.active) loop.start()
 }
