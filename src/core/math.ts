@@ -21,6 +21,12 @@ export class dim2 extends Float32Array {
     return out
   }
 
+  static copy (out :dim2, src :dim2) :dim2 {
+    out[0] = src[0]
+    out[1] = src[1]
+    return out
+  }
+
   static isEmpty (d :dim2) :boolean {
     return d[0] <= 0 || d[1] <= 0
   }
@@ -65,6 +71,14 @@ export class rect extends Float32Array {
     out[1] = y
     out[2] = width
     out[3] = height
+    return out
+  }
+
+  static copy (out :rect, src :rect) :rect {
+    out[0] = src[0]
+    out[1] = src[1]
+    out[2] = src[2]
+    out[3] = src[3]
     return out
   }
 
