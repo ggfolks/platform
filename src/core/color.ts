@@ -74,7 +74,7 @@ export abstract class Color extends Float32Array {
     const q = v * (1 - (s * frac))
     const t = v * (1 - (s * (1 - frac)))
 
-    switch(imin) {
+    switch (imin) {
     case 0: return Color.setARGB(c, a, v, t, p)
     case 1: return Color.setARGB(c, a, q, v, p)
     case 2: return Color.setARGB(c, a, p, v, t)
@@ -99,5 +99,11 @@ export abstract class Color extends Float32Array {
     * shaders. */
   static toGB (c :Color) :number {
     return Math.round(c[2]*255)*256 + Math.round(c[3]*255)
+  }
+
+  /** Returns a CSS color description based on `c`. Uses the `rgba()` CSS function. */
+  static toCSS (c :Color) :string {
+    const a = c[0], r = c[1], g = c[2], b = c[3]
+    return `rgba(${Math.round(r*255)}, ${Math.round(g*255)}, ${Math.round(b*255)}, ${a})`
   }
 }
