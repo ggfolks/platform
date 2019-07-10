@@ -32,8 +32,6 @@ export function spaceDemo (renderer :Renderer) {
   })
   camera.position.y = 3
   const webglRenderer = new WebGLRenderer({canvas, context: glc})
-  // containing renderer handles color clear
-  webglRenderer.autoClearColor = false
 
   const trans = new TransformComponent("trans")
   const geom = new DenseValueComponent<BufferGeometry>("geom", new BufferGeometry())

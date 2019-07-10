@@ -30,10 +30,7 @@ let renderfn :RenderFn = squares
 
 const loop = new Loop()
 loop.clock.onEmit(clock => {
-  surf.begin()
-  surf.clearTo(1, 0, 1, 1)
   renderfn(clock, batch, surf)
-  surf.end()
 })
 loop.start()
 
@@ -43,6 +40,7 @@ const pos = vec2.create(), size = dim2.create()
 const color = Color.fromRGB(1, 1, 1)
 
 function squares (clock :Clock, _ :QuadBatch, surf :Surface) {
+  surf.begin()
   const secs = clock.elapsed, sin = (Math.sin(secs)+1)/2, cos = (Math.cos(secs)+1)/2
   const vsize = renderer.size.current
   const sqSize = 16, hCount = Math.ceil(vsize[0]/sqSize), vCount = Math.ceil(vsize[1]/sqSize)
@@ -54,6 +52,7 @@ function squares (clock :Clock, _ :QuadBatch, surf :Surface) {
       surf.fillRect(vec2.set(pos, xx*size[0], yy*size[1]), size)
     }
   }
+  surf.end()
 }
 
 function wat (glc :GLC) :Subject<RenderFn> {
@@ -65,7 +64,10 @@ function wat (glc :GLC) :Subject<RenderFn> {
     const secs = clock.elapsed, sin = Math.sin(secs), cos = Math.cos(secs)
     vec2.set(pos, 250+sin*50, 250+cos*50)
     dim2.set(size, wat.size[0]*cos, wat.size[1]*sin)
+    surf.begin()
+    surf.clearTo(1, 1, 1, 1)
     surf.draw(wat, pos, size)
+    surf.end()
   })
 }
 

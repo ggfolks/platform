@@ -4,6 +4,7 @@ import {Clock} from "tfw/core/clock"
 import {loadImage} from "tfw/core/assets"
 import {Renderer, Scale, Tile, Texture, makeTexture} from "tfw/scene2/gl"
 import {QuadBatch} from "tfw/scene2/batch"
+import {Surface} from "tfw/scene2/surface"
 import {DenseValueComponent, Domain, Float32Component, Matcher, System, Vec2Component}
 from "tfw/entity/entity"
 import {TransformComponent, RenderSystem, DynamicsSystem} from "tfw/scene2/entity"
@@ -87,12 +88,15 @@ export function entityDemo (renderer :Renderer) {
       vel.update(id, vec2.set(initVel, (Math.random()-0.5)*300, (Math.random()-0.5)*300))
     }
 
-    return (clock :Clock, batch :QuadBatch) => {
+    return (clock :Clock, batch :QuadBatch, surf :Surface) => {
       rotsys.update(clock)
       dynamsys.update(clock)
       bouncesys.update()
       rendersys.update()
+      surf.begin()
+      surf.clearTo(1, 0, 1, 1)
       rendersys.render(batch)
+      surf.end()
     }
   })
 }
