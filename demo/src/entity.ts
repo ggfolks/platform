@@ -1,8 +1,9 @@
 import {dim2, vec2, vec2zero} from "tfw/core/math"
 import {Value} from "tfw/core/react"
 import {Clock} from "tfw/core/clock"
+import {Scale} from "tfw/core/ui"
 import {loadImage} from "tfw/core/assets"
-import {Renderer, Scale, Tile, Texture, makeTexture} from "tfw/scene2/gl"
+import {Renderer, Tile, Texture, makeTexture} from "tfw/scene2/gl"
 import {QuadBatch} from "tfw/scene2/batch"
 import {Surface} from "tfw/scene2/surface"
 import {DenseValueComponent, Domain, Float32Component, Matcher, System, Vec2Component}
