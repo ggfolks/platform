@@ -67,10 +67,10 @@ export class Box extends Element {
   readonly background? :Background
   readonly child :Element
 
-  constructor (fact :ElementFactory, readonly config :BoxConfig) {
-    super()
+  constructor (fact :ElementFactory, parent :Element, readonly config :BoxConfig) {
+    super(parent)
     if (config.background) this.background = fact.createBackground(config.background)
-    this.child = fact.createElement(config.child)
+    this.child = fact.createElement(this, config.child)
   }
 
   render (canvas :CanvasRenderingContext2D) {

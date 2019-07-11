@@ -7,14 +7,19 @@ import {Background, BackgroundConfig} from "./background"
 const tmpr = rect.create()
 const trueValue = Value.constant(true)
 
+export type Prop<T> = string | Value<T>
+
 /** Used to create runtime components from configuration data. */
 export interface ElementFactory {
+
+  /** Creates an element based on `config`. */
+  createElement (parent :Element, config :ElementConfig) :Element
 
   /** Creates a background based on `config`. */
   createBackground (config :BackgroundConfig) :Background
 
-  /** Creates an element based on `config`. */
-  createElement (config :ElementConfig) :Element
+  /** Resolves the property `prop` via the UI model if appropriate. */
+  resolveProp<T> (prop :Prop<T>) :Value<T>
 }
 
 /** Configuration shared by all [[Element]]s. */
@@ -31,11 +36,10 @@ export interface ElementConfig {
 export abstract class Element {
   protected readonly _bounds :rect = rect.create()
   protected readonly _psize :dim2 = dim2.fromValues(-1, -1)
-  protected _parent? :Element = undefined
   protected _valid = Mutable.local(false)
   protected _onRemoved :Remover[] = []
 
-  constructor () {}
+  constructor (readonly parent :Element|undefined) {}
 
   abstract get config () :ElementConfig
 
@@ -48,7 +52,7 @@ export abstract class Element {
   get visible () :Value<boolean> { return this.config.visible || trueValue }
   get valid () :Value<boolean> { return this._valid }
 
-  get root () :Root|undefined { return this._parent ? this._parent.root : undefined }
+  get root () :Root|undefined { return this.parent ? this.parent.root : undefined }
 
   pos (into :vec2) :vec2 {
     into[0] = this.x
@@ -82,16 +86,12 @@ export abstract class Element {
 
   abstract render (canvas :CanvasRenderingContext2D) :void
 
-  protected wasParented (parent :Element) {
-    this._parent = parent
+  protected noteDependentValue (value :Value<any>) {
+    this._onRemoved.push(value.onValue(_ => this.invalidate()))
   }
-  protected wasUnparented () {
-    this._parent = undefined
-  }
-
   protected wasAdded () {
-    this._onRemoved.push(this.enabled.onValue(_ => this.invalidate()))
-    this._onRemoved.push(this.visible.onValue(_ => this.invalidate()))
+    this.noteDependentValue(this.enabled)
+    this.noteDependentValue(this.visible)
     // TODO: do we want hierarchy changed event?
   }
   protected wasRemoved () {
@@ -103,7 +103,8 @@ export abstract class Element {
     // TODO: clear preferred size
     if (this._valid.current) {
       this._valid.update(false)
-      this._parent && this._parent.invalidate()
+      this._psize[0] = -1 // force psize recompute
+      this.parent && this.parent.invalidate()
     }
   }
   protected revalidate () {
@@ -125,12 +126,16 @@ export interface RootConfig extends ElementConfig {
 
 /** The top-level of the UI hierarchy. Manages the canvas into which the UI is rendered. */
 export class Root extends Element {
-  private canvas :HTMLCanvasElement = document.createElement("canvas")
+  readonly canvas :HTMLCanvasElement = document.createElement("canvas")
+  readonly ctx :CanvasRenderingContext2D
   readonly child :Element
 
   constructor (readonly fact :ElementFactory, readonly config :RootConfig) {
-    super()
-    this.child = fact.createElement(config.child)
+    super(undefined)
+    const ctx = this.canvas.getContext("2d")
+    if (ctx) this.ctx = ctx
+    else throw new Error(`Canvas rendering context not supported?`)
+    this.child = fact.createElement(this, config.child)
   }
 
   get root () :Root|undefined { return this }
@@ -138,12 +143,13 @@ export class Root extends Element {
   pack (width :number, height :number) :HTMLCanvasElement {
     this.setBounds(rect.set(tmpr, 0, 0, width, height))
     this.validate()
-    const ctx = this.canvas.getContext("2d")
-    ctx && this.render(ctx)
+    this.render(this.ctx)
     return this.canvas
   }
 
   render (canvas :CanvasRenderingContext2D) {
+    const sf = this.config.scale.factor
+    canvas.scale(sf, sf)
     this.child.render(canvas)
   }
 
@@ -162,7 +168,6 @@ export class Root extends Element {
     canvas.height = Math.ceil(toPixel.scaled(this.height))
     canvas.style.width = `${this.width}px`
     canvas.style.height = `${this.height}px`
-    console.log(`Resized canvas ${canvas.width}x${canvas.height} & ${this.width}x${this.height}`)
     this.child.validate()
   }
 }

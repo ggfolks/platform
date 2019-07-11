@@ -8,8 +8,12 @@ interface GroupConfig extends ElementConfig {
 }
 
 abstract class Group extends Element {
+  readonly children :Element[]
 
-  constructor (readonly config :GroupConfig, readonly children :Element[]) { super() }
+  constructor (fact :ElementFactory, parent :Element, readonly config :GroupConfig) {
+    super(parent)
+    this.children = config.children.map(cc => fact.createElement(this, cc))
+  }
 
   render (canvas :CanvasRenderingContext2D) {
     for (const child of this.children) child.render(canvas)
@@ -122,8 +126,8 @@ export interface ColumnConfig extends AxisConfig {
 
 export class Column extends Group {
 
-  constructor (fact :ElementFactory, readonly config :ColumnConfig) {
-    super(config, config.children.map(cc => fact.createElement(cc)))
+  constructor (fact :ElementFactory, parent :Element, readonly config :ColumnConfig) {
+    super(fact, parent, config)
   }
 
   protected computePreferredSize (hintX :number, hintY :number, into :dim2) {

@@ -26,4 +26,6 @@ export class Scale {
   roundToNearestPixel (length :number) :number {
     return Math.round(length * this.factor) / this.factor
   }
+
+  toString() { return `x${this.factor}` }
 }
