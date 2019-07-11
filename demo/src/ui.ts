@@ -73,7 +73,7 @@ export function uiDemo (renderer :Renderer) :Subject<RenderFn> {
     })
 
     return () => {
-      renderer.glc.deleteTexture(tex)
+      renderer.glc.deleteTexture(gltex)
     }
   })
 }
