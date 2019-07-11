@@ -1,3 +1,4 @@
+import {Disposable} from "../core/util"
 import {dim2, rect, vec2} from "../core/math"
 import {Record} from "../core/data"
 import {Value, Mutable, Remover} from "../core/react"
@@ -33,15 +34,17 @@ export interface ElementConfig {
 /** The basic building block of UIs. Elements have a bounds, are part of a UI hierarchy (have a
   * parent, except for the root element), and participate in the cycle of invaldiation, validation
   * and rendering. */
-export abstract class Element {
+export abstract class Element implements Disposable {
   protected readonly _bounds :rect = rect.create()
   protected readonly _psize :dim2 = dim2.fromValues(-1, -1)
   protected _valid = Mutable.local(false)
-  protected _onRemoved :Remover[] = []
+  protected _onDispose :Remover[] = []
 
-  constructor (readonly parent :Element|undefined) {}
-
-  abstract get config () :ElementConfig
+  constructor (readonly parent :Element|undefined, readonly config :ElementConfig) {
+    this.noteDependentValue(this.enabled)
+    this.noteDependentValue(this.visible)
+    // TODO: do we want hierarchy changed event?
+  }
 
   get x () :number { return this._bounds[0] }
   get y () :number { return this._bounds[1] }
@@ -77,30 +80,25 @@ export abstract class Element {
     if (changed) this.invalidate()
   }
 
-  validate () {
-    if (!this._valid.current) {
-      this.revalidate()
-      this._valid.update(true)
-    }
+  validate () :boolean {
+    if (this._valid.current) return false
+    this.revalidate()
+    this._valid.update(true)
+    return true
   }
 
   abstract render (canvas :CanvasRenderingContext2D) :void
 
+  dispose () {
+    this._onDispose.forEach(r => r())
+    this._onDispose = []
+  }
+
   protected noteDependentValue (value :Value<any>) {
-    this._onRemoved.push(value.onValue(_ => this.invalidate()))
-  }
-  protected wasAdded () {
-    this.noteDependentValue(this.enabled)
-    this.noteDependentValue(this.visible)
-    // TODO: do we want hierarchy changed event?
-  }
-  protected wasRemoved () {
-    this._onRemoved.forEach(r => r())
-    this._onRemoved = []
+    this._onDispose.push(value.onValue(_ => this.invalidate()))
   }
 
   protected invalidate () {
-    // TODO: clear preferred size
     if (this._valid.current) {
       this._valid.update(false)
       this._psize[0] = -1 // force psize recompute
@@ -113,8 +111,6 @@ export abstract class Element {
 
   protected abstract computePreferredSize (hintX :number, hintY :number, into :dim2) :void
   protected abstract relayout () :void
-
-  // TODO: willAdd, willRemove, willDispose?
 }
 
 /** Defines configuration for [[Root]] elements. */
@@ -131,7 +127,7 @@ export class Root extends Element {
   readonly child :Element
 
   constructor (readonly fact :ElementFactory, readonly config :RootConfig) {
-    super(undefined)
+    super(undefined, config)
     const ctx = this.canvas.getContext("2d")
     if (ctx) this.ctx = ctx
     else throw new Error(`Canvas rendering context not supported?`)
@@ -151,6 +147,11 @@ export class Root extends Element {
     const sf = this.config.scale.factor
     canvas.scale(sf, sf)
     this.child.render(canvas)
+  }
+
+  dispose () {
+    super.dispose()
+    this.child.dispose()
   }
 
   protected computePreferredSize (hintX :number, hintY :number, into :dim2) {

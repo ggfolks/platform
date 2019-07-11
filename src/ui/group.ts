@@ -11,12 +11,17 @@ abstract class Group extends Element {
   readonly children :Element[]
 
   constructor (fact :ElementFactory, parent :Element, readonly config :GroupConfig) {
-    super(parent)
+    super(parent, config)
     this.children = config.children.map(cc => fact.createElement(this, cc))
   }
 
   render (canvas :CanvasRenderingContext2D) {
     for (const child of this.children) child.render(canvas)
+  }
+
+  dispose () {
+    super.dispose()
+    for (const child of this.children) child.dispose()
   }
 
   protected revalidate () {

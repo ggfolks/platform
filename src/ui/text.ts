@@ -18,20 +18,16 @@ export class Label extends Element {
   private fillFn = NoopFillFn
 
   constructor (fact :ElementFactory, parent :Element, readonly config :LabelConfig) {
-    super(parent)
+    super(parent, config)
     this.fontSpec = makeFontSpec(config.font)
     this.fillSpec = makeColorSpec(config.fill)
     this.text = fact.resolveProp(config.text)
+    this.noteDependentValue(this.text)
   }
 
   render (canvas :CanvasRenderingContext2D) {
     canvas.fillStyle = this.fillSpec
     this.fillFn(canvas, this.x, this.y)
-  }
-
-  protected wasAdded () {
-    super.wasAdded()
-    this.noteDependentValue(this.text)
   }
 
   protected computePreferredSize (hintX :number, hintY :number, into :dim2) {

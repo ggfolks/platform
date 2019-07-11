@@ -68,7 +68,7 @@ export class Box extends Element {
   readonly child :Element
 
   constructor (fact :ElementFactory, parent :Element, readonly config :BoxConfig) {
-    super(parent)
+    super(parent, config)
     if (config.background) this.background = fact.createBackground(config.background)
     this.child = fact.createElement(this, config.child)
   }
@@ -80,6 +80,11 @@ export class Box extends Element {
       this.background(canvas, inbounds)
     }
     this.child.render(canvas)
+  }
+
+  dispose () {
+    super.dispose()
+    this.child.dispose()
   }
 
   protected computePreferredSize (hintX :number, hintY :number, into :dim2) {
@@ -103,8 +108,8 @@ export class Box extends Element {
     const cheight = valign == "stretch" ? bheight : Math.min(bheight, psize[1])
     const edgeLeft = insetLeft(padding || 0) + insetLeft(margin || 0)
     const edgeTop = insetTop(padding || 0) + insetTop(margin || 0)
-    const cx = edgeLeft + alignOffset(halign, cwidth, bwidth)
-    const cy = edgeTop + alignOffset(valign, cheight, bheight)
+    const cx = this.x + edgeLeft + alignOffset(halign, cwidth, bwidth)
+    const cy = this.y + edgeTop + alignOffset(valign, cheight, bheight)
     this.child.setBounds(rect.set(tmpr, cx, cy, cwidth, cheight))
   }
 
