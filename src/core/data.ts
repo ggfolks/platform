@@ -61,8 +61,7 @@ export function refEquals<T> (a :T, b :T) :boolean {
   return a === b
 }
 
-/**
- * Determines whether the two arrays provided contain the same references in the same order. */
+/** Determines whether the two arrays provided contain the same references in the same order. */
 export function arrayContentsRefEquals<T> (a :Array<T>, b :Array<T>) {
   if (a.length !== b.length) {
     return false

@@ -1,6 +1,5 @@
 import {
   BoxBufferGeometry,
-  CullFaceNone,
   BufferGeometry,
   GridHelper,
   Math as ThreeMath,
@@ -14,24 +13,33 @@ import {
 import {Body, Box, Plane, Quaternion, Shape, Sphere, Vec3} from "cannon"
 
 import {Clock} from "tfw/core/clock"
-import {Value} from "tfw/core/react"
+import {Remover, Subject, Value} from "tfw/core/react"
 import {DenseValueComponent, Domain, Float32Component} from "tfw/entity/entity"
 import {Renderer} from "tfw/scene2/gl"
 import {TransformComponent} from "tfw/space/entity"
 import {MeshSystem} from "tfw/scene3/entity"
 import {PhysicsSystem} from "tfw/physics3/entity"
 
-export function spaceDemo (renderer :Renderer) {
-  const {canvas, glc} = renderer
+import {RenderFn} from "./index"
+
+export function spaceDemo (renderer :Renderer): Subject<[RenderFn, Remover]> {
+  const webglRenderer = new WebGLRenderer()
+
   const scene = new Scene()
   scene.add(new GridHelper(100, 100))
   const camera = new PerspectiveCamera()
-  renderer.size.onValue(size => {
+  camera.position.y = 3
+
+  // replace 2d canvas with 3d one
+  const root = renderer.canvas.parentElement as HTMLElement
+  root.removeChild(renderer.canvas)
+  root.appendChild(webglRenderer.domElement)
+  const sizeRemover = renderer.size.onValue(size => {
+    webglRenderer.setPixelRatio(window.devicePixelRatio)
+    webglRenderer.setSize(size[0], size[1])
     camera.aspect = size[0] / size[1]
     camera.updateProjectionMatrix()
   })
-  camera.position.y = 3
-  const webglRenderer = new WebGLRenderer({canvas, context: glc})
 
   const trans = new TransformComponent("trans")
   const geom = new DenseValueComponent<BufferGeometry>("geom", new BufferGeometry())
@@ -77,11 +85,20 @@ export function spaceDemo (renderer :Renderer) {
     trans.updatePosition(id, position)
   }
 
-  return Value.constant((clock: Clock) => {
-    physicssys.update(clock)
-    meshsys.update()
-    webglRenderer.render(scene, camera)
-    // scene2 expects back face culling to be disabled
-    webglRenderer.state.setCullFace(CullFaceNone)
-  })
+  return Value.constant([
+    (clock: Clock) => {
+      physicssys.update(clock)
+      meshsys.update()
+      webglRenderer.render(scene, camera)
+    },
+    () => {
+      sizeRemover()
+
+      // restore 2d canvas
+      root.removeChild(webglRenderer.domElement)
+      root.appendChild(renderer.canvas)
+
+      webglRenderer.dispose()
+    }
+  ])
 }
