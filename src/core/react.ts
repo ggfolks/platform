@@ -594,7 +594,7 @@ abstract class DerivedValue<T> extends Value<T> {
     if (needConnect) this._disconnect = this._connectToSource()
     return () => {
       remover()
-      if (this._listeners.length > 0) {
+      if (this._listeners.length === 0) {
         this._disconnect()
         this._disconnect = NoopRemover
       }
