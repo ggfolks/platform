@@ -1,12 +1,8 @@
 import {vec2} from "tfw/core/math"
-import {Clock} from "tfw/core/clock"
 import {Subject, Mutable, Value} from "tfw/core/react"
-import {QuadBatch} from "tfw/scene2/batch"
 import {Renderer, Texture, createTexture, imageToTexture} from "tfw/scene2/gl"
-import {Surface} from "tfw/scene2/surface"
 import {UI, Root, RootConfig} from "tfw/ui/ui"
-
-type RenderFn = (clock :Clock, batch :QuadBatch, surf :Surface) => void
+import {RenderFn} from "./index"
 
 const theme = {
   base: {

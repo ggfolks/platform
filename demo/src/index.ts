@@ -31,16 +31,8 @@ let renderfn :RenderFn = squares
 let cleaner :Remover = NoopRemover
 
 function setRenderFn (fn :Subject<RenderFn>) {
-  setRenderFnAndRemover(Subject.join2(fn, Value.constant(NoopRemover)))
-}
-
-function setRenderFnAndRemover (fn: Subject<[RenderFn, Remover]>) {
   const ocleaner = cleaner
-  let fnRemover = fn.onValue(([fn, remover]) => {
-    ocleaner()
-    renderfn = fn
-    cleaner = () => { fnRemover() ; remover() }
-  })
+  cleaner = fn.onValue(fn => { ocleaner() ; renderfn = fn })
 }
 
 const loop = new Loop()
@@ -91,7 +83,7 @@ document.onkeydown = ev => {
   case "1": setRenderFn(Value.constant(squares)) ; break
   case "2": setRenderFn(wat(renderer.glc)) ; break
   case "3": setRenderFn(entityDemo(renderer)) ; break
-  case "4": setRenderFnAndRemover(spaceDemo(renderer)) ; break
+  case "4": setRenderFn(spaceDemo(renderer)) ; break
   case "5": setRenderFn(uiDemo(renderer)) ; break
   }
   if (!loop.active) loop.start()
