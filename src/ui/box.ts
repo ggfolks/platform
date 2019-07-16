@@ -1,8 +1,9 @@
 import {rect, dim2} from "../core/math"
 import {Element, ElementConfig, ElementFactory} from "./element"
-import {Background, BackgroundConfig} from "./background"
+import {BackgroundConfig, NoBackground, makeBackground} from "./background"
 
 const tmpr = rect.create()
+const tmpd = dim2.create()
 
 /** Padding and margin are either specified as a single value for all four sides, or as individual
   * values: `[top, right, bottom, left]`. */
@@ -64,21 +65,24 @@ export interface BoxConfig extends ElementConfig {
 
 /** Displays a single child with an optional background, padding, margin, and alignment. */
 export class Box extends Element {
-  readonly background? :Background
+  private background = NoBackground
   readonly child :Element
 
   constructor (fact :ElementFactory, parent :Element, readonly config :BoxConfig) {
     super(parent, config)
-    if (config.background) this.background = fact.createBackground(config.background)
+    if (config.background) this._onDispose.push(makeBackground(fact, config.background).onValue(bg => {
+      this.background = bg
+    }))
     this.child = fact.createElement(this, config.child)
   }
 
   render (canvas :CanvasRenderingContext2D) {
     const {padding} = this.config
-    if (this.background) {
-      const inbounds = padding ? insetRect(padding, this._bounds, tmpr) : this._bounds
-      this.background(canvas, inbounds)
-    }
+    const inbounds = padding ? insetRect(padding, this._bounds, tmpr) : this._bounds
+    // TODO: should we just do all element rendering translated to the element's origin
+    canvas.translate(inbounds[0], inbounds[1])
+    this.background.render(canvas, dim2.set(tmpd, inbounds[2], inbounds[3]))
+    canvas.translate(-inbounds[0], -inbounds[1])
     this.child.render(canvas)
   }
 

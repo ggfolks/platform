@@ -96,7 +96,7 @@ export type DispatchFn<T> = (value :T) => void
 /** A predicate which tests something about a `value`. */
 export type Pred<T> = (value :T) => boolean
 
-/** A reactive source: an API that abstracts over `Stream` and `Value`. */
+/** A reactive source: an API that abstracts over `Stream`, `Subject` and `Value`. */
 export abstract class Source<T> {
 
   /** Registers `fn` to be called when `source` contains or emits non-`undefined` values.

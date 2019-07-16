@@ -1,5 +1,6 @@
 import {vec2} from "tfw/core/math"
 import {Subject, Mutable, Value} from "tfw/core/react"
+import {loadImage} from "tfw/core/assets"
 import {Renderer, Texture, createTexture, imageToTexture} from "tfw/scene2/gl"
 import {UI, Root, RootConfig} from "tfw/ui/ui"
 import {RenderFn} from "./index"
@@ -10,8 +11,8 @@ const theme = {
       family: "Helvetica",
       size: 16
     },
-    stroke: "#FFFFFF",
-    fill: "#000000"
+    stroke: {type: "color", color: "#FFFFFF"},
+    fill: {type: "color", color: "#000000"}
   },
   label: {
     parent: "base"
@@ -19,10 +20,7 @@ const theme = {
   button: {
     parent: "base",
     padding: 5,
-    background: {
-      type: "solid",
-      color: "#FFCC99"
-    }
+    background: {fill: {type: "color", color: "#FFCC99"}}
   }
 }
 
@@ -35,17 +33,18 @@ const config = {
     children: [{
       type: "box",
       constraints: {stretch: true},
-      background: {type: "solid", color: "#FFCC99"},
+      background: {fill: {type: "color", color: "#FFCC99"}, cornerRadius: 10},
       child: {type: "label", text: "top.text", font: {size: 32, weight: "bold"}}
     }, {
       type: "box",
       constraints: {stretch: true},
-      background: {type: "solid", color: "#99FFCC"},
+      background: {fill: {type: "linear", start: [0, 0], end: [0, 100],
+                          stops: [[0, "#99FFCC"], [0.5, "#CC99FF"], [1, "#99CCFF"]]}},
       child: {type: "label", text: "middle.text", font: {size: 24}}
     }, {
       type: "box",
       constraints: {stretch: true},
-      background: {type: "solid", color: "#99CCFF"},
+      background: {fill: {type: "pattern", image: "flappy.png"}, cornerRadius: 10},
       child: {type: "column", children: []}
     }]
   }
@@ -62,7 +61,7 @@ const model = {
 
 export function uiDemo (renderer :Renderer) :Subject<RenderFn> {
   return Subject.derive(disp => {
-    const ui = new UI(theme, model)
+    const ui = new UI(theme, model, {resolveImage: loadImage})
     const root = new Root(ui, {...config, scale: renderer.scale} as RootConfig)
     const canvas = root.pack(400, 400)
     const texcfg = {...Texture.DefaultConfig, scale: renderer.scale}

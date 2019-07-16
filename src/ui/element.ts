@@ -1,9 +1,9 @@
 import {Disposable} from "../core/util"
 import {dim2, rect, vec2} from "../core/math"
 import {Record} from "../core/data"
-import {Value, Mutable, Remover} from "../core/react"
+import {Mutable, Remover, Source, Value} from "../core/react"
 import {Scale} from "../core/ui"
-import {Background, BackgroundConfig} from "./background"
+import {ImageResolver} from "./style"
 
 const tmpr = rect.create()
 const trueValue = Value.constant(true)
@@ -11,13 +11,10 @@ const trueValue = Value.constant(true)
 export type Prop<T> = string | Value<T>
 
 /** Used to create runtime components from configuration data. */
-export interface ElementFactory {
+export interface ElementFactory extends ImageResolver {
 
   /** Creates an element based on `config`. */
   createElement (parent :Element, config :ElementConfig) :Element
-
-  /** Creates a background based on `config`. */
-  createBackground (config :BackgroundConfig) :Background
 
   /** Resolves the property `prop` via the UI model if appropriate. */
   resolveProp<T> (prop :Prop<T>) :Value<T>
@@ -94,7 +91,7 @@ export abstract class Element implements Disposable {
     this._onDispose = []
   }
 
-  protected noteDependentValue (value :Value<any>) {
+  protected noteDependentValue (value :Source<any>) {
     this._onDispose.push(value.onValue(_ => this.invalidate()))
   }
 
