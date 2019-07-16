@@ -192,12 +192,10 @@ class GradientPaint extends Paint {
         gradient = canvas.createRadialGradient(x0, y0, r0, x1, y1, r1)
       } else {
         const [x0, y0] = config.start, [x1, y1] = config.end
-        console.log(`clg ${x0}/${y0} ${x1}/${y1}`)
         gradient = canvas.createLinearGradient(x0, y0, x1, y1)
       }
       (config.stops || []).forEach(
-        ([frac, color]) => { console.log(`acs ${frac} / ${color}`); gradient.addColorStop(frac, makeCSSColor(color)) })
-      console.log(gradient)
+        ([frac, color]) => gradient.addColorStop(frac, makeCSSColor(color)))
       return gradient
     }
     return this.gradient ? this.gradient : (this.gradient = make(this.config))
