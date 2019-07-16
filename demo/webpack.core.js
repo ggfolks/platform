@@ -3,7 +3,8 @@ const webpack = require('webpack');
 
 module.exports = {
   resolve: {
-    extensions: ['.js', '.ts']
+    extensions: ['.js', '.ts'],
+    symlinks: false
   },
 
   module: {
