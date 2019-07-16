@@ -1,5 +1,4 @@
 import {
-  RGBAFormat,
   BufferAttribute,
   BufferGeometry,
   CubeTexture,
@@ -7,6 +6,7 @@ import {
   FloatType,
   Group,
   Mesh,
+  RGBAFormat,
   ShaderMaterial,
   Sphere,
 } from "three"
