@@ -18,6 +18,7 @@ import {DenseValueComponent, Domain, Float32Component} from "tfw/entity/entity"
 import {Renderer} from "tfw/scene2/gl"
 import {TransformComponent} from "tfw/space/entity"
 import {MeshSystem} from "tfw/scene3/entity"
+import {Planet} from "tfw/scene3/planet"
 import {PhysicsSystem} from "tfw/physics3/entity"
 import {RenderFn} from "./index"
 
@@ -29,6 +30,10 @@ export function spaceDemo (renderer :Renderer) :Subject<RenderFn> {
     scene.add(new GridHelper(100, 100))
     const camera = new PerspectiveCamera()
     camera.position.y = 3
+
+    const planet = new Planet()
+    scene.add(planet.group)
+    planet.group.position.set(0, 6, -10)
 
     // replace 2d canvas with 3d one
     const root = renderer.canvas.parentElement as HTMLElement
@@ -88,6 +93,7 @@ export function spaceDemo (renderer :Renderer) :Subject<RenderFn> {
     disp((clock: Clock) => {
       physicssys.update(clock)
       meshsys.update()
+      planet.group.rotateY(clock.dt)
       webglRenderer.render(scene, camera)
     })
 
@@ -96,6 +102,7 @@ export function spaceDemo (renderer :Renderer) :Subject<RenderFn> {
       // restore 2d canvas
       root.removeChild(webglRenderer.domElement)
       root.appendChild(renderer.canvas)
+      planet.dispose()
       webglRenderer.dispose()
     }
   })
