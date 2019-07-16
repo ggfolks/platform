@@ -20,8 +20,7 @@ export class Label extends Element {
   constructor (fact :ElementFactory, parent :Element, readonly config :LabelConfig) {
     super(parent, config)
     this.font = makeFont(config.font)
-    const foo = makePaint(fact, config.fill)
-    this._onDispose.push(foo.onValue(fill => {
+    this._onDispose.push(makePaint(fact, config.fill).onValue(fill => {
       this.fill = fill
       this.invalidate()
     }))
