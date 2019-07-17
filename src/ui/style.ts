@@ -2,6 +2,8 @@ import {dim2} from "../core/math"
 import {Color} from "../core/color"
 import {Subject, Value} from "../core/react"
 
+// Todo: ImageConfig = string | {source/path/url :string, scale :number} | ?
+
 export interface ImageResolver {
 
   resolveImage (path :string) :Subject<HTMLImageElement|Error>

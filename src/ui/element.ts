@@ -1,7 +1,7 @@
 import {Disposable} from "../core/util"
 import {dim2, rect, vec2} from "../core/math"
 import {Record} from "../core/data"
-import {Mutable, Remover, Source, Value} from "../core/react"
+import {Mutable, Remover, Source, Value, NoopRemover} from "../core/react"
 import {Scale} from "../core/ui"
 import {ImageResolver} from "./style"
 
@@ -9,6 +9,37 @@ const tmpr = rect.create()
 const trueValue = Value.constant(true)
 
 export type Prop<T> = string | Value<T>
+
+/** Used by elements to observe reactive values. Takes care of invalidating the element when the
+  * value changes, clearing old listeners when switching sources, and cleaning up when the element
+  * is disposed. */
+export class Observer<T> implements Disposable {
+  private remover = NoopRemover
+
+  constructor (public owner :Element, public current :T) {}
+
+  /** Updates this observed property with (the non-reactive) `value` and invalidates the owning
+    * element. */
+  update (value :T) {
+    this.remover()
+    this.current = value
+    this.owner.invalidate()
+  }
+
+  /** Updates this observed property with (the reactive) `value`. The owning element will be
+    * invalidated when the first value is received and again if it changes. */
+  observe (value :Source<T>) {
+    this.remover()
+    this.remover = value.onValue(v => {
+      this.current = v
+      this.owner.invalidate()
+    })
+  }
+
+  dispose () {
+    this.remover()
+  }
+}
 
 /** Used to create runtime components from configuration data. */
 export interface ElementFactory extends ImageResolver {
@@ -20,12 +51,26 @@ export interface ElementFactory extends ImageResolver {
   resolveProp<T> (prop :Prop<T>) :Value<T>
 }
 
+/** Enumerates the states an [[Element]] can be in, i.e. `normal` or `disabled`. Elements may be
+  * styled differently depending on their state. */
+export type ElementState = "normal" | "disabled"
+
+/** Defines the style configurations for an [[Element]]. */
+export interface ElementStyle {
+  // nothing shared by all elements
+}
+
 /** Configuration shared by all [[Element]]s. */
 export interface ElementConfig {
   type :string
-  enabled? :Value<boolean> // TODO: move to Widget/Control?
-  visible? :Value<boolean>
+  visible? :Prop<boolean>
+  enabled? :Prop<boolean> // TODO: move to Widget/Control?
   constraints? :Record
+  style? :{[key in ElementState] :ElementStyle}
+  // this allows ElementConfig to contain "extra" stuff that TypeScript will ignore; this is
+  // necessary to allow a subtype of ElementConfig to be supplied where a container element wants
+  // some sort of ElementConfig; we can only plumb sharp types so deep
+  [extra :string] :any
 }
 
 /** The basic building block of UIs. Elements have a bounds, are part of a UI hierarchy (have a
@@ -34,13 +79,27 @@ export interface ElementConfig {
 export abstract class Element implements Disposable {
   protected readonly _bounds :rect = rect.create()
   protected readonly _psize :dim2 = dim2.fromValues(-1, -1)
+  protected _state = Mutable.local("normal") as Mutable<ElementState> // TODO: meh
   protected _valid = Mutable.local(false)
   protected _onDispose :Remover[] = []
 
-  constructor (readonly parent :Element|undefined, readonly config :ElementConfig) {
-    this.noteDependentValue(this.enabled)
-    this.noteDependentValue(this.visible)
-    // TODO: do we want hierarchy changed event?
+  readonly visible :Value<boolean>
+  readonly enabled :Value<boolean>
+
+  constructor (fact :ElementFactory,
+               readonly parent :Element|undefined,
+               readonly config :ElementConfig) {
+    this.noteDependentValue(this._state)
+    if (!config.visible) this.visible = trueValue
+    else this.noteDependentValue(this.visible = fact.resolveProp(config.visible))
+    if (!config.enabled) this.enabled = trueValue
+    else {
+      this.enabled = fact.resolveProp(config.enabled)
+      this._onDispose.push(this.enabled.onValue(enabled => {
+        // TODO: allow subclasses to refine state...
+        this._state.update(enabled ? "normal" : "disabled")
+      }))
+    }
   }
 
   get x () :number { return this._bounds[0] }
@@ -48,8 +107,6 @@ export abstract class Element implements Disposable {
   get width () :number { return this._bounds[2] }
   get height () :number { return this._bounds[3] }
 
-  get enabled () :Value<boolean> { return this.config.enabled || trueValue }
-  get visible () :Value<boolean> { return this.config.visible || trueValue }
   get valid () :Value<boolean> { return this._valid }
 
   get root () :Root|undefined { return this.parent ? this.parent.root : undefined }
@@ -77,6 +134,14 @@ export abstract class Element implements Disposable {
     if (changed) this.invalidate()
   }
 
+  invalidate () {
+    if (this._valid.current) {
+      this._valid.update(false)
+      this._psize[0] = -1 // force psize recompute
+      this.parent && this.parent.invalidate()
+    }
+  }
+
   validate () :boolean {
     if (this._valid.current) return false
     this.revalidate()
@@ -95,13 +160,12 @@ export abstract class Element implements Disposable {
     this._onDispose.push(value.onValue(_ => this.invalidate()))
   }
 
-  protected invalidate () {
-    if (this._valid.current) {
-      this._valid.update(false)
-      this._psize[0] = -1 // force psize recompute
-      this.parent && this.parent.invalidate()
-    }
+  protected observe<T> (initial :T) :Observer<T> {
+    const obs = new Observer(this, initial)
+    this._onDispose.push(() => obs.dispose())
+    return obs
   }
+
   protected revalidate () {
     if (this.visible.current) this.relayout()
   }
@@ -114,21 +178,21 @@ export abstract class Element implements Disposable {
 export interface RootConfig extends ElementConfig {
   type :"root"
   scale :Scale
-  child :ElementConfig
+  contents :ElementConfig
 }
 
 /** The top-level of the UI hierarchy. Manages the canvas into which the UI is rendered. */
 export class Root extends Element {
   readonly canvas :HTMLCanvasElement = document.createElement("canvas")
   readonly ctx :CanvasRenderingContext2D
-  readonly child :Element
+  readonly contents :Element
 
   constructor (readonly fact :ElementFactory, readonly config :RootConfig) {
-    super(undefined, config)
+    super(fact, undefined, config)
     const ctx = this.canvas.getContext("2d")
     if (ctx) this.ctx = ctx
     else throw new Error(`Canvas rendering context not supported?`)
-    this.child = fact.createElement(this, config.child)
+    this.contents = fact.createElement(this, config.contents)
   }
 
   get root () :Root|undefined { return this }
@@ -143,20 +207,20 @@ export class Root extends Element {
   render (canvas :CanvasRenderingContext2D) {
     const sf = this.config.scale.factor
     canvas.scale(sf, sf)
-    this.child.render(canvas)
+    this.contents.render(canvas)
   }
 
   dispose () {
     super.dispose()
-    this.child.dispose()
+    this.contents.dispose()
   }
 
   protected computePreferredSize (hintX :number, hintY :number, into :dim2) {
-    dim2.copy(into, this.child.preferredSize(hintX, hintY))
+    dim2.copy(into, this.contents.preferredSize(hintX, hintY))
   }
 
   protected relayout () {
-    this.child.setBounds(this._bounds)
+    this.contents.setBounds(this._bounds)
   }
 
   protected revalidate () {
@@ -166,6 +230,6 @@ export class Root extends Element {
     canvas.height = Math.ceil(toPixel.scaled(this.height))
     canvas.style.width = `${this.width}px`
     canvas.style.height = `${this.height}px`
-    this.child.validate()
+    this.contents.validate()
   }
 }

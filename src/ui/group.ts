@@ -4,29 +4,29 @@ import {Element, ElementConfig, ElementFactory} from "./element"
 const tmpr = rect.create()
 
 interface GroupConfig extends ElementConfig {
-  children: ElementConfig[]
+  contents: ElementConfig[]
 }
 
 abstract class Group extends Element {
-  readonly children :Element[]
+  readonly contents :Element[]
 
   constructor (fact :ElementFactory, parent :Element, readonly config :GroupConfig) {
-    super(parent, config)
-    this.children = config.children.map(cc => fact.createElement(this, cc))
+    super(fact, parent, config)
+    this.contents = config.contents.map(cc => fact.createElement(this, cc))
   }
 
   render (canvas :CanvasRenderingContext2D) {
-    for (const child of this.children) child.render(canvas)
+    for (const child of this.contents) child.render(canvas)
   }
 
   dispose () {
     super.dispose()
-    for (const child of this.children) child.dispose()
+    for (const child of this.contents) child.dispose()
   }
 
   protected revalidate () {
     super.revalidate()
-    for (const elem of this.children) elem.validate()
+    for (const elem of this.contents) elem.validate()
   }
 }
 
@@ -65,7 +65,7 @@ function computeSize (c :AxisConstraints, size :number, totalWeight :number,
 function computeMetrics (group :Group, hintX :number, hintY :number,
                          gap :number, vert :boolean) {
   const m = new Metrics()
-  for (const elem of group.children) {
+  for (const elem of group.contents) {
     if (!elem.visible.current) continue
     m.count += 1
 
@@ -88,7 +88,7 @@ function computeMetrics (group :Group, hintX :number, hintY :number,
 
   // now compute the preferred size for the stretched elements, providing them with more accurate
   // width/height hints
-  for (const elem of group.children) {
+  for (const elem of group.contents) {
     if (!elem.visible.current) continue
     const c = axisConstraints(elem)
     if (!c.stretch) continue
@@ -149,7 +149,7 @@ export class Column extends Group {
     const m = computeMetrics(this, width, height, gap, true)
     const stretchHeight = Math.max(0, height - m.gaps(gap) - m.fixHeight)
     let y = top
-    for (const elem of this.children) {
+    for (const elem of this.contents) {
       if (!elem.visible.current) continue
       const psize = elem.preferredSize(width, height) // will be cached
       const c = axisConstraints(elem)

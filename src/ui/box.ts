@@ -1,5 +1,5 @@
 import {rect, dim2} from "../core/math"
-import {Element, ElementConfig, ElementFactory} from "./element"
+import {Element, ElementConfig, ElementFactory, ElementStyle} from "./element"
 import {BackgroundConfig, NoBackground, makeBackground} from "./background"
 
 const tmpr = rect.create()
@@ -51,74 +51,94 @@ export function alignOffset (align :HAlign|VAlign, size :number, extent :number)
   }
 }
 
-/** Defines configuration for [[Box]] elements. */
-export interface BoxConfig extends ElementConfig {
-  type :"box"
+/** Defines the styles that apply to [[Box]]. */
+export interface BoxStyle extends ElementStyle {
   padding? :Insets
   margin? :Insets
   background? :BackgroundConfig
   halign? :HAlign
   valign? :VAlign
-  child :ElementConfig
   // TODO: border?
 }
 
-/** Displays a single child with an optional background, padding, margin, and alignment. */
-export class Box extends Element {
-  private background = NoBackground
-  readonly child :Element
+/** Defines configuration for [[Box]]-like elements. */
+export interface BoxLikeConfig extends ElementConfig {
+  type :"box"
+  contents :ElementConfig
+  style: {normal :BoxStyle, disabled :BoxStyle}
+}
 
-  constructor (fact :ElementFactory, parent :Element, readonly config :BoxConfig) {
-    super(parent, config)
-    if (config.background) this._onDispose.push(makeBackground(fact, config.background).onValue(bg => {
-      this.background = bg
-    }))
-    this.child = fact.createElement(this, config.child)
+/** Defines configuration for [[Box]] elements. */
+export interface BoxConfig extends BoxLikeConfig {
+  type :"box"
+}
+
+export class BoxLike extends Element {
+  private background = this.observe(NoBackground)
+  readonly contents :Element
+
+  constructor (fact :ElementFactory, parent :Element, readonly config :BoxLikeConfig) {
+    super(fact, parent, config)
+    this.contents = fact.createElement(this, config.contents)
+    this._state.onValue(state => {
+      const style = this.config.style[state]
+      if (style.background) this.background.observe(makeBackground(fact, style.background))
+      else this.background.update(NoBackground)
+    })
   }
 
   render (canvas :CanvasRenderingContext2D) {
-    const {padding} = this.config
+    const {padding} = this.style
     const inbounds = padding ? insetRect(padding, this._bounds, tmpr) : this._bounds
     // TODO: should we just do all element rendering translated to the element's origin
     canvas.translate(inbounds[0], inbounds[1])
-    this.background.render(canvas, dim2.set(tmpd, inbounds[2], inbounds[3]))
+    this.background.current.render(canvas, dim2.set(tmpd, inbounds[2], inbounds[3]))
     canvas.translate(-inbounds[0], -inbounds[1])
-    this.child.render(canvas)
+    this.contents.render(canvas)
   }
 
   dispose () {
     super.dispose()
-    this.child.dispose()
+    this.contents.dispose()
   }
 
+  protected get style () :BoxStyle { return this.config.style[this._state.current] }
+
   protected computePreferredSize (hintX :number, hintY :number, into :dim2) {
-    const {padding, margin} = this.config
+    const {padding, margin} = this.style
     const edgeWidth = insetWidth(padding || 0) - insetWidth(margin || 0)
     const edgeHeight = insetHeight(padding || 0) - insetHeight(margin || 0)
-    const psize = this.child.preferredSize(hintX-edgeWidth, hintY-edgeHeight)
+    const psize = this.contents.preferredSize(hintX-edgeWidth, hintY-edgeHeight)
     dim2.set(into, psize[0] + edgeWidth, psize[1] + edgeHeight)
   }
 
   protected relayout () {
-    const {padding, margin} = this.config
-    const halign = this.config.halign || "center"
-    const valign = this.config.valign || "center"
+    const {padding, margin} = this.style
+    const halign = this.style.halign || "center"
+    const valign = this.style.valign || "center"
     let inbounds = rect.copy(tmpr, this._bounds)
     if (padding) inbounds = insetRect(padding, inbounds, tmpr)
     if (margin) inbounds = insetRect(margin, inbounds, tmpr)
     const bwidth = inbounds[2], bheight = inbounds[3]
-    const psize = this.child.preferredSize(bwidth, bheight)
+    const psize = this.contents.preferredSize(bwidth, bheight)
     const cwidth = halign == "stretch" ? bwidth : Math.min(bwidth, psize[0])
     const cheight = valign == "stretch" ? bheight : Math.min(bheight, psize[1])
     const edgeLeft = insetLeft(padding || 0) + insetLeft(margin || 0)
     const edgeTop = insetTop(padding || 0) + insetTop(margin || 0)
     const cx = this.x + edgeLeft + alignOffset(halign, cwidth, bwidth)
     const cy = this.y + edgeTop + alignOffset(valign, cheight, bheight)
-    this.child.setBounds(rect.set(tmpr, cx, cy, cwidth, cheight))
+    this.contents.setBounds(rect.set(tmpr, cx, cy, cwidth, cheight))
   }
 
   protected revalidate () {
     super.revalidate()
-    this.child.validate()
+    this.contents.validate()
+  }
+}
+
+/** Displays a single child with an optional background, padding, margin, and alignment. */
+export class Box extends BoxLike {
+  constructor (fact :ElementFactory, parent :Element, config :BoxConfig) {
+    super(fact, parent, config)
   }
 }

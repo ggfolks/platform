@@ -17,7 +17,7 @@ const PROTOTYPE_PROP = "prototype"
  * properties, if the child declares an explicit empty record or set, that property _overrides_ the
  * parent property instead of being merged with it.
  */
-export function makeConfig (configs :Record[]) :Record {
+export function makeConfig (configs :Record[], freeze = true) :Record {
   function merge (target :Record, source :Record) :Record {
     for (const key in source) {
       const sprop = source[key], tprop = target[key]
@@ -54,7 +54,8 @@ export function makeConfig (configs :Record[]) :Record {
     }
     return target
   }
-  return Object.freeze(configs.reduceRight(merge, {}))
+  const config = configs.reduceRight(merge, {})
+  return freeze ? Object.freeze(config) : config
 }
 
 /**

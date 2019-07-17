@@ -1,37 +1,44 @@
 import {dim2} from "../core/math"
 import {Value} from "../core/react"
-import {Element, ElementConfig, ElementFactory, Prop} from "./element"
+import {Element, ElementConfig, ElementFactory, ElementStyle, Prop} from "./element"
 import {FontConfig, Font, NoopDrawFn, makeFont} from "./style"
-import {DefaultPaint, PaintConfig, Paint, makePaint} from "./style"
+import {DefaultPaint, PaintConfig, makePaint} from "./style"
+
+export interface LabelStyle extends ElementStyle {
+  font :FontConfig
+  // TODO: stroke, make both stroke & fill optional & freak out if neither are set?
+  fill :PaintConfig
+}
 
 export interface LabelConfig extends ElementConfig {
   type :"label"
   text :Prop<string>
-  font :FontConfig
-  fill :PaintConfig
+  style : {normal :LabelStyle, disabled :LabelStyle}
 }
 
 export class Label extends Element {
   readonly text :Value<string>
-  private readonly font :Font
-  private fill :Paint = DefaultPaint
+  private font! :Font
+  private fill = this.observe(DefaultPaint)
   private fillFn = NoopDrawFn
 
   constructor (fact :ElementFactory, parent :Element, readonly config :LabelConfig) {
-    super(parent, config)
-    this.font = makeFont(config.font)
-    this._onDispose.push(makePaint(fact, config.fill).onValue(fill => {
-      this.fill = fill
-      this.invalidate()
-    }))
+    super(fact, parent, config)
     this.text = fact.resolveProp(config.text)
     this.noteDependentValue(this.text)
+    this._state.onValue(state => {
+      const style = this.config.style[state]
+      this.font = makeFont(style.font)
+      this.fill.observe(makePaint(fact, style.fill))
+    })
   }
 
   render (canvas :CanvasRenderingContext2D) {
-    this.fill && this.fill.prepFill(canvas)
+    this.fill.current.prepFill(canvas)
     this.fillFn(canvas, this.x, this.y)
   }
+
+  // protected get style () :LabelStyle { return this.config.style[this._state.current] }
 
   protected computePreferredSize (hintX :number, hintY :number, into :dim2) {
     const root = this.root
