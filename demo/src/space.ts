@@ -31,7 +31,7 @@ export function spaceDemo (renderer :Renderer) :Subject<RenderFn> {
     const camera = new PerspectiveCamera()
     camera.position.y = 3
 
-    const planet = new Planet()
+    const planet = new Planet(webglRenderer)
     scene.add(planet.group)
     planet.group.position.set(0, 6, -10)
 

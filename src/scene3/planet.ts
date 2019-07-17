@@ -1,14 +1,19 @@
 import {
+  BackSide,
+  BoxBufferGeometry,
   BufferAttribute,
   BufferGeometry,
-  CubeTexture,
-  DataTexture,
+  CubeCamera,
   FloatType,
   Group,
   Mesh,
   RGBAFormat,
+  Scene,
   ShaderMaterial,
   Sphere,
+  Texture,
+  Vector4,
+  WebGLRenderer,
 } from "three"
 
 /** Depicts a planet using a set of heightfields. */
@@ -16,16 +21,14 @@ export class Planet {
   readonly group = new Group( )
 
   private _material = new ShaderMaterial()
-  private _texture = new CubeTexture(createNoiseImages(6))
+  private _texture :Texture
   private _mesh = new Mesh(getSphereGeometry(6), this._material)
 
-  constructor () {
+  constructor (renderer :WebGLRenderer) {
     this.group.add(this._mesh)
     this._material.vertexShader = SPHERE_VERTEX_SHADER
     this._material.fragmentShader = SPHERE_FRAGMENT_SHADER
-    this._texture.format = RGBAFormat
-    this._texture.type = FloatType
-    this._texture.needsUpdate = true
+    this._texture = generateHeightTexture(renderer, 6)
     this._material.uniforms.height = {value: this._texture}
   }
 
@@ -34,26 +37,6 @@ export class Planet {
     this._material.dispose()
     this._texture.dispose()
   }
-}
-
-/** Returns an array of (six) placeholder noise images. */
-function createNoiseImages (divs :number) {
-  const textures :DataTexture[] = []
-  const dim = 2 ** divs
-  for (let side = 0; side < 6; side++) {
-    const data = new Float32Array(dim * dim * 4)
-    for (let idx = 0; idx < data.length; ) {
-      const value = Math.random() * 0.1 - 0.05
-      data[idx++] = value
-      data[idx++] = value
-      data[idx++] = value
-      data[idx++] = value
-    }
-    const texture = new DataTexture(data, dim, dim)
-    texture.needsUpdate = true
-    textures.push(texture)
-  }
-  return textures
 }
 
 const sphereGeometry :Map<number, BufferGeometry> = new Map()
@@ -106,12 +89,93 @@ function getSphereGeometry (divs :number) {
   return geometry
 }
 
+const PLANES_PER_PASS = 256;
+
+/** Generates a height texture using the method described at http://paulbourke.net/fractals/noise/
+ * (Modeling fake planets). */
+function generateHeightTexture (renderer :WebGLRenderer, divs :number) {
+  const dim = 2 ** divs
+
+  // create two cameras to ping-pong between
+  const cameras :CubeCamera[] = []
+  for (let ii = 0; ii < 2; ii++) {
+    // @ts-ignore type definition lacks CubeCamera options
+    cameras.push(new CubeCamera(0.1, 1.0, dim, {
+      format: RGBAFormat,
+      type: FloatType,
+      depthBuffer: false,
+      stencilBuffer: false,
+    }))
+  }
+
+  // create scene with cube-textured box
+  const scene = new Scene()
+  const material = new ShaderMaterial()
+  material.side = BackSide
+  material.vertexShader = GENERATE_VERTEX_SHADER
+  material.fragmentShader = GENERATE_FRAGMENT_SHADER
+  const planes :Vector4[] = []
+  material.uniforms.planes = {value: planes}
+  for (let ii = 0; ii < PLANES_PER_PASS; ii++) {
+    planes.push(new Vector4())
+  }
+  const box = new Mesh(new BoxBufferGeometry(), material)
+  scene.add(box)
+
+  // ping-pong over several iterations
+  let camera = 0
+  for (let ii = 0; ii < 8; ii++) {
+    material.uniforms.height = {value: cameras[camera].renderTarget.texture}
+
+    // fill up the uniforms
+    for (let jj = 0; jj < PLANES_PER_PASS; jj++) {
+      const plane = planes[jj]
+      plane
+        .set(Math.random()*2-1, Math.random()*2-1, Math.random()*2-1, 0.0)
+        .normalize()
+      plane.w = Math.random()*2-1
+    }
+
+    // switch to other camera
+    camera = 1 - camera
+
+    // render to the texture
+    cameras[camera].update(renderer, scene)
+  }
+
+  // dispose of one target and return the texture from the other
+  cameras[1 - camera].renderTarget.dispose()
+  return cameras[camera].renderTarget.texture
+}
+
+const GENERATE_VERTEX_SHADER = `
+varying vec3 v_Position;
+void main() {
+  v_Position = position;
+  gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+}
+`
+
+const GENERATE_FRAGMENT_SHADER = `
+uniform samplerCube height;
+uniform vec4 planes[${PLANES_PER_PASS}];
+varying vec3 v_Position;
+void main() {
+  float value = textureCube(height, v_Position).r;
+  vec4 point = vec4(normalize(v_Position), 1.0);
+  for (int ii = 0; ii < ${PLANES_PER_PASS}; ii++) {
+    value += 0.001 * (step(0.0, dot(point, planes[ii])) * 2.0 - 1.0);
+  }
+  gl_FragColor = vec4(value, value, value, 1.0);
+}
+`
+
 const SPHERE_VERTEX_SHADER = `
 uniform samplerCube height;
 varying vec3 v_Position;
 void main() {
   v_Position = position;
-  float heightValue = textureCube(height, position).a;
+  float heightValue = textureCube(height, position).r;
   vec3 direction = normalize(position) * (1.0 + heightValue);
   gl_Position = projectionMatrix * modelViewMatrix * vec4(direction, 1.0);
 }
