@@ -1,6 +1,7 @@
 import {clamp} from "./math"
 
-/** Represents a color as a set of ARGB channels. */
+/** Represents a color as a set of ARGB channels.
+  * Colors are really just Float32Arrays, for performance. */
 export abstract class Color extends Float32Array {
 
   /** Creates a color instance with all channels initialized to `0`. */
