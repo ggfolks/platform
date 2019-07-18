@@ -98,6 +98,11 @@ export class rect extends Float32Array {
     return dim2.fromValues(r[2], r[3])
   }
 
+  static contains (r :rect, pos :vec2) :boolean {
+    const rx = r[0], ry = r[1], rw = r[2], rh = r[3], px = pos[0], py = pos[1]
+    return (px >= rx && px <= rx+rw && py >= ry && py <= ry+rh)
+  }
+
   static intersects (r1 :rect, r2 :rect) :boolean {
     const x2 = r2[0], y2 = r2[1], w2 = r2[2], h2 = r2[3]
     return rect.intersectsXYWH(r1, x2, y2, w2, h2)
