@@ -1,4 +1,4 @@
-import {dim2} from "./math"
+import {dim2, vec2} from "./math"
 
 /** Represents the scale factor for a HiDPI display. Provides methods useful for doing the
   * calculations needed to create scale-independent interfaces. */
@@ -17,8 +17,14 @@ export class Scale {
 
   /** Returns `length` scaled by this scale factor. */
   scaled (length :number) :number { return length * this.factor }
-  /** Returns a new `dim2` containing `size` scaled by this scale factor. */
-  scaledDim (size :dim2) :dim2 { return dim2.scale(dim2.create(), size, this.factor) }
+  /** Scales `size` by this scale factor, writing the result into `into` or a newly created `dim2`.
+    * @return `into` or the newly created `dim2`. */
+  scaledDim (size :dim2, into? :dim2) :dim2 {
+    return dim2.scale(into || dim2.create(), size, this.factor) }
+  /** Scales `size` by this scale factor, writing the result into `into` or a newly created `vec2`.
+    * @return `into` or the newly created `vec2`. */
+  scaledVec (size :vec2, into? :vec2) :vec2 {
+    return vec2.scale(into || vec2.create(), size, this.factor) }
 
   /** Rounds the supplied length to the nearest length that corresponds to an integer pixel length
     * after this scale factor is applied. For example, for a scale factor of 3,
