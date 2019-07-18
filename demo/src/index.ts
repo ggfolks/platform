@@ -90,7 +90,7 @@ document.onkeydown = ev => {
 }
 
 document.onmousedown = ev => {
-  if (ev.button == 0) {
+  if (ev.button == 0 && ev.shiftKey) {
     if (loop.active) loop.stop()
     else loop.start()
   }
