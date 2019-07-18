@@ -1,16 +1,20 @@
 import {
   BoxBufferGeometry,
   BufferGeometry,
-  GridHelper,
+  Color,
+  DirectionalLight,
+  Material,
   Math as ThreeMath,
+  MeshToonMaterial,
   PerspectiveCamera,
+  Quaternion,
   Scene,
   SphereBufferGeometry,
   Vector3,
   WebGLRenderer,
 } from "three"
 
-import {Body, Box, Plane, Quaternion, Shape, Sphere, Vec3} from "cannon"
+import {Box, Heightfield, Shape, Sphere, Vec3} from "cannon"
 
 import {Clock} from "tfw/core/clock"
 import {Subject} from "tfw/core/react"
@@ -18,7 +22,7 @@ import {DenseValueComponent, Domain, Float32Component} from "tfw/entity/entity"
 import {Renderer} from "tfw/scene2/gl"
 import {TransformComponent} from "tfw/space/entity"
 import {MeshSystem} from "tfw/scene3/entity"
-import {Planet} from "tfw/scene3/planet"
+import {generateHeightfield, createHeightfieldGeometry} from "tfw/scene3/terrain"
 import {PhysicsSystem} from "tfw/physics3/entity"
 import {RenderFn} from "./index"
 
@@ -27,13 +31,13 @@ export function spaceDemo (renderer :Renderer) :Subject<RenderFn> {
     const webglRenderer = new WebGLRenderer()
 
     const scene = new Scene()
-    scene.add(new GridHelper(100, 100))
     const camera = new PerspectiveCamera()
+    scene.add(camera)
     camera.position.y = 3
 
-    const planet = new Planet(webglRenderer)
-    scene.add(planet.group)
-    planet.group.position.set(0, 6, -10)
+    const light = new DirectionalLight()
+    light.position.set(1, 1, 1)
+    scene.add(light)
 
     // replace 2d canvas with 3d one
     const root = renderer.canvas.parentElement as HTMLElement
@@ -48,21 +52,33 @@ export function spaceDemo (renderer :Renderer) :Subject<RenderFn> {
 
     const trans = new TransformComponent("trans")
     const geom = new DenseValueComponent<BufferGeometry>("geom", new BufferGeometry())
+    const mat = new DenseValueComponent<Material>("mat", new MeshToonMaterial())
     const shapes = new DenseValueComponent<Shape[]>("shapes", [])
     const mass = new Float32Component("mass", 0)
-    const domain = new Domain({}, {trans, geom, shapes, mass})
-    const meshsys = new MeshSystem(domain, trans, geom)
+    const domain = new Domain({}, {trans, geom, mat, shapes, mass})
+    const meshsys = new MeshSystem(domain, trans, geom, mat)
     const physicssys = new PhysicsSystem(domain, trans, shapes, mass)
     physicssys.world.gravity.y = -9.8
-    physicssys.world.addBody(new Body({
-      shape: new Plane(),
-      quaternion: new Quaternion().setFromEuler(-Math.PI * 0.5, 0, 0)
-    }))
+
     scene.add(meshsys.group)
 
     const econfig = {
-      components: {trans: {}, geom: {}, shapes: {}, mass: {}}
+      components: {trans: {}, geom: {}, mat: {}, shapes: {}, mass: {}}
     }
+
+    const terrainId = domain.add(econfig)
+    const elementSize = 0.5
+    const heightfield = generateHeightfield(7, 1.5)
+    // @ts-ignore the type for Heightfield is number[][], not number[]
+    shapes.update(terrainId, [new Heightfield(heightfield, {elementSize})])
+    const halfExtent = (heightfield.length - 1) * elementSize * 0.5
+    trans.updatePosition(terrainId, new Vector3(-halfExtent, 0.0, halfExtent))
+    trans.updateQuaternion(terrainId, new Quaternion().setFromAxisAngle(
+      new Vector3(1, 0, 0),
+      -Math.PI * 0.5,
+    ))
+    mat.update(terrainId, new MeshToonMaterial({color: "#80ff80"}))
+    geom.update(terrainId, createHeightfieldGeometry(heightfield, elementSize))
 
     const sphereGeom = new SphereBufferGeometry()
     const boxGeom = new BoxBufferGeometry()
@@ -81,6 +97,7 @@ export function spaceDemo (renderer :Renderer) :Subject<RenderFn> {
         geom.update(id, boxGeom)
         shapes.update(id, boxShapes)
       }
+      mat.update(id, new MeshToonMaterial({color: new Color().setHSL(Math.random(), 1.0, 0.8)}))
       mass.update(id, 1)
       position.set(
         origin.x + ThreeMath.randFloat(-2, 2),
@@ -93,7 +110,6 @@ export function spaceDemo (renderer :Renderer) :Subject<RenderFn> {
     disp((clock: Clock) => {
       physicssys.update(clock)
       meshsys.update()
-      planet.group.rotateY(clock.dt)
       webglRenderer.render(scene, camera)
     })
 
@@ -102,7 +118,6 @@ export function spaceDemo (renderer :Renderer) :Subject<RenderFn> {
       // restore 2d canvas
       root.removeChild(webglRenderer.domElement)
       root.appendChild(renderer.canvas)
-      planet.dispose()
       webglRenderer.dispose()
     }
   })
