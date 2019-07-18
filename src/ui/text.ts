@@ -2,12 +2,13 @@ import {dim2} from "../core/math"
 import {Value} from "../core/react"
 import {Element, ElementConfig, ElementFactory, ElementStyle, Prop} from "./element"
 import {FontConfig, Font, NoopDrawFn, makeFont} from "./style"
-import {DefaultPaint, PaintConfig, makePaint} from "./style"
+import {DefaultPaint, PaintConfig, ShadowConfig, makePaint, prepShadow, resetShadow} from "./style"
 
 export interface LabelStyle extends ElementStyle {
   font :FontConfig
   // TODO: stroke, make both stroke & fill optional & freak out if neither are set?
   fill :PaintConfig
+  shadow? :ShadowConfig
 }
 
 export interface LabelConfig extends ElementConfig {
@@ -20,6 +21,7 @@ export class Label extends Element {
   readonly text :Value<string>
   private font! :Font
   private fill = this.observe(DefaultPaint)
+  private shadow? :ShadowConfig
   private fillFn = NoopDrawFn
 
   constructor (fact :ElementFactory, parent :Element, readonly config :LabelConfig) {
@@ -29,16 +31,18 @@ export class Label extends Element {
     this._state.onValue(state => {
       const style = this.config.style[state]
       this.font = makeFont(style.font)
+      this.shadow = style.shadow
       this.fill.observe(makePaint(fact, style.fill))
     })
   }
 
   render (canvas :CanvasRenderingContext2D) {
+    const shadow = this.shadow
     this.fill.current.prepFill(canvas)
+    shadow && prepShadow(canvas, shadow)
     this.fillFn(canvas, this.x, this.y)
+    shadow && resetShadow(canvas)
   }
-
-  // protected get style () :LabelStyle { return this.config.style[this._state.current] }
 
   protected computePreferredSize (hintX :number, hintY :number, into :dim2) {
     const root = this.root
@@ -46,7 +50,5 @@ export class Label extends Element {
     this.fillFn = this.font.measureText(root.ctx, this.text.current, into)
   }
 
-  protected relayout () {
-    // TODO: anything?
-  }
+  protected relayout () {} // nothing needed
 }

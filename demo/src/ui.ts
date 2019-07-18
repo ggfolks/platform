@@ -5,6 +5,8 @@ import {Renderer, Texture, createTexture, imageToTexture} from "tfw/scene2/gl"
 import {UI} from "tfw/ui/ui"
 import {RenderFn} from "./index"
 
+const buttonCorner = 3
+
 const theme = {
   styles: {
     baseFont: {family: "Helvetica", size: 16},
@@ -37,19 +39,26 @@ const theme = {
     button: {
       parent: "base",
       padding: 10,
-      background: {fill: {type: "color", color: "#FFCC99"}, cornerRadius: 10},
+      border: {
+        stroke: {type: "color", color: "#000000"},
+        cornerRadius: buttonCorner,
+      },
+      background: {
+        fill: {type: "color", color: "#99CCFF"},
+        cornerRadius: buttonCorner,
+        shadow: {offsetX: 2, offsetY: 2, blur: 5, color: "#000000"}
+      },
       pressed: {
-        background: {fill: {type: "color", color: "#99FFCC"}, cornerRadius: 10},
+        background: {fill: {type: "color", color: "#77AADD"}, cornerRadius: buttonCorner},
       },
       disabled: {
-        background: {fill: {type: "color", color: "#CC9966"}, cornerRadius: 10}
+        background: {fill: {type: "color", color: "#CC9966"}, cornerRadius: buttonCorner}
       },
     }
   }
 }
 
 const config = {
-  type: "root" as "root", // TODO: meh
   contents: {
     type: "column",
     offPolicy: "stretch",
@@ -62,7 +71,12 @@ const config = {
         type: "label",
         enabled: "top.enabled",
         text: "top.text",
-        style: {font: {size: 32, weight: "bold"}}
+        style: {
+          font: {size: 32, weight: "bold"},
+          normal: {
+            shadow: {offsetX: 4, offsetY: 4, blur: 5, color: "#666666"}
+          }
+        }
       },
       style: {
         normal: {background: {fill: {type: "color", color: "#FFCC99"}, cornerRadius: 10}},
@@ -104,7 +118,7 @@ const model = {
 export function uiDemo (renderer :Renderer) :Subject<RenderFn> {
   return Subject.derive(disp => {
     const ui = new UI(theme, model, {resolveImage: loadImage})
-    const root = ui.createRoot({...config, scale: renderer.scale})
+    const root = ui.createRoot({type: "root", scale: renderer.scale, ...config})
     const canvas = root.pack(400, 400)
     const texcfg = {...Texture.DefaultConfig, scale: renderer.scale}
     const gltex = createTexture(renderer.glc, texcfg)

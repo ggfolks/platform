@@ -40,6 +40,4 @@ export class Button extends BoxLike {
     // see Element.computeState for why we have to downcast
     return state as ElementState
   }
-
-  // TODO: state changes
 }

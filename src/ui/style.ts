@@ -228,3 +228,26 @@ class PatternPaint extends Paint {
 }
 
 export const DefaultPaint :Paint = new ColorPaint("#FF0000")
+
+//
+// Shadows
+
+export interface ShadowConfig {
+  offsetX :number
+  offsetY :number
+  blur :number
+  color :ColorConfig
+}
+
+export function prepShadow (canvas :CanvasRenderingContext2D, config :ShadowConfig) {
+  canvas.shadowOffsetX = config.offsetX
+  canvas.shadowOffsetY = config.offsetY
+  canvas.shadowBlur = config.blur
+  canvas.shadowColor = makeCSSColor(config.color)
+}
+
+export function resetShadow (canvas :CanvasRenderingContext2D) {
+  canvas.shadowOffsetX = 0
+  canvas.shadowOffsetY = 0
+  canvas.shadowBlur = 0
+}
