@@ -78,7 +78,7 @@ export function spaceDemo (renderer :Renderer) :Subject<RenderFn> {
       -Math.PI * 0.5,
     ))
     mat.update(terrainId, new MeshToonMaterial({color: "#80ff80"}))
-    geom.update(terrainId, createHeightfieldGeometry(heightfield, elementSize))
+    geom.update(terrainId, createHeightfieldGeometry(heightfield, elementSize, 5))
 
     const sphereGeom = new SphereBufferGeometry()
     const boxGeom = new BoxBufferGeometry()

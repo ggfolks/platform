@@ -1,4 +1,4 @@
-import {BufferAttribute, BufferGeometry, Math as ThreeMath} from "three"
+import {BufferAttribute, BufferGeometry, Math as ThreeMath, Vector3} from "three"
 
 /** Generates a heightfield in the format used by Cannon using a simple diamond-square algorithm. */
 export function generateHeightfield (divs :number, scale :number, roughness = 0.7) {
@@ -62,21 +62,60 @@ export function generateHeightfield (divs :number, scale :number, roughness = 0.
   return heightfield
 }
 
-/** Creates geometry for the supplied Cannon-style heightfield. */
-export function createHeightfieldGeometry (heightfield :Float32Array[], elementSize :number) {
+/**
+ * Creates geometry for the supplied Cannon-style heightfield.
+ *
+ * @param heightfield the heightfield data.
+ * @param elementSize the spacing between heightfield elements on X/Y.
+ * @param [normalExaggeration=1] the scale by which to exaggerate the normals.
+ */
+export function createHeightfieldGeometry (heightfield :Float32Array[],
+                                           elementSize :number,
+                                           normalExaggeration = 1) {
   const geometry = new BufferGeometry()
   const width = heightfield.length
+  const maxX = width - 1
   const height = heightfield[0].length
+  const maxY = height - 1
   const position = new Float32Array(width * height * 3)
+  const normal = new Float32Array(width * height * 3)
   let idx = 0
+  const right = new Vector3()
+  const up = new Vector3()
+  const ortho = new Vector3()
+  const singleSpan = elementSize / normalExaggeration
+  const doubleSpan = singleSpan * 2
   for (let xx = 0; xx < width; xx++) {
     for (let yy = 0; yy < height; yy++) {
-      position[idx++] = xx * elementSize
-      position[idx++] = yy * elementSize
-      position[idx++] = heightfield[xx][yy]
+      position[idx] = xx * elementSize
+      position[idx + 1] = yy * elementSize
+      position[idx + 2] = heightfield[xx][yy]
+
+      if (xx === 0) {
+        right.set(singleSpan, 0, heightfield[xx + 1][yy] - heightfield[xx][yy])
+      } else if (xx === maxX) {
+        right.set(singleSpan, 0, heightfield[xx][yy] - heightfield[xx - 1][yy])
+      } else {
+        right.set(doubleSpan, 0, heightfield[xx + 1][yy] - heightfield[xx - 1][yy])
+      }
+
+      if (yy === 0) {
+        up.set(0, singleSpan, heightfield[xx][yy + 1] - heightfield[xx][yy])
+      } else if (yy === maxY) {
+        up.set(0, singleSpan, heightfield[xx][yy] - heightfield[xx][yy - 1])
+      } else {
+        up.set(0, doubleSpan, heightfield[xx][yy + 1] - heightfield[xx][yy - 1])
+      }
+
+      ortho.crossVectors(right, up).normalize()
+
+      normal[idx++] = ortho.x
+      normal[idx++] = ortho.y
+      normal[idx++] = ortho.z
     }
   }
   geometry.addAttribute("position", new BufferAttribute(position, 3))
+  geometry.addAttribute("normal", new BufferAttribute(normal, 3))
   const widthMinusOne = width - 1
   const heightMinusOne = height - 1
   const index = new Uint32Array(widthMinusOne * heightMinusOne * 2 * 3)
@@ -94,7 +133,6 @@ export function createHeightfieldGeometry (heightfield :Float32Array[], elementS
     }
   }
   geometry.setIndex(new BufferAttribute(index, 1))
-  geometry.computeVertexNormals()
   geometry.computeBoundingSphere()
   return geometry
 }
