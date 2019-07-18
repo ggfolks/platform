@@ -1,5 +1,6 @@
 import {vec2} from "tfw/core/math"
-import {Emitter, Remover, Subject, Mutable, Value} from "tfw/core/react"
+import {Disposer} from "tfw/core/util"
+import {Emitter, Subject, Mutable, Value} from "tfw/core/react"
 import {loadImage} from "tfw/core/assets"
 import {Renderer} from "tfw/scene2/gl"
 import {UI} from "tfw/ui/ui"
@@ -118,26 +119,26 @@ const model = {
 
 export function uiDemo (renderer :Renderer) :Subject<RenderFn> {
   return Subject.derive(disp => {
-    const cleanup :Remover[] = []
+    const cleanup = new Disposer()
     const ui = new UI(theme, model, {resolveImage: loadImage})
     const host = new Host2(renderer)
-    cleanup.unshift(() => host.dispose())
-    host.bind(renderer.canvas)
-    cleanup.unshift(() => host.unbind(renderer.canvas))
+    cleanup.add(host)
+    // TODO: this will go away if Host2 does it automatically
+    cleanup.add(host.bind(renderer.canvas))
 
     const rootOrigin = vec2.fromValues(10, 10)
     const root = ui.createRoot({type: "root", scale: renderer.scale, ...config})
     root.pack(400, 400)
     host.addRoot(root, rootOrigin)
 
-    cleanup.unshift(model.button.target.onEmit(event => {
+    cleanup.add(model.button.target.onEmit(event => {
       if (event === "toggle") model.top.enabled.update(!model.top.enabled.current)
     }))
 
     const uptime = () => model.middle.text.update(new Date().toLocaleTimeString())
     uptime()
     const timer = setInterval(uptime, 1000)
-    cleanup.unshift(() => clearInterval(timer))
+    cleanup.add(() => clearInterval(timer))
 
     disp((clock, batch, surf) => {
       host.update(clock)
@@ -147,6 +148,6 @@ export function uiDemo (renderer :Renderer) :Subject<RenderFn> {
       surf.end()
     })
 
-    return () => cleanup.forEach(r => r())
+    return () => cleanup.dispose()
   })
 }

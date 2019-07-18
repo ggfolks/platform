@@ -1,11 +1,5 @@
+import {Remover, NoopRemover} from "./util"
 import {Data, dataEquals, refEquals} from "./data"
-
-/** A thunk that is invoked with no arguments to remove a listener registration. */
-export type Remover = () => void
-
-/** A no-op remover thunk. This is useful when doing manual plumbing to avoid having to maintain a
-  * potentially undefined remover thunk. */
-export const NoopRemover :Remover = () => true
 
 // TypeScript infers literal types for type parameters with bounds, so when we bound our reactive
 // value types by Data, that causes calls like `mutable("")` to yield types like `Mutable<"">`

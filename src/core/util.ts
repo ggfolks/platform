@@ -1,3 +1,9 @@
+/** A thunk that is invoked with no arguments to remove a listener registration. */
+export type Remover = () => void
+
+/** A no-op remover thunk. This is useful when doing manual plumbing to avoid having to maintain a
+  * potentially undefined remover thunk. */
+export const NoopRemover :Remover = () => true
 
 /** An interface for things that maintain external resources and should be disposed when no longer
   * needed. */
@@ -5,6 +11,36 @@ export interface Disposable {
 
   /** Disposes the resources used by this instance. */
   dispose () :void
+}
+
+/** Abstracts over [[Disposable]] and [[Remover]] functions. */
+export type ToDispose = Remover | Disposable
+
+/** Eases the process of creating a list of disposables, adding to it and then disposing everything
+  * on it in the reverse order in which it was added. */
+export class Disposer implements Disposable {
+  private list :ToDispose[] = []
+
+  /** Adds `disp` to be disposed. */
+  add<D extends ToDispose> (disp :D) :D {
+    this.list.unshift(disp)
+    return disp
+  }
+
+  /** Removes `disp` from this disposer. Does not dispose `disp`. */
+  remove (disp :ToDispose) {
+    const idx = this.list.indexOf(disp)
+    if (idx >= 0) this.list.splice(idx, 1)
+  }
+
+  /** Disposes everything in this disposer and clears it out. */
+  dispose () {
+    for (const d of this.list) {
+      if (typeof d === "function") d()
+      else d.dispose()
+    }
+    this.list.length = 0
+  }
 }
 
 /** Maintains a set of integers using bits in a backing (typed array) vector. */

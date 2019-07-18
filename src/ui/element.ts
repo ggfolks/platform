@@ -1,8 +1,8 @@
-import {Disposable} from "../core/util"
+import {Disposable, Disposer, Remover, NoopRemover} from "../core/util"
 import {Clock} from "../core/clock"
 import {dim2, rect, vec2} from "../core/math"
 import {Record} from "../core/data"
-import {Emitter, Mutable, Remover, Source, Value, NoopRemover} from "../core/react"
+import {Emitter, Mutable, Source, Value} from "../core/react"
 import {Scale} from "../core/ui"
 import {ImageResolver} from "./style"
 
@@ -90,7 +90,7 @@ export abstract class Element implements Disposable {
   protected readonly _psize :dim2 = dim2.fromValues(-1, -1)
   protected _state = Mutable.local("normal") as Mutable<ElementState> // TODO: meh
   protected _valid = Mutable.local(false)
-  protected _onDispose :Remover[] = []
+  protected _onDispose = new Disposer()
 
   readonly visible :Value<boolean>
   readonly enabled :Value<boolean>
@@ -104,7 +104,7 @@ export abstract class Element implements Disposable {
     if (!config.enabled) this.enabled = trueValue
     else {
       this.enabled = fact.resolveProp(config.enabled)
-      this._onDispose.push(this.enabled.onValue(_ => this._state.update(this.computeState)))
+      this._onDispose.add(this.enabled.onValue(_ => this._state.update(this.computeState)))
     }
   }
 
@@ -168,8 +168,7 @@ export abstract class Element implements Disposable {
   }
 
   dispose () {
-    this._onDispose.forEach(r => r())
-    this._onDispose = []
+    this._onDispose.dispose()
   }
 
   toString () {
@@ -186,13 +185,11 @@ export abstract class Element implements Disposable {
   }
 
   protected noteDependentValue (value :Source<any>) {
-    this._onDispose.push(value.onValue(_ => this.invalidate()))
+    this._onDispose.add(value.onValue(_ => this.invalidate()))
   }
 
   protected observe<T> (initial :T) :Observer<T> {
-    const obs = new Observer(this, initial)
-    this._onDispose.push(() => obs.dispose())
-    return obs
+    return this._onDispose.add(new Observer(this, initial))
   }
 
   protected revalidate () {
@@ -319,7 +316,7 @@ export class Root extends Element {
 
 /** Manages a collection of [[Root]]s: handles dispatching input and frame events, revalidating and
   * rerendering. Client responsibilities:
-  * - [[bind]] (and [[unbind]]) to the canvas element in which the roots are rendered
+  * - [[bind]] to the canvas element in which the roots are rendered
   * - call [[update]] on every animation frame
   * - add manually created roots via [[addRoot]]
   * - keep the root origins up to date with the locations at which the roots are rendered.
@@ -336,16 +333,15 @@ export class Host implements Disposable {
     this.rootAdded(root, origin, ii)
   }
 
-  bind (canvas :HTMLCanvasElement) {
+  bind (canvas :HTMLCanvasElement) :Remover {
     canvas.addEventListener("mousedown", this.onMouse)
     canvas.addEventListener("mousemove", this.onMouse)
     canvas.addEventListener("mouseup", this.onMouse)
-  }
-
-  unbind (canvas :HTMLCanvasElement) {
-    canvas.removeEventListener("mousedown", this.onMouse)
-    canvas.removeEventListener("mousemove", this.onMouse)
-    canvas.removeEventListener("mouseup", this.onMouse)
+    return () => {
+      canvas.removeEventListener("mousedown", this.onMouse)
+      canvas.removeEventListener("mousemove", this.onMouse)
+      canvas.removeEventListener("mouseup", this.onMouse)
+    }
   }
 
   handleMouseEvent (event :MouseEvent) {
