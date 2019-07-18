@@ -1,14 +1,13 @@
 import {Disposable} from "../core/util"
 import {dim2, rect, vec2} from "../core/math"
 import {Record} from "../core/data"
-import {Mutable, Remover, Source, Value, NoopRemover} from "../core/react"
+import {Emitter, Mutable, Remover, Source, Value, NoopRemover} from "../core/react"
 import {Scale} from "../core/ui"
 import {ImageResolver} from "./style"
 
 const tmpr = rect.create()
+const tmpv = vec2.create()
 const trueValue = Value.constant(true)
-
-export type Prop<T> = string | Value<T>
 
 /** Used by elements to observe reactive values. Takes care of invalidating the element when the
   * value changes, clearing old listeners when switching sources, and cleaning up when the element
@@ -41,6 +40,12 @@ export class Observer<T> implements Disposable {
   }
 }
 
+/** Defines a path to a reactive property in a model, or an immediate value to be used. */
+export type Prop<T> = string | Value<T>
+
+/** Defines a path to an event emitter in a model, or an immediate emitter to be used. */
+export type Sink<T> = string | Emitter<T>
+
 /** Used to create runtime components from configuration data. */
 export interface ElementFactory extends ImageResolver {
 
@@ -49,6 +54,9 @@ export interface ElementFactory extends ImageResolver {
 
   /** Resolves the property `prop` via the UI model if appropriate. */
   resolveProp<T> (prop :Prop<T>) :Value<T>
+
+  /** Resolves the event `sink` via the UI model if appropriate. */
+  resolveSink<T> (sink :Sink<T>) :Emitter<T>
 }
 
 /** Enumerates the states an [[Element]] can be in, i.e. `normal` or `disabled`. Elements may be
@@ -95,10 +103,7 @@ export abstract class Element implements Disposable {
     if (!config.enabled) this.enabled = trueValue
     else {
       this.enabled = fact.resolveProp(config.enabled)
-      this._onDispose.push(this.enabled.onValue(enabled => {
-        // TODO: allow subclasses to refine state...
-        this._state.update(enabled ? "normal" : "disabled")
-      }))
+      this._onDispose.push(this.enabled.onValue(_ => this._state.update(this.computeState)))
     }
   }
 
@@ -106,6 +111,7 @@ export abstract class Element implements Disposable {
   get y () :number { return this._bounds[1] }
   get width () :number { return this._bounds[2] }
   get height () :number { return this._bounds[3] }
+  get bounds () :rect { return this._bounds }
 
   get valid () :Value<boolean> { return this._valid }
 
@@ -151,9 +157,31 @@ export abstract class Element implements Disposable {
 
   abstract render (canvas :CanvasRenderingContext2D) :void
 
+  /** Requests that this element handle the supplied mouse down event.
+    * @param event the event forwarded from the browser.
+    * @param pos the position of the event relative to the root origin.
+    * @return an interaction if an element started an interaction with the mouse, `undefined`
+    * otherwise. */
+  handleMouseDown (event :MouseEvent, pos :vec2) :MouseInteraction|undefined {
+    return undefined
+  }
+
   dispose () {
     this._onDispose.forEach(r => r())
     this._onDispose = []
+  }
+
+  toString () {
+    return `${this.constructor.name}@${this._bounds}`
+  }
+
+  // note: to type this properly, Element would need to be parameterized on the type of its state so
+  // that subclasses could parameterize themselves on an extension of that state; but this would
+  // leak irrelevant type machinery out to users of Element which is definitely not worth it, so
+  // instead we just force subclasses to cast their extended state back to ElementState and rely on
+  // them handling their extended state in the appropriate places
+  protected get computeState () :ElementState {
+    return this.enabled.current ? "normal" : "disabled"
   }
 
   protected noteDependentValue (value :Source<any>) {
@@ -174,6 +202,19 @@ export abstract class Element implements Disposable {
   protected abstract relayout () :void
 }
 
+/** Encapsulates a mouse interaction with an element. When the mouse button is pressed over an
+  * element, it can start an interaction which will then handle subsequent mouse events until the
+  * button is released or the interaction is canceled. */
+export type MouseInteraction = {
+  /** Called when the pointer is moved while this interaction is active. */
+  move: (moveEvent :MouseEvent, pos :vec2) => void
+  /** Called when the pointer is released while this interaction is active. This ends the
+    * interaction. */
+  release: (upEvent :MouseEvent, pos :vec2) => void
+  /** Called if this action is canceled. This ends the interaction. */
+  cancel: () => void
+}
+
 /** Defines configuration for [[Root]] elements. */
 export interface RootConfig extends ElementConfig {
   type :"root"
@@ -186,6 +227,7 @@ export class Root extends Element {
   readonly canvas :HTMLCanvasElement = document.createElement("canvas")
   readonly ctx :CanvasRenderingContext2D
   readonly contents :Element
+  private interacts :Array<MouseInteraction|undefined> = []
 
   constructor (readonly fact :ElementFactory, readonly config :RootConfig) {
     super(fact, undefined, config)
@@ -214,6 +256,46 @@ export class Root extends Element {
     super.dispose()
     this.contents.dispose()
   }
+
+  /** Dispatches a browser mouse event to this root.
+    * @param event the browser event to dispatch.
+    * @param origin the origin of the root in screen coordinates. */
+  dispatchMouseEvent (event :MouseEvent, origin :vec2) {
+    // TODO: we're assuming the root/renderer scale is the same as the browser display unit to pixel
+    // ratio (mouse events come in display units), so everything "just lines up"; if we want to
+    // support other weird ratios between browser display units and backing buffers, we have to be
+    // more explicit about all this...
+    const pos = vec2.set(tmpv, event.offsetX-origin[0], event.offsetY-origin[1])
+    const button = event.button
+    const iact = this.interacts[button]
+    switch (event.type) {
+    case "mousedown":
+      if (rect.contains(this.contents.bounds, pos)) {
+        if (iact) {
+          console.warn(`Got mouse down but have active interaction? [button=${button}]`)
+          iact.cancel()
+        }
+        this.interacts[button] = this.contents.handleMouseDown(event, pos)
+      }
+      break
+    case "mousemove":
+      if (iact) iact.move(event, pos)
+      break
+    case "mouseup":
+      if (iact) {
+        iact.release(event, pos)
+        this.interacts[button] = undefined
+      }
+      break
+    case "mousecancel":
+      if (iact) {
+        iact.cancel()
+        this.interacts[button] = undefined
+      }
+    }
+  }
+
+  // TODO: dispatchKeyEvent, dispatchTouchEvent? separate handleXEvent methods?
 
   protected computePreferredSize (hintX :number, hintY :number, into :dim2) {
     dim2.copy(into, this.contents.preferredSize(hintX, hintY))

@@ -1,4 +1,4 @@
-import {rect, dim2} from "../core/math"
+import {rect, dim2, vec2} from "../core/math"
 import {Element, ElementConfig, ElementFactory, ElementStyle} from "./element"
 import {BackgroundConfig, NoBackground, makeBackground} from "./background"
 
@@ -63,7 +63,6 @@ export interface BoxStyle extends ElementStyle {
 
 /** Defines configuration for [[Box]]-like elements. */
 export interface BoxLikeConfig extends ElementConfig {
-  type :"box"
   contents :ElementConfig
   style: {normal :BoxStyle, disabled :BoxStyle}
 }
@@ -88,8 +87,8 @@ export class BoxLike extends Element {
   }
 
   render (canvas :CanvasRenderingContext2D) {
-    const {padding} = this.style
-    const inbounds = padding ? insetRect(padding, this._bounds, tmpr) : this._bounds
+    const {margin} = this.style
+    const inbounds = margin ? insetRect(margin, this._bounds, tmpr) : this._bounds
     // TODO: should we just do all element rendering translated to the element's origin
     canvas.translate(inbounds[0], inbounds[1])
     this.background.current.render(canvas, dim2.set(tmpd, inbounds[2], inbounds[3]))
@@ -140,5 +139,10 @@ export class BoxLike extends Element {
 export class Box extends BoxLike {
   constructor (fact :ElementFactory, parent :Element, config :BoxConfig) {
     super(fact, parent, config)
+  }
+
+  handleMouseDown (event :MouseEvent, pos :vec2) {
+    return rect.contains(this.contents.bounds, pos) ?
+      this.contents.handleMouseDown(event, pos) : undefined
   }
 }

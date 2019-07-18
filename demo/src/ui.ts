@@ -1,5 +1,5 @@
 import {vec2} from "tfw/core/math"
-import {Subject, Mutable, Value} from "tfw/core/react"
+import {Emitter, Subject, Mutable, Value} from "tfw/core/react"
 import {loadImage} from "tfw/core/assets"
 import {Renderer, Texture, createTexture, imageToTexture} from "tfw/scene2/gl"
 import {UI} from "tfw/ui/ui"
@@ -36,10 +36,13 @@ const theme = {
     },
     button: {
       parent: "base",
-      padding: 5,
-      background: {fill: {type: "color", color: "#FFCC99"}},
+      padding: 10,
+      background: {fill: {type: "color", color: "#FFCC99"}, cornerRadius: 10},
+      pressed: {
+        background: {fill: {type: "color", color: "#99FFCC"}, cornerRadius: 10},
+      },
       disabled: {
-        background: {fill: {type: "color", color: "#CC9966"}}
+        background: {fill: {type: "color", color: "#CC9966"}, cornerRadius: 10}
       },
     }
   }
@@ -73,7 +76,12 @@ const config = {
     }, {
       type: "box",
       constraints: {stretch: true},
-      contents: {type: "column", contents: []},
+      contents: {
+        type: "button",
+        target: "button.target",
+        event: "toggle",
+        contents: {type: "label", text: "button.text"},
+      },
       style: {background: {fill: "$flappyPatternPaint", cornerRadius: 10}}
     }],
   },
@@ -86,6 +94,10 @@ const model = {
   },
   middle: {
     text: Mutable.local("Time")
+  },
+  button: {
+    text: Value.constant("Toggle"),
+    target: new Emitter<string>()
   }
 }
 
@@ -98,15 +110,20 @@ export function uiDemo (renderer :Renderer) :Subject<RenderFn> {
     const gltex = createTexture(renderer.glc, texcfg)
     let tex = imageToTexture(renderer.glc, canvas, texcfg, gltex)
 
-    const uptime = () => {
-      const now = new Date().toLocaleTimeString()
-      model.middle.text.update(now)
-      model.top.enabled.update(!now.includes("0 "))
-    }
+    const rootOrigin = vec2.fromValues(10, 10)
+    const eventListener = (event :MouseEvent) => root.dispatchMouseEvent(event, rootOrigin)
+    renderer.canvas.addEventListener("mousedown", eventListener)
+    renderer.canvas.addEventListener("mousemove", eventListener)
+    renderer.canvas.addEventListener("mouseup", eventListener)
+
+    const unlisten = model.button.target.onEmit(event => {
+      if (event === "toggle") model.top.enabled.update(!model.top.enabled.current)
+    })
+
+    const uptime = () => model.middle.text.update(new Date().toLocaleTimeString())
     uptime()
     const timer = setInterval(uptime, 1000)
 
-    const pos = vec2.fromValues(10, 10)
     disp((clock, batch, surf) => {
       // TODO: this needs to be more automatic; maybe pass a Stream<Clock> to Root?
       if (root.validate()) {
@@ -115,11 +132,15 @@ export function uiDemo (renderer :Renderer) :Subject<RenderFn> {
       }
       surf.begin()
       surf.clearTo(1, 1, 1, 1)
-      surf.draw(tex, pos, tex.size)
+      surf.draw(tex, rootOrigin, tex.size)
       surf.end()
     })
 
     return () => {
+      renderer.canvas.removeEventListener("mousedown", eventListener)
+      renderer.canvas.removeEventListener("mousemove", eventListener)
+      renderer.canvas.removeEventListener("mouseup", eventListener)
+      unlisten()
       root.dispose()
       renderer.glc.deleteTexture(gltex)
       clearInterval(timer)

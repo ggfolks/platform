@@ -1,11 +1,12 @@
 import {Record} from "../core/data"
 import {makeConfig} from "../core/config"
-import {Subject, Value} from "../core/react"
+import {Emitter, Subject, Value} from "../core/react"
 import {ImageResolver} from "./style"
-import {Element, ElementConfig, ElementFactory, Prop, Root, RootConfig} from "./element"
-import * as B from "./box"
+import {Element, ElementConfig, ElementFactory, Prop, Sink, Root, RootConfig} from "./element"
+import * as X from "./box"
 import * as G from "./group"
 import * as T from "./text"
+import * as B from "./button"
 
 type ElemReg = {
   states :string[]
@@ -23,18 +24,29 @@ export type Theme = {
   elements :ElemDefs
 }
 
-type ModelElem = Value<any> | Model
+type ModelElem = Value<any> | Emitter<any> | Model
 export interface Model { [key :string] :ModelElem }
+
+function findModelElem (model :Model, path :string[], pos :number) :ModelElem {
+  const next = model[path[pos]]
+  if (!next) throw new Error(`Missing model element at pos ${pos} in ${path}`)
+  // TODO: would be nice if we could check the types here and freak out if we hit something
+  // weird along the way
+  else if (pos < path.length-1) return findModelElem(next as Model, path, pos+1)
+  else return next
+}
 
 export class UI implements ElementFactory {
   private protoStyles = new Map<string,Record>()
   private regs :{[key :string] :ElemReg} = {
     "box"   : {states: ["disabled"],
-               create: (f, p, c) => new B.Box(f, p, c as any as B.BoxConfig)},
+               create: (f, p, c) => new X.Box(f, p, c as any as X.BoxConfig)},
+    "column": {states: ["disabled"],
+               create: (f, p, c) => new G.Column(f, p, c as any as G.ColumnConfig)},
     "label" : {states: ["disabled"],
                create: (f, p, c) => new T.Label(f, p, c as any as T.LabelConfig)},
-    "column": {states: ["disabled"],
-               create: (f, p, c) => new G.Column(f, p, c as any as G.ColumnConfig)}
+    "button" : {states: ["pressed", "disabled"],
+               create: (f, p, c) => new B.Button(f, p, c as any as B.ButtonConfig)},
   }
 
   constructor (readonly theme :Theme, readonly model :Model, readonly resolver :ImageResolver) {}
@@ -51,16 +63,13 @@ export class UI implements ElementFactory {
   }
 
   resolveProp<T> (prop :Prop<T>) :Value<T> {
-    function findProp (model :Model, path :string[], pos :number) :Value<T> {
-      const next = model[path[pos]]
-      if (!next) throw new Error(`Missing model element at pos ${pos} in ${path}`)
-      // TODO: would be nice if we could check the types here and freak out if we hit something
-      // weird along the way
-      else if (pos < path.length-1) return findProp(next as Model, path, pos+1)
-      else return next as Value<T>
-    }
-    if (typeof prop === "string") return findProp(this.model, prop.split("."), 0)
+    if (typeof prop === "string") return findModelElem(this.model, prop.split("."), 0) as Value<T>
     else return prop
+  }
+
+  resolveSink<T> (sink :Sink<T>) :Emitter<T> {
+    if (typeof sink === "string") return findModelElem(this.model, sink.split("."), 0) as Emitter<T>
+    else return sink
   }
 
   resolveConfig<C extends ElementConfig> (config :C, xstates :string[]) :Record {

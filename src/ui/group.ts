@@ -1,4 +1,4 @@
-import {dim2, rect} from "../core/math"
+import {dim2, rect, vec2} from "../core/math"
 import {Element, ElementConfig, ElementFactory} from "./element"
 
 const tmpr = rect.create()
@@ -17,6 +17,13 @@ abstract class Group extends Element {
 
   render (canvas :CanvasRenderingContext2D) {
     for (const child of this.contents) child.render(canvas)
+  }
+
+  handleMouseDown (event :MouseEvent, pos :vec2) {
+    for (const cc of this.contents) {
+      if (rect.contains(cc.bounds, pos)) return cc.handleMouseDown(event, pos)
+    }
+    return undefined
   }
 
   dispose () {
