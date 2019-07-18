@@ -1,8 +1,9 @@
 import {vec2} from "tfw/core/math"
-import {Emitter, Subject, Mutable, Value} from "tfw/core/react"
+import {Emitter, Remover, Subject, Mutable, Value} from "tfw/core/react"
 import {loadImage} from "tfw/core/assets"
-import {Renderer, Texture, createTexture, imageToTexture} from "tfw/scene2/gl"
+import {Renderer} from "tfw/scene2/gl"
 import {UI} from "tfw/ui/ui"
+import {Host2} from "tfw/ui/host2"
 import {RenderFn} from "./index"
 
 const buttonCorner = 3
@@ -117,47 +118,35 @@ const model = {
 
 export function uiDemo (renderer :Renderer) :Subject<RenderFn> {
   return Subject.derive(disp => {
+    const cleanup :Remover[] = []
     const ui = new UI(theme, model, {resolveImage: loadImage})
-    const root = ui.createRoot({type: "root", scale: renderer.scale, ...config})
-    const canvas = root.pack(400, 400)
-    const texcfg = {...Texture.DefaultConfig, scale: renderer.scale}
-    const gltex = createTexture(renderer.glc, texcfg)
-    let tex = imageToTexture(renderer.glc, canvas, texcfg, gltex)
+    const host = new Host2(renderer)
+    cleanup.unshift(() => host.dispose())
+    host.bind(renderer.canvas)
+    cleanup.unshift(() => host.unbind(renderer.canvas))
 
     const rootOrigin = vec2.fromValues(10, 10)
-    const eventListener = (event :MouseEvent) => root.dispatchMouseEvent(event, rootOrigin)
-    renderer.canvas.addEventListener("mousedown", eventListener)
-    renderer.canvas.addEventListener("mousemove", eventListener)
-    renderer.canvas.addEventListener("mouseup", eventListener)
+    const root = ui.createRoot({type: "root", scale: renderer.scale, ...config})
+    root.pack(400, 400)
+    host.addRoot(root, rootOrigin)
 
-    const unlisten = model.button.target.onEmit(event => {
+    cleanup.unshift(model.button.target.onEmit(event => {
       if (event === "toggle") model.top.enabled.update(!model.top.enabled.current)
-    })
+    }))
 
     const uptime = () => model.middle.text.update(new Date().toLocaleTimeString())
     uptime()
     const timer = setInterval(uptime, 1000)
+    cleanup.unshift(() => clearInterval(timer))
 
     disp((clock, batch, surf) => {
-      // TODO: this needs to be more automatic; maybe pass a Stream<Clock> to Root?
-      if (root.validate()) {
-        root.render(root.ctx)
-        tex = imageToTexture(renderer.glc, root.canvas, texcfg, gltex)
-      }
+      host.update(clock)
       surf.begin()
       surf.clearTo(1, 1, 1, 1)
-      surf.draw(tex, rootOrigin, tex.size)
+      host.render(surf)
       surf.end()
     })
 
-    return () => {
-      renderer.canvas.removeEventListener("mousedown", eventListener)
-      renderer.canvas.removeEventListener("mousemove", eventListener)
-      renderer.canvas.removeEventListener("mouseup", eventListener)
-      unlisten()
-      root.dispose()
-      renderer.glc.deleteTexture(gltex)
-      clearInterval(timer)
-    }
+    return () => cleanup.forEach(r => r())
   })
 }

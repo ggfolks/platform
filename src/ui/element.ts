@@ -1,4 +1,5 @@
 import {Disposable} from "../core/util"
+import {Clock} from "../core/clock"
 import {dim2, rect, vec2} from "../core/math"
 import {Record} from "../core/data"
 import {Emitter, Mutable, Remover, Source, Value, NoopRemover} from "../core/react"
@@ -314,4 +315,59 @@ export class Root extends Element {
     canvas.style.height = `${this.height}px`
     this.contents.validate()
   }
+}
+
+/** Manages a collection of [[Root]]s: handles dispatching input and frame events, revalidating and
+  * rerendering. Client responsibilities:
+  * - [[bind]] (and [[unbind]]) to the canvas element in which the roots are rendered
+  * - call [[update]] on every animation frame
+  * - add manually created roots via [[addRoot]]
+  * - keep the root origins up to date with the locations at which the roots are rendered.
+  *
+  * Clients will generally not use this class directly but rather use the `Host2` or `Host3`
+  * subclasses which integrate more tightly with the `scene2` and `scene3` libraries. */
+export class Host implements Disposable {
+  private readonly onMouse = (event :MouseEvent) => this.handleMouseEvent(event)
+  protected readonly roots :[Root, vec2][] = []
+
+  addRoot (root :Root, origin :vec2) {
+    const ii = this.roots.length
+    this.roots.push([root, origin])
+    this.rootAdded(root, origin, ii)
+  }
+
+  bind (canvas :HTMLCanvasElement) {
+    canvas.addEventListener("mousedown", this.onMouse)
+    canvas.addEventListener("mousemove", this.onMouse)
+    canvas.addEventListener("mouseup", this.onMouse)
+  }
+
+  unbind (canvas :HTMLCanvasElement) {
+    canvas.removeEventListener("mousedown", this.onMouse)
+    canvas.removeEventListener("mousemove", this.onMouse)
+    canvas.removeEventListener("mouseup", this.onMouse)
+  }
+
+  handleMouseEvent (event :MouseEvent) {
+    for (const ro of this.roots) ro[0].dispatchMouseEvent(event, ro[1])
+  }
+
+  update (clock :Clock) {
+    let ii = 0
+    for (const ro of this.roots) {
+      const root = ro[0], origin = ro[1]
+      if (root.validate()) {
+        root.render(root.ctx)
+        this.rootUpdated(root, origin, ii)
+      }
+      ii += 1
+    }
+  }
+
+  dispose () {
+    for (const ro of this.roots) ro[0].dispose()
+  }
+
+  protected rootAdded (root :Root, origin :vec2, index :number) {}
+  protected rootUpdated (root :Root, origin :vec2, index :number) {}
 }
