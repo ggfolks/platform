@@ -1,11 +1,12 @@
-node_modules
+demo/node_modules
+demo/tsconfig.tsbuildinfo
 docs
-*/lib
-*/tsconfig.tsbuildinfo
 lib/core
 lib/entity
 lib/physics3
 lib/scene2
 lib/scene3
 lib/space
+lib/tsconfig.tsbuildinfo
 lib/ui
+src/node_modules
