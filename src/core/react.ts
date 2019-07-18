@@ -325,6 +325,7 @@ export abstract class Subject<T> extends Source<T> {
           }
         }
       }
+      toString () { return `Subject(${latest})` }
     }
     return new DerivedSubject()
   }
@@ -576,6 +577,8 @@ export abstract class Value<T> extends Subject<T> {
       })
     })
   }
+
+  toString () { return `Value(${this.current})` }
 }
 
 abstract class DerivedValue<T> extends Value<T> {
