@@ -9,6 +9,16 @@ export interface ImageResolver {
   resolveImage (path :string) :Subject<HTMLImageElement|Error>
 }
 
+let scratch2D :CanvasRenderingContext2D|null = null
+function requireScratch2D () :CanvasRenderingContext2D {
+  if (!scratch2D) {
+    const scratch = document.createElement("canvas")
+    scratch2D = scratch.getContext("2d")
+    if (!scratch2D) throw new Error(`Support for 2D canvas required`)
+  }
+  return scratch2D
+}
+
 //
 // Paint: color/gradient/pattern filling and stroking
 
@@ -104,6 +114,7 @@ function makeCSSColor (config? :ColorConfig) :string {
 
 class ColorPaint extends Paint {
   constructor (readonly color :string) { super() }
+
   prepStroke (canvas :CanvasRenderingContext2D) {
     canvas.strokeStyle = this.color
   }
@@ -113,31 +124,27 @@ class ColorPaint extends Paint {
 }
 
 class GradientPaint extends Paint {
-  private gradient? :CanvasGradient
-  constructor (readonly config :GradientPaintConfig) { super() }
+  private gradient :CanvasGradient
+
+  constructor (config :GradientPaintConfig) {
+    super()
+    const canvas = requireScratch2D()
+    if (config.type === "radial") {
+      const [x0, y0, r0] = config.start, [x1, y1, r1] = config.end
+      this.gradient = canvas.createRadialGradient(x0, y0, r0, x1, y1, r1)
+    } else {
+      const [x0, y0] = config.start, [x1, y1] = config.end
+      this.gradient = canvas.createLinearGradient(x0, y0, x1, y1)
+    }
+    (config.stops || []).forEach(
+      ([frac, color]) => this.gradient.addColorStop(frac, makeCSSColor(color)))
+  }
 
   prepStroke (canvas :CanvasRenderingContext2D) {
-    canvas.strokeStyle = this.prepStyle(canvas)
+    canvas.strokeStyle = this.gradient
   }
   prepFill (canvas :CanvasRenderingContext2D) {
-    canvas.fillStyle = this.prepStyle(canvas)
-  }
-
-  private prepStyle (canvas :CanvasRenderingContext2D) :CanvasGradient {
-    function make (config :GradientPaintConfig) :CanvasGradient {
-      let gradient :CanvasGradient
-      if (config.type === "radial") {
-        const [x0, y0, r0] = config.start, [x1, y1, r1] = config.end
-        gradient = canvas.createRadialGradient(x0, y0, r0, x1, y1, r1)
-      } else {
-        const [x0, y0] = config.start, [x1, y1] = config.end
-        gradient = canvas.createLinearGradient(x0, y0, x1, y1)
-      }
-      (config.stops || []).forEach(
-        ([frac, color]) => gradient.addColorStop(frac, makeCSSColor(color)))
-      return gradient
-    }
-    return this.gradient ? this.gradient : (this.gradient = make(this.config))
+    canvas.fillStyle = this.gradient
   }
 }
 
@@ -146,21 +153,20 @@ class GradientPaint extends Paint {
 // for the pattern, it's already 2x the size so we end up with a pattern that's 4x the size; I'm not
 // sure if this can be fixed without major hackery...
 class PatternPaint extends Paint {
-  private pattern? :CanvasPattern
-  constructor (readonly image :HTMLImageElement, readonly config :PatternPaintConfig) { super() }
+  private pattern :CanvasPattern
+
+  constructor (image :HTMLImageElement, config :PatternPaintConfig) {
+    super()
+    const pattern = requireScratch2D().createPattern(image, config.repeat || "repeat")
+    if (pattern) this.pattern = pattern
+    else throw new Error(`Failed to create pattern? [config=${JSON.stringify(config)}]`)
+  }
 
   prepStroke (canvas :CanvasRenderingContext2D) {
-    canvas.strokeStyle = this.prepStyle(canvas)
+    canvas.strokeStyle = this.pattern
   }
   prepFill (canvas :CanvasRenderingContext2D) {
-    canvas.fillStyle = this.prepStyle(canvas)
-  }
-
-  private prepStyle (canvas :CanvasRenderingContext2D) :CanvasPattern {
-    if (this.pattern) return this.pattern
-    const pattern = canvas.createPattern(this.image, this.config.repeat || "repeat")
-    if (pattern) return this.pattern = pattern
-    throw new Error(`Failed to create pattern? [config=${JSON.stringify(this.config)}]`)
+    canvas.fillStyle = this.pattern
   }
 }
 
@@ -219,16 +225,6 @@ function toCanvasFont (config :FontConfig) :string {
 //
 // Styled text
 
-let scratch2D :CanvasRenderingContext2D|null = null
-function requireScratch2D () :CanvasRenderingContext2D {
-  if (!scratch2D) {
-    const scratch = document.createElement("canvas")
-    scratch2D = scratch.getContext("2d")
-    if (!scratch2D) throw new Error(`Support for 2D canvas required`)
-  }
-  return scratch2D
-}
-
 /** A span of text in a particular style, all rendered in a single line. */
 export class Span {
   readonly size = dim2.create()
@@ -241,31 +237,31 @@ export class Span {
     readonly shadow? :ShadowConfig
   ) {
     if (!fill && !stroke) console.warn(`Span with neither fill nor stroke? [text=${text}]`)
-    const ctx = requireScratch2D()
-    this.prepCanvas(ctx)
-    const metrics = ctx.measureText(this.text)
+    const canvas = requireScratch2D()
+    this.prepCanvas(canvas)
+    const metrics = canvas.measureText(this.text)
     dim2.set(this.size, metrics.width, this.font.size)
-    this.resetCanvas(ctx)
+    this.resetCanvas(canvas)
   }
 
-  render (ctx :CanvasRenderingContext2D, x :number, y :number) {
-    this.prepCanvas(ctx)
+  render (canvas :CanvasRenderingContext2D, x :number, y :number) {
+    this.prepCanvas(canvas)
     const {fill, stroke, text} = this
-    fill && ctx.fillText(text, x, y)
-    stroke && ctx.strokeText(text, x, y)
-    this.resetCanvas(ctx)
+    fill && canvas.fillText(text, x, y)
+    stroke && canvas.strokeText(text, x, y)
+    this.resetCanvas(canvas)
   }
 
-  private prepCanvas (ctx :CanvasRenderingContext2D) {
-    ctx.textAlign = "start"
-    ctx.textBaseline = "top"
-    ctx.font = toCanvasFont(this.font)
-    this.fill && this.fill.prepFill(ctx)
-    this.stroke && this.stroke.prepStroke(ctx)
-    if (this.shadow) prepShadow(ctx, this.shadow)
+  private prepCanvas (canvas :CanvasRenderingContext2D) {
+    canvas.textAlign = "start"
+    canvas.textBaseline = "top"
+    canvas.font = toCanvasFont(this.font)
+    this.fill && this.fill.prepFill(canvas)
+    this.stroke && this.stroke.prepStroke(canvas)
+    if (this.shadow) prepShadow(canvas, this.shadow)
   }
-  private resetCanvas (ctx :CanvasRenderingContext2D) {
-    if (this.shadow) resetShadow(ctx)
+  private resetCanvas (canvas :CanvasRenderingContext2D) {
+    if (this.shadow) resetShadow(canvas)
   }
 }
 
