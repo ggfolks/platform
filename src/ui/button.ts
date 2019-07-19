@@ -1,6 +1,6 @@
 import {rect, vec2} from "../core/math"
 import {Emitter, Mutable, Value} from "../core/react"
-import {Element, ElementFactory, ElementState, MouseInteraction, Sink} from "./element"
+import {Element, ElementContext, ElementState, MouseInteraction, Sink} from "./element"
 import {BoxLikeConfig, BoxLike, BoxStyle} from "./box"
 
 export interface ButtonConfig extends BoxLikeConfig {
@@ -14,9 +14,9 @@ export class Button extends BoxLike {
   private _pressed = Mutable.local(false)
   private _target :Emitter<any>
 
-  constructor (fact :ElementFactory, parent :Element, readonly config :ButtonConfig) {
-    super(fact, parent, config)
-    this._target = fact.resolveSink(config.target)
+  constructor (ctx :ElementContext, parent :Element, readonly config :ButtonConfig) {
+    super(ctx, parent, config)
+    this._target = ctx.resolveSink(config.target)
     this._pressed.onValue(_ => this._state.update(this.computeState))
   }
 

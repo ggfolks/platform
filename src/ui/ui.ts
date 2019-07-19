@@ -1,8 +1,8 @@
 import {Record} from "../core/data"
 import {makeConfig} from "../core/config"
 import {Emitter, Subject, Value} from "../core/react"
-import {ImageResolver} from "./style"
-import {Element, ElementConfig, ElementFactory, Prop, Sink, Root, RootConfig} from "./element"
+import {StyleContext} from "./style"
+import {Element, ElementConfig, ElementContext, Prop, Sink, Root, RootConfig} from "./element"
 import * as X from "./box"
 import * as G from "./group"
 import * as T from "./text"
@@ -10,7 +10,7 @@ import * as B from "./button"
 
 type ElemReg = {
   states :string[]
-  create :(fact :ElementFactory, parent :Element, config :Record) => Element
+  create :(ctx :ElementContext, parent :Element, config :Record) => Element
 }
 
 type StyleDefs = {[key :string] :Record}
@@ -36,7 +36,7 @@ function findModelElem (model :Model, path :string[], pos :number) :ModelElem {
   else return next
 }
 
-export class UI implements ElementFactory {
+export class UI implements ElementContext {
   private protoStyles = new Map<string,Record>()
   private regs :{[key :string] :ElemReg} = {
     "box"   : {states: ["disabled"],
@@ -49,7 +49,7 @@ export class UI implements ElementFactory {
                create: (f, p, c) => new B.Button(f, p, c as any as B.ButtonConfig)},
   }
 
-  constructor (readonly theme :Theme, readonly model :Model, readonly resolver :ImageResolver) {}
+  constructor (readonly theme :Theme, readonly model :Model, readonly styleCtx :StyleContext) {}
 
   createRoot (config :RootConfig) :Root {
     return new Root(this, config)
@@ -83,7 +83,7 @@ export class UI implements ElementFactory {
   }
 
   resolveImage (path :string) :Subject<HTMLImageElement|Error> {
-    return this.resolver.resolveImage(path)
+    return this.styleCtx.resolveImage(path)
   }
 
   private resolveStyles (type :string, states :string[]) :Record {

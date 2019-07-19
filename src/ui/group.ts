@@ -1,5 +1,5 @@
 import {dim2, rect, vec2} from "../core/math"
-import {Element, ElementConfig, ElementFactory} from "./element"
+import {Element, ElementConfig, ElementContext} from "./element"
 
 const tmpr = rect.create()
 
@@ -10,9 +10,9 @@ interface GroupConfig extends ElementConfig {
 abstract class Group extends Element {
   readonly contents :Element[]
 
-  constructor (fact :ElementFactory, parent :Element, readonly config :GroupConfig) {
-    super(fact, parent, config)
-    this.contents = config.contents.map(cc => fact.createElement(this, cc))
+  constructor (ctx :ElementContext, parent :Element, readonly config :GroupConfig) {
+    super(ctx, parent, config)
+    this.contents = config.contents.map(cc => ctx.createElement(this, cc))
   }
 
   render (canvas :CanvasRenderingContext2D) {
@@ -138,8 +138,8 @@ export interface ColumnConfig extends AxisConfig {
 
 export class Column extends Group {
 
-  constructor (fact :ElementFactory, parent :Element, readonly config :ColumnConfig) {
-    super(fact, parent, config)
+  constructor (ctx :ElementContext, parent :Element, readonly config :ColumnConfig) {
+    super(ctx, parent, config)
   }
 
   protected computePreferredSize (hintX :number, hintY :number, into :dim2) {

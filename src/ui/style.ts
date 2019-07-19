@@ -2,10 +2,12 @@ import {dim2} from "../core/math"
 import {Color} from "../core/color"
 import {Subject, Value} from "../core/react"
 
-// Todo: ImageConfig = string | {source/path/url :string, scale :number} | ?
+// TODO?: ImageConfig = string | {source/path/url :string, scale :number} | ?
 
-export interface ImageResolver {
+/** Provides context information needed when resolving styles. */
+export interface StyleContext {
 
+  /** Resolves `path` into either a successful `<image>` element or an `Error`. */
   resolveImage (path :string) :Subject<HTMLImageElement|Error>
 }
 
@@ -89,13 +91,13 @@ export abstract class Paint {
   abstract prepFill (canvas :CanvasRenderingContext2D) :void
 }
 
-export function makePaint (resolver :ImageResolver, config :PaintConfig) :Subject<Paint> {
+export function makePaint (ctx :StyleContext, config :PaintConfig) :Subject<Paint> {
   const type :string = config.type
   switch (config.type) {
   case   "color": return Value.constant(new ColorPaint(makeCSSColor(config.color)))
   case  "linear":
   case  "radial": return Value.constant(new GradientPaint(config))
-  case "pattern": return resolver.resolveImage(config.image).map(img => {
+  case "pattern": return ctx.resolveImage(config.image).map(img => {
       if (img instanceof HTMLImageElement) return new PatternPaint(img, config)
       // TODO: return error pattern
       else return new ColorPaint("#FF0000")

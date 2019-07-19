@@ -4,7 +4,7 @@ import {dim2, rect, vec2} from "../core/math"
 import {Record} from "../core/data"
 import {Emitter, Mutable, Source, Value} from "../core/react"
 import {Scale} from "../core/ui"
-import {ImageResolver} from "./style"
+import {StyleContext} from "./style"
 
 const tmpr = rect.create()
 const tmpv = vec2.create()
@@ -47,8 +47,8 @@ export type Prop<T> = string | Value<T>
 /** Defines a path to an event emitter in a model, or an immediate emitter to be used. */
 export type Sink<T> = string | Emitter<T>
 
-/** Used to create runtime components from configuration data. */
-export interface ElementFactory extends ImageResolver {
+/** Gives elements access to their enclosing context. */
+export interface ElementContext extends StyleContext {
 
   /** Creates an element based on `config`. */
   createElement (parent :Element, config :ElementConfig) :Element
@@ -95,15 +95,15 @@ export abstract class Element implements Disposable {
   readonly visible :Value<boolean>
   readonly enabled :Value<boolean>
 
-  constructor (fact :ElementFactory,
+  constructor (ctx :ElementContext,
                readonly parent :Element|undefined,
                readonly config :ElementConfig) {
     this.noteDependentValue(this._state)
     if (!config.visible) this.visible = trueValue
-    else this.noteDependentValue(this.visible = fact.resolveProp(config.visible))
+    else this.noteDependentValue(this.visible = ctx.resolveProp(config.visible))
     if (!config.enabled) this.enabled = trueValue
     else {
-      this.enabled = fact.resolveProp(config.enabled)
+      this.enabled = ctx.resolveProp(config.enabled)
       this._onDispose.add(this.enabled.onValue(_ => this._state.update(this.computeState)))
     }
   }
@@ -222,17 +222,17 @@ export interface RootConfig extends ElementConfig {
 
 /** The top-level of the UI hierarchy. Manages the canvas into which the UI is rendered. */
 export class Root extends Element {
-  readonly canvas :HTMLCanvasElement = document.createElement("canvas")
-  readonly ctx :CanvasRenderingContext2D
+  readonly canvasElem :HTMLCanvasElement = document.createElement("canvas")
+  readonly canvas :CanvasRenderingContext2D
   readonly contents :Element
   private interacts :Array<MouseInteraction|undefined> = []
 
-  constructor (readonly fact :ElementFactory, readonly config :RootConfig) {
-    super(fact, undefined, config)
-    const ctx = this.canvas.getContext("2d")
-    if (ctx) this.ctx = ctx
+  constructor (readonly ctx :ElementContext, readonly config :RootConfig) {
+    super(ctx, undefined, config)
+    const canvas = this.canvasElem.getContext("2d")
+    if (canvas) this.canvas = canvas
     else throw new Error(`Canvas rendering context not supported?`)
-    this.contents = fact.createElement(this, config.contents)
+    this.contents = ctx.createElement(this, config.contents)
   }
 
   get root () :Root|undefined { return this }
@@ -240,8 +240,8 @@ export class Root extends Element {
   pack (width :number, height :number) :HTMLCanvasElement {
     this.setBounds(rect.set(tmpr, 0, 0, width, height))
     this.validate()
-    this.render(this.ctx)
-    return this.canvas
+    this.render(this.canvas)
+    return this.canvasElem
   }
 
   render (canvas :CanvasRenderingContext2D) {
@@ -305,7 +305,7 @@ export class Root extends Element {
 
   protected revalidate () {
     super.revalidate()
-    const canvas = this.canvas, toPixel = this.config.scale
+    const canvas = this.canvasElem, toPixel = this.config.scale
     canvas.width = Math.ceil(toPixel.scaled(this.width))
     canvas.height = Math.ceil(toPixel.scaled(this.height))
     canvas.style.width = `${this.width}px`
@@ -353,7 +353,7 @@ export class Host implements Disposable {
     for (const ro of this.roots) {
       const root = ro[0], origin = ro[1]
       if (root.validate()) {
-        root.render(root.ctx)
+        root.render(root.canvas)
         this.rootUpdated(root, origin, ii)
       }
       ii += 1

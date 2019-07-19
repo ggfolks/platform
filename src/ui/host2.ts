@@ -28,12 +28,12 @@ export class Host2 extends Host {
     const {glc, scale} = this.renderer
     const texcfg = {...Texture.DefaultConfig, scale: scale}
     const gltex = createTexture(glc, texcfg)
-    this.textures[index] = imageToTexture(glc, root.canvas, texcfg, gltex)
+    this.textures[index] = imageToTexture(glc, root.canvasElem, texcfg, gltex)
     console.log(`Root added ${this.textures[index]}`)
   }
 
   protected rootUpdated (root :Root, origin :vec2, index :number) {
     const otex = this.textures[index]
-    this.textures[index] = imageToTexture(this.renderer.glc, root.canvas, otex.config, otex.tex)
+    this.textures[index] = imageToTexture(this.renderer.glc, root.canvasElem, otex.config, otex.tex)
   }
 }

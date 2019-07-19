@@ -1,7 +1,7 @@
 import {rect, dim2, vec2} from "../core/math"
 import {Subject, Value} from "../core/react"
-import {Element, ElementConfig, ElementFactory, ElementStyle} from "./element"
-import {ImageResolver, PaintConfig, ShadowConfig, makePaint, prepShadow, resetShadow} from "./style"
+import {Element, ElementConfig, ElementContext, ElementStyle} from "./element"
+import {StyleContext, PaintConfig, ShadowConfig, makePaint, prepShadow, resetShadow} from "./style"
 
 const tmpr = rect.create()
 const tmpd = dim2.create()
@@ -86,8 +86,8 @@ export interface BackgroundConfig {
 }
 
 /** Creates a background based on the supplied `config`. */
-export function makeBackground (res :ImageResolver, config :BackgroundConfig) :Subject<Decoration> {
-  if (config.fill) return makePaint(res, config.fill).map(fill => {
+export function makeBackground (ctx :StyleContext, config :BackgroundConfig) :Subject<Decoration> {
+  if (config.fill) return makePaint(ctx, config.fill).map(fill => {
     const {cornerRadius, shadow} = config
     return (canvas, size) => {
       fill.prepFill(canvas)
@@ -126,8 +126,8 @@ export interface BorderConfig {
 }
 
 /** Creates a border based on the supplied `config`. */
-export function makeBorder (res :ImageResolver, config :BorderConfig) :Subject<Decoration> {
-  return makePaint(res, config.stroke).map(stroke => {
+export function makeBorder (ctx :StyleContext, config :BorderConfig) :Subject<Decoration> {
+  return makePaint(ctx, config.stroke).map(stroke => {
     const {cornerRadius, shadow} = config
     return (canvas, size) => {
       stroke.prepStroke(canvas)
@@ -181,14 +181,14 @@ export class BoxLike extends Element {
   private border = this.observe(NoopDecor)
   readonly contents :Element
 
-  constructor (fact :ElementFactory, parent :Element, readonly config :BoxLikeConfig) {
-    super(fact, parent, config)
-    this.contents = fact.createElement(this, config.contents)
+  constructor (ctx :ElementContext, parent :Element, readonly config :BoxLikeConfig) {
+    super(ctx, parent, config)
+    this.contents = ctx.createElement(this, config.contents)
     this._state.onValue(state => {
       const style = this.config.style[state]
-      if (style.background) this.background.observe(makeBackground(fact, style.background))
+      if (style.background) this.background.observe(makeBackground(ctx, style.background))
       else this.background.update(NoopDecor)
-      if (style.border) this.border.observe(makeBorder(fact, style.border))
+      if (style.border) this.border.observe(makeBorder(ctx, style.border))
       else this.border.update(NoopDecor)
     })
   }
@@ -246,8 +246,8 @@ export class BoxLike extends Element {
 
 /** Displays a single child with an optional background, padding, margin, and alignment. */
 export class Box extends BoxLike {
-  constructor (fact :ElementFactory, parent :Element, config :BoxConfig) {
-    super(fact, parent, config)
+  constructor (ctx :ElementContext, parent :Element, config :BoxConfig) {
+    super(ctx, parent, config)
   }
 
   handleMouseDown (event :MouseEvent, pos :vec2) {
