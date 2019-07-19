@@ -10,69 +10,6 @@ export interface ImageResolver {
 }
 
 //
-// Font rendering
-
-export type FontWeight = "normal" | "bold" | "bolder" | "lighter" | number
-export type FontStyle = "normal" | "italic" | "oblique"
-export type FontVariant = "normal" | "small-caps"
-
-export interface FontConfig {
-  family :string
-  size :number
-  weight? :FontWeight
-  style? :FontStyle
-  variant? :FontVariant
-}
-
-const DefaultFontConfig :FontConfig = {
-  family: "Helvetica",
-  size: 16
-}
-
-function toCanvasFont (config :FontConfig) :string {
-  const weight = config.weight || "normal"
-  const style = config.style || "normal"
-  const variant = config.variant || "normal"
-  return `${style} ${variant} ${weight} ${config.size}px ${config.family}`
-}
-
-export type DrawFn = (canvas :CanvasRenderingContext2D, x :number, y :number) => void
-
-export const NoopDrawFn :DrawFn = (canvas, x, y) => {}
-
-export class Font {
-  readonly cssFont :string
-
-  constructor (readonly config :FontConfig) {
-    this.cssFont = toCanvasFont(config)
-  }
-
-  measureText (canvas :CanvasRenderingContext2D, text :string, into :dim2) :DrawFn {
-    canvas.font = this.cssFont
-    const metrics = canvas.measureText(text)
-    into[0] = metrics.width
-    // TODO: blah, of course Firefox doesn't support anything but TM.width; we'll need to do a bunch
-    // of fucking around with CSS and hidden divs to measure text; le sigh...
-    into[1] = ('emHeightAscent' in metrics) ?
-      // TODO: we probably ultimately need to use actualBoundingBox here but then I'd like some way
-      // to configure multiple labels to share the same baseline even if they contain glyphs of
-      // differing heights
-      metrics.emHeightAscent + metrics.emHeightDescent :
-      this.config.size
-
-    return (canvas, x, y) => {
-      canvas.font = this.cssFont
-      const ascent = ("emHeightAscent" in metrics) ? metrics.emHeightAscent : this.config.size
-      canvas.fillText(text, x, y + ascent)
-    }
-  }
-}
-
-export function makeFont (config? :FontConfig) :Font {
-  return new Font(config || DefaultFontConfig)
-}
-
-//
 // Paint: color/gradient/pattern filling and stroking
 
 export type ColorConfig = string | Color
@@ -251,3 +188,85 @@ export function resetShadow (canvas :CanvasRenderingContext2D) {
   canvas.shadowOffsetY = 0
   canvas.shadowBlur = 0
 }
+
+//
+// Fonts
+
+export type FontWeight = "normal" | "bold" | "bolder" | "lighter" | number
+export type FontStyle = "normal" | "italic" | "oblique"
+export type FontVariant = "normal" | "small-caps"
+
+export interface FontConfig {
+  family :string
+  size :number
+  weight? :FontWeight
+  style? :FontStyle
+  variant? :FontVariant
+}
+
+const DefaultFontConfig :FontConfig = {
+  family: "Helvetica",
+  size: 16
+}
+
+function toCanvasFont (config :FontConfig) :string {
+  const weight = config.weight || "normal"
+  const style = config.style || "normal"
+  const variant = config.variant || "normal"
+  return `${style} ${variant} ${weight} ${config.size}px ${config.family}`
+}
+
+//
+// Styled text
+
+let scratch2D :CanvasRenderingContext2D|null = null
+function requireScratch2D () :CanvasRenderingContext2D {
+  if (!scratch2D) {
+    const scratch = document.createElement("canvas")
+    scratch2D = scratch.getContext("2d")
+    if (!scratch2D) throw new Error(`Support for 2D canvas required`)
+  }
+  return scratch2D
+}
+
+/** A span of text in a particular style, all rendered in a single line. */
+export class Span {
+  readonly size = dim2.create()
+
+  constructor (
+    readonly text :string,
+    readonly font :FontConfig,
+    readonly fill? :Paint,
+    readonly stroke? :Paint,
+    readonly shadow? :ShadowConfig
+  ) {
+    if (!fill && !stroke) console.warn(`Span with neither fill nor stroke? [text=${text}]`)
+    const ctx = requireScratch2D()
+    this.prepCanvas(ctx)
+    const metrics = ctx.measureText(this.text)
+    dim2.set(this.size, metrics.width, this.font.size)
+    this.resetCanvas(ctx)
+  }
+
+  render (ctx :CanvasRenderingContext2D, x :number, y :number) {
+    this.prepCanvas(ctx)
+    const {fill, stroke, text} = this
+    fill && ctx.fillText(text, x, y)
+    stroke && ctx.strokeText(text, x, y)
+    this.resetCanvas(ctx)
+  }
+
+  private prepCanvas (ctx :CanvasRenderingContext2D) {
+    ctx.textAlign = "start"
+    ctx.textBaseline = "top"
+    ctx.font = toCanvasFont(this.font)
+    this.fill && this.fill.prepFill(ctx)
+    this.stroke && this.stroke.prepStroke(ctx)
+    if (this.shadow) prepShadow(ctx, this.shadow)
+  }
+  private resetCanvas (ctx :CanvasRenderingContext2D) {
+    if (this.shadow) resetShadow(ctx)
+  }
+}
+
+export const EmptySpan = new Span("", DefaultFontConfig, undefined, DefaultPaint, undefined)

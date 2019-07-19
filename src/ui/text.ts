@@ -1,13 +1,13 @@
 import {dim2} from "../core/math"
-import {Value} from "../core/react"
+import {Subject, Value} from "../core/react"
 import {Element, ElementConfig, ElementFactory, ElementStyle, Prop} from "./element"
-import {FontConfig, Font, NoopDrawFn, makeFont} from "./style"
-import {DefaultPaint, PaintConfig, ShadowConfig, makePaint, prepShadow, resetShadow} from "./style"
+import {FontConfig, Span, EmptySpan} from "./style"
+import {PaintConfig, ShadowConfig, makePaint} from "./style"
 
 export interface LabelStyle extends ElementStyle {
   font :FontConfig
-  // TODO: stroke, make both stroke & fill optional & freak out if neither are set?
-  fill :PaintConfig
+  fill? :PaintConfig
+  stroke? :PaintConfig
   shadow? :ShadowConfig
 }
 
@@ -19,10 +19,7 @@ export interface LabelConfig extends ElementConfig {
 
 export class Label extends Element {
   readonly text :Value<string>
-  private font! :Font
-  private fill = this.observe(DefaultPaint)
-  private shadow? :ShadowConfig
-  private fillFn = NoopDrawFn
+  private span = this.observe(EmptySpan)
 
   constructor (fact :ElementFactory, parent :Element, readonly config :LabelConfig) {
     super(fact, parent, config)
@@ -30,24 +27,19 @@ export class Label extends Element {
     this.noteDependentValue(this.text)
     this._state.onValue(state => {
       const style = this.config.style[state]
-      this.font = makeFont(style.font)
-      this.shadow = style.shadow
-      this.fill.observe(makePaint(fact, style.fill))
+      const fillS = style.fill ? makePaint(fact, style.fill) : Value.constant(undefined)
+      const strokeS = style.stroke ? makePaint(fact, style.stroke) : Value.constant(undefined)
+      this.span.observe(Subject.join3(this.text, fillS, strokeS).map(
+        ([text, fill, stroke]) => new Span(text, style.font, fill, stroke, style.shadow)))
     })
   }
 
   render (canvas :CanvasRenderingContext2D) {
-    const shadow = this.shadow
-    this.fill.current.prepFill(canvas)
-    shadow && prepShadow(canvas, shadow)
-    this.fillFn(canvas, this.x, this.y)
-    shadow && resetShadow(canvas)
+    this.span.current.render(canvas, this.x, this.y)
   }
 
   protected computePreferredSize (hintX :number, hintY :number, into :dim2) {
-    const root = this.root
-    if (!root) throw new Error(`Cannot compute preferred size on unparented Label`)
-    this.fillFn = this.font.measureText(root.ctx, this.text.current, into)
+    dim2.copy(into, this.span.current.size)
   }
 
   protected relayout () {} // nothing needed

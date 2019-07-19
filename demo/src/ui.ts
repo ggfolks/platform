@@ -26,20 +26,14 @@ const theme = {
   },
 
   elements: {
-    base: {
+    label: {
       font: "$baseFont",
-      stroke: "$whitePaint",
       fill: "$blackPaint",
       disabled: {
-        stroke: "$lightGrayPaint",
         fill: "$darkGrayPaint",
       }
     },
-    label: {
-      parent: "base"
-    },
     button: {
-      parent: "base",
       padding: 10,
       border: {
         stroke: {type: "color", color: "#000000"},
