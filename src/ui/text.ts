@@ -1,6 +1,6 @@
 import {dim2} from "../core/math"
 import {Subject, Value} from "../core/react"
-import {Element, ElementConfig, ElementContext, ElementStyle, Prop} from "./element"
+import {Element, ElementConfig, ElementContext, ElementStyle} from "./element"
 import {FontConfig, Span, EmptySpan} from "./style"
 import {PaintConfig, ShadowConfig, makePaint} from "./style"
 
@@ -15,7 +15,7 @@ export interface LabelStyle extends ElementStyle {
 /** Defines configuration for [[Label]]. */
 export interface LabelConfig extends ElementConfig {
   type :"label"
-  text :Prop<string>
+  text :string|Value<string>
   style : {normal :LabelStyle, disabled :LabelStyle}
 }
 
@@ -26,7 +26,7 @@ export class Label extends Element {
 
   constructor (ctx :ElementContext, parent :Element, readonly config :LabelConfig) {
     super(ctx, parent, config)
-    this.text = ctx.resolveProp(config.text)
+    this.text = ctx.resolveModel(config.text)
     this.noteDependentValue(this.text)
     this._state.onValue(state => {
       const style = this.config.style[state]

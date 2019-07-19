@@ -1,8 +1,8 @@
 import {Record} from "../core/data"
 import {makeConfig} from "../core/config"
-import {Emitter, Subject, Value} from "../core/react"
+import {Source, Subject} from "../core/react"
 import {StyleContext} from "./style"
-import {Element, ElementConfig, ElementContext, Prop, Sink, Root, RootConfig} from "./element"
+import {Element, ElementConfig, ElementContext, Root, RootConfig} from "./element"
 import * as X from "./box"
 import * as G from "./group"
 import * as T from "./text"
@@ -24,7 +24,11 @@ export type Theme = {
   elements :ElemDefs
 }
 
-type ModelElem = Value<any> | Emitter<any> | Model
+type ModelElem = Source<any> | Model
+
+/** Defines the reactive data model for the UI. This is a POJO with potentially nested objects whose
+  * eventual leaf property values are reactive values which are displayed and/or updated by the UI
+  * components and the game/application logic. */
 export interface Model { [key :string] :ModelElem }
 
 function findModelElem (model :Model, path :string[], pos :number) :ModelElem {
@@ -62,14 +66,9 @@ export class UI implements ElementContext {
     return reg.create(this, parent, cfg)
   }
 
-  resolveProp<T> (prop :Prop<T>) :Value<T> {
-    if (typeof prop === "string") return findModelElem(this.model, prop.split("."), 0) as Value<T>
-    else return prop
-  }
-
-  resolveSink<T> (sink :Sink<T>) :Emitter<T> {
-    if (typeof sink === "string") return findModelElem(this.model, sink.split("."), 0) as Emitter<T>
-    else return sink
+  resolveModel<T, V extends Source<T>> (prop :string|V) :V {
+    return (typeof prop !== "string") ? prop :
+      findModelElem(this.model, prop.split("."), 0) as V
   }
 
   resolveConfig<C extends ElementConfig> (config :C, xstates :string[]) :Record {

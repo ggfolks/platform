@@ -2,7 +2,7 @@ import {Disposable, Disposer, Remover, NoopRemover} from "../core/util"
 import {Clock} from "../core/clock"
 import {dim2, rect, vec2} from "../core/math"
 import {Record} from "../core/data"
-import {Emitter, Mutable, Source, Value} from "../core/react"
+import {Mutable, Source, Value} from "../core/react"
 import {Scale} from "../core/ui"
 import {StyleContext} from "./style"
 
@@ -41,23 +41,15 @@ export class Observer<T> implements Disposable {
   }
 }
 
-/** Defines a path to a reactive property in a model, or an immediate value to be used. */
-export type Prop<T> = string | Value<T>
-
-/** Defines a path to an event emitter in a model, or an immediate emitter to be used. */
-export type Sink<T> = string | Emitter<T>
-
 /** Gives elements access to their enclosing context. */
 export interface ElementContext extends StyleContext {
 
   /** Creates an element based on `config`. */
   createElement (parent :Element, config :ElementConfig) :Element
 
-  /** Resolves the property `prop` via the UI model if appropriate. */
-  resolveProp<T> (prop :Prop<T>) :Value<T>
-
-  /** Resolves the event `sink` via the UI model if appropriate. */
-  resolveSink<T> (sink :Sink<T>) :Emitter<T>
+  /** Resolves the UI model element `elem`. The model element may be an immediate reactive value of
+    * the desired type or may be a path into the UI data model. */
+  resolveModel<T, V extends Source<T>> (elem :string|V) :V
 }
 
 /** Enumerates the states an [[Element]] can be in, i.e. `normal` or `disabled`. Elements may be
@@ -72,8 +64,8 @@ export interface ElementStyle {
 /** Configuration shared by all [[Element]]s. */
 export interface ElementConfig {
   type :string
-  visible? :Prop<boolean>
-  enabled? :Prop<boolean> // TODO: move to Widget/Control?
+  visible? :string|Value<boolean>
+  enabled? :string|Value<boolean> // TODO: move to Widget/Control?
   constraints? :Record
   style? :{[key in ElementState] :ElementStyle}
   // this allows ElementConfig to contain "extra" stuff that TypeScript will ignore; this is
@@ -100,10 +92,10 @@ export abstract class Element implements Disposable {
                readonly config :ElementConfig) {
     this.noteDependentValue(this._state)
     if (!config.visible) this.visible = trueValue
-    else this.noteDependentValue(this.visible = ctx.resolveProp(config.visible))
+    else this.noteDependentValue(this.visible = ctx.resolveModel(config.visible))
     if (!config.enabled) this.enabled = trueValue
     else {
-      this.enabled = ctx.resolveProp(config.enabled)
+      this.enabled = ctx.resolveModel(config.enabled)
       this._onDispose.add(this.enabled.onValue(_ => this._state.update(this.computeState)))
     }
   }
