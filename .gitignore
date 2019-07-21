@@ -3,6 +3,8 @@ demo/tsconfig.tsbuildinfo
 docs
 lib/core
 lib/entity
+lib/graph
+lib/input
 lib/physics3
 lib/scene2
 lib/scene3

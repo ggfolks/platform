@@ -18,12 +18,17 @@ import {Box, Heightfield, Shape, Sphere, Vec3} from "cannon"
 
 import {Clock} from "tfw/core/clock"
 import {Subject} from "tfw/core/react"
+import {Graph} from "tfw/graph/graph"
+import {registerMathNodes} from "tfw/graph/math"
+import {NodeTypeRegistry} from "tfw/graph/node"
 import {DenseValueComponent, Domain, Float32Component} from "tfw/entity/entity"
 import {Renderer} from "tfw/scene2/gl"
 import {TransformComponent} from "tfw/space/entity"
+import {registerSpaceNodes} from "tfw/space/node"
 import {MeshSystem} from "tfw/scene3/entity"
 import {generateHeightfield, createHeightfieldGeometry} from "tfw/scene3/terrain"
 import {PhysicsSystem} from "tfw/physics3/entity"
+import {registerInputNodes} from "tfw/input/node"
 import {RenderFn} from "./index"
 
 export function spaceDemo (renderer :Renderer) :Subject<RenderFn> {
@@ -107,13 +112,38 @@ export function spaceDemo (renderer :Renderer) :Subject<RenderFn> {
       trans.updatePosition(id, position)
     }
 
+    const avatarId = domain.add(econfig)
+    geom.update(avatarId, boxGeom)
+    trans.updatePosition(avatarId, position.set(0, 3, -10))
+
+    const nodes = new NodeTypeRegistry()
+    registerMathNodes(nodes)
+    registerSpaceNodes(nodes)
+    registerInputNodes(nodes)
+    const graph = new Graph(nodes, {domain}, {
+      left: {type: "key", code: 37},
+      right: {type: "key", code: 39},
+      direction: {type: "subtract", inputs: ["left", "right"]},
+      speed: {type: "constant", value: 2},
+      velocity: {type: "multiply", inputs: ["direction", "speed"]},
+      rotate: {
+        type: "rotate",
+        entity: avatarId,
+        component: "trans",
+        axis: new Vector3(0, 1, 0),
+        input: "velocity",
+      },
+    })
+
     disp((clock: Clock) => {
+      graph.update(clock)
       physicssys.update(clock)
       meshsys.update()
       webglRenderer.render(scene, camera)
     })
 
     return () => {
+      graph.dispose()
       sizeRemover()
       // restore 2d canvas
       root.removeChild(webglRenderer.domElement)
