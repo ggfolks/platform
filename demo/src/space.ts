@@ -3,6 +3,7 @@ import {
   BufferGeometry,
   Color,
   DirectionalLight,
+  Euler,
   Material,
   Math as ThreeMath,
   MeshToonMaterial,
@@ -115,6 +116,7 @@ export function spaceDemo (renderer :Renderer) :Subject<RenderFn> {
     const avatarId = domain.add(econfig)
     geom.update(avatarId, boxGeom)
     trans.updatePosition(avatarId, position.set(0, 3, -10))
+    trans.updateQuaternion(avatarId, new Quaternion().setFromEuler(new Euler(0, Math.PI, 0)))
 
     const nodes = new NodeTypeRegistry()
     registerMathNodes(nodes)
@@ -123,16 +125,17 @@ export function spaceDemo (renderer :Renderer) :Subject<RenderFn> {
     const graph = new Graph(nodes, {domain}, {
       left: {type: "key", code: 37},
       right: {type: "key", code: 39},
-      direction: {type: "subtract", inputs: ["left", "right"]},
-      speed: {type: "constant", value: 2},
-      velocity: {type: "multiply", inputs: ["direction", "speed"]},
-      rotate: {
-        type: "rotate",
-        entity: avatarId,
-        component: "trans",
-        axis: new Vector3(0, 1, 0),
-        input: "velocity",
-      },
+      leftRight: {type: "subtract", inputs: ["left", "right"]},
+      leftRightSpeed: {type: "constant", value: 2},
+      leftRightVelocity: {type: "multiply", inputs: ["leftRight", "leftRightSpeed"]},
+      rotate: {type: "rotate", entity: avatarId, component: "trans", y: "leftRightVelocity"},
+
+      fwd: {type: "key", code: 38},
+      back: {type: "key", code: 40},
+      fwdBack: {type: "subtract", inputs: ["fwd", "back"]},
+      fwdBackSpeed: {type: "constant", value: 2},
+      fwdBackVelocity: {type: "multiply", inputs: ["fwdBack", "fwdBackSpeed"]},
+      translate: {type: "translate", entity: avatarId, component: "trans", z: "fwdBackVelocity"},
     })
 
     disp((clock: Clock) => {
