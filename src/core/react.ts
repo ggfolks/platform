@@ -12,7 +12,7 @@ type Widen<T> =
 
 /** An equality function used to test whether values have actually changed during reactive value
   * propagation. */
-export type Eq<T> = (a:T,b:T) => boolean
+export type Eq<T> = (a:T, b:T) => boolean
 
 //
 // Listener plumbing
@@ -24,7 +24,6 @@ function addListener<T> (listeners :T[], listener :T) :Remover {
     if (ii >= 0) {
       listeners.splice(ii, 1)
     }
-    return (listeners.length == 0)
   }
 }
 

@@ -3,7 +3,7 @@ export type Remover = () => void
 
 /** A no-op remover thunk. This is useful when doing manual plumbing to avoid having to maintain a
   * potentially undefined remover thunk. */
-export const NoopRemover :Remover = () => true
+export const NoopRemover :Remover = () => {}
 
 /** An interface for things that maintain external resources and should be disposed when no longer
   * needed. */
