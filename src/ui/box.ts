@@ -1,7 +1,7 @@
 import {rect, dim2, vec2} from "../core/math"
 import {Subject, Value} from "../core/react"
 import {Element, ElementConfig, ElementContext, ElementStyle} from "./element"
-import {StyleContext, PaintConfig, ShadowConfig, makePaint, prepShadow, resetShadow} from "./style"
+import {StyleContext, Spec, PaintConfig, ShadowConfig} from "./style"
 
 const tmpr = rect.create()
 const tmpd = dim2.create()
@@ -67,11 +67,11 @@ export type FitConfig = "start"| "center"  | "end" | "stretch"
 /** Defines a background rendered behind a [[Box]]. */
 export interface BackgroundConfig {
   /** The paint used to fill this background (if it is a filled background). */
-  fill? :PaintConfig
+  fill? :Spec<PaintConfig>
   /** The corner radius if a filled background is used. */
   cornerRadius? :number // TODO: support [ul, ur, lr, ll] radii as well
   /** A shadow rendered behind this background. */
-  shadow? :ShadowConfig
+  shadow? :Spec<ShadowConfig>
   /** Defines an image which is rendered for the background. */
   image? :{
     /** The source URL for the image. Passed to the image resolver. */
@@ -87,12 +87,13 @@ export interface BackgroundConfig {
 
 /** Creates a background based on the supplied `config`. */
 export function makeBackground (ctx :StyleContext, config :BackgroundConfig) :Subject<Decoration> {
-  if (config.fill) return makePaint(ctx, config.fill).map(fill => {
-    const {cornerRadius, shadow} = config
+  if (config.fill) return ctx.resolvePaint(config.fill).map(fill => {
+    const cornerRadius = config.cornerRadius
+    const shadow = ctx.resolveShadowOpt(config.shadow)
     return (canvas, size) => {
       fill.prepFill(canvas)
       const w = size[0], h = size[1]
-      shadow && prepShadow(canvas, shadow)
+      shadow.prep(canvas)
       if (cornerRadius) {
         const midx = w/2, midy = h/2, maxx = w, maxy = h
         canvas.beginPath()
@@ -106,7 +107,7 @@ export function makeBackground (ctx :StyleContext, config :BackgroundConfig) :Su
       } else {
         canvas.fillRect(0, 0, w, h)
       }
-      shadow && resetShadow(canvas)
+      shadow.reset(canvas)
     }
   })
   // TODO
@@ -118,21 +119,22 @@ export function makeBackground (ctx :StyleContext, config :BackgroundConfig) :Su
 /** Defines a border rendered around a [[Box]]. */
 export interface BorderConfig {
   /** The paint used to stroke this border. */
-  stroke :PaintConfig
+  stroke :Spec<PaintConfig>
   /** The corner radius of the border. */
   cornerRadius? :number // TODO: support [ul, ur, lr, ll] radii as well
   /** A shadow rendered behind this border. */
-  shadow? :ShadowConfig
+  shadow? :Spec<ShadowConfig>
 }
 
 /** Creates a border based on the supplied `config`. */
 export function makeBorder (ctx :StyleContext, config :BorderConfig) :Subject<Decoration> {
-  return makePaint(ctx, config.stroke).map(stroke => {
-    const {cornerRadius, shadow} = config
+  return ctx.resolvePaint(config.stroke).map(stroke => {
+    const cornerRadius = config.cornerRadius
+    const shadow = ctx.resolveShadowOpt(config.shadow)
     return (canvas, size) => {
       stroke.prepStroke(canvas)
       const w = size[0], h = size[1]
-      shadow && prepShadow(canvas, shadow)
+      shadow.prep(canvas)
       if (cornerRadius) {
         const midx = w/2, midy = h/2, maxx = w, maxy = h
         canvas.beginPath()
@@ -146,7 +148,7 @@ export function makeBorder (ctx :StyleContext, config :BorderConfig) :Subject<De
       } else {
         canvas.strokeRect(0, 0, w, h)
       }
-      shadow && resetShadow(canvas)
+      shadow.reset(canvas)
     }
   })
 }

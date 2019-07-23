@@ -1,7 +1,7 @@
 import {Record} from "../core/data"
 import {makeConfig} from "../core/config"
 import {Source, Subject} from "../core/react"
-import {StyleContext} from "./style"
+import {StyleContext, StyleDefs} from "./style"
 import {Element, ElementConfig, ElementContext, Root, RootConfig} from "./element"
 import * as X from "./box"
 import * as G from "./group"
@@ -13,16 +13,8 @@ type ElemReg = {
   create :(ctx :ElementContext, parent :Element, config :Record) => Element
 }
 
-type StyleDefs = {[key :string] :Record}
+/** Default element configuration. */
 type ElemDefs = {[key :string] :Record}
-
-/** Defines the user interface "theme": default style configuration for all elements. */
-export type Theme = {
-  /** Shared style definitions. Substituted into element style configuration. */
-  styles :StyleDefs
-  /** Default element style configuration. */
-  elements :ElemDefs
-}
 
 type ModelElem = Source<any> | Model
 
@@ -40,7 +32,11 @@ function findModelElem (model :Model, path :string[], pos :number) :ModelElem {
   else return next
 }
 
-export class UI implements ElementContext {
+interface ImageResolver {
+  resolveImage (path :string) :Subject<HTMLImageElement|Error>
+}
+
+export class UI extends StyleContext implements ElementContext {
   private protoStyles = new Map<string,Record>()
   private regs :{[key :string] :ElemReg} = {
     "box"   : {states: ["disabled"],
@@ -53,7 +49,12 @@ export class UI implements ElementContext {
                create: (f, p, c) => new B.Button(f, p, c as any as B.ButtonConfig)},
   }
 
-  constructor (readonly theme :Theme, readonly model :Model, readonly styleCtx :StyleContext) {}
+  constructor (styles :StyleDefs,
+               private readonly elems :ElemDefs,
+               readonly model :Model,
+               readonly resolver :ImageResolver) {
+    super(styles)
+  }
 
   createRoot (config :RootConfig) :Root {
     return new Root(this, config)
@@ -76,60 +77,43 @@ export class UI implements ElementContext {
     const protoStyles = this.resolveStyles(config.type, states)
     let pconfig = {...config} as any as Record
     pconfig.style = pconfig.style ?
-      makeConfig([processStyles(this.theme.styles, pconfig.style as Record, states), protoStyles]) :
+      makeConfig([processStyles(this.styles, pconfig.style as Record, states), protoStyles]) :
       protoStyles
     return pconfig
   }
 
   resolveImage (path :string) :Subject<HTMLImageElement|Error> {
-    return this.styleCtx.resolveImage(path)
+    return this.resolver.resolveImage(path)
   }
 
   private resolveStyles (type :string, states :string[]) :Record {
-    function resolve (theme :Theme, type :string, protos :Record[]) {
-      const proto = theme.elements[type]
+    function resolve (elems :ElemDefs, styles :StyleDefs, type :string, protos :Record[]) {
+      const proto = elems[type]
       if (proto) {
         // pre-process the styles in our proto
         let pproto = {...proto}
         delete pproto["parent"]
-        pproto = processStyles(theme.styles, pproto as Record, states)
+        pproto = processStyles(styles, pproto as Record, states)
         protos.push(pproto)
         const parent = proto["parent"]
-        if (typeof parent === "string") resolve(theme, parent, protos)
+        if (typeof parent === "string") resolve(elems, styles, parent, protos)
       } // else: should we complain about missing proto?
       return protos
     }
     const proto = this.protoStyles.get(type)
     if (proto) return proto
-    const nproto = makeConfig(resolve(this.theme, type, []))
+    const nproto = makeConfig(resolve(this.elems, this.styles, type, []))
     this.protoStyles.set(type, nproto)
     return nproto
   }
 }
 
-function resolveDefs (defs :StyleDefs, source :Record, ignoreProps :string[]) :Record {
-  const target :Record = {}
-  for (let key in source) {
-    if (ignoreProps.includes(key)) continue
-    const value = source[key]
-    if (typeof value === "object") {
-      target[key] = resolveDefs(defs, value as Record, [])
-    } else if (typeof value === "string" && value.startsWith("$")) {
-      const defKey = value.substring(1)
-      const def = defs[defKey]
-      if (def) target[key] = def
-      else console.warn(`Unable to resolve style def '${defKey}'.`)
-    } else target[key] = value
-  }
-  return target
-}
-
 function processStyles (defs :StyleDefs, styles :Record, states: string[]) :Record {
-  const shared = resolveDefs(defs, styles, states)
+  const shared = {...styles}
+  for (const state of states) delete shared[state]
   const pstyles :Record = {}
   for (const state of states) {
-    const rstate = resolveDefs(defs, styles[state] as Record || {}, [])
-    pstyles[state] = makeConfig([rstate, shared], false)
+    pstyles[state] = makeConfig([styles[state] as Record, shared], false)
   }
   return pstyles
 }

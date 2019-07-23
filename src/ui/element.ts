@@ -75,7 +75,7 @@ export interface ElementConfig {
 }
 
 /** The basic building block of UIs. Elements have a bounds, are part of a UI hierarchy (have a
-  * parent, except for the root element), and participate in the cycle of invaldiation, validation
+  * parent, except for the root element), and participate in the cycle of invalidation, validation
   * and rendering. */
 export abstract class Element implements Disposable {
   protected readonly _bounds :rect = rect.create()

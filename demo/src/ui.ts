@@ -3,54 +3,57 @@ import {Disposer} from "tfw/core/util"
 import {Emitter, Subject, Mutable, Value} from "tfw/core/react"
 import {loadImage} from "tfw/core/assets"
 import {Renderer} from "tfw/scene2/gl"
+import {StyleDefs} from "tfw/ui/style"
 import {UI} from "tfw/ui/ui"
 import {Host2} from "tfw/ui/host2"
 import {RenderFn} from "./index"
 
 const buttonCorner = 3
 
-const theme = {
-  styles: {
-    baseFont: {family: "Helvetica", size: 16},
-
-    whitePaint: {type: "color", color: "#FFFFFF"},
-    lightGrayPaint: {type: "color", color: "#999999"},
-    darkGrayPaint: {type: "color", color: "#666666"},
-    blackPaint: {type: "color", color: "#000000"},
-
-    gradientPaint: {
+const styles :StyleDefs = {
+  colors: {},
+  shadows: {},
+  fonts: {
+    base: {family: "Helvetica", size: 16},
+  },
+  paints: {
+    white: {type: "color", color: "#FFFFFF"},
+    lightGray: {type: "color", color: "#999999"},
+    darkGray: {type: "color", color: "#666666"},
+    black: {type: "color", color: "#000000"},
+    gradient: {
       type: "linear", start: [0, 0], end: [0, 100],
       stops: [[0, "#99FFCC"], [0.5, "#CC99FF"], [1, "#99CCFF"]]
     },
-    flappyPatternPaint: {type: "pattern", image: "flappy.png"},
-  },
+    flappy: {type: "pattern", image: "flappy.png"},
+  }
+}
 
-  elements: {
-    label: {
-      font: "$baseFont",
-      fill: "$blackPaint",
-      disabled: {
-        fill: "$darkGrayPaint",
-      }
-    },
-    button: {
-      padding: 10,
-      border: {
-        stroke: {type: "color", color: "#000000"},
-        cornerRadius: buttonCorner,
-      },
-      background: {
-        fill: {type: "color", color: "#99CCFF"},
-        cornerRadius: buttonCorner,
-        shadow: {offsetX: 2, offsetY: 2, blur: 5, color: "#000000"}
-      },
-      pressed: {
-        background: {fill: {type: "color", color: "#77AADD"}, cornerRadius: buttonCorner},
-      },
-      disabled: {
-        background: {fill: {type: "color", color: "#CC9966"}, cornerRadius: buttonCorner}
-      },
+const elements = {
+  label: {
+    font: "$base",
+    fill: "$black",
+    disabled: {
+      fill: "$darkGray",
     }
+  },
+  button: {
+    padding: 10,
+    border: {
+      stroke: {type: "color", color: "#000000"},
+      cornerRadius: buttonCorner,
+    },
+    background: {
+      fill: {type: "color", color: "#99CCFF"},
+      cornerRadius: buttonCorner,
+      shadow: {offsetX: 2, offsetY: 2, blur: 5, color: "#000000"}
+    },
+    pressed: {
+      background: {fill: {type: "color", color: "#77AADD"}, cornerRadius: buttonCorner},
+    },
+    disabled: {
+      background: {fill: {type: "color", color: "#CC9966"}, cornerRadius: buttonCorner}
+    },
   }
 }
 
@@ -82,7 +85,7 @@ const config = {
       type: "box",
       constraints: {stretch: true},
       contents: {type: "label", text: "middle.text", style: {font: {size: 24}}},
-      style: {background: {fill: "$gradientPaint"}}
+      style: {background: {fill: "$gradient"}}
     }, {
       type: "box",
       constraints: {stretch: true},
@@ -92,7 +95,7 @@ const config = {
         event: "toggle",
         contents: {type: "label", text: "button.text"},
       },
-      style: {background: {fill: "$flappyPatternPaint", cornerRadius: 10}}
+      style: {background: {fill: "$flappy", cornerRadius: 10}}
     }],
   },
 }
@@ -100,7 +103,7 @@ const config = {
 const model = {
   top: {
     text: Value.constant("Top"), // TODO: if model contains raw value, wrap in Value.constant?
-    enabled: Mutable.local(false)
+    enabled: Mutable.local(true)
   },
   middle: {
     text: Mutable.local("Time")
@@ -114,7 +117,7 @@ const model = {
 export function uiDemo (renderer :Renderer) :Subject<RenderFn> {
   return Subject.derive(disp => {
     const cleanup = new Disposer()
-    const ui = new UI(theme, model, {resolveImage: loadImage})
+    const ui = new UI(styles, elements, model, {resolveImage: loadImage})
     const host = new Host2(renderer)
     cleanup.add(host)
     // TODO: this will go away if Host2 does it automatically

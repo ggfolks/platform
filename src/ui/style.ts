@@ -2,13 +2,60 @@ import {dim2} from "../core/math"
 import {Color} from "../core/color"
 import {Subject, Value} from "../core/react"
 
+type Defs<C> = {[key :string]: C}
+
+/** Defines styles which can be referenced by name in element configuration. */
+export interface StyleDefs {
+  colors  :Defs<ColorConfig>
+  shadows :Defs<ShadowConfig>
+  fonts   :Defs<FontConfig>
+  paints  :Defs<PaintConfig>
+}
+
+const SpecPrefix = "$"
+
+/** Defines either an "immediate" style configuration or the id of style def. */
+export type Spec<T> = string | T
+
 // TODO?: ImageConfig = string | {source/path/url :string, scale :number} | ?
 
-/** Provides context information needed when resolving styles. */
-export interface StyleContext {
+function readDef<C> (type :string, defs :Defs<C>, id :string) :C {
+  const config = defs[id.substring(1)]
+  if (config) return config
+  throw new Error(`Missing ${type} style def '${id}'`)
+}
+
+/** Provides style definitions for use when resolving styles, and other needed context. */
+export abstract class StyleContext {
+
+  constructor (readonly styles :StyleDefs) {}
+
+  resolveColor (spec :Spec<ColorConfig>) :string {
+    if (typeof spec !== "string" || !spec.startsWith(SpecPrefix)) return makeCSSColor(spec)
+    else return makeCSSColor(readDef("color", this.styles.colors, spec))
+  }
+
+  resolveShadow (spec :Spec<ShadowConfig>) :Shadow {
+    const config = (typeof spec !== "string") ? spec : readDef("shadow", this.styles.shadows, spec)
+    return new Shadow(config.offsetX, config.offsetY, config.blur, this.resolveColor(config.color))
+  }
+
+  resolveShadowOpt (spec :Spec<ShadowConfig>|undefined) :Shadow {
+    return spec ? this.resolveShadow(spec) : NoShadow
+  }
+
+  resolveFont (spec :Spec<FontConfig>) :FontConfig {
+    if (typeof spec !== "string") return spec
+    else return readDef("font", this.styles.fonts, spec)
+  }
+
+  resolvePaint (spec :Spec<PaintConfig>) :Subject<Paint> {
+    if (typeof spec !== "string") return makePaint(this, spec)
+    else return makePaint(this, readDef("paint", this.styles.paints, spec))
+  }
 
   /** Resolves `path` into either a successful `<image>` element or an `Error`. */
-  resolveImage (path :string) :Subject<HTMLImageElement|Error>
+  abstract resolveImage (path :string) :Subject<HTMLImageElement|Error>
 }
 
 let scratch2D :CanvasRenderingContext2D|null = null
@@ -24,16 +71,17 @@ function requireScratch2D () :CanvasRenderingContext2D {
 //
 // Paint: color/gradient/pattern filling and stroking
 
+// TODO: also allow JS array [a,r,g,b]? (Color is a float32array)
 export type ColorConfig = string | Color
 
 /** Configures a paint that uses a single color. */
 export interface ColorPaintConfig {
   type :"color"
-  color :ColorConfig
+  color :Spec<ColorConfig>
 }
 
 /** Defines a color stop for a linear or radial gradient. */
-export type ColorStop = [number, ColorConfig]
+export type ColorStop = [number, Spec<ColorConfig>]
 
 // TODO: gradient configurations are specified in absolute pixel coordinates which is problematic;
 // you don't know how big a space you'll need to fill until your widget is laid out, and you
@@ -94,9 +142,9 @@ export abstract class Paint {
 export function makePaint (ctx :StyleContext, config :PaintConfig) :Subject<Paint> {
   const type :string = config.type
   switch (config.type) {
-  case   "color": return Value.constant(new ColorPaint(makeCSSColor(config.color)))
+  case   "color": return Value.constant(new ColorPaint(ctx.resolveColor(config.color)))
   case  "linear":
-  case  "radial": return Value.constant(new GradientPaint(config))
+  case  "radial": return Value.constant(new GradientPaint(ctx, config))
   case "pattern": return ctx.resolveImage(config.image).map(img => {
       if (img instanceof HTMLImageElement) return new PatternPaint(img, config)
       // TODO: return error pattern
@@ -105,7 +153,7 @@ export function makePaint (ctx :StyleContext, config :PaintConfig) :Subject<Pain
   }
   // though TypeScript thinks we're safe here, our data may have been coerced from a config object,
   // so we need to handle the unexpected case
-  throw new Error(`Unknown paint type '${type}'`)
+  throw new Error(`Unknown paint type '${type}' (in ${JSON.stringify(config)})`)
 }
 
 function makeCSSColor (config? :ColorConfig) :string {
@@ -128,7 +176,7 @@ class ColorPaint extends Paint {
 class GradientPaint extends Paint {
   private gradient :CanvasGradient
 
-  constructor (config :GradientPaintConfig) {
+  constructor (ctx :StyleContext, config :GradientPaintConfig) {
     super()
     const canvas = requireScratch2D()
     if (config.type === "radial") {
@@ -139,7 +187,7 @@ class GradientPaint extends Paint {
       this.gradient = canvas.createLinearGradient(x0, y0, x1, y1)
     }
     (config.stops || []).forEach(
-      ([frac, color]) => this.gradient.addColorStop(frac, makeCSSColor(color)))
+      ([frac, color]) => this.gradient.addColorStop(frac, ctx.resolveColor(color)))
   }
 
   prepStroke (canvas :CanvasRenderingContext2D) {
@@ -181,21 +229,26 @@ export interface ShadowConfig {
   offsetX :number
   offsetY :number
   blur :number
-  color :ColorConfig
+  color :Spec<ColorConfig>
 }
 
-export function prepShadow (canvas :CanvasRenderingContext2D, config :ShadowConfig) {
-  canvas.shadowOffsetX = config.offsetX
-  canvas.shadowOffsetY = config.offsetY
-  canvas.shadowBlur = config.blur
-  canvas.shadowColor = makeCSSColor(config.color)
+export class Shadow {
+  constructor (readonly ox :number, readonly oy :number, readonly blur :number, readonly color :string) {}
+
+  prep (canvas :CanvasRenderingContext2D) {
+    canvas.shadowOffsetX = this.ox
+    canvas.shadowOffsetY = this.oy
+    canvas.shadowBlur = this.blur
+    canvas.shadowColor = this.color
+  }
+  reset (canvas :CanvasRenderingContext2D) {
+    canvas.shadowOffsetX = 0
+    canvas.shadowOffsetY = 0
+    canvas.shadowBlur = 0
+  }
 }
 
-export function resetShadow (canvas :CanvasRenderingContext2D) {
-  canvas.shadowOffsetX = 0
-  canvas.shadowOffsetY = 0
-  canvas.shadowBlur = 0
-}
+export const NoShadow = new Shadow(0, 0, 0, "white")
 
 //
 // Fonts
@@ -212,7 +265,7 @@ export interface FontConfig {
   variant? :FontVariant
 }
 
-const DefaultFontConfig :FontConfig = {
+export const DefaultFontConfig :FontConfig = {
   family: "Helvetica",
   size: 16
 }
@@ -236,7 +289,7 @@ export class Span {
     readonly font :FontConfig,
     readonly fill? :Paint,
     readonly stroke? :Paint,
-    readonly shadow? :ShadowConfig
+    readonly shadow? :Shadow
   ) {
     if (!fill && !stroke) console.warn(`Span with neither fill nor stroke? [text=${text}]`)
     const canvas = requireScratch2D()
@@ -260,10 +313,10 @@ export class Span {
     canvas.font = toCanvasFont(this.font)
     this.fill && this.fill.prepFill(canvas)
     this.stroke && this.stroke.prepStroke(canvas)
-    if (this.shadow) prepShadow(canvas, this.shadow)
+    if (this.shadow) this.shadow.prep(canvas)
   }
   private resetCanvas (canvas :CanvasRenderingContext2D) {
-    if (this.shadow) resetShadow(canvas)
+    if (this.shadow) this.shadow.reset(canvas)
   }
 }
 
