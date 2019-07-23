@@ -440,7 +440,10 @@ export abstract class Value<T> extends Subject<T> {
     return (new JoinedValue([a, b, c]) as any) as Value<[A,B,C]>
   }
 
-  constructor (readonly eq :Eq<T>) { super() }
+  constructor (
+    /** The function used to test new values for equality with old values. */
+    readonly eq :Eq<T>
+  ) { super() }
 
   /** The current value contained by this value. */
   abstract get current () :T
