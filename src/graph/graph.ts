@@ -1,7 +1,7 @@
 import {Clock} from "../core/clock"
 import {Emitter, Value} from "../core/react"
 import {Disposable} from "../core/util"
-import {InputEdge, InputEdges, Node, NodeConfig, NodeContext, NodeTypeRegistry} from "./node"
+import {InputEdge, InputEdges, Node, NodeConfig, NodeContext} from "./node"
 
 /** Configuration for a graph. */
 export interface GraphConfig {
@@ -14,9 +14,9 @@ export class Graph implements Disposable {
 
   private _nodes :Map<string, Node> = new Map()
 
-  constructor (types :NodeTypeRegistry, readonly ctx :NodeContext, config :GraphConfig) {
+  constructor (readonly ctx :NodeContext, config :GraphConfig) {
     for (let id in config) {
-      this._nodes.set(id, types.createNode(this, id, config[id]))
+      this._nodes.set(id, ctx.types.createNode(this, id, config[id]))
     }
     for (const node of this._nodes.values()) {
       node.connect()

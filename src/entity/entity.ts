@@ -1,6 +1,10 @@
+import {Clock} from "../core/clock"
 import {BitSet} from "../core/util"
 import {vec2} from "../core/math"
 import {Stream, Emitter} from "../core/react"
+import {Graph} from "../graph/graph"
+import {NodeContext} from "../graph/node"
+import {EntityNodeContext} from "./node"
 
 export type ID = number
 
@@ -429,5 +433,32 @@ export class System {
 
   protected deleted (id :ID) {
     this._ids.delete(id)
+  }
+}
+
+/** Handles entities with behavior graphs. */
+export class GraphSystem extends System {
+  private _ctx :EntityNodeContext
+
+  constructor (ctx :NodeContext, domain :Domain, readonly graph :Component<Graph>) {
+    super(domain, Matcher.hasC(graph.id))
+    this._ctx = Object.create(ctx)
+    this._ctx.domain = domain
+  }
+
+  update (clock :Clock) {
+    this.onEntities(id => this.graph.read(id).update(clock))
+  }
+
+  protected added (id :ID, config :EntityConfig) {
+    super.added(id, config)
+    const subctx = Object.create(this._ctx)
+    subctx.entityId = id
+    this.graph.update(id, new Graph(subctx, config.components[this.graph.id]))
+  }
+
+  protected deleted (id :ID) {
+    this.graph.read(id).dispose()
+    super.deleted(id)
   }
 }

@@ -24,13 +24,13 @@ class Rotate extends EntityComponentNode<TransformComponent> {
     const y = this.graph.getValue(this.config.y)
     const z = this.graph.getValue(this.config.z)
     this._removers.push(this.graph.clock.onValue(clock => {
-      component.readQuaternion(this.config.entity, quaternion)
+      component.readQuaternion(this._entityId, quaternion)
       quaternion.multiply(rotation.setFromEuler(euler.set(
         x.current * clock.dt,
         y.current * clock.dt,
         z.current * clock.dt,
       )))
-      component.updateQuaternion(this.config.entity, quaternion)
+      component.updateQuaternion(this._entityId, quaternion)
     }))
   }
 }
@@ -57,13 +57,13 @@ class Translate extends EntityComponentNode<TransformComponent> {
     const y = this.graph.getValue(this.config.y)
     const z = this.graph.getValue(this.config.z)
     this._removers.push(this.graph.clock.onValue(clock => {
-      component.readPosition(this.config.entity, position)
-      component.readQuaternion(this.config.entity, quaternion)
+      component.readPosition(this._entityId, position)
+      component.readQuaternion(this._entityId, quaternion)
       vector
         .set(x.current, y.current, z.current)
         .multiplyScalar(clock.dt)
         .applyQuaternion(quaternion)
-      component.updatePosition(this.config.entity, position.add(vector))
+      component.updatePosition(this._entityId, position.add(vector))
     }))
   }
 }

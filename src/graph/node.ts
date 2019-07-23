@@ -21,6 +21,7 @@ export type InputEdges = undefined | NodeOutput[]
 
 /** Base interface for node contexts. */
 export interface NodeContext {
+  types :NodeTypeRegistry
   // this allows NodeContext to contain "extra" stuff that TypeScript will ignore
   [extra :string] :any
 }
@@ -58,6 +59,12 @@ interface NodeConstructor<T extends NodeConfig> {
 /** Maintains a mapping from string node types to constructors. */
 export class NodeTypeRegistry {
   private _constructors :Map<string, NodeConstructor<NodeConfig>> = new Map()
+
+  constructor (...regs :((registry :NodeTypeRegistry) => void)[]) {
+    for (const reg of regs) {
+      reg(this)
+    }
+  }
 
   /** Registers a node type constructor. */
   registerNodeType<T extends NodeConfig> (type :string, constructor :NodeConstructor<T>) {

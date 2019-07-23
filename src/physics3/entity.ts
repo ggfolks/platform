@@ -1,67 +1,91 @@
-import {Body, Shape, World} from "cannon"
+import {Body, Box, Heightfield, Sphere, Vec3, World} from "cannon"
 
 import {Clock} from "../core/clock"
-import {arrayContentsRefEquals} from "../core/data"
-import {Component, Domain, ID, Matcher, System} from "../entity/entity"
+import {Component, Domain, EntityConfig, ID, Matcher, System} from "../entity/entity"
 import {TransformComponent} from "../space/entity"
+
+/** Configures the shapes and mass of a physical body. */
+export interface BodyConfig {
+  shapes :ShapeConfig[]
+  mass? :number
+}
+
+/** Base class for shape configs. */
+export interface ShapeConfig {
+  type :string
+}
+
+/** A configuration for a sphere shape. */
+export interface SphereConfig {
+  type :"sphere"
+}
+
+/** A configuration for a box shape. */
+export interface BoxConfig {
+  type :"box"
+}
+
+/** A configuration for a heightfield shape. */
+export interface HeightfieldConfig {
+  type :"heightfield"
+  data :Float32Array[]
+  elementSize :number
+}
 
 /** Manages a group of physical bodies. Users of this system must call [[PhysicsSystem.update]] on
  * every frame. */
 export class PhysicsSystem extends System {
   readonly world :World = new World()
 
-  private _bodies :Map<ID, Body> = new Map()
-
   constructor (domain :Domain,
                readonly trans :TransformComponent,
-               readonly shapes :Component<Shape[]>,
-               readonly mass :Component<number>) {
-    super(domain, Matcher.hasAllC(trans.id, shapes.id, mass.id))
+               readonly body :Component<Body>) {
+    super(domain, Matcher.hasAllC(trans.id, body.id))
   }
 
   update (clock :Clock) {
     this.onEntities(id => {
-      const shapes = this.shapes.read(id)
-      let body = this._bodies.get(id)
-      if (!(body && arrayContentsRefEquals(shapes, body.shapes))) {
-        body && this.world.remove(body)
-        this.world.addBody(body = new Body({mass: 1}))
-        this._bodies.set(id, body)
-        for (let shape of shapes) {
-          body.addShape(shape)
-        }
-      }
-      const mass = this.mass.read(id)
-      if (mass !== body.mass) {
-        body.mass = mass
-        body.updateMassProperties()
-      }
       // Cannon vectors/quaternions have same fields as Three.js ones
+      const body = this.body.read(id)
       this.trans.readPosition(id, body.position as any)
       this.trans.readQuaternion(id, body.quaternion as any)
     })
     this.world.step(clock.dt)
     this.onEntities(id => {
-      const body = this._requireBody(id)
+      const body = this.body.read(id)
       this.trans.updatePosition(id, body.position as any)
       this.trans.updateQuaternion(id, body.quaternion as any)
     })
   }
 
-  protected deleted (id :ID) {
-    super.deleted(id)
-    const body = this._bodies.get(id)
-    if (body) {
-      this.world.remove(body)
-      this._bodies.delete(id)
+  protected added (id :ID, config :EntityConfig) {
+    super.added(id, config)
+    const bodyConfig :BodyConfig = config.components[this.body.id]
+    const body = new Body({mass: bodyConfig.mass || 0})
+    for (const shape of bodyConfig.shapes) {
+      body.addShape(createShape(shape))
     }
+    this.body.update(id, body)
+    this.world.addBody(body)
   }
 
-  private _requireBody (id :ID) {
-    const body = this._bodies.get(id)
-    if (!body) {
-      throw new Error(`Missing body for entity ${id}`)
-    }
-    return body;
+  protected deleted (id :ID) {
+    this.world.remove(this.body.read(id))
+    super.deleted(id)
+  }
+}
+
+function createShape (config :ShapeConfig) {
+  switch (config.type) {
+    case "sphere":
+      return new Sphere(1)
+    case "box":
+      return new Box(new Vec3(0.5, 0.5, 0.5))
+    case "heightfield":
+      const hfConfig = config as HeightfieldConfig
+      // @ts-ignore data is number[][], not number[]
+      return new Heightfield(hfConfig.data, {elementSize: hfConfig.elementSize})
+    default:
+      throw new Error("Unknown shape type: " + config.type)
   }
 }
