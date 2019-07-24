@@ -1,7 +1,6 @@
 import {Value} from "../core/react"
-import {ElementConfig} from "./element"
 import {StyleDefs} from "./style"
-import {UI} from "./ui"
+import {UI, Theme} from "./ui"
 
 const styles :StyleDefs = {
   colors: {},
@@ -9,6 +8,7 @@ const styles :StyleDefs = {
   fonts: {
     base: {family: "Helvetica", size: 16},
     bold: {family: "Helvetica", size: 16, weight: "bold"},
+    italic: {family: "Helvetica", size: 16, style: "italic"},
   },
   paints: {
     white: {type: "color", color: "#FFFFFF"},
@@ -21,31 +21,27 @@ const styles :StyleDefs = {
     },
     flappy: {type: "pattern", image: "flappy.png"},
   },
+  borders: {},
+  backgrounds: {}
 }
 
-const elements = {
-  base: {
-    font: "$base",
-    normal: {
-      stroke: "$white",
-      fill: "$black",
+const theme :Theme = {
+  default: {
+    label: {
+      font: "$base",
+      normal: {
+        stroke: "$white",
+        fill: "$black",
+      },
+      disabled: {
+        stroke: "$lightGray",
+        fill: "$darkGray",
+      }
     },
-    disabled: {
-      stroke: "$lightGray",
-      fill: "$darkGray",
-    }
-  },
-  label: {
-    parent: "base"
   },
   button: {
-    parent: "base",
-    padding: 5,
-    normal: {
-      background: {fill: {type: "color", color: "#FFCC99"}}
-    },
-    disabled: {
-      background: {fill: {type: "color", color: "#CC9966"}}
+    label: {
+      pressed: {font: "$bold"}
     },
   }
 }
@@ -54,20 +50,16 @@ const noopResolver = {
   resolveImage: (path :string) => Value.constant(new Error("unsupported"))
 }
 
-test("config resolution", () => {
-  const ui = new UI(styles, elements, {}, noopResolver)
+test("style resolution", () => {
+  const ui = new UI(styles, theme, {}, noopResolver)
 
-  const bconfig :ElementConfig = {type: "button", style: {
-    stroke: "$lightGray",
-    pressed: {font: "$bold"}
-  }} as any
-  const config :any = ui.resolveConfig(bconfig, ["disabled", "pressed"])
-  // console.dir(config)
-
-  expect(config.style.normal.font).toEqual("$base")
-  expect(config.style.disabled.font).toEqual("$base")
-  expect(config.style.pressed.font).toEqual("$bold")
-
-  expect(config.style.normal.background.fill.color).toEqual("#FFCC99")
-  expect(config.style.disabled.background.fill.color).toEqual("#CC9966")
+  const lstyles = {stroke: "$lightGray", disabled: {font: "$italic"}}
+  const scope = {id: "button", states: ["normal", "disabled", "pressed"]}
+  const rstyles :any = ui.resolveStyles(scope, "label", lstyles)
+  // comes from label styles in default context
+  expect(rstyles.normal.font).toEqual("$base")
+  // comes from our "immediate" element styles
+  expect(rstyles.disabled.font).toEqual("$italic")
+  // comes from label styles in button context
+  expect(rstyles.pressed.font).toEqual("$bold")
 })

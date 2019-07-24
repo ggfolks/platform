@@ -6,10 +6,12 @@ type Defs<C> = {[key :string]: C}
 
 /** Defines styles which can be referenced by name in element configuration. */
 export interface StyleDefs {
-  colors  :Defs<ColorConfig>
-  shadows :Defs<ShadowConfig>
-  fonts   :Defs<FontConfig>
-  paints  :Defs<PaintConfig>
+  colors      :Defs<ColorConfig>
+  shadows     :Defs<ShadowConfig>
+  fonts       :Defs<FontConfig>
+  paints      :Defs<PaintConfig>
+  borders     :Defs<BorderConfig>
+  backgrounds :Defs<BackgroundConfig>
 }
 
 const SpecPrefix = "$"
@@ -39,7 +41,6 @@ export abstract class StyleContext {
     const config = (typeof spec !== "string") ? spec : readDef("shadow", this.styles.shadows, spec)
     return new Shadow(config.offsetX, config.offsetY, config.blur, this.resolveColor(config.color))
   }
-
   resolveShadowOpt (spec :Spec<ShadowConfig>|undefined) :Shadow {
     return spec ? this.resolveShadow(spec) : NoShadow
   }
@@ -47,6 +48,21 @@ export abstract class StyleContext {
   resolveFont (spec :Spec<FontConfig>) :FontConfig {
     if (typeof spec !== "string") return spec
     else return readDef("font", this.styles.fonts, spec)
+  }
+  resolveFontOpt (spec :Spec<FontConfig>|undefined) :FontConfig {
+    return spec ? this.resolveFont(spec) : DefaultFontConfig
+  }
+
+  // TODO: we should probably cache resolved borders, bgs & paints
+
+  resolveBorder (spec :Spec<BorderConfig>) :Subject<Decoration> {
+    if (typeof spec !== "string") return makeBorder(this, spec)
+    else return makeBorder(this, readDef("border", this.styles.borders, spec))
+  }
+
+  resolveBackground (spec :Spec<BackgroundConfig>) :Subject<Decoration> {
+    if (typeof spec !== "string") return makeBackground(this, spec)
+    else return makeBackground(this, readDef("background", this.styles.backgrounds, spec))
   }
 
   resolvePaint (spec :Spec<PaintConfig>) :Subject<Paint> {
@@ -275,6 +291,108 @@ function toCanvasFont (config :FontConfig) :string {
   const style = config.style || "normal"
   const variant = config.variant || "normal"
   return `${style} ${variant} ${weight} ${config.size}px ${config.family}`
+}
+
+//
+// Backgrounds and borders
+
+/** A decoration (border or background) is simply a rendering function. The canvas will be
+  * translated such that `0, 0` is the upper left of the region into which the decoration should be
+  * rendered, and `size` indicates its size. */
+export type Decoration = (canvas :CanvasRenderingContext2D, size :dim2) => void
+
+/** A decoration that renders nothing. */
+export const NoopDecor :Decoration = (canvas, size) => {}
+
+export type FitConfig = "start"| "center"  | "end" | "stretch"
+
+/** Defines a background rendered behind a [[Box]]. */
+export interface BackgroundConfig {
+  /** The paint used to fill this background (if it is a filled background). */
+  fill? :Spec<PaintConfig>
+  /** The corner radius if a filled background is used. */
+  cornerRadius? :number // TODO: support [ul, ur, lr, ll] radii as well
+  /** A shadow rendered behind this background. */
+  shadow? :Spec<ShadowConfig>
+  /** Defines an image which is rendered for the background. */
+  image? :{
+    /** The source URL for the image. Passed to the image resolver. */
+    source :string
+    /** The fit for the image on both x and y axes. Defaults to `center`. */
+    fit? :FitConfig
+    /** The fit for the image on the x axis. Supercedes `fit`, defaults to `center`. */
+    fitX? :FitConfig
+    /** The fit for the image on the y axis. Supercedes `fit`, defaults to `center`. */
+    fitY? :FitConfig
+  }
+}
+
+/** Creates a background based on the supplied `config`. */
+export function makeBackground (ctx :StyleContext, config :BackgroundConfig) :Subject<Decoration> {
+  if (config.fill) return ctx.resolvePaint(config.fill).map(fill => {
+    const cornerRadius = config.cornerRadius
+    const shadow = ctx.resolveShadowOpt(config.shadow)
+    return (canvas, size) => {
+      fill.prepFill(canvas)
+      const w = size[0], h = size[1]
+      shadow.prep(canvas)
+      if (cornerRadius) {
+        const midx = w/2, midy = h/2, maxx = w, maxy = h
+        canvas.beginPath()
+        canvas.moveTo(0, midy)
+        canvas.arcTo(0, 0, midx, 0, cornerRadius)
+        canvas.arcTo(maxx, 0, maxx, midy, cornerRadius)
+        canvas.arcTo(maxx, maxy, midx, maxy, cornerRadius)
+        canvas.arcTo(0, maxy, 0, midy, cornerRadius)
+        canvas.closePath()
+        canvas.fill()
+      } else {
+        canvas.fillRect(0, 0, w, h)
+      }
+      shadow.reset(canvas)
+    }
+  })
+  // TODO
+  else if (config.image) return Value.constant(NoopDecor)
+  // TODO: log a warning?
+  else return Value.constant(NoopDecor)
+}
+
+/** Defines a border rendered around a [[Box]]. */
+export interface BorderConfig {
+  /** The paint used to stroke this border. */
+  stroke :Spec<PaintConfig>
+  /** The corner radius of the border. */
+  cornerRadius? :number // TODO: support [ul, ur, lr, ll] radii as well
+  /** A shadow rendered behind this border. */
+  shadow? :Spec<ShadowConfig>
+}
+
+/** Creates a border based on the supplied `config`. */
+export function makeBorder (ctx :StyleContext, config :BorderConfig) :Subject<Decoration> {
+  return ctx.resolvePaint(config.stroke).map(stroke => {
+    const cornerRadius = config.cornerRadius
+    const shadow = ctx.resolveShadowOpt(config.shadow)
+    return (canvas, size) => {
+      stroke.prepStroke(canvas)
+      const w = size[0], h = size[1]
+      shadow.prep(canvas)
+      if (cornerRadius) {
+        const midx = w/2, midy = h/2, maxx = w, maxy = h
+        canvas.beginPath()
+        canvas.moveTo(0, midy)
+        canvas.arcTo(0, 0, midx, 0, cornerRadius)
+        canvas.arcTo(maxx, 0, maxx, midy, cornerRadius)
+        canvas.arcTo(maxx, maxy, midx, maxy, cornerRadius)
+        canvas.arcTo(0, maxy, 0, midy, cornerRadius)
+        canvas.closePath()
+        canvas.stroke()
+      } else {
+        canvas.strokeRect(0, 0, w, h)
+      }
+      shadow.reset(canvas)
+    }
+  })
 }
 
 //

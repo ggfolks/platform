@@ -52,10 +52,6 @@ export interface ElementContext extends StyleContext {
   resolveModel<T, V extends Source<T>> (elem :string|V) :V
 }
 
-/** Enumerates the states an [[Element]] can be in, i.e. `normal` or `disabled`. Elements may be
-  * styled differently depending on their state. */
-export type ElementState = "normal" | "disabled"
-
 /** Defines the style configurations for an [[Element]]. */
 export interface ElementStyle {
   // nothing shared by all elements
@@ -65,14 +61,23 @@ export interface ElementStyle {
 export interface ElementConfig {
   type :string
   visible? :string|Value<boolean>
-  enabled? :string|Value<boolean> // TODO: move to Widget/Control?
   constraints? :Record
-  style? :{[key in ElementState] :ElementStyle}
   // this allows ElementConfig to contain "extra" stuff that TypeScript will ignore; this is
   // necessary to allow a subtype of ElementConfig to be supplied where a container element wants
   // some sort of ElementConfig; we can only plumb sharp types so deep
   [extra :string] :any
 }
+
+/** Used to define "scoped" styles for controls. A button for example defines the `button` scope,
+  * and elements that are rendered inside a button are styled according to the `button` scope. */
+export type StyleScope = {
+  id :string
+  states :string[]
+}
+
+const DefaultState = "normal"
+const DefaultStyleScope = {id: "default", states: [DefaultState]}
+const rootState = Value.constant(DefaultState)
 
 /** The basic building block of UIs. Elements have a bounds, are part of a UI hierarchy (have a
   * parent, except for the root element), and participate in the cycle of invalidation, validation
@@ -80,24 +85,16 @@ export interface ElementConfig {
 export abstract class Element implements Disposable {
   protected readonly _bounds :rect = rect.create()
   protected readonly _psize :dim2 = dim2.fromValues(-1, -1)
-  protected _state = Mutable.local("normal") as Mutable<ElementState> // TODO: meh
-  protected _valid = Mutable.local(false)
-  protected _onDispose = new Disposer()
+  protected readonly _valid = Mutable.local(false)
+  protected readonly disposer = new Disposer()
 
+  readonly parent :Element|undefined
   readonly visible :Value<boolean>
-  readonly enabled :Value<boolean>
 
-  constructor (ctx :ElementContext,
-               readonly parent :Element|undefined,
-               readonly config :ElementConfig) {
-    this.noteDependentValue(this._state)
-    if (!config.visible) this.visible = trueValue
-    else this.noteDependentValue(this.visible = ctx.resolveModel(config.visible))
-    if (!config.enabled) this.enabled = trueValue
-    else {
-      this.enabled = ctx.resolveModel(config.enabled)
-      this._onDispose.add(this.enabled.onValue(_ => this._state.update(this.computeState)))
-    }
+  constructor (ctx :ElementContext, parent :Element|undefined, config :ElementConfig) {
+    this.parent = parent
+    this.visible = config.visible ? ctx.resolveModel(config.visible) : trueValue
+    this.invalidateOnChange(this.visible)
   }
 
   get x () :number { return this._bounds[0] }
@@ -106,9 +103,12 @@ export abstract class Element implements Disposable {
   get height () :number { return this._bounds[3] }
   get bounds () :rect { return this._bounds }
 
-  get valid () :Value<boolean> { return this._valid }
-
+  abstract get config () :ElementConfig
+  get styleScope () :StyleScope { return this.parent ? this.parent.styleScope : DefaultStyleScope }
   get root () :Root|undefined { return this.parent ? this.parent.root : undefined }
+  get valid () :Value<boolean> { return this._valid }
+  // all elements except Root have a parent, so rootState is only used for Roots
+  get state () :Value<string> { return this.parent ? this.parent.state : rootState }
 
   pos (into :vec2) :vec2 {
     into[0] = this.x
@@ -160,28 +160,19 @@ export abstract class Element implements Disposable {
   }
 
   dispose () {
-    this._onDispose.dispose()
+    this.disposer.dispose()
   }
 
   toString () {
     return `${this.constructor.name}@${this._bounds}`
   }
 
-  // note: to type this properly, Element would need to be parameterized on the type of its state so
-  // that subclasses could parameterize themselves on an extension of that state; but this would
-  // leak irrelevant type machinery out to users of Element which is definitely not worth it, so
-  // instead we just force subclasses to cast their extended state back to ElementState and rely on
-  // them handling their extended state in the appropriate places
-  protected get computeState () :ElementState {
-    return this.enabled.current ? "normal" : "disabled"
-  }
-
-  protected noteDependentValue (value :Source<any>) {
-    this._onDispose.add(value.onValue(_ => this.invalidate()))
+  protected invalidateOnChange (value :Source<any>) {
+    this.disposer.add(value.onEmit(_ => this.invalidate()))
   }
 
   protected observe<T> (initial :T) :Observer<T> {
-    return this._onDispose.add(new Observer(this, initial))
+    return this.disposer.add(new Observer(this, initial))
   }
 
   protected revalidate () {
@@ -190,6 +181,64 @@ export abstract class Element implements Disposable {
 
   protected abstract computePreferredSize (hintX :number, hintY :number, into :dim2) :void
   protected abstract relayout () :void
+}
+
+const ControlStyleScope = {id: "control", states: [DefaultState, "disabled"]}
+
+/** Configuration shared by all [[Control]]s. */
+export interface ControlConfig extends ElementConfig {
+  enabled? :string|Value<boolean>
+  contents :ElementConfig
+}
+
+/** Controls are [[Element]]s that can be interacted with. They can be enabled or disabled and
+  * generally support some sort of mouse/touch/keyboard interactions. Controls are also generally
+  * composite elements, combining one or more "visualization" elements. For example, a `Button`
+  * combines a `Box` with an `Icon` and/or `Label` (and a `Group` if both an icon and label are
+  * used) to visualize the button, and `Button` handles interactions. */
+export class Control extends Element {
+  protected readonly _state = Mutable.local("normal")
+  protected readonly enabled :Value<boolean>
+  protected readonly contents :Element
+
+  constructor (ctx :ElementContext, parent :Element|undefined, readonly config :ControlConfig) {
+    super(ctx, parent, config)
+    if (!config.enabled) this.enabled = trueValue
+    else {
+      this.enabled = ctx.resolveModel(config.enabled)
+      this.disposer.add(this.enabled.onValue(_ => this._state.update(this.computeState)))
+    }
+    this.contents = ctx.createElement(this, config.contents)
+  }
+
+  get styleScope () :StyleScope { return ControlStyleScope }
+  get state () :Value<string> { return this._state }
+
+  render (canvas :CanvasRenderingContext2D) {
+    this.contents.render(canvas)
+  }
+
+  dispose () {
+    super.dispose()
+    this.contents.dispose()
+  }
+
+  protected get computeState () :string {
+    return this.enabled.current ? "normal" : "disabled"
+  }
+
+  protected computePreferredSize (hintX :number, hintY :number, into :dim2) {
+    dim2.copy(into, this.contents.preferredSize(hintX, hintY))
+  }
+
+  protected relayout () {
+    this.contents.setBounds(this._bounds)
+  }
+
+  protected revalidate () {
+    super.revalidate()
+    this.contents.validate()
+  }
 }
 
 /** Encapsulates a mouse interaction with an element. When the mouse button is pressed over an

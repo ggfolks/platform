@@ -5,7 +5,7 @@ import {Spec, FontConfig, PaintConfig, ShadowConfig, Span, EmptySpan} from "./st
 
 /** Defines the styles that apply to [[Label]]. */
 export interface LabelStyle extends ElementStyle {
-  font :Spec<FontConfig>
+  font? :Spec<FontConfig>
   fill? :Spec<PaintConfig>
   stroke? :Spec<PaintConfig>
   shadow? :Spec<ShadowConfig>
@@ -15,24 +15,24 @@ export interface LabelStyle extends ElementStyle {
 export interface LabelConfig extends ElementConfig {
   type :"label"
   text :string|Value<string>
-  style : {normal :LabelStyle, disabled :LabelStyle}
+  style :{normal :LabelStyle, disabled :LabelStyle}
 }
 
 /** Displays styled text. */
 export class Label extends Element {
-  readonly text :Value<string>
-  private span = this.observe(EmptySpan)
+  private readonly span = this.observe(EmptySpan)
+  private readonly text :Value<string>
 
   constructor (ctx :ElementContext, parent :Element, readonly config :LabelConfig) {
     super(ctx, parent, config)
     this.text = ctx.resolveModel(config.text)
-    this.noteDependentValue(this.text)
-    this._state.onValue(state => {
+    this.invalidateOnChange(this.text)
+    this.state.onValue(state => {
       const style = this.config.style[state]
       const fillS = style.fill ? ctx.resolvePaint(style.fill) : Value.constant(undefined)
       const strokeS = style.stroke ? ctx.resolvePaint(style.stroke) : Value.constant(undefined)
       this.span.observe(Subject.join3(this.text, fillS, strokeS).map(([text, fill, stroke]) => {
-        const font = ctx.resolveFont(style.font)
+        const font = ctx.resolveFontOpt(style.font)
         const shadow = ctx.resolveShadowOpt(style.shadow)
         return new Span(text, font, fill, stroke, shadow)
       }))

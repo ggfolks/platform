@@ -26,35 +26,44 @@ const styles :StyleDefs = {
       stops: [[0, "#99FFCC"], [0.5, "#CC99FF"], [1, "#99CCFF"]]
     },
     flappy: {type: "pattern", image: "flappy.png"},
-  }
-}
-
-const elements = {
-  label: {
-    font: "$base",
-    fill: "$black",
-    disabled: {
-      fill: "$darkGray",
-    }
   },
-  button: {
-    padding: 10,
-    border: {
+  borders: {
+    button: {
       stroke: {type: "color", color: "#000000"},
       cornerRadius: buttonCorner,
-    },
-    background: {
+    }
+  },
+  backgrounds: {
+    buttonNormal: {
       fill: {type: "color", color: "#99CCFF"},
       cornerRadius: buttonCorner,
       shadow: {offsetX: 2, offsetY: 2, blur: 5, color: "#000000"}
     },
-    pressed: {
-      background: {fill: {type: "color", color: "#77AADD"}, cornerRadius: buttonCorner},
-    },
-    disabled: {
-      background: {fill: {type: "color", color: "#CC9966"}, cornerRadius: buttonCorner}
-    },
+    buttonPressed: {fill: {type: "color", color: "#77AADD"}, cornerRadius: buttonCorner},
+    buttonDisabled: {fill: {type: "color", color: "#CC9966"}, cornerRadius: buttonCorner},
   }
+}
+
+const theme = {
+  default: {
+    label: {
+      font: "$base",
+      fill: "$black",
+      disabled: {
+        fill: "$darkGray",
+      }
+    },
+  },
+  control: {},
+  button: {
+    box: {
+      padding: 10,
+      border: "$button",
+      background: "$buttonNormal",
+      disabled: {background: "$buttonDisabled"},
+      pressed: {background: "$buttonPressed"},
+    },
+  },
 }
 
 const config = {
@@ -63,24 +72,26 @@ const config = {
     offPolicy: "stretch",
     gap: 10,
     contents: [{
-      type: "box",
+      type: "control",
       enabled: "top.enabled",
       constraints: {stretch: true},
       contents: {
-        type: "label",
-        enabled: "top.enabled",
-        text: "top.text",
-        style: {
-          font: {size: 32, weight: "bold"},
-          normal: {
-            shadow: {offsetX: 4, offsetY: 4, blur: 5, color: "#666666"}
+        type: "box",
+        contents: {
+          type: "label",
+          text: "top.text",
+          style: {
+            font: {size: 32, weight: "bold"},
+            normal: {
+              shadow: {offsetX: 4, offsetY: 4, blur: 5, color: "#666666"}
+            }
           }
+        },
+        style: {
+          normal: {background: {fill: {type: "color", color: "#FFCC99"}, cornerRadius: 10}},
+          disabled: {background: {fill: {type: "color", color: "#CCFF99"}, cornerRadius: 10}}
         }
       },
-      style: {
-        normal: {background: {fill: {type: "color", color: "#FFCC99"}, cornerRadius: 10}},
-        disabled: {background: {fill: {type: "color", color: "#CCFF99"}, cornerRadius: 10}}
-      }
     }, {
       type: "box",
       constraints: {stretch: true},
@@ -93,7 +104,10 @@ const config = {
         type: "button",
         target: "button.target",
         event: "toggle",
-        contents: {type: "label", text: "button.text"},
+        contents: {
+          type: "box",
+          contents: {type: "label", text: "button.text"},
+        },
       },
       style: {background: {fill: "$flappy", cornerRadius: 10}}
     }],
@@ -117,7 +131,7 @@ const model = {
 export function uiDemo (renderer :Renderer) :Subject<RenderFn> {
   return Subject.derive(disp => {
     const cleanup = new Disposer()
-    const ui = new UI(styles, elements, model, {resolveImage: loadImage})
+    const ui = new UI(styles, theme, model, {resolveImage: loadImage})
     const host = new Host2(renderer)
     cleanup.add(host)
     // TODO: this will go away if Host2 does it automatically
