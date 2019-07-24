@@ -19,7 +19,14 @@ class EntityNode extends Node {
   }
 
   protected get _entityId () {
-    return this.config.entityId === undefined ? this.graph.ctx.entityId : this.config.entityId
+    if (this.config.entityId !== undefined) {
+      return this.config.entityId
+    }
+    const ctx = this.graph.ctx as EntityNodeContext
+    if (ctx.entityId === undefined) {
+      throw new Error("Missing entity id")
+    }
+    return ctx.entityId
   }
 }
 
@@ -39,17 +46,6 @@ export class EntityComponentNode<T> extends EntityNode {
     const ctx = this.graph.ctx as EntityNodeContext
     const component = ctx.domain.component(this.config.component) as unknown
     this._connectComponent(component as T)
-  }
-
-  protected get _entityId () {
-    if (this.config.entityId !== undefined) {
-      return this.config.entityId
-    }
-    const ctx = this.graph.ctx as EntityNodeContext
-    if (ctx.entityId === undefined) {
-      throw new Error("Missing entity id")
-    }
-    return ctx.entityId
   }
 
   protected _connectComponent (component :T) {}

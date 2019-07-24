@@ -446,6 +446,7 @@ export class GraphSystem extends System {
     this._ctx.domain = domain
   }
 
+  /** Updates the state of the graph system.  Should be called once per frame. */
   update (clock :Clock) {
     this.onEntities(id => this.graph.read(id).update(clock))
   }
