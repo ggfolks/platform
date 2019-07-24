@@ -23,7 +23,8 @@ export class Disposer implements Disposable {
 
   /** Adds `disp` to be disposed. */
   add<D extends ToDispose> (disp :D) :D {
-    this.list.unshift(disp)
+    // minor optimization: no need to add noop remover; we know it does nothing
+    if (disp !== NoopRemover) this.list.unshift(disp)
     return disp
   }
 
