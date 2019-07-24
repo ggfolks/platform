@@ -26,7 +26,6 @@ export class Label extends Element {
   constructor (ctx :ElementContext, parent :Element, readonly config :LabelConfig) {
     super(ctx, parent, config)
     this.text = ctx.resolveModel(config.text)
-    this.invalidateOnChange(this.text)
     this.state.onValue(state => {
       const style = this.config.style[state]
       const fillS = style.fill ? ctx.resolvePaint(style.fill) : Value.constant(undefined)
