@@ -1,4 +1,3 @@
-import {Value} from "../core/react"
 import {Graph} from "../graph/graph"
 import {Node, NodeConfig, NodeTypeRegistry} from "../graph/node"
 import {Keyboard} from "./keyboard"
@@ -13,7 +12,7 @@ class Key extends Node {
 
   constructor (graph :Graph, id :string, readonly config :KeyConfig) { super(graph, id, config) }
 
-  getDefaultOutput () :Value<number> {
+  getOutput () {
     return Keyboard.instance.getKeyState(this.config.code).map(Number)
   }
 }

@@ -14,7 +14,7 @@ class Constant extends Node {
     super(graph, id, config)
   }
 
-  getDefaultOutput () {
+  getOutput () {
     return Value.constant(this.config.value)
   }
 }
@@ -30,7 +30,7 @@ class Operator extends Node {
     super(graph, id, config)
   }
 
-  getDefaultOutput () {
+  getOutput () {
     return this.graph.getValues(this.config.inputs).map(values => this._apply(values))
   }
 
@@ -85,9 +85,31 @@ class Multiply extends Operator {
   }
 }
 
+/** Emits a random number. */
+export interface RandomConfig extends NodeConfig {
+  type :"random"
+  min :number
+  max :number
+}
+
+class Random extends Node {
+  private _output = Value
+    .fromStreamRef(this.graph.clock, {time: 0, elapsed: 0, dt: 0})
+    .map(clock => Math.random() * (this.config.max - this.config.min) + this.config.min)
+
+  constructor (graph :Graph, id :string, readonly config :RandomConfig) {
+    super(graph, id, config)
+  }
+
+  getOutput () {
+    return this._output
+  }
+}
+
 /** Registers the nodes in this module with the supplied registry. */
 export function registerMathNodes (registry :NodeTypeRegistry) {
   registry.registerNodeType("constant", Constant)
   registry.registerNodeType("subtract", Subtract)
   registry.registerNodeType("multiply", Multiply)
+  registry.registerNodeType("random", Random)
 }

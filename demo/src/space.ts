@@ -144,16 +144,22 @@ export function spaceDemo (renderer :Renderer) :Subject<RenderFn> {
           fwdBackVelocity: {type: "multiply", inputs: ["fwdBack", "fwdBackSpeed"]},
           translate: {type: "translate", component: "trans", z: "fwdBackVelocity"},
 
-          fire: {type: "key", code: 32},
-          addProjectile: {type: "addEntity", input: "fire", config: {
+          spawn: {type: "key", code: 32},
+          addEntity: {type: "addEntity", input: "spawn", config: {
             components: {
               trans: {initial: new Float32Array([0, 3, -10, 0, 0, 0, 1, 1, 1, 1])},
               mesh: {geometry: {type: "boxBuffer"}, material: {type: "toon"}},
               body: {shapes: [{type: "box"}]},
               graph: {
-                fwdVelocity: {type: "constant", value: 5},
-                move: {type: "translate", component: "trans", x: "fwdVelocity"},
-                countdown: {type: "timeout", seconds: 1},
+                changeDirection: {type: "interval", seconds: 0.25},
+                randomX: {type: "random", min: -1, max: 1},
+                randomY: {type: "random", min: -1, max: 1},
+                randomZ: {type: "random", min: -1, max: 1},
+                velX: {type: "latch", store: "changeDirection", value: "randomX"},
+                velY: {type: "latch", store: "changeDirection", value: "randomY"},
+                velZ: {type: "latch", store: "changeDirection", value: "randomZ"},
+                move: {type: "translate", component: "trans", x: "velX", y: "velY", z: "velZ"},
+                countdown: {type: "timeout", seconds: 10},
                 deleteSelf: {type: "deleteEntity", input: "countdown"},
               },
             },

@@ -32,14 +32,9 @@ export abstract class Node implements Disposable {
 
   constructor (readonly graph :Graph, readonly id :string, readonly config :NodeConfig) {}
 
-  /** Returns the value corresponding to the identified output. */
-  getOutput (output :string) :Value<number> {
-    throw new Error("Unknown output " + output)
-  }
-
-  /** Returns the value corresponding to the default output. */
-  getDefaultOutput () :Value<number> {
-    throw new Error("No default output")
+  /** Returns the value corresponding to the identified output, or the default if none. */
+  getOutput (name? :string) :Value<number> {
+    throw new Error("Unknown output " + name)
   }
 
   /** Connects and initializes the node. */

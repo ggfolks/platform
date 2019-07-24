@@ -24,7 +24,7 @@ export class Graph implements Disposable {
   }
 
   /** Retrieves a reactive value representing the identified input edges. */
-  getValues (inputs :InputEdges) {
+  getValues (inputs :InputEdges) :Value<number[]> {
     if (!inputs) {
       return Value.constant([] as number[])
     }
@@ -32,15 +32,15 @@ export class Graph implements Disposable {
   }
 
   /** Retrieves a reactive value representing the identified input edge. */
-  getValue (input :InputEdge) {
+  getValue (input :InputEdge) :Value<number> {
     if (!input) {
       return Value.constant(0)
     }
     if (Array.isArray(input)) {
-      const [nodeId, outputId] = input
-      return this._requireNode(nodeId).getOutput(outputId)
+      const [nodeId, outputName] = input
+      return this._requireNode(nodeId).getOutput(outputName)
     }
-    return this._requireNode(input).getDefaultOutput()
+    return this._requireNode(input).getOutput()
   }
 
   /** Updates the state of the graph.  Should be called once per frame. */
