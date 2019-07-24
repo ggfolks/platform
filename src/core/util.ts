@@ -103,7 +103,7 @@ export class BitSet {
   private resize (idx :number) :Uint32Array {
     const bits = this.bits
     if (bits.length > idx) return bits
-    const nbits = new Uint32Array(bits.length*2)
+    const nbits = new Uint32Array(Math.max(bits.length*2, idx+1))
     nbits.set(bits)
     this.bits = nbits
     return nbits
