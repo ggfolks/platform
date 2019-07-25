@@ -37,8 +37,8 @@
   "typedocOptions": {
     "mode": "modules",
     "module": "commonjs",
-    "out": "docs/api",
-    "exclude": "**/test.*",
+    "out": "../docs/api",
+    "exclude": ["**/test.*", "node_modules/**"],
     "excludeNotExported": true,
     "excludePrivate": true
   }

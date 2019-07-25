@@ -16,7 +16,7 @@
     "build": "tsc -b",
     "test": "jest --verbose",
     "wtest": "jest --verbose --watch",
-    "docs": "typedoc src"
+    "docs": "typedoc ."
   },
   "jest": {
     "moduleFileExtensions": [
