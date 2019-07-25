@@ -3,8 +3,10 @@ import {
   Color,
   Group,
   Mesh,
+  MeshStandardMaterial,
   MeshToonMaterial,
   Object3D,
+  RGBAFormat,
   SphereBufferGeometry,
 } from "three"
 import {GLTFLoader} from "three/examples/jsm/loaders/GLTFLoader"
@@ -110,7 +112,22 @@ function createObject3D (objectConfig: Object3DConfig) :Subject<Object3D> {
       return Subject.derive(dispatch => {
         loader.load(
           gltfConfig.url,
-          (gltf :{[key :string]: any}) => dispatch(gltf.scene),
+          (gltf :{[key :string]: any}) => {
+            // hack for alpha testing: enable on any materials with a color texture that has
+            // an alpha channel
+            gltf.scene.traverse((node :Object3D) => {
+              if (node instanceof Mesh) {
+                const material = node.material
+                if (material instanceof MeshStandardMaterial &&
+                    material.map &&
+                    material.map.format === RGBAFormat) {
+                  material.alphaTest = 0.9
+                  material.transparent = false
+                }
+              }
+            })
+            dispatch(gltf.scene)
+          },
           () => {},
           () => {
             // TODO: error object
