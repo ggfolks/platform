@@ -92,6 +92,7 @@ export class UI extends StyleContext implements ElementContext {
     "control": {create: (f, p, c) => new E.Control(f, p, c as any as E.ControlConfig)},
     "column" : {create: (f, p, c) => new G.Column(f, p, c as any as G.ColumnConfig)},
     "label"  : {create: (f, p, c) => new T.Label(f, p, c as any as T.LabelConfig)},
+    "cursor" : {create: (f, p, c) => new T.Cursor(f, p, c as any as T.CursorConfig)},
     "text"   : {create: (f, p, c) => new T.Text(f, p, c as any as T.TextConfig)},
     "button" : {create: (f, p, c) => new B.Button(f, p, c as any as B.ButtonConfig)},
   }

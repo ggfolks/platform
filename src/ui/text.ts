@@ -1,8 +1,10 @@
-import {dim2, vec2} from "../core/math"
+import {dim2, vec2, rect} from "../core/math"
 import {PMap} from "../core/util"
 import {Mutable, Subject, Value} from "../core/react"
 import {Control, ControlConfig, Element, ElementConfig, ElementContext, MouseInteraction} from "./element"
 import {Spec, FontConfig, PaintConfig, DefaultPaint, ShadowConfig, Span, EmptySpan} from "./style"
+
+const tmpr = rect.create()
 
 /** Defines the styles that apply to [[Label]]. */
 export interface LabelStyle {
@@ -112,66 +114,85 @@ const keyMap :KeyMap = {
   KeyH: {[CtrlMask]: "backspace"},
 }
 
-/** Defines the styles that apply to [[Text]]. */
-export interface TextStyle {
-  cursorStroke? :Spec<PaintConfig>
-  cursorWidth? :number
+export interface CursorStyle {
+  stroke? :Spec<PaintConfig>
+  width? :number
 }
+
+export interface CursorConfig extends ElementConfig {
+  type: "cursor"
+  style :PMap<CursorStyle>
+}
+
+export class Cursor extends Element {
+  private stroke = this.observe(DefaultPaint)
+
+  constructor (ctx :ElementContext, parent :Element, readonly config :CursorConfig) {
+    super(ctx, parent, config)
+    this.state.onValue(state => {
+      const style = this.getStyle(this.config.style, state)
+      if (style.stroke) this.stroke.observe(ctx.resolvePaint(style.stroke))
+      else this.stroke.update(DefaultPaint)
+    })
+  }
+
+  get style () :CursorStyle { return this.getStyle(this.config.style, this.state.current) }
+
+  render (canvas :CanvasRenderingContext2D) {
+    const x = this.x, y = this.y, h = this.height
+    this.stroke.current.prepStroke(canvas)
+    canvas.beginPath()
+    canvas.moveTo(x, y)
+    canvas.lineTo(x, y+h)
+    canvas.lineWidth = this.style.width || 1
+    canvas.stroke()
+    canvas.lineWidth = 1
+  }
+
+  protected computePreferredSize (hintX :number, hintY :number, into :dim2) {} // not used
+  protected relayout () {} // not used
+}
+
+const DefaultCursor :CursorConfig = {type: "cursor", style: {}}
 
 /** Defines configuration for [[Text]]. */
 export interface TextConfig extends ControlConfig {
   type :"text"
   text :Spec<Mutable<string>>
-  style :PMap<TextStyle>
+  cursor? :CursorConfig
 }
 
 const TextStyleScope = {id: "text", states: ["normal", "disabled", "focused"]}
 
 /** Displays a span of editable text. */
 export class Text extends Control {
-  private cursorStroke = this.observe(DefaultPaint)
+  readonly coffset = Mutable.local(0)
   readonly text :Mutable<string>
-  readonly cursor = Mutable.local(0)
+  readonly cursor :Cursor
   readonly label :Label
 
   constructor (ctx :ElementContext, parent :Element, readonly config :TextConfig) {
     super(ctx, parent, config)
-    this.invalidateOnChange(this.cursor)
+    this.invalidateOnChange(this.coffset)
     this.text = ctx.resolveModel(config.text)
+    this.cursor = ctx.createElement(this, config.cursor || DefaultCursor) as Cursor
     const label = this.contents.findChild("label")
     if (label) this.label = label as Label
     else throw new Error(`Text control must have Label child [config=${JSON.stringify(config)}].`)
-    this.state.onValue(state => {
-      const style = this.getStyle(this.config.style, state)
-      if (style.cursorStroke) this.cursorStroke.observe(ctx.resolvePaint(style.cursorStroke))
-      else this.cursorStroke.update(DefaultPaint)
-    })
   }
 
   get styleScope () { return TextStyleScope }
-  get style () :TextStyle { return this.getStyle(this.config.style, this.state.current) }
 
   render (canvas :CanvasRenderingContext2D) {
     super.render(canvas)
-    if (this.isFocused) {
-      const cx = this.label.x + this.label.span.current.measureAdvance(this.cursor.current)
-      const ly = this.label.y, lh = this.label.height
-      const cursorStroke = this.cursorStroke.current
-      cursorStroke.prepStroke(canvas)
-      canvas.beginPath()
-      canvas.moveTo(cx, ly)
-      canvas.lineTo(cx, ly+lh)
-      canvas.lineWidth = this.style.cursorWidth || 1
-      canvas.stroke()
-      canvas.lineWidth = 1
-    }
+    if (this.isFocused) this.cursor.render(canvas)
   }
 
   handleMouseDown (event :MouseEvent, pos :vec2) :MouseInteraction|undefined {
     if (event.button !== 0) return undefined
     this.focus()
     // position the cursor based on where the click landed
-    this.cursor.update(this.label.span.current.computeOffset(pos[0] - this.label.x))
+    this.coffset.update(this.label.span.current.computeOffset(pos[0] - this.label.x))
     // return a no-op mouse interaction to indicate that we handled the press
     return {
       move: (event, pos) => {},
@@ -193,15 +214,22 @@ export class Text extends Control {
       if (binding) {
         const action = actions[binding]
         if (action) {
-          action(this.text, this.cursor, typed)
+          action(this.text, this.coffset, typed)
         } else {
           console.warn(`Invalid binding for ${event.key} (mods: ${mask}): '${action}'`)
         }
       } else if (isPrintable) {
-        actions.insert(this.text, this.cursor, typed)
+        actions.insert(this.text, this.coffset, typed)
       }
     }
     // let the browser know we handled this event
     event.preventDefault()
+  }
+
+  protected relayout () {
+    super.relayout()
+    const lx = this.label.x, ly = this.label.y, lh = this.label.height
+    const cx = lx + this.label.span.current.measureAdvance(this.coffset.current)
+    this.cursor.setBounds(rect.set(tmpr, cx, ly, 1, lh))
   }
 }
