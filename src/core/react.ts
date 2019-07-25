@@ -211,26 +211,36 @@ export class Stream<T> extends Source<T> {
     return Stream.derive(dispatch => this.onEmit(value => pred(value) && dispatch(value)))
   }
 
+  /** Returns a reactive [[Value]] which starts with value `start` and is updated by combining
+    * values emitted by this stream with the current value via `fn` whenever they arrive.
+    * @param fn used to compute new folded values when values arrive on `this` stream.
+    * @param eq used to check whether computed new values have actually changed.
+    * [[Value]]s emit notifications only when values change. */
+  fold<Z> (start :Z, fn :(a:Z, v:T) => Z, eq :Eq<Z>) :Value<Z> {
+    const stream = this
+    class FoldValue extends DerivedValue<Z> {
+      private _current = start
+      get current () :Z { return this._current }
+      _connectToSource () {
+        return stream.onEmit(value => {
+          const ovalue = this._current
+          const nvalue = fn(ovalue, value)
+          if (!this.eq(ovalue, nvalue)) {
+            this._current = nvalue
+            this._dispatchValue(nvalue, ovalue)
+          }
+        })
+      }
+    }
+    return new FoldValue(eq)
+  }
+
   /** Returns a reactive [[Value]] which starts with value `start` and is updated by values emitted
     * by this stream whenever they arrive.
     * @param eq used to check whether successive values from this stream have actually changed.
     * [[Value]]s emit notifications only when values change. */
   toValue (start :T, eq :Eq<T>) :Value<T> {
-    const stream = this
-    class StreamValue extends DerivedValue<T> {
-      private _current = start
-      get current () :T { return this._current }
-      _connectToSource () {
-        return stream.onEmit(value => {
-          const previous = this._current
-          if (!this.eq(previous, value)) {
-            this._current = value
-            this._dispatchValue(value, previous)
-          }
-        })
-      }
-    }
-    return new StreamValue(eq)
+    return this.fold(start, (ov, nv) => nv, eq)
   }
 
   /** Returns a reactive [[Subject]] that is initialized with the next value emitted by this stream
