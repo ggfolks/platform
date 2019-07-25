@@ -1,4 +1,5 @@
 import {Subject} from "./react"
+import {NoopRemover} from "./util"
 
 function eventToError (pre :string, err :Event|string) :Error {
   if (typeof err === "string") return new Error(`${pre}: ${err}`)
@@ -12,6 +13,6 @@ export function loadImage (url :string) :Subject<HTMLImageElement|Error> {
     image.src = url
     image.onload = () => disp(image)
     image.onerror = err => disp(eventToError(`Failed to load '${url}'`, err))
-    return () => {} // nothing to dispose, GC takes care of image
+    return NoopRemover // nothing to dispose, GC takes care of image
   })
 }
