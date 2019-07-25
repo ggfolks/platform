@@ -1,8 +1,10 @@
 import {dim2, vec2, rect} from "../core/math"
 import {PMap} from "../core/util"
 import {Mutable, Subject, Value} from "../core/react"
-import {Control, ControlConfig, Element, ElementConfig, ElementContext, MouseInteraction} from "./element"
+import {Control, ControlConfig, Element, ElementConfig, ElementContext,
+        MouseInteraction} from "./element"
 import {Spec, FontConfig, PaintConfig, DefaultPaint, ShadowConfig, Span, EmptySpan} from "./style"
+import {makeRectPath} from "./util"
 
 const tmpr = rect.create()
 
@@ -23,6 +25,7 @@ export interface LabelConfig extends ElementConfig {
 
 /** Displays styled text. */
 export class Label extends Element {
+  readonly xoffset = Mutable.local(0)
   readonly span = this.observe(EmptySpan)
   readonly text :Value<string>
 
@@ -42,14 +45,27 @@ export class Label extends Element {
   }
 
   render (canvas :CanvasRenderingContext2D) {
-    this.span.current.render(canvas, this.x, this.y)
+    const {x, y, width, height, xoffset} = this
+    const span = this.span.current, rx = x + xoffset.current
+    const needClip = rx < 0 || span.size[0] > width
+    if (needClip) {
+      canvas.save()
+      makeRectPath(canvas, x, y, width, height)
+      canvas.clip()
+    }
+    span.render(canvas, rx, y)
+    if (needClip) canvas.restore()
   }
 
   protected computePreferredSize (hintX :number, hintY :number, into :dim2) {
     dim2.copy(into, this.span.current.size)
   }
 
-  protected relayout () {} // nothing needed
+  protected relayout () {
+    // clamp our x offset so we don't have empty space on the right (TODO: or left?)
+    const width = this.width, swidth = this.span.current.size[0]
+    if (this.xoffset.current + swidth < width) this.xoffset.update(width-swidth)
+  }
 }
 
 type TextAction = (text :Mutable<string>, cursor :Mutable<number>, typed :string) => void
@@ -192,7 +208,8 @@ export class Text extends Control {
     if (event.button !== 0) return undefined
     this.focus()
     // position the cursor based on where the click landed
-    this.coffset.update(this.label.span.current.computeOffset(pos[0] - this.label.x))
+    const cp = pos[0] - this.label.x - this.label.xoffset.current
+    this.coffset.update(this.label.span.current.computeOffset(cp))
     // return a no-op mouse interaction to indicate that we handled the press
     return {
       move: (event, pos) => {},
@@ -226,10 +243,16 @@ export class Text extends Control {
     event.preventDefault()
   }
 
-  protected relayout () {
-    super.relayout()
-    const lx = this.label.x, ly = this.label.y, lh = this.label.height
-    const cx = lx + this.label.span.current.measureAdvance(this.coffset.current)
-    this.cursor.setBounds(rect.set(tmpr, cx, ly, 1, lh))
+  protected revalidate () {
+    super.revalidate()
+    const lx = this.label.x, ly = this.label.y, lw = this.label.width, lh = this.label.height
+    const cadvance = this.label.span.current.measureAdvance(this.coffset.current)
+
+    // if the cursor is out of bounds, adjust the label x offset to bring it to the edge
+    const ll = -this.label.xoffset.current
+    if (cadvance < ll) this.label.xoffset.update(-cadvance)
+    else if (cadvance > ll+lw) this.label.xoffset.update(lw-cadvance)
+
+    this.cursor.setBounds(rect.set(tmpr, lx + this.label.xoffset.current + cadvance, ly, 1, lh))
   }
 }
