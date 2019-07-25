@@ -1,10 +1,10 @@
 import {dim2, vec2, rect} from "../core/math"
 import {PMap} from "../core/util"
 import {Mutable, Subject, Value} from "../core/react"
-import {Control, ControlConfig, Element, ElementConfig, ElementContext,
+import {makeRectPath} from "./util"
+import {Control, ControlConfig, ControlStates, Element, ElementConfig, ElementContext,
         MouseInteraction} from "./element"
 import {Spec, FontConfig, PaintConfig, DefaultPaint, ShadowConfig, Span, EmptySpan} from "./style"
-import {makeRectPath} from "./util"
 
 const tmpr = rect.create()
 
@@ -135,8 +135,11 @@ export interface CursorStyle {
   width? :number
 }
 
+const DefaultBlinkPeriod = 0.6
+
 export interface CursorConfig extends ElementConfig {
   type: "cursor"
+  blinkPeriod? :number
   style :PMap<CursorStyle>
 }
 
@@ -178,10 +181,9 @@ export interface TextConfig extends ControlConfig {
   cursor? :CursorConfig
 }
 
-const TextStyleScope = {id: "text", states: ["normal", "disabled", "focused"]}
-
 /** Displays a span of editable text. */
 export class Text extends Control {
+  private readonly showCursor = this.observe(false)
   readonly coffset = Mutable.local(0)
   readonly text :Mutable<string>
   readonly cursor :Cursor
@@ -195,18 +197,27 @@ export class Text extends Control {
     const label = this.contents.findChild("label")
     if (label) this.label = label as Label
     else throw new Error(`Text control must have Label child [config=${JSON.stringify(config)}].`)
+
+    // when we're focused, listen to the clock so we can blink the cursor
+    this.state.onValue(state => {
+      if (state !== "focused") this.showCursor.update(false)
+      else this.startBlink()
+    })
   }
 
-  get styleScope () { return TextStyleScope }
+  get styleScope () { return {id: "text", states: ControlStates} }
 
   render (canvas :CanvasRenderingContext2D) {
     super.render(canvas)
-    if (this.isFocused) this.cursor.render(canvas)
+    if (this.showCursor.current) this.cursor.render(canvas)
   }
 
   handleMouseDown (event :MouseEvent, pos :vec2) :MouseInteraction|undefined {
     if (event.button !== 0) return undefined
-    this.focus()
+    // if we're already focused, restart the cursor blink so that the user immediately sees it at
+    // the new location
+    if (this.isFocused) this.startBlink()
+    else this.focus()
     // position the cursor based on where the click landed
     const cp = pos[0] - this.label.x - this.label.xoffset.current
     this.coffset.update(this.label.span.current.computeOffset(cp))
@@ -241,6 +252,19 @@ export class Text extends Control {
     }
     // let the browser know we handled this event
     event.preventDefault()
+  }
+
+  protected startBlink () {
+    const blinkPeriod = this.cursor.config.blinkPeriod || DefaultBlinkPeriod
+    let elapsed = 0, on = true
+    this.showCursor.observe(this.root.clock.map(clock => {
+      elapsed += clock.dt
+      if (elapsed > blinkPeriod) {
+        on = !on
+        elapsed -= blinkPeriod
+      }
+      return on
+    }))
   }
 
   protected revalidate () {
