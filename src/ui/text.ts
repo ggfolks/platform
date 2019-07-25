@@ -1,4 +1,5 @@
 import {dim2, vec2, rect} from "../core/math"
+import {refEquals} from "../core/data"
 import {PMap} from "../core/util"
 import {Mutable, Subject, Value} from "../core/react"
 import {makeRectPath} from "./util"
@@ -44,7 +45,17 @@ export class Label extends Element {
     })
   }
 
-  render (canvas :CanvasRenderingContext2D) {
+  protected computePreferredSize (hintX :number, hintY :number, into :dim2) {
+    dim2.copy(into, this.span.current.size)
+  }
+
+  protected relayout () {
+    // clamp our x offset so we don't have empty space on the right (TODO: or left?)
+    const width = this.width, swidth = this.span.current.size[0]
+    if (this.xoffset.current + swidth < width) this.xoffset.update(width-swidth)
+  }
+
+  protected rerender (canvas :CanvasRenderingContext2D) {
     const {x, y, width, height, xoffset} = this
     const span = this.span.current, rx = x + xoffset.current
     const needClip = rx < 0 || span.size[0] > width
@@ -55,16 +66,6 @@ export class Label extends Element {
     }
     span.render(canvas, rx, y)
     if (needClip) canvas.restore()
-  }
-
-  protected computePreferredSize (hintX :number, hintY :number, into :dim2) {
-    dim2.copy(into, this.span.current.size)
-  }
-
-  protected relayout () {
-    // clamp our x offset so we don't have empty space on the right (TODO: or left?)
-    const width = this.width, swidth = this.span.current.size[0]
-    if (this.xoffset.current + swidth < width) this.xoffset.update(width-swidth)
   }
 }
 
@@ -157,7 +158,10 @@ export class Cursor extends Element {
 
   get style () :CursorStyle { return this.getStyle(this.config.style, this.state.current) }
 
-  render (canvas :CanvasRenderingContext2D) {
+  protected computePreferredSize (hintX :number, hintY :number, into :dim2) {} // not used
+  protected relayout () {} // not used
+
+  protected rerender (canvas :CanvasRenderingContext2D) {
     const x = this.x, y = this.y, h = this.height
     this.stroke.current.prepStroke(canvas)
     canvas.beginPath()
@@ -167,9 +171,6 @@ export class Cursor extends Element {
     canvas.stroke()
     canvas.lineWidth = 1
   }
-
-  protected computePreferredSize (hintX :number, hintY :number, into :dim2) {} // not used
-  protected relayout () {} // not used
 }
 
 const DefaultCursor :CursorConfig = {type: "cursor", style: {}}
@@ -183,7 +184,7 @@ export interface TextConfig extends ControlConfig {
 
 /** Displays a span of editable text. */
 export class Text extends Control {
-  private readonly showCursor = this.observe(false)
+  private readonly jiggle = Mutable.local(false)
   readonly coffset = Mutable.local(0)
   readonly text :Mutable<string>
   readonly cursor :Cursor
@@ -193,30 +194,32 @@ export class Text extends Control {
     super(ctx, parent, config)
     this.invalidateOnChange(this.coffset)
     this.text = ctx.resolveModel(config.text)
-    this.cursor = ctx.createElement(this, config.cursor || DefaultCursor) as Cursor
+
+    // we include jiggle here so that we can reset the clock fold on demand when the user clicks the
+    // mouse even when we're already focused
+    const blinking = Value.join2(this.state, this.jiggle).switchMap(([state, jiggle]) => {
+      if (state !== "focused") return Value.constant(false)
+      else {
+        const blinkPeriod = this.cursor.config.blinkPeriod || DefaultBlinkPeriod
+        return this.root.clock.fold(0, (acc, c) => acc+c.dt, refEquals).
+          map(acc => Math.floor(acc/blinkPeriod) % 2 === 0)
+      }
+    })
+    const cconfig = {...(config.cursor || DefaultCursor), visible: blinking}
+    this.cursor = ctx.createElement(this, cconfig) as Cursor
+
     const label = this.contents.findChild("label")
     if (label) this.label = label as Label
     else throw new Error(`Text control must have Label child [config=${JSON.stringify(config)}].`)
-
-    // when we're focused, listen to the clock so we can blink the cursor
-    this.state.onValue(state => {
-      if (state !== "focused") this.showCursor.update(false)
-      else this.startBlink()
-    })
   }
 
   get styleScope () { return {id: "text", states: ControlStates} }
 
-  render (canvas :CanvasRenderingContext2D) {
-    super.render(canvas)
-    if (this.showCursor.current) this.cursor.render(canvas)
-  }
-
   handleMouseDown (event :MouseEvent, pos :vec2) :MouseInteraction|undefined {
     if (event.button !== 0) return undefined
-    // if we're already focused, restart the cursor blink so that the user immediately sees it at
-    // the new location
-    if (this.isFocused) this.startBlink()
+    // if we're already focused, jiggle the cursor blinker so it restarts; this ensures that the
+    // user immediately sees the cursor at the new location
+    if (this.isFocused) this.jiggle.update(!this.jiggle.current)
     else this.focus()
     // position the cursor based on where the click landed
     const cp = pos[0] - this.label.x - this.label.xoffset.current
@@ -254,19 +257,6 @@ export class Text extends Control {
     event.preventDefault()
   }
 
-  protected startBlink () {
-    const blinkPeriod = this.cursor.config.blinkPeriod || DefaultBlinkPeriod
-    let elapsed = 0, on = true
-    this.showCursor.observe(this.root.clock.map(clock => {
-      elapsed += clock.dt
-      if (elapsed > blinkPeriod) {
-        on = !on
-        elapsed -= blinkPeriod
-      }
-      return on
-    }))
-  }
-
   protected revalidate () {
     super.revalidate()
     const lx = this.label.x, ly = this.label.y, lw = this.label.width, lh = this.label.height
@@ -278,5 +268,11 @@ export class Text extends Control {
     else if (cadvance > ll+lw) this.label.xoffset.update(lw-cadvance)
 
     this.cursor.setBounds(rect.set(tmpr, lx + this.label.xoffset.current + cadvance, ly, 1, lh))
+    this.cursor.validate()
+  }
+
+  protected rerender (canvas :CanvasRenderingContext2D) {
+    super.rerender(canvas)
+    this.cursor.render(canvas)
   }
 }
