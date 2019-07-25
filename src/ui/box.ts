@@ -1,5 +1,6 @@
 import {rect, dim2, vec2} from "../core/math"
-import {Element, ElementConfig, ElementContext, ElementStyle} from "./element"
+import {PMap} from "../core/util"
+import {Element, ElementConfig, ElementContext} from "./element"
 import {NoopDecor, BackgroundConfig, BorderConfig, Spec} from "./style"
 
 const tmpr = rect.create()
@@ -55,21 +56,20 @@ export function alignOffset (align :HAlign|VAlign, size :number, extent :number)
 // Box config and element
 
 /** Defines the styles that apply to [[Box]]. */
-export interface BoxStyle extends ElementStyle {
+export interface BoxStyle {
   margin? :Insets
   background? :Spec<BackgroundConfig>
   border? :Spec<BorderConfig>
   padding? :Insets
   halign? :HAlign
   valign? :VAlign
-  // TODO: border?
 }
 
 /** Defines configuration for [[Box]] elements. */
 export interface BoxConfig extends ElementConfig {
   type :"box"
   contents :ElementConfig
-  style :{normal :BoxStyle, disabled :BoxStyle}
+  style :PMap<BoxStyle>
 }
 
 /** Displays a single child with an optional background, padding, margin, and alignment. */
@@ -82,12 +82,19 @@ export class Box extends Element {
     super(ctx, parent, config)
     this.contents = ctx.createElement(this, config.contents)
     this.state.onValue(state => {
-      const style = this.config.style[state]
+      const style = this.getStyle(this.config.style, state)
       if (style.background) this.background.observe(ctx.resolveBackground(style.background))
       else this.background.update(NoopDecor)
       if (style.border) this.border.observe(ctx.resolveBorder(style.border))
       else this.border.update(NoopDecor)
     })
+  }
+
+  get style () :BoxStyle { return this.getStyle(this.config.style, this.state.current) }
+
+  /** Finds the first child with the specified `type`. */
+  findChild (type :string) :Element|undefined {
+    return super.findChild(type) || this.contents.findChild(type)
   }
 
   render (canvas :CanvasRenderingContext2D) {
@@ -111,8 +118,6 @@ export class Box extends Element {
     super.dispose()
     this.contents.dispose()
   }
-
-  protected get style () :BoxStyle { return this.config.style[this.state.current] }
 
   protected computePreferredSize (hintX :number, hintY :number, into :dim2) {
     const {padding, margin} = this.style

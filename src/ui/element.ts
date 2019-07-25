@@ -1,4 +1,4 @@
-import {Disposable, Disposer, Remover, NoopRemover} from "../core/util"
+import {Disposable, Disposer, Remover, NoopRemover, PMap} from "../core/util"
 import {Clock} from "../core/clock"
 import {dim2, rect, vec2} from "../core/math"
 import {Record} from "../core/data"
@@ -49,12 +49,7 @@ export interface ElementContext extends StyleContext {
 
   /** Resolves the UI model element `elem`. The model element may be an immediate reactive value of
     * the desired type or may be a path into the UI data model. */
-  resolveModel<T, V extends Source<T>> (elem :string|V) :V
-}
-
-/** Defines the style configurations for an [[Element]]. */
-export interface ElementStyle {
-  // nothing shared by all elements
+  resolveModel<V extends Source<unknown>> (elem :string|V) :V
 }
 
 /** Configuration shared by all [[Element]]s. */
@@ -74,10 +69,6 @@ export type StyleScope = {
   id :string
   states :string[]
 }
-
-const DefaultState = "normal"
-const DefaultStyleScope = {id: "default", states: [DefaultState]}
-const rootState = Value.constant(DefaultState)
 
 /** The basic building block of UIs. Elements have a bounds, are part of a UI hierarchy (have a
   * parent, except for the root element), and participate in the cycle of invalidation, validation
@@ -104,11 +95,16 @@ export abstract class Element implements Disposable {
   get bounds () :rect { return this._bounds }
 
   abstract get config () :ElementConfig
-  get styleScope () :StyleScope { return this.parent ? this.parent.styleScope : DefaultStyleScope }
-  get root () :Root|undefined { return this.parent ? this.parent.root : undefined }
+  get styleScope () :StyleScope { return this.requireParent.styleScope }
+  get root () :Root { return this.requireParent.root }
   get valid () :Value<boolean> { return this._valid }
-  // all elements except Root have a parent, so rootState is only used for Roots
-  get state () :Value<string> { return this.parent ? this.parent.state : rootState }
+  get state () :Value<string> { return this.requireParent.state }
+
+  protected get requireParent () :Element {
+    const parent = this.parent
+    if (!parent) throw new Error(`Element missing parent?`)
+    return parent
+  }
 
   pos (into :vec2) :vec2 {
     into[0] = this.x
@@ -159,12 +155,24 @@ export abstract class Element implements Disposable {
     return undefined
   }
 
+  /** Finds the first child with the specified `type`. */
+  findChild (type :string) :Element|undefined {
+    return (this.config.type === type) ? this : undefined
+  }
+
   dispose () {
     this.disposer.dispose()
   }
 
   toString () {
     return `${this.constructor.name}@${this._bounds}`
+  }
+
+  protected getStyle<S> (styles :PMap<S>, state :string) :S {
+    const style = styles[state]
+    if (style) return style
+    console.warn(`Missing styles for state '${state}' in ${this}.`)
+    return {} as S
   }
 
   protected invalidateOnChange (value :Source<any>) {
@@ -183,7 +191,7 @@ export abstract class Element implements Disposable {
   protected abstract relayout () :void
 }
 
-const ControlStyleScope = {id: "control", states: [DefaultState, "disabled"]}
+const ControlStyleScope = {id: "control", states: ["normal", "disabled", "focused"]}
 
 /** Configuration shared by all [[Control]]s. */
 export interface ControlConfig extends ElementConfig {
@@ -213,9 +221,36 @@ export class Control extends Element {
 
   get styleScope () :StyleScope { return ControlStyleScope }
   get state () :Value<string> { return this._state }
+  get isFocused () :boolean { return this.root.focus.current === this }
+
+  /** Requests that this control receive input focus. */
+  focus () {
+    // no focus if you're not enabled
+    if (!this.enabled.current) return
+    const root = this.root
+    // if we're already focused, then nothing doing
+    if (root.focus.current === this) return
+
+    root.focus.update(this)
+    this._state.update(this.computeState)
+    const remover = root.focus.onValue(fc => {
+      if (fc !== this) {
+        this._state.update(this.computeState)
+        remover()
+      }
+    })
+  }
+
+  /** Requests that this control handle the supplied keyboard event.
+    * This will only be called on controls that have the keyboard focus. */
+  handleKeyEvent (event :KeyboardEvent) {}
 
   render (canvas :CanvasRenderingContext2D) {
     this.contents.render(canvas)
+  }
+
+  findChild (type :string) :Element|undefined {
+    return super.findChild(type) || this.contents.findChild(type)
   }
 
   dispose () {
@@ -224,7 +259,7 @@ export class Control extends Element {
   }
 
   protected get computeState () :string {
-    return this.enabled.current ? "normal" : "disabled"
+    return this.isFocused ? "focused" : this.enabled.current ? "normal" : "disabled"
   }
 
   protected computePreferredSize (hintX :number, hintY :number, into :dim2) {
@@ -254,6 +289,9 @@ export type MouseInteraction = {
   cancel: () => void
 }
 
+const RootStyleScope = {id: "default", states: ["normal"]}
+const RootState = Value.constant("normal")
+
 /** Defines configuration for [[Root]] elements. */
 export interface RootConfig extends ElementConfig {
   type :"root"
@@ -263,10 +301,12 @@ export interface RootConfig extends ElementConfig {
 
 /** The top-level of the UI hierarchy. Manages the canvas into which the UI is rendered. */
 export class Root extends Element {
+  private readonly interacts :Array<MouseInteraction|undefined> = []
+
   readonly canvasElem :HTMLCanvasElement = document.createElement("canvas")
   readonly canvas :CanvasRenderingContext2D
   readonly contents :Element
-  private interacts :Array<MouseInteraction|undefined> = []
+  readonly focus = Mutable.localRef<Control|undefined>(undefined)
 
   constructor (readonly ctx :ElementContext, readonly config :RootConfig) {
     super(ctx, undefined, config)
@@ -276,7 +316,9 @@ export class Root extends Element {
     this.contents = ctx.createElement(this, config.contents)
   }
 
-  get root () :Root|undefined { return this }
+  get styleScope () :StyleScope { return RootStyleScope }
+  get root () :Root { return this }
+  get state () :Value<string> { return RootState }
 
   pack (width :number, height :number) :HTMLCanvasElement {
     this.setBounds(rect.set(tmpr, 0, 0, width, height))
@@ -314,7 +356,9 @@ export class Root extends Element {
           console.warn(`Got mouse down but have active interaction? [button=${button}]`)
           iact.cancel()
         }
-        this.interacts[button] = this.contents.handleMouseDown(event, pos)
+        const niact = this.interacts[button] = this.contents.handleMouseDown(event, pos)
+        // if we click and hit no interactive control, clear the focus
+        if (niact === undefined) this.focus.update(undefined)
       }
       break
     case "mousemove":
@@ -333,8 +377,14 @@ export class Root extends Element {
       }
     }
   }
+  // TODO: dispatchMouseWheelEvent, dispatchTouchEvent, handlePointerDown (called by mouse & touch)?
 
-  // TODO: dispatchKeyEvent, dispatchTouchEvent? separate handleXEvent methods?
+  /** Dispatches a browser keyboard event to this root. */
+  dispatchKeyEvent (event :KeyboardEvent) {
+    // TODO: focus navigation on Tab/Shift-Tab?
+    const focus = this.focus.current
+    focus && focus.handleKeyEvent(event)
+  }
 
   protected computePreferredSize (hintX :number, hintY :number, into :dim2) {
     dim2.copy(into, this.contents.preferredSize(hintX, hintY))
@@ -366,6 +416,7 @@ export class Root extends Element {
   * subclasses which integrate more tightly with the `scene2` and `scene3` libraries. */
 export class Host implements Disposable {
   private readonly onMouse = (event :MouseEvent) => this.handleMouseEvent(event)
+  private readonly onKey = (event :KeyboardEvent) => this.handleKeyEvent(event)
   protected readonly roots :[Root, vec2][] = []
 
   addRoot (root :Root, origin :vec2) {
@@ -378,15 +429,23 @@ export class Host implements Disposable {
     canvas.addEventListener("mousedown", this.onMouse)
     canvas.addEventListener("mousemove", this.onMouse)
     canvas.addEventListener("mouseup", this.onMouse)
+    document.addEventListener("keydown", this.onKey)
+    document.addEventListener("keyup", this.onKey)
     return () => {
       canvas.removeEventListener("mousedown", this.onMouse)
       canvas.removeEventListener("mousemove", this.onMouse)
       canvas.removeEventListener("mouseup", this.onMouse)
+      document.removeEventListener("keydown", this.onKey)
+      document.removeEventListener("keyup", this.onKey)
     }
   }
 
   handleMouseEvent (event :MouseEvent) {
     for (const ro of this.roots) ro[0].dispatchMouseEvent(event, ro[1])
+  }
+  handleKeyEvent (event :KeyboardEvent) {
+    // TODO: maintain a notion of which root currently has focus (if any)
+    for (const ro of this.roots) ro[0].dispatchKeyEvent(event)
   }
 
   update (clock :Clock) {

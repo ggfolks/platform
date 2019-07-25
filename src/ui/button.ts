@@ -8,7 +8,7 @@ export interface ButtonConfig extends ControlConfig {
   event :any
 }
 
-const ButtonStyleScope = {id: "button", states: ["normal", "disabled", "pressed"]}
+const ButtonStyleScope = {id: "button", states: ["normal", "disabled", "focused", "pressed"]}
 
 export class Button extends Control {
   protected readonly _pressed = Mutable.local(false)
@@ -26,6 +26,7 @@ export class Button extends Control {
   handleMouseDown (event :MouseEvent, pos :vec2) :MouseInteraction|undefined {
     if (event.button !== 0) return undefined
     this._pressed.update(true)
+    this.focus()
     return {
       move: (event, pos) => this._pressed.update(rect.contains(this.bounds, pos)),
       release: () => {
@@ -37,6 +38,6 @@ export class Button extends Control {
   }
 
   protected get computeState () {
-    return this.enabled.current ? (this._pressed.current ? "pressed" : "normal") : "disabled"
+    return this._pressed.current ? "pressed" : super.computeState
   }
 }

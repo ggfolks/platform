@@ -26,6 +26,16 @@ abstract class Group extends Element {
     return undefined
   }
 
+  findChild (type :string) :Element|undefined {
+    const self = super.findChild(type)
+    if (self) return self
+    for (const cc of this.contents) {
+      const child = cc.findChild(type)
+      if (child) return child
+    }
+    return undefined
+  }
+
   dispose () {
     super.dispose()
     for (const child of this.contents) child.dispose()

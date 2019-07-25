@@ -1,17 +1,16 @@
+import {PMap} from "../core/util"
 import {dim2} from "../core/math"
 import {Color} from "../core/color"
 import {Subject, Value} from "../core/react"
 
-type Defs<C> = {[key :string]: C}
-
 /** Defines styles which can be referenced by name in element configuration. */
 export interface StyleDefs {
-  colors      :Defs<ColorConfig>
-  shadows     :Defs<ShadowConfig>
-  fonts       :Defs<FontConfig>
-  paints      :Defs<PaintConfig>
-  borders     :Defs<BorderConfig>
-  backgrounds :Defs<BackgroundConfig>
+  colors      :PMap<ColorConfig>
+  shadows     :PMap<ShadowConfig>
+  fonts       :PMap<FontConfig>
+  paints      :PMap<PaintConfig>
+  borders     :PMap<BorderConfig>
+  backgrounds :PMap<BackgroundConfig>
 }
 
 const SpecPrefix = "$"
@@ -21,7 +20,7 @@ export type Spec<T> = string | T
 
 // TODO?: ImageConfig = string | {source/path/url :string, scale :number} | ?
 
-function readDef<C> (type :string, defs :Defs<C>, id :string) :C {
+function readDef<C> (type :string, defs :PMap<C>, id :string) :C {
   const config = defs[id.substring(1)]
   if (config) return config
   throw new Error(`Missing ${type} style def '${id}'`)
@@ -236,7 +235,7 @@ class PatternPaint extends Paint {
   }
 }
 
-export const DefaultPaint :Paint = new ColorPaint("#FF0000")
+export const DefaultPaint :Paint = new ColorPaint("#000000")
 
 //
 // Shadows
@@ -327,6 +326,19 @@ export interface BackgroundConfig {
   }
 }
 
+function makeRoundRectPath (canvas :CanvasRenderingContext2D,
+                            x :number, y :number, w :number, h :number,
+                            radius :number) {
+  const midx = x+w/2, midy = y+h/2, maxx = x+w, maxy = y+h
+  canvas.beginPath()
+  canvas.moveTo(x, midy)
+  canvas.arcTo(x, y, midx, y, radius)
+  canvas.arcTo(maxx, y, maxx, midy, radius)
+  canvas.arcTo(maxx, maxy, midx, maxy, radius)
+  canvas.arcTo(x, maxy, x, midy, radius)
+  canvas.closePath()
+}
+
 /** Creates a background based on the supplied `config`. */
 export function makeBackground (ctx :StyleContext, config :BackgroundConfig) :Subject<Decoration> {
   if (config.fill) return ctx.resolvePaint(config.fill).map(fill => {
@@ -337,14 +349,7 @@ export function makeBackground (ctx :StyleContext, config :BackgroundConfig) :Su
       const w = size[0], h = size[1]
       shadow.prep(canvas)
       if (cornerRadius) {
-        const midx = w/2, midy = h/2, maxx = w, maxy = h
-        canvas.beginPath()
-        canvas.moveTo(0, midy)
-        canvas.arcTo(0, 0, midx, 0, cornerRadius)
-        canvas.arcTo(maxx, 0, maxx, midy, cornerRadius)
-        canvas.arcTo(maxx, maxy, midx, maxy, cornerRadius)
-        canvas.arcTo(0, maxy, 0, midy, cornerRadius)
-        canvas.closePath()
+        makeRoundRectPath(canvas, 0, 0, w, h, cornerRadius)
         canvas.fill()
       } else {
         canvas.fillRect(0, 0, w, h)
@@ -378,14 +383,7 @@ export function makeBorder (ctx :StyleContext, config :BorderConfig) :Subject<De
       const w = size[0], h = size[1]
       shadow.prep(canvas)
       if (cornerRadius) {
-        const midx = w/2, midy = h/2, maxx = w, maxy = h
-        canvas.beginPath()
-        canvas.moveTo(0, midy)
-        canvas.arcTo(0, 0, midx, 0, cornerRadius)
-        canvas.arcTo(maxx, 0, maxx, midy, cornerRadius)
-        canvas.arcTo(maxx, maxy, midx, maxy, cornerRadius)
-        canvas.arcTo(0, maxy, 0, midy, cornerRadius)
-        canvas.closePath()
+        makeRoundRectPath(canvas, 0, 0, w, h, cornerRadius)
         canvas.stroke()
       } else {
         canvas.strokeRect(0, 0, w, h)
@@ -423,6 +421,39 @@ export class Span {
     fill && canvas.fillText(text, x, y)
     stroke && canvas.strokeText(text, x, y)
     this.resetCanvas(canvas)
+  }
+
+  /** Measures the x offset of the character at position `offset`. This is the position at which the
+    * cursor will be rendered when it is at that character offset into our text. */
+  measureAdvance (offset :number) :number {
+    const canvas = requireScratch2D()
+    this.prepCanvas(canvas)
+    const metrics = canvas.measureText(this.text.substring(0, offset))
+    this.resetCanvas(canvas)
+    return metrics.width
+  }
+
+
+  /** Computes the character offset into this span's text of the specified `advance`. This is used
+    * to position the cursor when the user clicks or taps on text at a particular position. */
+  computeOffset (advance :number) :number {
+    // if we're out of bounds, return one or the other end
+    if (advance <= 0) return 0
+    else if (advance >= this.size[0]) return this.text.length
+
+    const canvas = requireScratch2D()
+    this.prepCanvas(canvas)
+    // yay, the canvas text APIs are the worst, so we have to do this binary search
+    let minO = 0, minA = 0, maxO = this.size[0]
+    while (maxO - minO > 1) {
+      const testO = minO + Math.round((maxO-minO)/2)
+      const testA = canvas.measureText(this.text.substring(0, testO)).width
+      if (testA > advance) { maxO = testO }
+      else { minO = testO ; minA = testA }
+    }
+    const maxA = canvas.measureText(this.text.substring(0, maxO)).width
+    this.resetCanvas(canvas)
+    return (maxA-advance < advance-minA) ? maxO : minO
   }
 
   private prepCanvas (canvas :CanvasRenderingContext2D) {

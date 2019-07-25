@@ -1,3 +1,4 @@
+import {PMap} from "../core/util"
 import {Record} from "../core/data"
 import {makeConfig} from "../core/config"
 import {Source, Subject} from "../core/react"
@@ -18,9 +19,7 @@ import * as B from "./button"
   * }
   * ```
   * Where the styles for each element are defined by [[T.LabelStyles]], etc. */
-interface ElemStyles {
-  [key :string] :Record
-}
+type ElemStyles = PMap<Record>
 
 /** Defines the default styles for elements for all the contexts in which elements appear. The
   * `default` context is used for elements that appear outside composite elements. Composite
@@ -31,9 +30,7 @@ interface ElemStyles {
   *   button: {label: { ...labels inside buttons... }, box: { ...boxes inside buttons... }}
   * }
   * ``` */
-export interface Theme {
-  [key :string] :ElemStyles
-}
+export type Theme = PMap<ElemStyles>
 
 type ModelElem = Source<any> | Model
 
@@ -90,11 +87,12 @@ type ElemReg = {
 export class UI extends StyleContext implements ElementContext {
   private resolvers = new Map<string,StyleResolver>()
 
-  private regs :{[key :string] :ElemReg} = {
+  private regs :PMap<ElemReg> = {
     "box"    : {create: (f, p, c) => new X.Box(f, p, c as any as X.BoxConfig)},
     "control": {create: (f, p, c) => new E.Control(f, p, c as any as E.ControlConfig)},
     "column" : {create: (f, p, c) => new G.Column(f, p, c as any as G.ColumnConfig)},
     "label"  : {create: (f, p, c) => new T.Label(f, p, c as any as T.LabelConfig)},
+    "text"   : {create: (f, p, c) => new T.Text(f, p, c as any as T.TextConfig)},
     "button" : {create: (f, p, c) => new B.Button(f, p, c as any as B.ButtonConfig)},
   }
 
@@ -117,7 +115,7 @@ export class UI extends StyleContext implements ElementContext {
     return reg.create(this, parent, rconfig)
   }
 
-  resolveModel<T, V extends Source<T>> (prop :string|V) :V {
+  resolveModel<V extends Source<unknown>> (prop :string|V) :V {
     return (typeof prop !== "string") ? prop :
       findModelElem(this.model, prop.split("."), 0) as V
   }

@@ -1,5 +1,5 @@
 import {Clock} from "../core/clock"
-import {BitSet} from "../core/util"
+import {BitSet, PMap} from "../core/util"
 import {vec2} from "../core/math"
 import {Stream, Emitter} from "../core/react"
 import {Graph} from "../graph/graph"
@@ -38,7 +38,7 @@ export class Domain {
   readonly events :Stream<LifecycleEvent> = new Emitter<LifecycleEvent>()
 
   constructor (readonly config :DomainConfig,
-               readonly components :{[key :string] :Component<any>}) {}
+               readonly components :PMap<Component<any>>) {}
 
   /** Returns the configuration for entity `id`.
     * @throws Error if no entity exists with `id`. */

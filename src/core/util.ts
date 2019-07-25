@@ -44,6 +44,9 @@ export class Disposer implements Disposable {
   }
 }
 
+/** An object used as a "property map", where all properties have the same type. */
+export type PMap<T> = {[key :string] :T}
+
 /** Maintains a set of integers using bits in a backing (typed array) vector. */
 export class BitSet {
   private bits :Uint32Array
