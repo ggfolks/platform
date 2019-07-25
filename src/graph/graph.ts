@@ -40,7 +40,10 @@ export class Graph implements Disposable {
       const [nodeId, outputName] = input
       return this._requireNode(nodeId).getOutput(outputName)
     }
-    return this._requireNode(input).getOutput()
+    if (typeof input === "string") {
+      return this._requireNode(input).getOutput()
+    }
+    return Value.constant(input)
   }
 
   /** Updates the state of the graph.  Should be called once per frame. */

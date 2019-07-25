@@ -2,7 +2,7 @@ import {Mutable} from "../core/react"
 import {Graph} from "./graph"
 import {InputEdge, Node, NodeConfig, NodeTypeRegistry} from "./node"
 
-/** Switches to true after an interval passes. */
+/** Switches to true after a number of seconds have passed. */
 export interface TimeoutConfig extends NodeConfig {
   type :"timeout"
   seconds :number
@@ -26,6 +26,7 @@ class Timeout extends Node {
   }
 }
 
+/** Pulses true at regular intervals. */
 export interface IntervalConfig extends NodeConfig {
   type :"interval"
   seconds :number

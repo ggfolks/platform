@@ -10,14 +10,17 @@ export interface NodeConfig {
   [extra :string] :any
 }
 
-/** Optionally pairs a node id with the name of one of its outputs. */
-export type NodeOutput = string | [string, string]
+/** The type of the values transferred over edges. */
+export type EdgeValue = number
 
-/** Indicates the node and output to which a single input is connected. */
-export type InputEdge = undefined | NodeOutput
+/** Describes the input of a node: a node ID, a node/output pair, or a static value. */
+export type NodeInput = string | [string, string] | EdgeValue
 
-/** Indicates the node and output to which an array of inputs are connected. */
-export type InputEdges = undefined | NodeOutput[]
+/** Describes the connection state of a single node input. */
+export type InputEdge = undefined | NodeInput
+
+/** Describes the connection states of an array of node inputs. */
+export type InputEdges = undefined | InputEdge[]
 
 /** Base interface for node contexts. */
 export interface NodeContext {
