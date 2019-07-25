@@ -144,7 +144,9 @@ export abstract class Element implements Disposable {
     return true
   }
 
-  abstract render (canvas :CanvasRenderingContext2D) :void
+  render (canvas :CanvasRenderingContext2D) {
+    if (this.visible.current) this.rerender(canvas)
+  }
 
   /** Requests that this element handle the supplied mouse down event.
     * @param event the event forwarded from the browser.
@@ -189,6 +191,7 @@ export abstract class Element implements Disposable {
 
   protected abstract computePreferredSize (hintX :number, hintY :number, into :dim2) :void
   protected abstract relayout () :void
+  protected abstract rerender (canvas :CanvasRenderingContext2D) :void
 }
 
 /** Encapsulates a mouse interaction with an element. When the mouse button is pressed over an
@@ -248,12 +251,6 @@ export class Root extends Element {
     const changed = this.validate()
     changed && this.render(this.canvas)
     return changed
-  }
-
-  render (canvas :CanvasRenderingContext2D) {
-    const sf = this.config.scale.factor
-    canvas.scale(sf, sf)
-    this.contents.render(canvas)
   }
 
   dispose () {
@@ -326,6 +323,12 @@ export class Root extends Element {
     canvas.style.height = `${this.height}px`
     this.contents.validate()
   }
+
+  protected rerender (canvas :CanvasRenderingContext2D) {
+    const sf = this.config.scale.factor
+    canvas.scale(sf, sf)
+    this.contents.render(canvas)
+  }
 }
 
 export const ControlStates = [...RootStates, "disabled", "focused"]
@@ -382,10 +385,6 @@ export class Control extends Element {
     * This will only be called on controls that have the keyboard focus. */
   handleKeyEvent (event :KeyboardEvent) {}
 
-  render (canvas :CanvasRenderingContext2D) {
-    this.contents.render(canvas)
-  }
-
   findChild (type :string) :Element|undefined {
     return super.findChild(type) || this.contents.findChild(type)
   }
@@ -410,6 +409,10 @@ export class Control extends Element {
   protected revalidate () {
     super.revalidate()
     this.contents.validate()
+  }
+
+  protected rerender (canvas :CanvasRenderingContext2D) {
+    this.contents.render(canvas)
   }
 }
 

@@ -15,10 +15,6 @@ abstract class Group extends Element {
     this.contents = config.contents.map(cc => ctx.createElement(this, cc))
   }
 
-  render (canvas :CanvasRenderingContext2D) {
-    for (const child of this.contents) child.render(canvas)
-  }
-
   handleMouseDown (event :MouseEvent, pos :vec2) {
     for (const cc of this.contents) {
       if (rect.contains(cc.bounds, pos)) return cc.handleMouseDown(event, pos)
@@ -44,6 +40,10 @@ abstract class Group extends Element {
   protected revalidate () {
     super.revalidate()
     for (const elem of this.contents) elem.validate()
+  }
+
+  protected rerender (canvas :CanvasRenderingContext2D) {
+    for (const child of this.contents) child.render(canvas)
   }
 }
 

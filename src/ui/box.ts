@@ -97,18 +97,6 @@ export class Box extends Element {
     return super.findChild(type) || this.contents.findChild(type)
   }
 
-  render (canvas :CanvasRenderingContext2D) {
-    const {margin} = this.style
-    const inbounds = margin ? insetRect(margin, this._bounds, tmpr) : this._bounds
-    // TODO: should we just do all element rendering translated to the element's origin
-    canvas.translate(inbounds[0], inbounds[1])
-    this.background.current(canvas, dim2.set(tmpd, inbounds[2], inbounds[3]))
-    // TODO: should the border render over the contents?
-    this.border.current(canvas, dim2.set(tmpd, inbounds[2], inbounds[3]))
-    canvas.translate(-inbounds[0], -inbounds[1])
-    this.contents.render(canvas)
-  }
-
   handleMouseDown (event :MouseEvent, pos :vec2) {
     return rect.contains(this.contents.bounds, pos) ?
       this.contents.handleMouseDown(event, pos) : undefined
@@ -148,5 +136,17 @@ export class Box extends Element {
   protected revalidate () {
     super.revalidate()
     this.contents.validate()
+  }
+
+  protected rerender (canvas :CanvasRenderingContext2D) {
+    const {margin} = this.style
+    const inbounds = margin ? insetRect(margin, this._bounds, tmpr) : this._bounds
+    // TODO: should we just do all element rendering translated to the element's origin
+    canvas.translate(inbounds[0], inbounds[1])
+    this.background.current(canvas, dim2.set(tmpd, inbounds[2], inbounds[3]))
+    // TODO: should the border render over the contents?
+    this.border.current(canvas, dim2.set(tmpd, inbounds[2], inbounds[3]))
+    canvas.translate(-inbounds[0], -inbounds[1])
+    this.contents.render(canvas)
   }
 }
