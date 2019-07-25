@@ -4,15 +4,31 @@ import {
   Group,
   Mesh,
   MeshToonMaterial,
+  Object3D,
   SphereBufferGeometry,
 } from "three"
+import {GLTFLoader} from "three/examples/jsm/loaders/GLTFLoader"
 
+import {Subject, Value} from "../core/react"
+import {NoopRemover} from "../core/util"
 import {Component, Domain, EntityConfig, ID, Matcher, System} from "../entity/entity"
 import {TransformComponent} from "../space/entity"
 import {createHeightfieldGeometry} from "./terrain"
 
+/** Base class for 3D object configs. */
+export interface Object3DConfig {
+  type :string
+}
+
+/** Configures an object loaded from a GLTF resource. */
+export interface GLTFConfig extends Object3DConfig {
+  type :"gltf"
+  url :string
+}
+
 /** Configures the geometry and (optionally) material of a mesh. */
-export interface MeshConfig {
+export interface MeshConfig extends Object3DConfig {
+  type :"mesh"
   geometry :GeometryConfig
   material? :MaterialConfig
 }
@@ -37,7 +53,6 @@ export interface HeightfieldBufferConfig extends GeometryConfig {
   type :"heightfieldBuffer"
   data :Float32Array[]
   elementSize :number
-
 }
 
 /** Base class for material configs. */
@@ -51,39 +66,65 @@ export interface ToonMaterialConfig extends MaterialConfig {
   color :Color | string | undefined
 }
 
-/** Manages a group of meshes based on [[TransformComponent]] for 3D transform, a
- * geometry component, and an optional material component. Users of this system must call
- * [[MeshSystem.update]] on every frame. */
-export class MeshSystem extends System {
+/** Manages a group of scene nodes based on [[TransformComponent]] for 3D transform and a scene
+ * object component. Users of this system must call [[SceneSystem.update]] on every frame. */
+export class SceneSystem extends System {
+
+  /** The group that holds all of our objects. */
   readonly group :Group = new Group()
 
   constructor (domain :Domain,
                readonly trans :TransformComponent,
-               readonly mesh :Component<Mesh>) {
-    super(domain, Matcher.hasAllC(trans.id, mesh.id))
+               readonly obj :Component<Object3D>) {
+    super(domain, Matcher.hasAllC(trans.id, obj.id))
   }
 
   update () {
     this.onEntities(id => {
-      const mesh = this.mesh.read(id)
-      this.trans.readPosition(id, mesh.position)
-      this.trans.readQuaternion(id, mesh.quaternion)
-      this.trans.readScale(id, mesh.scale)
+      const obj = this.obj.read(id)
+      this.trans.readPosition(id, obj.position)
+      this.trans.readQuaternion(id, obj.quaternion)
+      this.trans.readScale(id, obj.scale)
     })
   }
 
   protected added (id :ID, config :EntityConfig) {
     super.added(id, config)
-    const meshConfig :MeshConfig = config.components[this.mesh.id]
-    const mesh = new Mesh(createGeometry(meshConfig.geometry),
-                          maybeCreateMaterial(meshConfig.material))
-    this.mesh.update(id, mesh)
-    this.group.add(mesh)
+    createObject3D(config.components[this.obj.id]).onValue(obj => {
+      this.obj.update(id, obj)
+      this.group.add(obj)
+    })
   }
 
   protected deleted (id :ID) {
-    this.group.remove(this.mesh.read(id))
+    this.group.remove(this.obj.read(id))
     super.deleted(id)
+  }
+}
+
+function createObject3D (objectConfig: Object3DConfig) :Subject<Object3D> {
+  switch (objectConfig.type) {
+    case "gltf": {
+      const gltfConfig = objectConfig as GLTFConfig
+      const loader = new GLTFLoader()
+      return Subject.derive(dispatch => {
+        loader.load(
+          gltfConfig.url,
+          (gltf :{[key :string]: any}) => dispatch(gltf.scene),
+          () => {},
+          () => {
+            // TODO: error object
+          }
+        )
+        return NoopRemover
+      })
+    }
+    case "mesh":
+      const meshConfig = objectConfig as MeshConfig
+      return Value.constant(new Mesh(createGeometry(meshConfig.geometry),
+                                     maybeCreateMaterial(meshConfig.material)))
+    default:
+      throw new Error("Unknown Object3D type: " + objectConfig.type)
   }
 }
 
