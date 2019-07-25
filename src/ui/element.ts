@@ -2,7 +2,7 @@ import {Disposable, Disposer, Remover, NoopRemover, PMap} from "../core/util"
 import {Clock} from "../core/clock"
 import {dim2, rect, vec2} from "../core/math"
 import {Record} from "../core/data"
-import {Mutable, Source, Value} from "../core/react"
+import {Emitter, Mutable, Source, Stream, Value} from "../core/react"
 import {Scale} from "../core/ui"
 import {StyleContext} from "./style"
 
@@ -191,91 +191,6 @@ export abstract class Element implements Disposable {
   protected abstract relayout () :void
 }
 
-const ControlStyleScope = {id: "control", states: ["normal", "disabled", "focused"]}
-
-/** Configuration shared by all [[Control]]s. */
-export interface ControlConfig extends ElementConfig {
-  enabled? :string|Value<boolean>
-  contents :ElementConfig
-}
-
-/** Controls are [[Element]]s that can be interacted with. They can be enabled or disabled and
-  * generally support some sort of mouse/touch/keyboard interactions. Controls are also generally
-  * composite elements, combining one or more "visualization" elements. For example, a `Button`
-  * combines a `Box` with an `Icon` and/or `Label` (and a `Group` if both an icon and label are
-  * used) to visualize the button, and `Button` handles interactions. */
-export class Control extends Element {
-  protected readonly _state = Mutable.local("normal")
-  protected readonly enabled :Value<boolean>
-  protected readonly contents :Element
-
-  constructor (ctx :ElementContext, parent :Element|undefined, readonly config :ControlConfig) {
-    super(ctx, parent, config)
-    if (!config.enabled) this.enabled = trueValue
-    else {
-      this.enabled = ctx.resolveModel(config.enabled)
-      this.disposer.add(this.enabled.onValue(_ => this._state.update(this.computeState)))
-    }
-    this.contents = ctx.createElement(this, config.contents)
-  }
-
-  get styleScope () :StyleScope { return ControlStyleScope }
-  get state () :Value<string> { return this._state }
-  get isFocused () :boolean { return this.root.focus.current === this }
-
-  /** Requests that this control receive input focus. */
-  focus () {
-    // no focus if you're not enabled
-    if (!this.enabled.current) return
-    const root = this.root
-    // if we're already focused, then nothing doing
-    if (root.focus.current === this) return
-
-    root.focus.update(this)
-    this._state.update(this.computeState)
-    const remover = root.focus.onValue(fc => {
-      if (fc !== this) {
-        this._state.update(this.computeState)
-        remover()
-      }
-    })
-  }
-
-  /** Requests that this control handle the supplied keyboard event.
-    * This will only be called on controls that have the keyboard focus. */
-  handleKeyEvent (event :KeyboardEvent) {}
-
-  render (canvas :CanvasRenderingContext2D) {
-    this.contents.render(canvas)
-  }
-
-  findChild (type :string) :Element|undefined {
-    return super.findChild(type) || this.contents.findChild(type)
-  }
-
-  dispose () {
-    super.dispose()
-    this.contents.dispose()
-  }
-
-  protected get computeState () :string {
-    return this.isFocused ? "focused" : this.enabled.current ? "normal" : "disabled"
-  }
-
-  protected computePreferredSize (hintX :number, hintY :number, into :dim2) {
-    dim2.copy(into, this.contents.preferredSize(hintX, hintY))
-  }
-
-  protected relayout () {
-    this.contents.setBounds(this._bounds)
-  }
-
-  protected revalidate () {
-    super.revalidate()
-    this.contents.validate()
-  }
-}
-
 /** Encapsulates a mouse interaction with an element. When the mouse button is pressed over an
   * element, it can start an interaction which will then handle subsequent mouse events until the
   * button is released or the interaction is canceled. */
@@ -289,8 +204,8 @@ export type MouseInteraction = {
   cancel: () => void
 }
 
-const RootStyleScope = {id: "default", states: ["normal"]}
-const RootState = Value.constant("normal")
+export const RootStates = ["normal"]
+const RootState = Value.constant(RootStates[0])
 
 /** Defines configuration for [[Root]] elements. */
 export interface RootConfig extends ElementConfig {
@@ -302,7 +217,7 @@ export interface RootConfig extends ElementConfig {
 /** The top-level of the UI hierarchy. Manages the canvas into which the UI is rendered. */
 export class Root extends Element {
   private readonly interacts :Array<MouseInteraction|undefined> = []
-
+  private readonly _clock = new Emitter<Clock>()
   readonly canvasElem :HTMLCanvasElement = document.createElement("canvas")
   readonly canvas :CanvasRenderingContext2D
   readonly contents :Element
@@ -316,7 +231,8 @@ export class Root extends Element {
     this.contents = ctx.createElement(this, config.contents)
   }
 
-  get styleScope () :StyleScope { return RootStyleScope }
+  get clock () :Stream<Clock> { return this._clock }
+  get styleScope () :StyleScope { return {id: "default", states: RootStates} }
   get root () :Root { return this }
   get state () :Value<string> { return RootState }
 
@@ -325,6 +241,13 @@ export class Root extends Element {
     this.validate()
     this.render(this.canvas)
     return this.canvasElem
+  }
+
+  update (clock :Clock) :boolean {
+    this._clock.emit(clock)
+    const changed = this.validate()
+    changed && this.render(this.canvas)
+    return changed
   }
 
   render (canvas :CanvasRenderingContext2D) {
@@ -405,6 +328,91 @@ export class Root extends Element {
   }
 }
 
+export const ControlStates = [...RootStates, "disabled", "focused"]
+
+/** Configuration shared by all [[Control]]s. */
+export interface ControlConfig extends ElementConfig {
+  enabled? :string|Value<boolean>
+  contents :ElementConfig
+}
+
+/** Controls are [[Element]]s that can be interacted with. They can be enabled or disabled and
+  * generally support some sort of mouse/touch/keyboard interactions. Controls are also generally
+  * composite elements, combining one or more "visualization" elements. For example, a `Button`
+  * combines a `Box` with an `Icon` and/or `Label` (and a `Group` if both an icon and label are
+  * used) to visualize the button, and `Button` handles interactions. */
+export class Control extends Element {
+  protected readonly _state = Mutable.local(ControlStates[0])
+  protected readonly enabled :Value<boolean>
+  protected readonly contents :Element
+
+  constructor (ctx :ElementContext, parent :Element|undefined, readonly config :ControlConfig) {
+    super(ctx, parent, config)
+    if (!config.enabled) this.enabled = trueValue
+    else {
+      this.enabled = ctx.resolveModel(config.enabled)
+      this.disposer.add(this.enabled.onValue(_ => this._state.update(this.computeState)))
+    }
+    this.contents = ctx.createElement(this, config.contents)
+  }
+
+  get styleScope () :StyleScope { return {id: "control", states: ControlStates} }
+  get state () :Value<string> { return this._state }
+  get isFocused () :boolean { return this.root.focus.current === this }
+
+  /** Requests that this control receive input focus. */
+  focus () {
+    // no focus if you're not enabled
+    if (!this.enabled.current) return
+    const root = this.root
+    // if we're already focused, then nothing doing
+    if (root.focus.current === this) return
+
+    root.focus.update(this)
+    this._state.update(this.computeState)
+    const remover = root.focus.onValue(fc => {
+      if (fc !== this) {
+        this._state.update(this.computeState)
+        remover()
+      }
+    })
+  }
+
+  /** Requests that this control handle the supplied keyboard event.
+    * This will only be called on controls that have the keyboard focus. */
+  handleKeyEvent (event :KeyboardEvent) {}
+
+  render (canvas :CanvasRenderingContext2D) {
+    this.contents.render(canvas)
+  }
+
+  findChild (type :string) :Element|undefined {
+    return super.findChild(type) || this.contents.findChild(type)
+  }
+
+  dispose () {
+    super.dispose()
+    this.contents.dispose()
+  }
+
+  protected get computeState () :string {
+    return this.isFocused ? "focused" : this.enabled.current ? "normal" : "disabled"
+  }
+
+  protected computePreferredSize (hintX :number, hintY :number, into :dim2) {
+    dim2.copy(into, this.contents.preferredSize(hintX, hintY))
+  }
+
+  protected relayout () {
+    this.contents.setBounds(this._bounds)
+  }
+
+  protected revalidate () {
+    super.revalidate()
+    this.contents.validate()
+  }
+}
+
 /** Manages a collection of [[Root]]s: handles dispatching input and frame events, revalidating and
   * rerendering. Client responsibilities:
   * - [[bind]] to the canvas element in which the roots are rendered
@@ -451,11 +459,8 @@ export class Host implements Disposable {
   update (clock :Clock) {
     let ii = 0
     for (const ro of this.roots) {
-      const root = ro[0], origin = ro[1]
-      if (root.validate()) {
-        root.render(root.canvas)
-        this.rootUpdated(root, origin, ii)
-      }
+      const root = ro[0]
+      if (root.update(clock)) this.rootUpdated(root, ro[1], ii)
       ii += 1
     }
   }
