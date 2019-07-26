@@ -24,6 +24,22 @@ const SY = 11
 const RO  = 12
 const DT  = 13
 
+/** Creates a transform with the supplied initial values. Used to specify initial values for
+  * transform components. */
+export function makeTransform (ox :number, oy :number, tx :number, ty :number,
+                               sx :number, sy :number, rot :number) :Float32Array {
+  const trans = DefaultTransform.slice(0)
+  trans[OX] = ox
+  trans[OY] = oy
+  trans[TX] = tx
+  trans[TY] = ty
+  trans[SX] = sx
+  trans[SY] = sy
+  trans[RO] = rot
+  trans[DT] = 1
+  return trans
+}
+
 /** A 2D transform for a sprite-like entity. This includes translation, rotation, scale and origin.
   * These individual components are combined into a transform matrix which can then be used to
   * render the sprite using [[RenderSystem]]. */
@@ -188,7 +204,7 @@ export class RenderSystem extends System {
       const tile = this.tile.read(id)
       const trans = this.trans.readMatrix(id, this.ttrans)
       const tint = this.tint ? this.tint.read(id, this.ttint) : noTint
-      batch.addTexQuad(tile.texture, tint, trans, vec2zero, tile.size)
+      batch.addTile(tile, tint, trans, vec2zero, tile.size)
     })
   }
 }
