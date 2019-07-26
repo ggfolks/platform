@@ -203,17 +203,11 @@ export class SparseValueComponent<T> extends Component<T> {
   }
 }
 
-/** Specializes [[Component]] for handling of array values. Mainly this is the addition of a
-  * zero-allocation [[ArrayComponent.read]] method. */
-export abstract class ArrayComponent<T> extends Component<T> {
-
-  /** Returns the value of this component for entity `id`. If `into` is supplied, the value will be
-    * copied into `into` and `into` will be returned. */
-  abstract read (id :ID, into? :T) :T
-}
-
-export class Float32Component extends Component<number> {
-  private readonly batches :Float32Array[] = []
+/** A component backed by a typed array where the component value takes up only a single array slot.
+  * Predefined versions are provided for common use cases: [[Float32Component]] for float-valued
+  * scalars, and [[IDComponent]] (for entity to entity mappings). */
+export abstract class TypedArrayComponent<E, A> extends Component<E> {
+  private readonly batches :A[] = []
   private readonly batchMask :number
 
   constructor (readonly id :string, private readonly defval :number,
@@ -222,10 +216,10 @@ export class Float32Component extends Component<number> {
     this.batchMask = (1 << batchBits) - 1
   }
 
-  read (id :ID) :number {
+  read (id :ID) :E {
     return this.batches[id >> this.batchBits][id & this.batchMask]
   }
-  update (id :ID, value :number) {
+  update (id :ID, value :E) {
     this.batches[id >> this.batchBits][id & this.batchMask] = value
   }
 
@@ -233,12 +227,33 @@ export class Float32Component extends Component<number> {
     const init = config && 'initial' in config ? config.initial : this.defval
     const batix = id >> this.batchBits
     const array = this.batches[batix] || (
-      this.batches[batix] = new Float32Array(1 << this.batchBits))
+      this.batches[batix] = this.createArray(1 << this.batchBits))
     array[id & this.batchMask] = init as number
   }
   // could remove empty batches but that would require tracking batch occupancy; more trouble than
   // its worth
   removed (id :ID) {}
+
+  protected abstract createArray (size :number) :A
+}
+
+/** A component providing a single 32-bit float per entity. */
+export class Float32Component extends TypedArrayComponent<number, Float32Array> {
+  protected createArray (size :number) { return new Float32Array(size) }
+}
+
+/** A component providing a single entity ID per entity (for entity to entity maps). */
+export class IDComponent extends TypedArrayComponent<ID, Uint32Array> {
+  protected createArray (size :number) { return new Uint32Array(size) }
+}
+
+/** Specializes [[Component]] for handling of array values. Mainly this is the addition of a
+  * zero-allocation [[ArrayComponent.read]] method. */
+export abstract class ArrayComponent<T> extends Component<T> {
+
+  /** Returns the value of this component for entity `id`. If `into` is supplied, the value will be
+    * copied into `into` and `into` will be returned. */
+  abstract read (id :ID, into? :T) :T
 }
 
 export class Vec2Component extends ArrayComponent<vec2> {
