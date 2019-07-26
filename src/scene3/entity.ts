@@ -3,6 +3,7 @@ import {
   Color,
   Group,
   Mesh,
+  MeshBasicMaterial,
   MeshStandardMaterial,
   MeshToonMaterial,
   Object3D,
@@ -93,6 +94,9 @@ export class SceneSystem extends System {
   protected added (id :ID, config :EntityConfig) {
     super.added(id, config)
     createObject3D(config.components[this.obj.id]).onValue(obj => {
+      // if this is the initial, default Object3D, it won't actually be in the group;
+      // otherwise, we're replacing the model with another
+      this.group.remove(this.obj.read(id))
       this.obj.update(id, obj)
       this.group.add(obj)
     })
@@ -106,36 +110,10 @@ export class SceneSystem extends System {
 
 function createObject3D (objectConfig: Object3DConfig) :Subject<Object3D> {
   switch (objectConfig.type) {
-    case "gltf": {
+    case "gltf":
       const gltfConfig = objectConfig as GLTFConfig
-      const loader = new GLTFLoader()
-      return Subject.derive(dispatch => {
-        loader.load(
-          gltfConfig.url,
-          (gltf :{[key :string]: any}) => {
-            // hack for alpha testing: enable on any materials with a color texture that has
-            // an alpha channel
-            gltf.scene.traverse((node :Object3D) => {
-              if (node instanceof Mesh) {
-                const material = node.material
-                if (material instanceof MeshStandardMaterial &&
-                    material.map &&
-                    material.map.format === RGBAFormat) {
-                  material.alphaTest = 0.9
-                  material.transparent = false
-                }
-              }
-            })
-            dispatch(gltf.scene)
-          },
-          () => {},
-          () => {
-            // TODO: error object
-          }
-        )
-        return NoopRemover
-      })
-    }
+      return loadGLTF(gltfConfig.url).map(original => original.clone())
+
     case "mesh":
       const meshConfig = objectConfig as MeshConfig
       return Value.constant(new Mesh(createGeometry(meshConfig.geometry),
@@ -143,6 +121,44 @@ function createObject3D (objectConfig: Object3DConfig) :Subject<Object3D> {
     default:
       throw new Error("Unknown Object3D type: " + objectConfig.type)
   }
+}
+
+const gltfs :Map<string, Subject<Object3D>> = new Map()
+const errorGeom = new BoxBufferGeometry()
+const errorMat = new MeshBasicMaterial({color: 0xFF0000})
+
+function loadGLTF (url :string) {
+  let gltf = gltfs.get(url)
+  if (!gltf) {
+    gltfs.set(url, gltf = Subject.derive(dispatch => {
+      new GLTFLoader().load(
+        url,
+        gltf => {
+          // hack for alpha testing: enable on any materials with a color texture that has
+          // an alpha channel
+          gltf.scene.traverse((node :Object3D) => {
+            if (node instanceof Mesh) {
+              const material = node.material
+              if (material instanceof MeshStandardMaterial &&
+                  material.map &&
+                  material.map.format === RGBAFormat) {
+                material.alphaTest = 0.9
+                material.transparent = false
+              }
+            }
+          })
+          dispatch(gltf.scene)
+        },
+        event => { /* do nothing with progress for now */ },
+        error => {
+          console.error(error)
+          dispatch(new Mesh(errorGeom, errorMat))
+        },
+      )
+      return NoopRemover
+    }))
+  }
+  return gltf
 }
 
 function maybeCreateMaterial (materialConfig? :MaterialConfig) {
