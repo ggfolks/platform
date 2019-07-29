@@ -1,3 +1,5 @@
+import {Clock} from "../core/clock"
+import {refEquals} from "../core/data"
 import {Mutable} from "../core/react"
 import {Graph} from "./graph"
 import {InputEdge, Node, NodeConfig, NodeTypeRegistry} from "./node"
@@ -8,7 +10,7 @@ export interface TimeoutConfig extends NodeConfig {
   seconds :number
 }
 
-class Timeout extends Node {
+class TimeoutNode extends Node {
   private _output = Mutable.local(0)
   private _timeout = setTimeout(() => this._output.update(1), this.config.seconds * 1000)
 
@@ -32,7 +34,7 @@ export interface IntervalConfig extends NodeConfig {
   seconds :number
 }
 
-class Interval extends Node {
+class IntervalNode extends Node {
   private _output = Mutable.local(0)
   private _interval = setInterval(
     () => { this._output.update(1) ; this._output.update(0) },
@@ -81,9 +83,28 @@ class Latch extends Node {
   }
 }
 
+/** Provides the time, elapsed, and dt (default) fields from the clock. */
+export interface ClockConfig extends NodeConfig {
+  type :"clock"
+}
+
+class ClockNode extends Node {
+
+  constructor (graph :Graph, id :string, readonly config :ClockConfig) {
+    super(graph, id, config)
+  }
+
+  getOutput (name? :string) {
+    const field :(clock :Clock) => number =
+      (name === "time" || name === "elapsed") ? clock => clock[name] : clock => clock.dt
+    return this.graph.clock.map(field).toValue(0, refEquals)
+  }
+}
+
 /** Registers the nodes in this module with the supplied registry. */
 export function registerUtilNodes (registry :NodeTypeRegistry) {
-  registry.registerNodeType("timeout", Timeout)
-  registry.registerNodeType("interval", Interval)
+  registry.registerNodeType("timeout", TimeoutNode)
+  registry.registerNodeType("interval", IntervalNode)
   registry.registerNodeType("latch", Latch)
+  registry.registerNodeType("clock", ClockNode)
 }

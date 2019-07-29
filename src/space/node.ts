@@ -4,13 +4,15 @@ import {InputEdge, NodeTypeRegistry} from "../graph/node"
 import {EntityComponentConfig, EntityComponentNode} from "../entity/node"
 import {TransformComponent} from "./entity"
 
-/** Rotates at a velocity determined by the input. */
+/** Rotates by an amount determined by the inputs. */
 export interface RotateConfig extends EntityComponentConfig {
   type :"rotate"
   x :InputEdge
   y :InputEdge
   z :InputEdge
 }
+
+const NoopListener = () => {}
 
 class Rotate extends EntityComponentNode<TransformComponent> {
 
@@ -23,19 +25,22 @@ class Rotate extends EntityComponentNode<TransformComponent> {
     const x = this.graph.getValue(this.config.x)
     const y = this.graph.getValue(this.config.y)
     const z = this.graph.getValue(this.config.z)
-    this._removers.push(this.graph.clock.onValue(clock => {
-      component.readQuaternion(this._entityId, quaternion)
-      quaternion.multiply(rotation.setFromEuler(euler.set(
-        x.current * clock.dt,
-        y.current * clock.dt,
-        z.current * clock.dt,
-      )))
-      component.updateQuaternion(this._entityId, quaternion)
-    }))
+    this._removers.push(
+      // we listen to the inputs despite the fact that we poll their values every frame;
+      // this is because, without listeners, the current value won't be updated
+      x.onChange(NoopListener),
+      y.onChange(NoopListener),
+      z.onChange(NoopListener),
+      this.graph.clock.onValue(clock => {
+        component.readQuaternion(this._entityId, quaternion)
+        quaternion.multiply(rotation.setFromEuler(euler.set(x.current, y.current, z.current)))
+        component.updateQuaternion(this._entityId, quaternion)
+      }),
+    )
   }
 }
 
-/** Translates at a velocity determined by the input. */
+/** Translates by an amount determined by the inputs. */
 export interface TranslateConfig extends EntityComponentConfig {
   type :"translate"
   x :InputEdge
@@ -56,15 +61,21 @@ class Translate extends EntityComponentNode<TransformComponent> {
     const x = this.graph.getValue(this.config.x)
     const y = this.graph.getValue(this.config.y)
     const z = this.graph.getValue(this.config.z)
-    this._removers.push(this.graph.clock.onValue(clock => {
-      component.readPosition(this._entityId, position)
-      component.readQuaternion(this._entityId, quaternion)
-      vector
-        .set(x.current, y.current, z.current)
-        .multiplyScalar(clock.dt)
-        .applyQuaternion(quaternion)
-      component.updatePosition(this._entityId, position.add(vector))
-    }))
+    this._removers.push(
+      // we listen to the inputs despite the fact that we poll their values every frame;
+      // this is because, without listeners, the current value won't be updated
+      x.onChange(NoopListener),
+      y.onChange(NoopListener),
+      z.onChange(NoopListener),
+      this.graph.clock.onValue(clock => {
+        component.readPosition(this._entityId, position)
+        component.readQuaternion(this._entityId, quaternion)
+        vector
+          .set(x.current, y.current, z.current)
+          .applyQuaternion(quaternion)
+        component.updatePosition(this._entityId, position.add(vector))
+      }),
+    )
   }
 }
 
