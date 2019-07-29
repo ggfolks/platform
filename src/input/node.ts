@@ -1,6 +1,6 @@
 import {Value} from "../core/react"
 import {Graph} from "../graph/graph"
-import {Node, NodeConfig, NodeContext, NodeTypeRegistry} from "../graph/node"
+import {Node, NodeConfig, NodeContext, NodeTypeRegistry, OutputEdge} from "../graph/node"
 import {Keyboard} from "./keyboard"
 import {Mouse} from "./mouse"
 
@@ -13,6 +13,7 @@ export interface InputNodeContext extends NodeContext {
 export interface KeyConfig extends NodeConfig {
   type :"key"
   code :number
+  output :OutputEdge<boolean>
 }
 
 class Key extends Node {
@@ -20,7 +21,7 @@ class Key extends Node {
   constructor (graph :Graph, id :string, readonly config :KeyConfig) { super(graph, id, config) }
 
   getOutput () {
-    return Keyboard.instance.getKeyState(this.config.code).map(Number)
+    return Keyboard.instance.getKeyState(this.config.code)
   }
 }
 
@@ -28,6 +29,7 @@ class Key extends Node {
 export interface MouseButtonConfig extends NodeConfig {
   type :"mouseButton"
   button? :number
+  output :OutputEdge<boolean>
 }
 
 class MouseButton extends Node {
@@ -38,13 +40,15 @@ class MouseButton extends Node {
 
   getOutput () {
     const mouse = (this.graph.ctx as InputNodeContext).mouse
-    return mouse ? mouse.getButtonState(this.config.button || 0).map(Number) : Value.constant(0)
+    return mouse ? mouse.getButtonState(this.config.button || 0) : Value.constant(false)
   }
 }
 
 /** Provides outputs of x and y describing mouse movement in pixels. */
 export interface MouseMovementConfig extends NodeConfig {
   type :"mouseMovement"
+  x :OutputEdge<number>
+  y :OutputEdge<number>
 }
 
 class MouseMovement extends Node {

@@ -55,7 +55,7 @@ export class EntityComponentNode<T> extends EntityNode {
 export interface AddEntityConfig extends NodeConfig {
   type :"addEntity"
   config :EntityConfig
-  input :InputEdge
+  input :InputEdge<boolean>
 }
 
 class AddEntity extends Node {
@@ -65,7 +65,7 @@ class AddEntity extends Node {
   }
 
   connect () {
-    this._removers.push(this.graph.getValue(this.config.input).onValue(value => {
+    this._removers.push(this.graph.getValue(this.config.input, false).onValue(value => {
       if (value) {
         const ctx = this.graph.ctx as EntityNodeContext
         ctx.domain.add(this.config.config)
@@ -77,7 +77,7 @@ class AddEntity extends Node {
 /** A node that deletes an entity when its input transitions to true. */
 export interface DeleteEntityConfig extends EntityNodeConfig {
   type :"deleteEntity"
-  input :InputEdge
+  input :InputEdge<boolean>
 }
 
 class DeleteEntity extends EntityNode {
@@ -87,7 +87,7 @@ class DeleteEntity extends EntityNode {
   }
 
   connect () {
-    this._removers.push(this.graph.getValue(this.config.input).onValue(value => {
+    this._removers.push(this.graph.getValue(this.config.input, false).onValue(value => {
       if (value) {
         const ctx = this.graph.ctx as EntityNodeContext
         ctx.domain.delete(this._entityId)

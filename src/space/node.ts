@@ -7,9 +7,9 @@ import {TransformComponent} from "./entity"
 /** Rotates by an amount determined by the inputs. */
 export interface RotateConfig extends EntityComponentConfig {
   type :"rotate"
-  x :InputEdge
-  y :InputEdge
-  z :InputEdge
+  x :InputEdge<number>
+  y :InputEdge<number>
+  z :InputEdge<number>
 }
 
 const NoopListener = () => {}
@@ -22,9 +22,9 @@ class Rotate extends EntityComponentNode<TransformComponent> {
     const quaternion = new Quaternion()
     const rotation = new Quaternion()
     const euler = new Euler()
-    const x = this.graph.getValue(this.config.x)
-    const y = this.graph.getValue(this.config.y)
-    const z = this.graph.getValue(this.config.z)
+    const x = this.graph.getValue(this.config.x, 0)
+    const y = this.graph.getValue(this.config.y, 0)
+    const z = this.graph.getValue(this.config.z, 0)
     this._removers.push(
       // we listen to the inputs despite the fact that we poll their values every frame;
       // this is because, without listeners, the current value won't be updated
@@ -43,9 +43,9 @@ class Rotate extends EntityComponentNode<TransformComponent> {
 /** Translates by an amount determined by the inputs. */
 export interface TranslateConfig extends EntityComponentConfig {
   type :"translate"
-  x :InputEdge
-  y :InputEdge
-  z :InputEdge
+  x :InputEdge<number>
+  y :InputEdge<number>
+  z :InputEdge<number>
 }
 
 class Translate extends EntityComponentNode<TransformComponent> {
@@ -58,9 +58,9 @@ class Translate extends EntityComponentNode<TransformComponent> {
     const position = new Vector3()
     const quaternion = new Quaternion()
     const vector = new Vector3()
-    const x = this.graph.getValue(this.config.x)
-    const y = this.graph.getValue(this.config.y)
-    const z = this.graph.getValue(this.config.z)
+    const x = this.graph.getValue(this.config.x, 0)
+    const y = this.graph.getValue(this.config.y, 0)
+    const z = this.graph.getValue(this.config.z, 0)
     this._removers.push(
       // we listen to the inputs despite the fact that we poll their values every frame;
       // this is because, without listeners, the current value won't be updated

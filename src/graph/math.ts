@@ -1,11 +1,12 @@
 import {Value} from "../core/react"
 import {Graph} from "./graph"
-import {InputEdges, Node, NodeConfig, NodeTypeRegistry} from "./node"
+import {InputEdges, Node, NodeConfig, NodeTypeRegistry, OutputEdge} from "./node"
 
 /** Outputs a single constant. */
 export interface ConstantConfig extends NodeConfig {
   type :"constant"
   value :number
+  output :OutputEdge<number>
 }
 
 class Constant extends Node {
@@ -21,7 +22,8 @@ class Constant extends Node {
 
 /** Base config for operators with N inputs and one output. */
 interface OperatorConfig extends NodeConfig {
-  inputs :InputEdges
+  inputs :InputEdges<number>
+  output :OutputEdge<number>
 }
 
 class Operator extends Node {
@@ -31,7 +33,13 @@ class Operator extends Node {
   }
 
   getOutput () {
-    return this.graph.getValues(this.config.inputs).map(values => this._apply(values))
+    return this.graph
+      .getValues(this.config.inputs, this._defaultInputValue)
+      .map(values => this._apply(values))
+  }
+
+  protected get _defaultInputValue () :number {
+    return 0
   }
 
   protected _apply (values :number[]) :number {
@@ -76,6 +84,10 @@ class Multiply extends Operator {
     super(graph, id, config)
   }
 
+  protected get _defaultInputValue () :number {
+    return 1
+  }
+
   protected _apply (values :number[]) :number {
     let product = 1
     for (const value of values) {
@@ -90,6 +102,7 @@ export interface RandomConfig extends NodeConfig {
   type :"random"
   min :number
   max :number
+  output :OutputEdge<number>
 }
 
 class Random extends Node {

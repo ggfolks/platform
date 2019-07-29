@@ -24,17 +24,17 @@ export class Graph implements Disposable {
   }
 
   /** Retrieves a reactive value representing the identified input edges. */
-  getValues (inputs :InputEdges) :Value<number[]> {
+  getValues<T> (inputs :InputEdges<T>, defaultValue :T) :Value<T[]> {
     if (!inputs) {
-      return Value.constant([] as number[])
+      return Value.constant([] as T[])
     }
-    return Value.join(...inputs.map(input => this.getValue(input)))
+    return Value.join(...inputs.map(input => this.getValue(input, defaultValue)))
   }
 
   /** Retrieves a reactive value representing the identified input edge. */
-  getValue (input :InputEdge) :Value<number> {
+  getValue<T> (input :InputEdge<T>, defaultValue :T) :Value<T> {
     if (!input) {
-      return Value.constant(0)
+      return Value.constant(defaultValue)
     }
     if (Array.isArray(input)) {
       const [nodeId, outputName] = input

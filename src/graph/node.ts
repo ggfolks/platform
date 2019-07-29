@@ -10,17 +10,17 @@ export interface NodeConfig {
   [extra :string] :any
 }
 
-/** The type of the values transferred over edges. */
-export type EdgeValue = number
-
 /** Describes the input of a node: a node ID, a node/output pair, or a static value. */
-export type NodeInput = string | [string, string] | EdgeValue
+export type NodeInput<T> = string | [string, string] | T
 
 /** Describes the connection state of a single node input. */
-export type InputEdge = undefined | NodeInput
+export type InputEdge<T> = undefined | NodeInput<T>
 
 /** Describes the connection states of an array of node inputs. */
-export type InputEdges = undefined | InputEdge[]
+export type InputEdges<T> = undefined | InputEdge<T>[]
+
+/** Used to describe output edges, whose connection states are omitted from configs. */
+export type OutputEdge<T> = never
 
 /** Base interface for node contexts. */
 export interface NodeContext {
@@ -36,7 +36,7 @@ export abstract class Node implements Disposable {
   constructor (readonly graph :Graph, readonly id :string, readonly config :NodeConfig) {}
 
   /** Returns the value corresponding to the identified output, or the default if none. */
-  getOutput (name? :string) :Value<number> {
+  getOutput (name? :string) :Value<any> {
     throw new Error("Unknown output " + name)
   }
 
