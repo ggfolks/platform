@@ -295,18 +295,18 @@ function makeErrorTexture (
 }
 
 export function makeTexture (
-  glc :GLC, image :Subject<TexImageSource|Error>, config :Subject<TextureConfig>
+  glc :GLC, image :Subject<TexImageSource|Error>, config :TextureConfig
 ) :Subject<Texture> {
   let tex :WebGLTexture|void = undefined
-  return Subject.join2(image, config).mapTrace(() => {
+  return image.mapTrace(() => {
     // nothing to do in onWake, we'll create our texture when we have our first `cfg`
-  }, ([img, cfg]) => {
-    if (!tex) tex = createTexture(glc, cfg)
+  }, img => {
+    if (!tex) tex = createTexture(glc, config)
     if (img instanceof Error) {
       console.log(`makeTexture() got error: ${img.message}`)
-      return makeErrorTexture(glc, cfg, tex)
+      return makeErrorTexture(glc, config, tex)
     }
-    else return imageToTexture(glc, img, cfg, tex)
+    else return imageToTexture(glc, img, config, tex)
   }, _ => {
     if (tex) glc.deleteTexture(tex)
   })
