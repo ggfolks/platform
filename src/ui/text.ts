@@ -118,12 +118,12 @@ const actions :PMap<TextAction> = {
     const ctext = state.text.current, [sstart, send] = state.selection.current
     if (sstart < send) {
       state.text.update(ctext.substring(0, sstart) + typed + ctext.substring(send))
-      state.cursor.update(sstart+1)
+      state.cursor.update(sstart+typed.length)
       state.selection.update([0, 0])
     } else {
       const ipos = state.cursor.current
       state.text.update(ctext.substring(0, ipos) + typed + ctext.substring(ipos))
-      state.cursor.update(ipos+1)
+      state.cursor.update(ipos+typed.length)
     }
   },
   delete: (state, typed) => {
@@ -155,18 +155,8 @@ const actions :PMap<TextAction> = {
     if (send > sstart) navigator.clipboard.writeText(state.text.current.substring(sstart, send))
   },
   paste: (state, typed) => {
-    const ctext = state.text.current, cpos = state.cursor.current
-    const [sstart, send] = state.selection.current
-    const [pos, pre, post] = (send > sstart) ?
-      [sstart, ctext.substring(0, sstart), ctext.substring(send)] :
-      [cpos, ctext.substring(0, cpos), ctext.substring(cpos)]
     readClipText().then(text => {
-      if (text) {
-        const trimmed = text.replace("\n", "").replace("\r", "")
-        state.text.update(pre + trimmed + post)
-        state.cursor.update(pos + trimmed.length)
-        state.selection.update([0, 0])
-      }
+      if (text) actions.insert(state, text.replace("\n", "").replace("\r", ""))
     })
   },
   // moving the cursor around
