@@ -1,6 +1,7 @@
+import {Mutable} from "../core/react"
 import {Graph} from "../graph/graph"
-import {InputEdge, Node, NodeConfig, NodeContext, NodeTypeRegistry} from "../graph/node"
-import {Domain, EntityConfig, ID} from "./entity"
+import {InputEdge, Node, NodeConfig, NodeContext, NodeTypeRegistry, OutputEdge} from "../graph/node"
+import {Component, Domain, EntityConfig, ID} from "./entity"
 
 /** Context for nodes relating to entities. */
 export interface EntityNodeContext extends NodeContext {
@@ -36,7 +37,7 @@ export interface EntityComponentConfig extends EntityNodeConfig {
 }
 
 /** Base class for nodes that operate on a single component (of type T) of a single entity. */
-export class EntityComponentNode<T> extends EntityNode {
+export class EntityComponentNode<T extends Component<any>> extends EntityNode {
 
   constructor (graph :Graph, id :string, readonly config :EntityComponentConfig) {
     super(graph, id, config)
@@ -96,8 +97,58 @@ class DeleteEntity extends EntityNode {
   }
 }
 
+/** Provides the value of a component as an output. */
+export interface ReadComponentConfig extends EntityComponentConfig {
+  type :"readComponent"
+  output :OutputEdge<any>
+}
+
+class ReadComponent extends EntityComponentNode<Component<any>> {
+  private _output :Mutable<any> = Mutable.local(0)
+
+  constructor (graph :Graph, id :string, readonly config :ReadComponentConfig) {
+    super(graph, id, config)
+  }
+
+  getOutput () {
+    return this._output
+  }
+
+  protected _connectComponent (component :Component<any>) {
+    // TODO: use a reactive view of the component value
+    this._removers.push(
+      this.graph.clock.onValue(clock => {
+        this._output.update(component.read(this._entityId))
+      })
+    )
+  }
+}
+
+/** Updates the value of a component according to the input. */
+export interface UpdateComponentConfig extends EntityComponentConfig {
+  type :"updateComponent"
+  input :InputEdge<any>
+}
+
+class UpdateComponent extends EntityComponentNode<Component<any>> {
+
+  constructor (graph :Graph, id :string, readonly config :UpdateComponentConfig) {
+    super(graph, id, config)
+  }
+
+  protected _connectComponent (component :Component<any>) {
+    this._removers.push(
+      this.graph.getValue(this.config.input, 0).onValue(value => {
+        component.update(this._entityId, value)
+      })
+    )
+  }
+}
+
 /** Registers the nodes in this module with the supplied registry. */
 export function registerEntityNodes (registry :NodeTypeRegistry) {
   registry.registerNodeType("addEntity", AddEntity)
   registry.registerNodeType("deleteEntity", DeleteEntity)
+  registry.registerNodeType("readComponent", ReadComponent)
+  registry.registerNodeType("updateComponent", UpdateComponent)
 }

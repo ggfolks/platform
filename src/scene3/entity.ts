@@ -4,6 +4,7 @@ import {
   Camera,
   Color,
   DirectionalLight,
+  Intersection,
   Mesh,
   MeshBasicMaterial,
   MeshStandardMaterial,
@@ -11,6 +12,7 @@ import {
   Object3D,
   PerspectiveCamera,
   RGBAFormat,
+  Raycaster,
   Scene,
   SphereBufferGeometry,
   Vector2,
@@ -20,7 +22,16 @@ import {GLTFLoader} from "three/examples/jsm/loaders/GLTFLoader"
 
 import {Subject, Value} from "../core/react"
 import {NoopRemover} from "../core/util"
-import {Component, Domain, EntityConfig, ID, Matcher, System} from "../entity/entity"
+import {Touch} from "../input/input"
+import {
+  Component,
+  Domain,
+  EntityConfig,
+  ID,
+  IDSetComponent,
+  Matcher,
+  System,
+} from "../entity/entity"
 import {TransformComponent} from "../space/entity"
 import {createHeightfieldGeometry} from "./terrain"
 
@@ -97,6 +108,11 @@ export interface ToonMaterialConfig extends MaterialConfig {
 }
 
 const rendererSize = new Vector2()
+const touchCoords = new Vector2()
+const raycaster = new Raycaster()
+const intersections :Intersection[] = []
+const hoveredSet :Set<ID> = new Set()
+const pressedSet :Set<ID> = new Set()
 
 /** Manages a group of scene nodes based on [[TransformComponent]] for 3D transform and a scene
  * object component. Users of this system must call [[SceneSystem.update]] on every frame. */
@@ -109,7 +125,10 @@ export class SceneSystem extends System {
 
   constructor (domain :Domain,
                readonly trans :TransformComponent,
-               readonly obj :Component<Object3D>) {
+               readonly obj :Component<Object3D>,
+               readonly hovered? :IDSetComponent,
+               readonly pressed? :IDSetComponent,
+               readonly touches? :Value<Touch[]>) {
     super(domain, Matcher.hasAllC(trans.id, obj.id))
   }
 
@@ -118,6 +137,37 @@ export class SceneSystem extends System {
     this.update()
     renderer.getSize(rendererSize)
     const aspect = rendererSize.x / rendererSize.y
+    if (this.hovered && this.pressed && this.touches) {
+      hoveredSet.clear()
+      pressedSet.clear()
+      for (const touch of this.touches.current) {
+        for (const camera of this._cameras) {
+          raycaster.setFromCamera(
+            touchCoords.set(
+              touch.position[0] / rendererSize.x * 2 - 1,
+              1 - touch.position[1] / rendererSize.y * 2,
+            ),
+            camera,
+          )
+          intersections.length = 0
+          for (const intersection of raycaster.intersectObject(this.scene, true, intersections)) {
+            let ancestor :Object3D | null = intersection.object
+            while (ancestor && ancestor.userData.id === undefined) {
+              ancestor = ancestor.parent
+            }
+            if (ancestor) {
+              const comps = this.domain.entityConfig(ancestor.userData.id).components
+              if (comps[this.hovered.id]) {
+                hoveredSet.add(ancestor.userData.id)
+                if (touch.pressed && comps[this.pressed.id]) pressedSet.add(ancestor.userData.id)
+              }
+            }
+          }
+        }
+      }
+      this.hovered.updateAll(hoveredSet)
+      this.pressed.updateAll(pressedSet)
+    }
     for (const camera of this._cameras) {
       if (camera instanceof PerspectiveCamera && camera.aspect !== aspect) {
         camera.aspect = aspect
@@ -145,6 +195,7 @@ export class SceneSystem extends System {
       const oldObj = this.obj.read(id)
       this.scene.remove(oldObj)
       if (oldObj instanceof Camera) this._cameras.delete(oldObj)
+      obj.userData.id = id
       this.obj.update(id, obj)
       this.scene.add(obj)
       if (obj instanceof Camera) this._cameras.add(obj)

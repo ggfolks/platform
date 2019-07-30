@@ -247,6 +247,36 @@ export class IDComponent extends TypedArrayComponent<ID, Uint32Array> {
   protected createArray (size :number) { return new Uint32Array(size) }
 }
 
+/** Tracks membership in a small (relative to the domain entity count) set of entities. */
+export class IDSetComponent extends Component<boolean> {
+  private _ids :Set<ID> = new Set()
+
+  constructor (readonly id :string) { super() }
+
+  /** Updates the entire set so that it matches the argument. */
+  updateAll (set :Set<ID>) {
+    // remove anything not present in the new set
+    for (const id of this._ids) {
+      if (!set.has(id)) this._ids.delete(id)
+    }
+
+    // add anything not present in the old set
+    for (const id of set) {
+      this._ids.add(id)
+    }
+  }
+
+  read (id :number) :boolean { return this._ids.has(id) }
+  update (id :number, value :boolean) { value ? this._ids.add(id) : this._ids.delete(id) }
+
+  added (id :ID, config? :ValueComponentConfig<boolean>) {
+    if (config && config.initial) {
+      this._ids.add(id)
+    }
+  }
+  removed (id :ID) { this._ids.delete(id) }
+}
+
 /** Specializes [[Component]] for handling of array values. Mainly this is the addition of a
   * zero-allocation [[ArrayComponent.read]] method. */
 export abstract class ArrayComponent<T> extends Component<T> {

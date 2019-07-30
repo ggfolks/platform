@@ -1,4 +1,5 @@
 import {Euler, Quaternion, Vector3} from "three"
+import {Noop} from "../core/util"
 import {Graph} from "../graph/graph"
 import {InputEdge, NodeTypeRegistry} from "../graph/node"
 import {EntityComponentConfig, EntityComponentNode} from "../entity/node"
@@ -11,8 +12,6 @@ export interface RotateConfig extends EntityComponentConfig {
   y :InputEdge<number>
   z :InputEdge<number>
 }
-
-const NoopListener = () => {}
 
 class Rotate extends EntityComponentNode<TransformComponent> {
 
@@ -28,9 +27,9 @@ class Rotate extends EntityComponentNode<TransformComponent> {
     this._removers.push(
       // we listen to the inputs despite the fact that we poll their values every frame;
       // this is because, without listeners, the current value won't be updated
-      x.onChange(NoopListener),
-      y.onChange(NoopListener),
-      z.onChange(NoopListener),
+      x.onChange(Noop),
+      y.onChange(Noop),
+      z.onChange(Noop),
       this.graph.clock.onValue(clock => {
         component.readQuaternion(this._entityId, quaternion)
         quaternion.multiply(rotation.setFromEuler(euler.set(x.current, y.current, z.current)))
@@ -64,9 +63,9 @@ class Translate extends EntityComponentNode<TransformComponent> {
     this._removers.push(
       // we listen to the inputs despite the fact that we poll their values every frame;
       // this is because, without listeners, the current value won't be updated
-      x.onChange(NoopListener),
-      y.onChange(NoopListener),
-      z.onChange(NoopListener),
+      x.onChange(Noop),
+      y.onChange(Noop),
+      z.onChange(Noop),
       this.graph.clock.onValue(clock => {
         component.readPosition(this._entityId, position)
         component.readQuaternion(this._entityId, quaternion)
