@@ -114,9 +114,6 @@ export abstract class Source<T> {
     * value, `fn` will also be called immediately with the current value. */
   abstract onValue (fn :ValueFn<T>) :Remover
 
-  /** Returns a new source that transforms the value of this source via `fn`. */
-  abstract map<U> (fn :(v:T) => U) :Source<U>
-
   /** Registers `fn` to be called the first time this source contains or emits a value. If the
     * source contains a current value, `fn` will be called before this call returns. `fn` will be
     * called zero or one times.
