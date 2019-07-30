@@ -220,6 +220,7 @@ export class Stream<T> extends Source<T> {
     const stream = this
     class FoldValue extends DerivedValue<Z> {
       private _current = start
+      constructor (readonly eq :Eq<Z>) { super() }
       get current () :Z { return this._current }
       _connectToSource () {
         return stream.onEmit(value => {
@@ -450,10 +451,8 @@ export abstract class Value<T> extends Subject<T> {
     return (new JoinedValue([a, b, c]) as any) as Value<[A,B,C]>
   }
 
-  constructor (
-    /** The function used to test new values for equality with old values. */
-    readonly eq :Eq<T>
-  ) { super() }
+  /** The function used to test new values for equality with old values. */
+  abstract get eq () :Eq<T>
 
   /** The current value contained by this value. */
   abstract get current () :T
@@ -522,6 +521,7 @@ export abstract class Value<T> extends Subject<T> {
     }
 
     class SwitchMappedValue extends DerivedValue<R> {
+      get eq () :Eq<R> { return refEquals }
       get current () :R {
         // rather than recreate a mapped reactive value every time our value is requested,
         // we cache the source value from which we most recently created our mapped value
@@ -557,7 +557,7 @@ export abstract class Value<T> extends Subject<T> {
         }
       }
     }
-    return new SwitchMappedValue(refEquals)
+    return new SwitchMappedValue()
   }
 
   /** Returns a `Stream` that emits values whenever this value changes. */
@@ -614,20 +614,23 @@ abstract class DerivedValue<T> extends Value<T> {
 }
 
 class ConstantValue<T> extends Value<T> {
-  // note: we always use refEquals here as some equality fn is needed, but it is never used because
-  // constant values never change and thus never have to compare an old value and a new value
-  constructor (readonly current :T) { super(refEquals) }
+  constructor (readonly current :T) { super() }
+  // note: we use refEquals here as we must provide something for eq, but it's never used because
+  // constant values never change, thus we never have to compare an old and a new value
+  get eq () :Eq<T> { return refEquals }
   onChange (fn :ChangeFn<T>) :Remover { return NoopRemover }
 }
 
 class JoinedValue extends DerivedValue<any[]> {
+  readonly eq :Eq<any[]>
   constructor (readonly sources :Value<any>[]) {
-    super((as, bs) => {
+    super()
+    this.eq = (as, bs) => {
       for (let ii = 0, ll = sources.length; ii < ll; ii += 1) {
         if (!sources[ii].eq(as[ii], bs[ii])) return false
       }
       return true
-    })
+    }
   }
 
   get current () { return this.sources.map(source => source.current) }
@@ -679,7 +682,7 @@ export abstract class Mutable<T> extends Value<T> {
 class LocalMutable<T> extends Mutable<T> {
   private _listeners :ChangeFn<T>[] = []
 
-  constructor (private _value :T, eq :Eq<T>) { super(eq) }
+  constructor (private _value :T, readonly eq :Eq<T>) { super() }
 
   get current () :T { return this._value }
 
@@ -701,7 +704,11 @@ class MappedValue<S,T> extends DerivedValue<T> {
 
   get current () :T { return this.isConnected ? this._latest : this.fn(this.source.current) }
 
-  constructor (readonly source :Value<S>, readonly fn :(value :S) => T, eq :Eq<T>) { super(eq) }
+  constructor (
+    readonly source :Value<S>,
+    readonly fn :(value :S) => T,
+    readonly eq :Eq<T>
+  ) { super() }
 
   _connectToSource () {
     this._latest = this.current
