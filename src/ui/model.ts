@@ -3,6 +3,9 @@ import {Source} from "../core/react"
 /** Model actions executed in response to user actions (like button clicks). */
 export type Action = () => void
 
+/** An action that does nothing. */
+export const NoopAction :Action = () => {}
+
 /** Defines the allowed values in a model. */
 export type ModelValue = Source<unknown> | Action | ModelProvider
 

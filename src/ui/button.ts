@@ -1,11 +1,11 @@
 import {rect, vec2} from "../core/math"
 import {Mutable, Value} from "../core/react"
-import {Action, Spec} from "./model"
+import {Action, NoopAction, Spec} from "./model"
 import {Control, ControlConfig, Element, ElementContext, MouseInteraction} from "./element"
 
 export interface ButtonConfig extends ControlConfig {
   type :"button"
-  onClick :Spec<Action>
+  onClick? :Spec<Action>
 }
 
 const ButtonStyleScope = {id: "button", states: ["normal", "disabled", "focused", "pressed"]}
@@ -16,7 +16,7 @@ export class Button extends Control {
 
   constructor (ctx :ElementContext, parent :Element, readonly config :ButtonConfig) {
     super(ctx, parent, config)
-    this.onClick = ctx.model.resolve(config.onClick)
+    this.onClick = config.onClick ? ctx.model.resolve(config.onClick) : NoopAction
     this._pressed.onValue(_ => this._state.update(this.computeState))
   }
 

@@ -7,6 +7,7 @@ import {Control, ControlConfig, ControlStates, Element, ElementConfig, ElementCo
         MouseInteraction} from "./element"
 import {Spec, FontConfig, Paint, PaintConfig, DefaultPaint, ShadowConfig,
         Span, EmptySpan} from "./style"
+import {Action, NoopAction} from "./model"
 
 const tmpr = rect.create()
 
@@ -309,14 +310,16 @@ const DefaultCursor :CursorConfig = {type: "cursor", style: {}}
 /** Defines configuration for [[Text]]. */
 export interface TextConfig extends ControlConfig {
   type :"text"
-  text :Spec<Mutable<string>>
   cursor? :CursorConfig
+  text :Spec<Mutable<string>>
+  onEnter? :Spec<Action>
 }
 
 /** Displays a span of editable text. */
 export class Text extends Control {
   private readonly jiggle = Mutable.local(false)
   private readonly textState :TextState
+  private readonly onEnter :Action
   readonly coffset = Mutable.local(0)
   readonly text :Mutable<string>
   readonly label :Label
@@ -326,6 +329,7 @@ export class Text extends Control {
     super(ctx, parent, config)
     this.invalidateOnChange(this.coffset)
     this.text = ctx.model.resolve(config.text)
+    this.onEnter = config.onEnter ? ctx.model.resolve(config.onEnter) : NoopAction
 
     const label = this.contents.findChild("label")
     if (label) this.label = label as Label
@@ -403,6 +407,8 @@ export class Text extends Control {
         }
       } else if (isPrintable) {
         actions.insert(this.textState, typed)
+      } else if (event.code === "Enter") {
+        this.onEnter()
       }
     }
     // let the browser know we handled this event
