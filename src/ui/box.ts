@@ -80,12 +80,12 @@ export class Box extends Element {
 
   constructor (ctx :ElementContext, parent :Element, readonly config :BoxConfig) {
     super(ctx, parent, config)
-    this.contents = ctx.createElement(this, config.contents)
+    this.contents = ctx.elem.create(ctx, this, config.contents)
     this.state.onValue(state => {
       const style = this.getStyle(this.config.style, state)
-      if (style.background) this.background.observe(ctx.resolveBackground(style.background))
+      if (style.background) this.background.observe(ctx.style.resolveBackground(style.background))
       else this.background.update(NoopDecor)
-      if (style.border) this.border.observe(ctx.resolveBorder(style.border))
+      if (style.border) this.border.observe(ctx.style.resolveBorder(style.border))
       else this.border.update(NoopDecor)
     })
   }

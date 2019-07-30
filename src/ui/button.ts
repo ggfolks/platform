@@ -1,22 +1,22 @@
 import {rect, vec2} from "../core/math"
-import {Emitter, Mutable, Value} from "../core/react"
+import {Mutable, Value} from "../core/react"
+import {Action, Spec} from "./model"
 import {Control, ControlConfig, Element, ElementContext, MouseInteraction} from "./element"
 
 export interface ButtonConfig extends ControlConfig {
   type :"button"
-  target :string|Emitter<Button>
-  event :any
+  onClick :Spec<Action>
 }
 
 const ButtonStyleScope = {id: "button", states: ["normal", "disabled", "focused", "pressed"]}
 
 export class Button extends Control {
   protected readonly _pressed = Mutable.local(false)
-  protected readonly target :Emitter<any>
+  protected readonly onClick :Action
 
   constructor (ctx :ElementContext, parent :Element, readonly config :ButtonConfig) {
     super(ctx, parent, config)
-    this.target = ctx.resolveModel(config.target)
+    this.onClick = ctx.model.resolve(config.onClick)
     this._pressed.onValue(_ => this._state.update(this.computeState))
   }
 
@@ -31,7 +31,7 @@ export class Button extends Control {
       move: (event, pos) => this._pressed.update(rect.contains(this.bounds, pos)),
       release: () => {
         this._pressed.update(false)
-        if (rect.contains(this.bounds, pos)) this.target.emit(this.config.event)
+        if (rect.contains(this.bounds, pos)) this.onClick()
       },
       cancel: () => this._pressed.update(false)
     }

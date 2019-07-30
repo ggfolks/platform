@@ -4,7 +4,8 @@ import {dim2, rect, vec2} from "../core/math"
 import {Record} from "../core/data"
 import {Emitter, Mutable, Source, Stream, Value} from "../core/react"
 import {Scale} from "../core/ui"
-import {StyleContext} from "./style"
+import {Model} from "./model"
+import {Spec, StyleContext} from "./style"
 
 const tmpr = rect.create()
 const tmpv = vec2.create()
@@ -41,21 +42,27 @@ export class Observer<T> implements Disposable {
   }
 }
 
-/** Gives elements access to their enclosing context. */
-export interface ElementContext extends StyleContext {
+/** Handles creating elements from a configuration. */
+export interface ElementFactory {
 
   /** Creates an element based on `config`. */
-  createElement (parent :Element, config :ElementConfig) :Element
+  create (ctx :ElementContext, parent :Element, config :ElementConfig) :Element
+}
 
-  /** Resolves the UI model element `elem`. The model element may be an immediate reactive value of
-    * the desired type or may be a path into the UI data model. */
-  resolveModel<V extends Source<unknown>> (elem :string|V) :V
+/** Gives elements access to their enclosing context. */
+export type ElementContext = {
+  /** Used to obtain model data for elements. */
+  model :Model
+  /** Used to resolve styles for elements. */
+  style :StyleContext
+  /** Used to create new elements. */
+  elem :ElementFactory
 }
 
 /** Configuration shared by all [[Element]]s. */
 export interface ElementConfig {
   type :string
-  visible? :string|Value<boolean>
+  visible? :Spec<Value<boolean>>
   constraints? :Record
   // this allows ElementConfig to contain "extra" stuff that TypeScript will ignore; this is
   // necessary to allow a subtype of ElementConfig to be supplied where a container element wants
@@ -84,7 +91,7 @@ export abstract class Element implements Disposable {
 
   constructor (ctx :ElementContext, parent :Element|undefined, config :ElementConfig) {
     this.parent = parent
-    this.visible = config.visible ? ctx.resolveModel(config.visible) : trueValue
+    this.visible = config.visible ? ctx.model.resolve(config.visible) : trueValue
     this.invalidateOnChange(this.visible)
   }
 
@@ -231,7 +238,7 @@ export class Root extends Element {
     const canvas = this.canvasElem.getContext("2d")
     if (canvas) this.canvas = canvas
     else throw new Error(`Canvas rendering context not supported?`)
-    this.contents = ctx.createElement(this, config.contents)
+    this.contents = ctx.elem.create(ctx, this, config.contents)
   }
 
   get clock () :Stream<Clock> { return this._clock }
@@ -335,7 +342,7 @@ export const ControlStates = [...RootStates, "disabled", "focused"]
 
 /** Configuration shared by all [[Control]]s. */
 export interface ControlConfig extends ElementConfig {
-  enabled? :string|Value<boolean>
+  enabled? :Spec<Value<boolean>>
   contents :ElementConfig
 }
 
@@ -353,10 +360,10 @@ export class Control extends Element {
     super(ctx, parent, config)
     if (!config.enabled) this.enabled = trueValue
     else {
-      this.enabled = ctx.resolveModel(config.enabled)
+      this.enabled = ctx.model.resolve(config.enabled)
       this.disposer.add(this.enabled.onValue(_ => this._state.update(this.computeState)))
     }
-    this.contents = ctx.createElement(this, config.contents)
+    this.contents = ctx.elem.create(ctx, this, config.contents)
   }
 
   get styleScope () :StyleScope { return {id: "control", states: ControlStates} }

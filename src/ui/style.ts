@@ -4,6 +4,32 @@ import {Color} from "../core/color"
 import {Subject, Value} from "../core/react"
 import {makeRoundRectPath} from "./util"
 
+// TODO?: ImageConfig = string | {source/path/url :string, scale :number} | ?
+
+/** Handles the resolution of images needed by style components. */
+export interface ImageResolver {
+
+  /** Resolves the image at `path`, eventually providing an HTML image or an error. Note that the
+    * `path` is treated as opaque. An app will provide an image resolver that handles paths of a
+    * particular sort (could be full URLs, could be paths relative to some root URL, could be
+    * something totally different) and will then make reference to those paths in its style
+    * definitions. */
+  resolve (path :string) :Subject<HTMLImageElement|Error>
+}
+
+const SpecPrefix = "$"
+
+/** Defines either an "immediate" style configuration or the id of style def. */
+export type Spec<T> = string | T
+
+function readDef<C> (type :string, defs :PMap<C>, id :string) :C {
+  const config = defs[id.substring(1)]
+  if (config) return config
+  throw new Error(`Missing ${type} style def '${id}'`)
+}
+
+const noPaint = Value.constant<Paint|undefined>(undefined)
+
 /** Defines styles which can be referenced by name in element configuration. */
 export interface StyleDefs {
   colors      :PMap<ColorConfig>
@@ -14,23 +40,10 @@ export interface StyleDefs {
   backgrounds :PMap<BackgroundConfig>
 }
 
-const SpecPrefix = "$"
-
-/** Defines either an "immediate" style configuration or the id of style def. */
-export type Spec<T> = string | T
-
-// TODO?: ImageConfig = string | {source/path/url :string, scale :number} | ?
-
-function readDef<C> (type :string, defs :PMap<C>, id :string) :C {
-  const config = defs[id.substring(1)]
-  if (config) return config
-  throw new Error(`Missing ${type} style def '${id}'`)
-}
-
 /** Provides style definitions for use when resolving styles, and other needed context. */
-export abstract class StyleContext {
+export class StyleContext {
 
-  constructor (readonly styles :StyleDefs) {}
+  constructor (readonly styles :StyleDefs, readonly image :ImageResolver) {}
 
   resolveColor (spec :Spec<ColorConfig>) :string {
     if (typeof spec !== "string" || !spec.startsWith(SpecPrefix)) return makeCSSColor(spec)
@@ -70,8 +83,9 @@ export abstract class StyleContext {
     else return makePaint(this, readDef("paint", this.styles.paints, spec))
   }
 
-  /** Resolves `path` into either a successful `<image>` element or an `Error`. */
-  abstract resolveImage (path :string) :Subject<HTMLImageElement|Error>
+  resolvePaintOpt (spec :Spec<PaintConfig>|undefined) :Subject<Paint|undefined> {
+    return spec ? this.resolvePaint(spec) : noPaint
+  }
 }
 
 let scratch2D :CanvasRenderingContext2D|null = null
@@ -161,7 +175,7 @@ export function makePaint (ctx :StyleContext, config :PaintConfig) :Subject<Pain
   case   "color": return Value.constant(new ColorPaint(ctx.resolveColor(config.color)))
   case  "linear":
   case  "radial": return Value.constant(new GradientPaint(ctx, config))
-  case "pattern": return ctx.resolveImage(config.image).map(img => {
+  case "pattern": return ctx.image.resolve(config.image).map(img => {
       if (img instanceof HTMLImageElement) return new PatternPaint(img, config)
       // TODO: return error pattern
       else return new ColorPaint("#FF0000")

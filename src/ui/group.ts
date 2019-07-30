@@ -3,17 +3,11 @@ import {Element, ElementConfig, ElementContext} from "./element"
 
 const tmpr = rect.create()
 
-interface GroupConfig extends ElementConfig {
-  contents: ElementConfig[]
-}
-
+/** Groups contain multiple child elements.
+  * Different subclasses of group implement different layout policies. */
 abstract class Group extends Element {
-  readonly contents :Element[]
 
-  constructor (ctx :ElementContext, parent :Element, readonly config :GroupConfig) {
-    super(ctx, parent, config)
-    this.contents = config.contents.map(cc => ctx.createElement(this, cc))
-  }
+  abstract get contents () :Element[]
 
   handleMouseDown (event :MouseEvent, pos :vec2) {
     for (const cc of this.contents) {
@@ -63,6 +57,7 @@ class Metrics {
   gaps (gap :number) :number { return gap * (this.count-1) }
 }
 
+/** Layout constraints for elements contained by a group that lays out along an axis. */
 export type AxisConstraints = {
   stretch? :boolean,
   weight? :number
@@ -127,6 +122,13 @@ function computeMetrics (group :Group, hintX :number, hintY :number,
   return m
 }
 
+/** Defines the behavior of axis-layout groups on their off-axis (width for vertical groups, height
+  * for horizontal groups).
+  *  - `stretch` - size all elements to the group's off-axis size.
+  *  - `equalize` - size all elements to the size of the largest element in the off-axis dimension.
+  *  - `constrain` - size all elements to their preferred size, but constrain any that prefer a size
+  *                  larger than the group's off-axis size to that maximum size.
+  */
 export type OffAxisPolicy = "stretch" | "equalize" | "constrain"
 
 function computeOffSize (policy :OffAxisPolicy, size :number, maxSize :number, extent :number) {
@@ -137,20 +139,12 @@ function computeOffSize (policy :OffAxisPolicy, size :number, maxSize :number, e
   }
 }
 
-interface AxisConfig extends GroupConfig {
+export interface AxisConfig extends ElementConfig {
   gap? :number
   offPolicy? :OffAxisPolicy
 }
 
-export interface ColumnConfig extends AxisConfig {
-  type :"column"
-}
-
-export class Column extends Group {
-
-  constructor (ctx :ElementContext, parent :Element, readonly config :ColumnConfig) {
-    super(ctx, parent, config)
-  }
+export abstract class VGroup extends Group {
 
   protected computePreferredSize (hintX :number, hintY :number, into :dim2) {
     const gap = this.config.gap || 0
@@ -175,5 +169,21 @@ export class Column extends Group {
       elem.setBounds(rect.set(tmpr, left, y, ewidth, eheight))
       y += (eheight + gap)
     }
+  }
+}
+
+/** Defines configuration for [[Column]] elements. */
+export interface ColumnConfig extends AxisConfig {
+  type :"column"
+  contents: ElementConfig[]
+}
+
+/** A column lays out its child elements along a vertical axis. */
+export class Column extends VGroup {
+  readonly contents :Element[]
+
+  constructor (ctx :ElementContext, parent :Element, readonly config :ColumnConfig) {
+    super(ctx, parent, config)
+    this.contents = config.contents.map(cc => ctx.elem.create(ctx, this, cc))
   }
 }

@@ -24,7 +24,7 @@ export interface LabelStyle {
 /** Defines configuration for [[Label]]. */
 export interface LabelConfig extends ElementConfig {
   type :"label"
-  text :string|Value<string>
+  text :Spec<Value<string>>
   style :PMap<LabelStyle>
 }
 
@@ -41,18 +41,18 @@ export class Label extends Element {
   constructor (ctx :ElementContext, parent :Element, readonly config :LabelConfig) {
     super(ctx, parent, config)
     this.invalidateOnChange(this.selection)
-    this.text = ctx.resolveModel(config.text)
+    this.text = ctx.model.resolve(config.text)
     this.state.onValue(state => {
       const style = this.getStyle(this.config.style, state)
-      const fillS = style.fill ? ctx.resolvePaint(style.fill) : Value.constant(undefined)
-      const strokeS = style.stroke ? ctx.resolvePaint(style.stroke) : Value.constant(undefined)
+      const fillS = ctx.style.resolvePaintOpt(style.fill)
+      const strokeS = ctx.style.resolvePaintOpt(style.stroke)
       this.span.observe(Subject.join3(this.text, fillS, strokeS).map(([text, fill, stroke]) => {
-        const font = ctx.resolveFontOpt(style.font)
-        const shadow = ctx.resolveShadowOpt(style.shadow)
+        const font = ctx.style.resolveFontOpt(style.font)
+        const shadow = ctx.style.resolveShadowOpt(style.shadow)
         return new Span(text, font, fill, stroke, shadow)
       }))
       if (!style.selection || !style.selection.fill) this.selFill.update(undefined)
-      else this.selFill.observe(ctx.resolvePaint(style.selection.fill))
+      else this.selFill.observe(ctx.style.resolvePaint(style.selection.fill))
     })
   }
 
@@ -234,7 +234,7 @@ export class Cursor extends Element {
     super(ctx, parent, config)
     this.state.onValue(state => {
       const style = this.getStyle(this.config.style, state)
-      if (style.stroke) this.stroke.observe(ctx.resolvePaint(style.stroke))
+      if (style.stroke) this.stroke.observe(ctx.style.resolvePaint(style.stroke))
       else this.stroke.update(DefaultPaint)
     })
   }
@@ -325,7 +325,7 @@ export class Text extends Control {
   constructor (ctx :ElementContext, parent :Element, readonly config :TextConfig) {
     super(ctx, parent, config)
     this.invalidateOnChange(this.coffset)
-    this.text = ctx.resolveModel(config.text)
+    this.text = ctx.model.resolve(config.text)
 
     const label = this.contents.findChild("label")
     if (label) this.label = label as Label
@@ -345,7 +345,7 @@ export class Text extends Control {
         }
       })
     const cconfig = {...(config.cursor || DefaultCursor), visible: blinking}
-    this.cursor = ctx.createElement(this, cconfig) as Cursor
+    this.cursor = ctx.elem.create(ctx, this, cconfig) as Cursor
 
     this.textState = {text: this.text, cursor: this.coffset, selection: this.label.selection}
   }

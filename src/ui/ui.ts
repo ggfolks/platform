@@ -1,8 +1,8 @@
 import {PMap} from "../core/util"
 import {Record} from "../core/data"
 import {makeConfig} from "../core/config"
-import {Source, Subject} from "../core/react"
-import {StyleContext, StyleDefs} from "./style"
+import {ImageResolver, StyleContext, StyleDefs} from "./style"
+import {Model} from "./model"
 import {Element, ElementConfig, ElementContext, StyleScope, Root, RootConfig} from "./element"
 import * as E from "./element"
 import * as X from "./box"
@@ -32,26 +32,6 @@ type ElemStyles = PMap<Record>
   * ``` */
 export type Theme = PMap<ElemStyles>
 
-type ModelElem = Source<any> | Model
-
-/** Defines the reactive data model for the UI. This is a POJO with potentially nested objects whose
-  * eventual leaf property values are reactive values which are displayed and/or updated by the UI
-  * components and the game/application logic. */
-export interface Model { [key :string] :ModelElem }
-
-function findModelElem (model :Model, path :string[], pos :number) :ModelElem {
-  const next = model[path[pos]]
-  if (!next) throw new Error(`Missing model element at pos ${pos} in ${path}`)
-  // TODO: would be nice if we could check the types here and freak out if we hit something
-  // weird along the way
-  else if (pos < path.length-1) return findModelElem(next as Model, path, pos+1)
-  else return next
-}
-
-interface ImageResolver {
-  resolveImage (path :string) :Subject<HTMLImageElement|Error>
-}
-
 function processStyles (styles :Record, states: string[]) :Record {
   const shared = {...styles}
   for (const state of states) delete shared[state]
@@ -80,55 +60,42 @@ class StyleResolver {
   }
 }
 
-type ElemReg = {
-  create :(ctx :ElementContext, parent :Element, config :Record) => Element
-}
-
-export class UI extends StyleContext implements ElementContext {
+export class UI {
   private resolvers = new Map<string,StyleResolver>()
 
-  private regs :PMap<ElemReg> = {
-    "box"    : {create: (f, p, c) => new X.Box(f, p, c as any as X.BoxConfig)},
-    "control": {create: (f, p, c) => new E.Control(f, p, c as any as E.ControlConfig)},
-    "column" : {create: (f, p, c) => new G.Column(f, p, c as any as G.ColumnConfig)},
-    "label"  : {create: (f, p, c) => new T.Label(f, p, c as any as T.LabelConfig)},
-    "cursor" : {create: (f, p, c) => new T.Cursor(f, p, c as any as T.CursorConfig)},
-    "text"   : {create: (f, p, c) => new T.Text(f, p, c as any as T.TextConfig)},
-    "button" : {create: (f, p, c) => new B.Button(f, p, c as any as B.ButtonConfig)},
-  }
+  readonly ctx :ElementContext
 
-  constructor (styles :StyleDefs,
-               readonly theme :Theme,
-               readonly model :Model,
-               readonly resolver :ImageResolver) {
-    super(styles)
+  constructor (private theme :Theme, defs :StyleDefs, image :ImageResolver, model :Model) {
+    this.ctx = {
+      model,
+      style: new StyleContext(defs, image),
+      elem: {create: (ctx, parent, config) => this.createElement(ctx, parent, config)},
+    }
   }
 
   createRoot (config :RootConfig) :Root {
-    return new Root(this, config)
+    return new Root(this.ctx, config)
   }
 
-  createElement (parent :Element, config :ElementConfig) :Element {
-    const reg = this.regs[config.type]
-    if (!reg) throw new Error(`Unknown element type '${config.type}'.`)
+  createElement (ctx :ElementContext, parent :Element, config :ElementConfig) :Element {
     const rstyles = this.resolveStyles(parent.styleScope, config.type, config.style as Record)
-    const rconfig = {...config, style: rstyles} as any as Record
-    return reg.create(this, parent, rconfig)
-  }
-
-  resolveModel<V extends Source<unknown>> (prop :string|V) :V {
-    return (typeof prop !== "string") ? prop :
-      findModelElem(this.model, prop.split("."), 0) as V
+    const rconfig = {...config, style: rstyles} as any
+    switch (config.type) {
+    case     "box": return new X.Box(this.ctx, parent, rconfig as X.BoxConfig)
+    case "control": return new E.Control(this.ctx, parent, rconfig as E.ControlConfig)
+    case  "column": return new G.Column(this.ctx, parent, rconfig as G.ColumnConfig)
+    case   "label": return new T.Label(this.ctx, parent, rconfig as T.LabelConfig)
+    case  "cursor": return new T.Cursor(this.ctx, parent, rconfig as T.CursorConfig)
+    case    "text": return new T.Text(this.ctx, parent, rconfig as T.TextConfig)
+    case  "button": return new B.Button(this.ctx, parent, rconfig as B.ButtonConfig)
+    default: throw new Error(`Unknown element type '${config.type}'.`)
+    }
   }
 
   resolveStyles (scope :StyleScope, type :string, elemStyles :Record|undefined) :Record {
     const protoStyles = this.getStyleResolver(scope).resolveStyles(type)
     return elemStyles ? makeConfig([processStyles(elemStyles, scope.states), protoStyles]) :
       protoStyles
-  }
-
-  resolveImage (path :string) :Subject<HTMLImageElement|Error> {
-    return this.resolver.resolveImage(path)
   }
 
   private getStyleResolver (scope :StyleScope) :StyleResolver {
