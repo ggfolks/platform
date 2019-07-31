@@ -9,6 +9,7 @@ import * as X from "./box"
 import * as G from "./group"
 import * as T from "./text"
 import * as B from "./button"
+import * as L from "./list"
 
 /** Defines a set of styles for elements. This is something like:
   * ```
@@ -81,13 +82,14 @@ export class UI {
     const rstyles = this.resolveStyles(parent.styleScope, config.type, config.style as Record)
     const rconfig = {...config, style: rstyles} as any
     switch (config.type) {
-    case     "box": return new X.Box(this.ctx, parent, rconfig as X.BoxConfig)
-    case "control": return new E.Control(this.ctx, parent, rconfig as E.ControlConfig)
-    case  "column": return new G.Column(this.ctx, parent, rconfig as G.ColumnConfig)
-    case   "label": return new T.Label(this.ctx, parent, rconfig as T.LabelConfig)
-    case  "cursor": return new T.Cursor(this.ctx, parent, rconfig as T.CursorConfig)
-    case    "text": return new T.Text(this.ctx, parent, rconfig as T.TextConfig)
-    case  "button": return new B.Button(this.ctx, parent, rconfig as B.ButtonConfig)
+    case     "box": return new X.Box(ctx, parent, rconfig as X.BoxConfig)
+    case "control": return new E.Control(ctx, parent, rconfig as E.ControlConfig)
+    case  "column": return new G.Column(ctx, parent, rconfig as G.ColumnConfig)
+    case   "label": return new T.Label(ctx, parent, rconfig as T.LabelConfig)
+    case  "cursor": return new T.Cursor(ctx, parent, rconfig as T.CursorConfig)
+    case    "text": return new T.Text(ctx, parent, rconfig as T.TextConfig)
+    case  "button": return new B.Button(ctx, parent, rconfig as B.ButtonConfig)
+    case    "list": return new L.List(ctx, parent, rconfig as L.ListConfig)
     default: throw new Error(`Unknown element type '${config.type}'.`)
     }
   }
