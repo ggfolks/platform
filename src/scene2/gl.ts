@@ -344,7 +344,7 @@ export class TextureRenderTarget implements RenderTarget, Disposable {
 
 /** Returns a value with the current size of `window`, which updates when the size changes. */
 export function windowSize (window :Window) :Value<dim2> {
-  const size = Mutable.localEq(dim2.fromValues(window.innerWidth, window.innerHeight), dim2.eq)
+  const size = Mutable.local(dim2.fromValues(window.innerWidth, window.innerHeight), dim2.eq)
   window.onresize = _ => size.update(dim2.fromValues(window.innerWidth, window.innerHeight))
   return size
 }

@@ -104,7 +104,7 @@ export interface ReadComponentConfig extends EntityComponentConfig {
 }
 
 class ReadComponent extends EntityComponentNode<Component<any>> {
-  private _output :Mutable<any> = Mutable.local(0)
+  private _output :Mutable<any> = Mutable.localData(0)
 
   constructor (graph :Graph, id :string, readonly config :ReadComponentConfig) {
     super(graph, id, config)

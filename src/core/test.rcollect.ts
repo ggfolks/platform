@@ -1,7 +1,7 @@
 import {ListChange, MutableList, MapChange, MutableMap} from "./rcollect"
 
 test("reactive lists", () => {
-  const list = MutableList.local<string>()
+  const list = MutableList.localData<string>()
   const hist :ListChange<string>[] = []
   const xhist :ListChange<string>[] = []
   list.onChange(change => hist.push(change))

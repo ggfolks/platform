@@ -231,7 +231,7 @@ export class Root extends Element {
   readonly canvasElem :HTMLCanvasElement = document.createElement("canvas")
   readonly canvas :CanvasRenderingContext2D
   readonly contents :Element
-  readonly focus = Mutable.localRef<Control|undefined>(undefined)
+  readonly focus = Mutable.local<Control|undefined>(undefined)
 
   constructor (readonly ctx :ElementContext, readonly config :RootConfig) {
     super(ctx, undefined, config)

@@ -526,25 +526,9 @@ export class Value<T> extends Source<T> {
   /** Creates a value which transforms this value via `fn`. The new value will emit changes
     * whenever this value changes and the transformed value differs from the previous transformed
     * value. [[refEquals]] will be used to determine when the transformed value changes.
-    * @param fn a referentially transparent transformer function. */
-  map<U> (fn :(v:T) => U) :Value<U> {
-    return this.mapEq(fn, refEquals)
-  }
-
-  /** Creates a value which transforms this value via `fn`. The new value will emit changes
-    * whenever this value changes and the transformed value differs from the previous transformed
-    * value. [[dataEquals]] will be used to determine when the transformed value changes.
-    * @param fn a referentially transparent transformer function. */
-  mapData<U extends Data> (fn :(v:T) => U) :Value<U> {
-    return this.mapEq(fn, dataEquals)
-  }
-
-  /** Creates a value which transforms this value via `fn`. The new value will emit changes
-    * whenever this value changes and the transformed value differs from the previous transformed
-    * value.
     * @param fn a referentially transparent transformer function.
-    * @param eq used to determine when the transformed value changes. */
-  mapEq<U> (fn :(v:T) => U, eq :Eq<U>) :Value<U> {
+    * @param eq used to determine when the transformed value changes. Defaults to [[refEquals]]. */
+  map<U> (fn :(v:T) => U, eq :Eq<U> = refEquals) :Value<U> {
     const {_current, _onChange} = this
     let connected = false, latest :U
     return Value.deriveValue(eq, disp => {
@@ -559,6 +543,14 @@ export class Value<T> extends Source<T> {
       })
       return () => { connected = false ; unlisten() }
     }, () => connected ? latest : fn(_current()))
+  }
+
+  /** Creates a value which transforms this value via `fn`. The new value will emit changes
+    * whenever this value changes and the transformed value differs from the previous transformed
+    * value. [[dataEquals]] will be used to determine when the transformed value changes.
+    * @param fn a referentially transparent transformer function. */
+  mapData<U extends Data> (fn :(v:T) => U) :Value<U> {
+    return this.map(fn, dataEquals)
   }
 
   /** Creates a value which transforms this value via `fn` into a result value. The value of the
@@ -656,26 +648,8 @@ export class Value<T> extends Source<T> {
 export class Mutable<T> extends Value<T> {
 
   /** Creates a local mutable value, which starts with value `start`.
-    * Changes to this value will be determined using [[dataEquals]]. */
-  static local<T extends Data> (start :T) :Mutable<Widen<T>> {
-    return this.localEq(start as Widen<T>, dataEquals)
-  }
-
-  /** Creates a local mutable value, which starts with value `start` or `undefined`.
-    * Changes to this value will be determined using [[dataEquals]]. */
-  static localOpt<T extends Data> (start? :T) :Mutable<Widen<T|undefined>> {
-    return this.localEq(start as Widen<T|undefined>, dataEquals)
-  }
-
-  /** Creates a local mutable value, which starts with value `start`.
-    * Changes to this value will be determined using [[refEquals]]. */
-  static localRef<T> (start :T) :Mutable<T> {
-    return this.localEq(start, refEquals)
-  }
-
-  /** Creates a local mutable value, which starts with value `start`.
-    * Changes to this value will be determined using `eq`. */
-  static localEq<T> (start :T, eq :Eq<T>) :Mutable<T> {
+    * Changes to this value will be determined using `eq` which defaults to `refEquals`. */
+  static local<T> (start :T, eq :Eq<T> = refEquals) :Mutable<T> {
     const listeners :ValueFn<T>[] = []
     let current = start
     return new Mutable(eq, lner => addListener(listeners, lner), () => current, newValue => {
@@ -685,6 +659,18 @@ export class Mutable<T> extends Value<T> {
         dispatchChange(listeners, newValue, oldValue)
       }
     })
+  }
+
+  /** Creates a local mutable value, which starts with value `start`.
+    * Changes to this value will be determined using [[dataEquals]]. */
+  static localData<T extends Data> (start :T) :Mutable<Widen<T>> {
+    return this.local(start as Widen<T>, dataEquals)
+  }
+
+  /** Creates a local mutable value, which starts with value `start` or `undefined`.
+    * Changes to this value will be determined using [[dataEquals]]. */
+  static localOpt<T extends Data> (start? :T) :Mutable<Widen<T|undefined>> {
+    return this.local(start as Widen<T|undefined>, dataEquals)
   }
 
   /** Creates a mutable value derived from an external source. The `current` function should return

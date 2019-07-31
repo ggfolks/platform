@@ -7,8 +7,8 @@ import {Touch} from "./input"
 export class Mouse implements Disposable {
 
   private _buttonStates :Map<number, Mutable<boolean>> = new Map()
-  private _movement = Mutable.localRef(vec2.create())
-  private _touches = Mutable.localRef([] as Touch[])
+  private _movement = Mutable.local(vec2.create())
+  private _touches = Mutable.local([] as Touch[])
   private _lastScreen? :vec2
   private _lastOffset? :vec2
   private _accumulatedMovement = vec2.create()
@@ -97,7 +97,7 @@ export class Mouse implements Disposable {
   private _getButtonState (button :number) {
     let state = this._buttonStates.get(button)
     if (!state) {
-      this._buttonStates.set(button, state = Mutable.local(false))
+      this._buttonStates.set(button, state = Mutable.local<boolean>(false))
     }
     return state
   }

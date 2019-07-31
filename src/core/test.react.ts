@@ -330,7 +330,7 @@ test("joined values", () => {
 
 test("bimapped values", () => {
   const data = {foo: "foo", bar: {baz: 3, berry: false}}
-  const obj = Mutable.local(data)
+  const obj = Mutable.localData(data)
   const objhist :Array<typeof data> = []
   obj.onValue(v => objhist.push(v))
 

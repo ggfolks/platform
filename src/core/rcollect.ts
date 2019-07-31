@@ -40,20 +40,13 @@ export abstract class RList<E> extends Source<E[]> implements Iterable<E> {
 
   // /** Maps this list to a new reactive list via `fn`. The structure of the mapped list will mirror
   //   * `this` list but the elements will be transformed via `fn`. Equality of the mapped list
-  //   * elements will be computed via [[refEquals]]. */
-  // map<F> (fn :(e:E) => F) :RList<F> { return this.mapEq(fn, refEquals) }
+  //   * elements will be computed via `eq` which defaults to [[refEquals]]. */
+  // map<F> (fn :(e:E) => F, eq :Eq<F> = refEquals) :RList<F> { return throw new Error("TODO") }
 
   // /** Maps this list to a new reactive list via `fn`. The structure of the mapped list will mirror
   //   * `this` list but the elements will be transformed via `fn`. Equality of the mapped list
   //   * elements will be computed via [[dataEquals]]. */
-  // mapData<F extends Data> (fn :(e:E) => F) :RList<F> { return this.mapEq<F>(fn, dataEquals) }
-
-  // /** Maps this list to a new reactive list via `fn`. The structure of the mapped list will mirror
-  //   * `this` list but the elements will be transformed via `fn`. Equality of the mapped list
-  //   * elements will be computed via `eq`. */
-  // mapEq<F> (fn :(e:E) => F, eq :Eq<F>) :RList<F> {
-  //   throw new Error("TODO")
-  // }
+  // mapData<F extends Data> (fn :(e:E) => F) :RList<F> { return this.map<F>(fn, dataEquals) }
 
   /** Registers `fn` to be notified of changes to this list.
     * @return a remover thunk (invoke with no args to unregister `fn`). */
@@ -100,14 +93,12 @@ export abstract class RList<E> extends Source<E[]> implements Iterable<E> {
 export abstract class MutableList<E> extends RList<E> {
   private _listeners :ValueFn<ListChange<E>>[] = []
 
+  /** Creates a local mutable list. Elements will be compared for equality using `eq`, which
+    * defaults to [[refEquals]]. */
+  static local<E> (eq :Eq<E> = refEquals) :MutableList<E> { return new LocalMutableList<E>(eq) }
+
   /** Creates a local mutable list. Elements will be compared for equality using [[dataEquals]]. */
-  static local<E extends Data> () :MutableList<E> { return new LocalMutableList<E>(dataEquals) }
-
-  /** Creates a local mutable list. Elements will be compared for equality using [[refEquals]]. */
-  static localRef<E> () :MutableList<E> { return new LocalMutableList<E>(refEquals) }
-
-  /** Creates a local mutable list. Elements will be compared for equality using `eq`. */
-  static localEq<E> (eq :Eq<E>) :MutableList<E> { return new LocalMutableList<E>(eq) }
+  static localData<E extends Data> () :MutableList<E> { return this.local<E>(dataEquals) }
 
   /** Used to compare successive values of list elements for equality. */
   abstract get eq () :Eq<E>

@@ -66,7 +66,7 @@ export interface LatchConfig extends NodeConfig {
 }
 
 class Latch extends Node {
-  private _output :Mutable<any> = Mutable.local(0)
+  private _output :Mutable<any> = Mutable.localData(0)
 
   constructor (graph :Graph, id :string, readonly config :LatchConfig) {
     super(graph, id, config)

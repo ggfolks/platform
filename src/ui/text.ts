@@ -32,7 +32,7 @@ export interface LabelConfig extends ElementConfig {
 /** Displays styled text. */
 export class Label extends Element {
   readonly xoffset = Mutable.local(0)
-  readonly selection = Mutable.local<[number,number]>([0,0])
+  readonly selection = Mutable.localData<[number,number]>([0,0])
   readonly span = this.observe(EmptySpan)
   readonly selFill = this.observe<Paint|undefined>(undefined)
   readonly text :Value<string>

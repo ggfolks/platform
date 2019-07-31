@@ -41,7 +41,7 @@ export class Keyboard implements Disposable {
   private _getKeyState (code :number) :Mutable<boolean> {
     let keyState = this._keyStates.get(code)
     if (!keyState) {
-      this._keyStates.set(code, keyState = Mutable.local(false))
+      this._keyStates.set(code, keyState = Mutable.local<boolean>(false))
     }
     return keyState
   }
