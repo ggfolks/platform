@@ -84,6 +84,7 @@ export class UI {
     switch (config.type) {
     case     "box": return new X.Box(ctx, parent, rconfig as X.BoxConfig)
     case "control": return new E.Control(ctx, parent, rconfig as E.ControlConfig)
+    case     "row": return new G.Row(ctx, parent, rconfig as G.RowConfig)
     case  "column": return new G.Column(ctx, parent, rconfig as G.ColumnConfig)
     case   "label": return new T.Label(ctx, parent, rconfig as T.LabelConfig)
     case  "cursor": return new T.Cursor(ctx, parent, rconfig as T.CursorConfig)

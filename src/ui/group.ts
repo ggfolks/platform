@@ -166,7 +166,11 @@ export abstract class VGroup extends Group {
       const c = axisConstraints(elem)
       const ewidth = computeOffSize(offPolicy, psize[0], m.maxWidth, width)
       const eheight = computeSize(c, psize[1], m.totalWeight, stretchHeight)
-      elem.setBounds(rect.set(tmpr, left, y, ewidth, eheight))
+      // if the element is constrained (rather than stretched or equalized), it might be slimmer
+      // than the column width, so we center it; this is a more useful default I think, and if you
+      // really want left-aligned elements, you can equalize or stretch and put your sub-elements in
+      // a left-aligned box
+      elem.setBounds(rect.set(tmpr, left+(width-ewidth)/2, y, ewidth, eheight))
       y += (eheight + gap)
     }
   }
@@ -183,6 +187,54 @@ export class Column extends VGroup {
   readonly contents :Element[]
 
   constructor (ctx :ElementContext, parent :Element, readonly config :ColumnConfig) {
+    super(ctx, parent, config)
+    this.contents = config.contents.map(cc => ctx.elem.create(ctx, this, cc))
+  }
+}
+
+export abstract class HGroup extends Group {
+
+  protected computePreferredSize (hintX :number, hintY :number, into :dim2) {
+    const gap = this.config.gap || 0
+    const m = computeMetrics(this, hintX, hintY, gap, true)
+    dim2.set(into, m.prefWidth + m.gaps(gap), m.maxHeight)
+  }
+
+  protected relayout () {
+    const offPolicy = this.config.offPolicy || "constrain"
+    const gap = this.config.gap || 0
+    const bounds = this._bounds
+    const left = bounds[0], top = bounds[1], width = bounds[2], height = bounds[3]
+    const m = computeMetrics(this, width, height, gap, true)
+    const stretchWidth = Math.max(0, width - m.gaps(gap) - m.fixWidth)
+    let x = left
+    for (const elem of this.contents) {
+      if (!elem.visible.current) continue
+      const psize = elem.preferredSize(width, height) // will be cached
+      const c = axisConstraints(elem)
+      const ewidth = computeSize(c, psize[0], m.totalWeight, stretchWidth)
+      const eheight = computeOffSize(offPolicy, psize[1], m.maxHeight, height)
+      // if the element is constrained (rather than stretched or equalized), it might be slimmer
+      // than the row height, so we center it; this is a more useful default I think, and if you
+      // really want top-aligned elements, you can equalize or stretch and put your sub-elements in a
+      // top-aligned box
+      elem.setBounds(rect.set(tmpr, x, top+(height-eheight)/2, ewidth, eheight))
+      x += (ewidth + gap)
+    }
+  }
+}
+
+/** Defines configuration for [[Row]] elements. */
+export interface RowConfig extends AxisConfig {
+  type :"row"
+  contents: ElementConfig[]
+}
+
+/** A row lays out its child elements along a horizontal axis. */
+export class Row extends HGroup {
+  readonly contents :Element[]
+
+  constructor (ctx :ElementContext, parent :Element, readonly config :RowConfig) {
     super(ctx, parent, config)
     this.contents = config.contents.map(cc => ctx.elem.create(ctx, this, cc))
   }
