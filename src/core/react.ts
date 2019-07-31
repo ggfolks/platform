@@ -118,10 +118,6 @@ export abstract class Source<T> {
     * value, `fn` will also be called immediately with the current value. */
   abstract onValue (fn :ValueFn<T>) :Remover
 
-  /** Returns a source which transforms the values of this source via `fn`. Whenever `this` source
-    * emits a `value`, the returned source will emit `fn(value)`. */
-  abstract map<U> (fn :(v:T) => U) :Source<U>
-
   /** Registers `fn` to be called the first time this source contains or emits a value. If the
     * source contains a current value, `fn` will be called before this call returns. `fn` will be
     * called zero or one times.
@@ -151,6 +147,28 @@ export abstract class Source<T> {
   whenOnce (pred :Pred<T>, fn :ValueFn<T>) :Remover {
     let remover :Remover
     return (remover = this.onValue(v => { if (pred(v)) { remover() ; fn(v) } }))
+  }
+
+  /** Returns a source which transforms the values of this source via `fn`. Whenever `this` source
+    * emits a `value`, the returned source will emit `fn(value)`. */
+  abstract map<U> (fn :(v:T) => U) :Source<U>
+
+  /** Returns a reactive [[Value]] which starts with value `start` and is updated by combining
+    * values emitted by this source with the latest value via `fn` when they arrive. *Note:* the
+    * fold value is only "live" while it has listeners. When it has no listeners, it will not listen
+    * to `this` underlying source and will not observe events it emits.
+    * @param fn used to compute new folded values when values arrive on `this` source.
+    * @param eq used to check whether computed new values have actually changed.
+    * [[Value]]s emit notifications only when values change. */
+  fold<Z> (start :Z, fn :(a:Z, v:T) => Z, eq :Eq<Z> = refEquals) :Value<Z> {
+    let current = start
+    return Value.deriveValue(eq, disp => this.onValue(value => {
+      const ovalue = current, nvalue = fn(ovalue, value)
+      if (!eq(ovalue, nvalue)) {
+        current = nvalue
+        disp(nvalue, ovalue)
+      }
+    }), () => current)
   }
 }
 
@@ -218,35 +236,20 @@ export class Stream<T> extends Source<T> {
     return new Stream(lner => onEmit(value => pred(value) && lner(value)))
   }
 
-  /** Returns a reactive [[Value]] which starts with value `start` and is updated by combining
-    * values emitted by this stream with the current value via `fn` whenever they arrive.
-    * @param fn used to compute new folded values when values arrive on `this` stream.
-    * @param eq used to check whether computed new values have actually changed.
-    * [[Value]]s emit notifications only when values change. */
-  fold<Z> (start :Z, fn :(a:Z, v:T) => Z, eq :Eq<Z>) :Value<Z> {
+  /** Returns a reactive [[Subject]] that is initialized with the next value emitted by this stream
+    * and then changed by each subsequent value emitted by this stream. See note in [[fold]]
+    * regarding liveness. */
+  toSubject () :Subject<T> {
     const onEmit = this._onEmit
-    let current = start
-    return Value.deriveValue(eq, disp => onEmit(value => {
-      const ovalue = current, nvalue = fn(ovalue, value)
-      if (!eq(ovalue, nvalue)) {
-        current = nvalue
-        disp(nvalue, ovalue)
-      }
-    }), () => current)
+    return Subject.deriveSubject(disp => onEmit(disp))
   }
 
   /** Returns a reactive [[Value]] which starts with value `start` and is updated by values emitted
-    * by this stream whenever they arrive.
+    * by this stream whenever they arrive. See note in [[fold]] regarding liveness.
     * @param eq used to check whether successive values from this stream have actually changed.
     * [[Value]]s emit notifications only when values change. */
   toValue (start :T, eq :Eq<T>) :Value<T> {
     return this.fold(start, (ov, nv) => nv, eq)
-  }
-
-  /** Returns a reactive [[Subject]] that is initialized with the next value emitted by this stream
-    * and then changed by each subsequent value emitted by this stream. */
-  toSubject () :Subject<T> {
-    return Subject.deriveSubject(dispatch => this.onValue(dispatch))
   }
 }
 
