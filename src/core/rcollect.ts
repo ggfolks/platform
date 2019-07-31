@@ -301,7 +301,7 @@ export abstract class MutableMap<K,V> extends RMap<K,V> implements Map<K,V> {
   /** Deletes all mappings from this map. Notifies listeners of any deletions. */
   clear (): void {
     // TODO: do we want a bulk delete event?
-    for (const key of Array.from(this.keys())) this.delete(key)
+    for (const key of this.keys()) this.delete(key)
   }
 
   /** Returns a [[Mutable]] that reflects the value of this map at `key`. If no mapping exists, it
