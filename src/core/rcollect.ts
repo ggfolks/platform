@@ -5,6 +5,20 @@ import {Eq, Mutable, Source, Subject, Value, ValueFn, dispatchValue, addListener
 //
 // Reactive lists
 
+/** A read-only view of an ordered list of elements. */
+export interface ReadonlyList<E> extends Iterable<E> {
+  /** The length of the list. */
+  length :number
+  /** Returns the element at `index` or `undefined` if index is out-of-bounds. Beware that this
+    * potential `undefined` return value is not reflected in the return type. Similar to arrays, we
+    * assume you're operating in bounds. */
+  elemAt (index :number) :E
+  /** Applies `fn` to each element of this list, in order. */
+  forEach (fn :(e:E) => void) :void
+  /** Returns an iterator over this list's elements. */
+  [Symbol.iterator] () :IterableIterator<E>
+}
+
 /** Reports a change to an [[RList]]. */
 export type ListChange<E> =
   {type :"added",   index :number, elem :E} |
@@ -14,19 +28,13 @@ export type ListChange<E> =
 /** A reactive list: emits change events when elements are added, updated or deleted. A client can
   * choose to observe fine-grained list changes (via [[onChange]]) or treat the list as a
   * `Source` and simply reprocess the entire list any time it changes. */
-export abstract class RList<E> extends Source<E[]> implements Iterable<E> {
+export abstract class RList<E> extends Source<ReadonlyList<E>> implements ReadonlyList<E> {
   protected abstract get elems () :E[]
 
-  /** The current length of this list. */
+  // from ReadonlyList
   get length () :number { return this.elems.length }
-
-  /** Returns the element at `index`. */
   elemAt (index :number) :E { return this.elems[index] }
-
-  /** Calls `fn` on each element of this list in order. */
   forEach (fn :(e:E) => void) { this.elems.forEach(fn) }
-
-  /** Returns an iterator over the elements of this list. */
   [Symbol.iterator] () :IterableIterator<E> { return this.elems.values() }
 
   /** Returns a copy of a slice of this list as a plain array.
@@ -34,60 +42,42 @@ export abstract class RList<E> extends Source<E[]> implements Iterable<E> {
     * @param length the length of the slice, defaults to all elements after `start`. */
   slice (start? :number, length? :number) :E[] { return this.elems.slice(start, length) }
 
-  /** Maps the elements of this list via `fn`.
+  /** Maps the elements of this list (into an array) via `fn`.
     * @return a plain array containing the mapped elements. */
-  mapElems<F> (fn :(e:E) => F) :F[] { return this.elems.map(fn) }
+  mapArray<F> (fn :(e:E) => F) :F[] { return this.elems.map(fn) }
 
   // /** Maps this list to a new reactive list via `fn`. The structure of the mapped list will mirror
   //   * `this` list but the elements will be transformed via `fn`. Equality of the mapped list
   //   * elements will be computed via `eq` which defaults to [[refEquals]]. */
-  // map<F> (fn :(e:E) => F, eq :Eq<F> = refEquals) :RList<F> { return throw new Error("TODO") }
+  // mapElems<F> (fn :(e:E) => F, eq :Eq<F> = refEquals) :RList<F> { throw new Error("TODO") }
 
   // /** Maps this list to a new reactive list via `fn`. The structure of the mapped list will mirror
   //   * `this` list but the elements will be transformed via `fn`. Equality of the mapped list
   //   * elements will be computed via [[dataEquals]]. */
-  // mapData<F extends Data> (fn :(e:E) => F) :RList<F> { return this.map<F>(fn, dataEquals) }
+  // mapDataElems<F extends Data> (fn :(e:E) => F) :RList<F> {
+  //   return this.mapElems<F>(fn, dataEquals)
+  // }
 
   /** Registers `fn` to be notified of changes to this list.
     * @return a remover thunk (invoke with no args to unregister `fn`). */
   abstract onChange (fn :ValueFn<ListChange<E>>) :Remover
 
   // from Source
-  onEmit (fn :ValueFn<E[]>) :Remover {
-    return this.onChange(change => fn(this.elems))
+  onEmit (fn :ValueFn<ReadonlyList<E>>) :Remover {
+    return this.onChange(change => fn(this))
   }
-  onValue (fn :ValueFn<E[]>) :Remover {
+  onValue (fn :ValueFn<ReadonlyList<E>>) :Remover {
     const remover = this.onEmit(fn)
-    fn(this.elems)
+    fn(this)
     return remover
   }
+  map<U> (fn :(l:ReadonlyList<E>) => U) :Source<U> {
+    return new Subject((lner, want) => {
+      if (want) lner(fn(this))
+      return this.onChange(change => lner(fn(this)))
+    })
+  }
 }
-
-// abstract class DerivedList<E> extends RList<E> {
-//   private _listeners :ValueFn<ListChange<E>>[] = []
-//   private _disconnect = NoopRemover
-
-//   abstract _connectToSource () :Remover
-
-//   _dispatchChange (change :ListChange<E>) {
-//     dispatchValue(this._listeners, change)
-//   }
-
-//   onChange (listener :ValueFn<ListChange<E>>) :Remover {
-//     const needConnect = this._listeners.length === 0
-//     const remover = addListener(this._listeners, listener)
-//     if (needConnect) this._disconnect = this._connectToSource()
-//     return () => {
-//       remover()
-//       if (this._listeners.length === 0) {
-//         this._disconnect()
-//         this._disconnect = NoopRemover
-//       }
-//     }
-//   }
-
-//   protected get isConnected () :boolean { return this._disconnect !== NoopRemover }
-// }
 
 /** A mutable [[RList]] which provides an API for adding, updating and deleting elements. */
 export abstract class MutableList<E> extends RList<E> {
@@ -258,13 +248,15 @@ export abstract class RMap<K,V> extends Source<ReadonlyMap<K,V>> implements Read
   }
 
   /** Returns a reactive view of the keys of this map. The source will immediately contain the
-    * current keys and will emit a change when mappings are added or removed. */
-  keysSource () :Source<K[]> {
+    * current keys and will emit a change when mappings are added or removed. The source will not
+    * change when an existing mapping is updated (as the keys will not have changed).
+    *
+    * Reactive views are not provided for [[values]] or [[entries]] because those change every time
+    * anything in the map changes. Simply call `map(m => m.values())` for example. */
+  keysSource () :Source<IterableIterator<K>> {
     return new Subject((lner, want) => {
-      if (want) lner(Array.from(this.keys()))
-      return this.onChange(change => {
-        if (change.type === "deleted" || change.prev === undefined) lner(Array.from(this.keys()))
-      })
+      if (want) lner(this.keys())
+      return this.onChange(c => c.type === "deleted" || c.prev === undefined && lner(this.keys()))
     })
   }
 
@@ -280,6 +272,12 @@ export abstract class RMap<K,V> extends Source<ReadonlyMap<K,V>> implements Read
     const remover = this.onEmit(fn)
     fn(this.data)
     return remover
+  }
+  map<T> (fn :(m:ReadonlyMap<K,V>) => T) :Source<T> {
+    return new Subject((lner, want) => {
+      if (want) lner(fn(this))
+      return this.onChange(_ => lner(fn(this)))
+    })
   }
 }
 
