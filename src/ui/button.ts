@@ -39,7 +39,9 @@ export class Button extends Control {
   }
 
   protected get computeState () {
-    return this._pressed.current ? "pressed" : super.computeState
+    // meh, this can be called before our constructor runs...
+    const pressed = (this._pressed  && this._pressed.current)
+    return this.enabled.current && pressed ? "pressed" : super.computeState
   }
 }
 

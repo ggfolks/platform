@@ -406,7 +406,7 @@ export class Control extends Element {
   }
 
   protected get computeState () :string {
-    return this.isFocused ? "focused" : this.enabled.current ? "normal" : "disabled"
+    return this.enabled.current ? (this.isFocused ? "focused" : "normal") : "disabled"
   }
 
   protected computePreferredSize (hintX :number, hintY :number, into :dim2) {
