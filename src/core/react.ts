@@ -189,7 +189,7 @@ export class Stream<T> extends Source<T> {
     })
   }
 
-  constructor (private readonly _onEmit :(fn :ValueFn<T>) => Remover) { super() }
+  constructor (protected readonly _onEmit :(fn :ValueFn<T>) => Remover) { super() }
 
   /** Registers `fn` to be invoked when this stream emits a value.
     * @return a remover thunk (invoke with no args to unregister `fn`). */
@@ -248,7 +248,7 @@ export class Stream<T> extends Source<T> {
 
 /* A stream which can have values emitted on it by external callers. */
 export class Emitter<T> extends Stream<T> {
-  private _listeners :ValueFn<T>[] = []
+  private readonly _listeners :ValueFn<T>[] = []
 
   constructor () { super(lner => addListener(this._listeners, lner)) }
 
@@ -500,8 +500,8 @@ export class Value<T> extends Source<T> {
   constructor (
     /** The function used to test new values for equality with old values. */
     readonly eq :Eq<T>,
-    private readonly _onChange :(fn :ChangeFn<T>) => Remover,
-    private readonly _current :() => T) { super() }
+    protected readonly _onChange :(fn :ChangeFn<T>) => Remover,
+    protected readonly _current :() => T) { super() }
 
   /** The current value contained by this value. */
   get current () :T { return this._current() }
@@ -715,11 +715,31 @@ export class Mutable<T> extends Value<T> {
   }
 
   constructor (eq :Eq<T>, onChange :(fn:ChangeFn<T>) => Remover, current :() => T,
-               private readonly _update :(v:T) => void) {
+               protected readonly _update :(v:T) => void) {
     super(eq, onChange, current)
   }
 
   /** Updates this mutable value to `newValue`. If `newValue` differs from the current value,
     * listeners will be notified of the change. */
   update (newValue :T) { this._update(newValue) }
+
+  /** Creates a two way mapping between `this` mutable value and a projection of it given a
+    * projection and injection function. Changes to `this` value will be projected out and used to
+    * reflect the bimapped value, and changes to the bimapped value will be injected back into
+    * `this` value which will then be updated. Equality for the projected value will be tested using
+    * the same function used by `this` value.
+    * @param project a function that projects out from `this` value, for example, one that projects
+    * a single property of an object.
+    * @param inject a function that injects the projected value `u` back into the larger value `t`,
+    * for example if `t` were an object it could create a new object that copied all properties from
+    * `t` and replaced the projected property with the updated `u`.
+    */
+  bimap<U> (project :(t:T) => U, inject :(t:T, u:U) => T) :Mutable<U> {
+    const {eq, _onChange, _current, _update} = this
+    const eqU = eq as any as Eq<U> // shenanigans, but should generally be OK
+    return new Mutable(eqU, disp => _onChange((value:T, ovalue:T) => {
+      let current = project(value), previous = project(ovalue)
+      if (!eqU(current, previous)) disp(current, previous)
+    }), () => project(_current()), (u:U) => _update(inject(_current(), u)))
+  }
 }

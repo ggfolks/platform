@@ -327,3 +327,47 @@ test("joined values", () => {
   baz.update(13)
   expect(fooBarBaz.current).toEqual([false, "boo", 13])
 })
+
+test("bimapped values", () => {
+  const data = {foo: "foo", bar: {baz: 3, berry: false}}
+  const obj = Mutable.local(data)
+  const objhist :Array<typeof data> = []
+  obj.onValue(v => objhist.push(v))
+
+  const xobjhist = [data]
+  expect(objhist).toEqual(xobjhist)
+
+  const foo = obj.bimap(o => o.foo, (o, foo) => ({...o, foo}))
+  const foohist :string[] = []
+  foo.onValue(f => foohist.push(f))
+
+  const xfoohist = [data.foo]
+  expect(foohist).toEqual(xfoohist)
+
+  foo.update("foozle")
+  xfoohist.push("foozle")
+  expect(foohist).toEqual(xfoohist)
+  xobjhist.push({...data, foo: "foozle"})
+  expect(objhist).toEqual(xobjhist)
+
+  const bar = obj.bimap(o => o.bar, (o, bar) => ({...o, bar}))
+  const barhist :Array<typeof data.bar> = []
+  bar.onValue(b => barhist.push(b))
+
+  const xbarhist = [data.bar]
+  expect(barhist).toEqual(xbarhist)
+
+  const baz = bar.bimap(b => b.baz, (b, baz) => ({...b, baz}))
+  const bazhist :number[] = []
+  baz.onValue(b => bazhist.push(b))
+
+  const xbazhist = [data.bar.baz]
+  expect(bazhist).toEqual(xbazhist)
+
+  baz.update(5)
+  xbazhist.push(5)
+  expect(bazhist).toEqual(xbazhist)
+
+  xobjhist.push({...data, foo: "foozle", bar: {...data.bar, baz: 5}})
+  expect(objhist).toEqual(xobjhist)
+})
