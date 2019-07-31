@@ -131,7 +131,7 @@ export abstract class Element implements Disposable {
   }
 
   setBounds (bounds :rect) {
-    const obounds = this._bounds, changed = obounds[2] !== bounds[2] || obounds[3] !== bounds[3]
+    const obounds = this._bounds, changed = !rect.eq(bounds, obounds)
     rect.copy(obounds, bounds)
     if (changed) this.invalidate()
   }
@@ -363,7 +363,7 @@ export class Control extends Element {
       this.enabled = ctx.model.resolve(config.enabled)
       this.disposer.add(this.enabled.onValue(_ => this._state.update(this.computeState)))
     }
-    this.contents = ctx.elem.create(ctx, this, config.contents)
+    this.contents = this.createContents(ctx)
   }
 
   get styleScope () :StyleScope { return {id: "control", states: ControlStates} }
@@ -399,6 +399,10 @@ export class Control extends Element {
   dispose () {
     super.dispose()
     this.contents.dispose()
+  }
+
+  protected createContents (ctx :ElementContext) :Element {
+    return ctx.elem.create(ctx, this, this.config.contents)
   }
 
   protected get computeState () :string {
