@@ -417,14 +417,17 @@ export class Text extends Control {
 
   protected revalidate () {
     super.revalidate()
+    // bound the cursor into the text length
+    const coffset = Math.max(0, Math.min(this.text.current.length, this.coffset.current))
+    this.coffset.update(coffset)
+    // compute the advance of the cursor based on the text contents
     const lx = this.label.x, ly = this.label.y, lw = this.label.width, lh = this.label.height
-    const cadvance = this.label.span.current.measureAdvance(this.coffset.current)
-
+    const cadvance = this.label.span.current.measureAdvance(coffset)
     // if the cursor is out of bounds, adjust the label x offset to bring it to the edge
     const ll = -this.label.xoffset.current
     if (cadvance < ll) this.label.xoffset.update(-cadvance)
     else if (cadvance > ll+lw) this.label.xoffset.update(lw-cadvance)
-
+    // finally position the cursor based on our calculations
     this.cursor.setBounds(rect.set(tmpr, lx + this.label.xoffset.current + cadvance, ly, 1, lh))
     this.cursor.validate()
   }
