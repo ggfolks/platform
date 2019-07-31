@@ -110,45 +110,38 @@ type TextState = {
 }
 type TextAction = (state :TextState, typed :string) => void
 
-// TODO: do we want to support a simple undo mechanism for text editing? would be nice if it
-// factored into a larger undo framework...
+function replace (state :TextState, start :number, end :number, text :string, cpos :number) {
+  const ctext = state.text.current
+  state.text.update(ctext.substring(0, start) + text + ctext.substring(end))
+  state.cursor.update(cpos)
+  state.selection.update([0, 0])
+}
 
 const actions :PMap<TextAction> = {
   // text edits
   insert: (state, typed) => {
-    const ctext = state.text.current, [sstart, send] = state.selection.current
-    if (sstart < send) {
-      state.text.update(ctext.substring(0, sstart) + typed + ctext.substring(send))
-      state.cursor.update(sstart+typed.length)
-      state.selection.update([0, 0])
-    } else {
-      const ipos = state.cursor.current
-      state.text.update(ctext.substring(0, ipos) + typed + ctext.substring(ipos))
-      state.cursor.update(ipos+typed.length)
-    }
+    const [sstart, send] = state.selection.current, ipos = state.cursor.current
+    if (sstart < send) replace(state, sstart, send, typed, sstart+typed.length)
+    else replace(state, ipos, ipos, typed, ipos+typed.length)
   },
   delete: (state, typed) => {
     const ctext = state.text.current, ipos = state.cursor.current
-    if (ipos < ctext.length) {
-      state.text.update(ctext.substring(0, ipos) + ctext.substring(ipos+1))
-    }
+    const [sstart, send] = state.selection.current
+    if (sstart < send) replace(state, sstart, send, "", sstart)
+    else if (ipos < ctext.length) replace(state, ipos, ipos+1, "", ipos)
   },
   backspace: (state, typed) => {
-    const ctext = state.text.current, ipos = state.cursor.current
-    if (ipos > 0) {
-      state.text.update(ctext.substring(0, ipos-1) + ctext.substring(ipos))
-      state.cursor.update(ipos-1)
-    }
+    const [sstart, send] = state.selection.current, ipos = state.cursor.current
+    if (sstart < send) replace(state, sstart, send, "", sstart)
+    else if (ipos > 0) replace(state, ipos-1, ipos, "", ipos-1)
   },
   // clipboard interaction
   cut: (state, typed) => {
     const [sstart, send] = state.selection.current
     if (send > sstart) {
-      const ctext = state.text.current
-      state.text.update(ctext.substring(0, sstart) + ctext.substring(send))
-      state.selection.update([0,0])
-      state.cursor.update(sstart)
-      navigator.clipboard.writeText(ctext.substring(sstart, send))
+      const cut = state.text.current.substring(sstart, send)
+      replace(state, sstart, send, "", sstart)
+      navigator.clipboard.writeText(cut)
     }
   },
   copy: (state, typed) => {
