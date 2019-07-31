@@ -90,6 +90,7 @@ export class UI {
     case  "cursor": return new T.Cursor(ctx, parent, rconfig as T.CursorConfig)
     case    "text": return new T.Text(ctx, parent, rconfig as T.TextConfig)
     case  "button": return new B.Button(ctx, parent, rconfig as B.ButtonConfig)
+    case  "toggle": return new B.Toggle(ctx, parent, rconfig as B.ToggleConfig)
     case    "list": return new L.List(ctx, parent, rconfig as L.ListConfig)
     default: throw new Error(`Unknown element type '${config.type}'.`)
     }
