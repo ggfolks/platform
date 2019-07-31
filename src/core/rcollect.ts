@@ -1,6 +1,6 @@
 import {Remover} from "./util"
 import {Data, dataEquals, refEquals} from "./data"
-import {Eq, Mutable, Source, Value, ValueFn, dispatchValue, addListener} from "./react"
+import {Eq, Mutable, Source, Subject, Value, ValueFn, dispatchValue, addListener} from "./react"
 
 //
 // Reactive lists
@@ -238,16 +238,6 @@ export abstract class RMap<K,V> extends Source<ReadonlyMap<K,V>> implements Read
     throw new Error(`Missing required value for key '${key}'`)
   }
 
-  /** Returns a [[Value]] that reflects the value of this map at `key`. When mapping changes, the
-    * value will emit a change. While no mapping exists for key, the value will contain `undefined`.
-    * @param eq the equality function to use to compare successive values. */
-  getValue (key :K, eq :Eq<V|undefined> = refEquals) :Value<V|undefined> {
-    return Value.deriveValue(eq, disp => this.onChange(change => {
-      const ovalue = change.prev, nvalue = change.type === "set" ? change.value : undefined
-      if (!eq(ovalue, nvalue)) disp(nvalue, ovalue)
-    }), () => this.get(key))
-  }
-
   // TODO: map &c
 
   /** Returns an iterator over the keys of this map, in insertion order. */
@@ -263,6 +253,29 @@ export abstract class RMap<K,V> extends Source<ReadonlyMap<K,V>> implements Read
   [Symbol.iterator] () :IterableIterator<[K,V]> { return this.data[Symbol.iterator]() }
 
   get [Symbol.toStringTag] () :string { return this.data[Symbol.toStringTag] }
+
+  /** Returns a [[Value]] that reflects the value of this map at `key`. When mapping changes, the
+    * value will emit a change. While no mapping exists for key, the value will contain `undefined`.
+    * @param eq the equality function to use to compare successive values. */
+  getValue (key :K, eq :Eq<V|undefined> = refEquals) :Value<V|undefined> {
+    return Value.deriveValue(eq, disp => this.onChange(change => {
+      if (change.key === key) {
+        const ovalue = change.prev, nvalue = change.type === "set" ? change.value : undefined
+        if (!eq(ovalue, nvalue)) disp(nvalue, ovalue)
+      }
+    }), () => this.get(key))
+  }
+
+  /** Returns a reactive view of the keys of this map. The source will immediately contain the
+    * current keys and will emit a change when mappings are added or removed. */
+  keysSource () :Source<K[]> {
+    return new Subject((lner, want) => {
+      if (want) lner(Array.from(this.keys()))
+      return this.onChange(change => {
+        if (change.type === "deleted" || change.prev === undefined) lner(Array.from(this.keys()))
+      })
+    })
+  }
 
   /** Registers `fn` to be notified of changes to this map.
     * @return a remover thunk (invoke with no args to unregister `fn`). */
@@ -307,8 +320,10 @@ export abstract class MutableMap<K,V> extends RMap<K,V> implements Map<K,V> {
   getMutable (key :K, eq :Eq<V|undefined> = refEquals) :Mutable<V|undefined> {
     return Mutable.deriveMutable(
       disp => this.onChange(change => {
-        const ovalue = change.prev, nvalue = change.type === "set" ? change.value : undefined
-        if (!eq(ovalue, nvalue)) disp(nvalue, ovalue)
+        if (change.key === key) {
+          const ovalue = change.prev, nvalue = change.type === "set" ? change.value : undefined
+          if (!eq(ovalue, nvalue)) disp(nvalue, ovalue)
+        }
       }),
       () => this.get(key),
       value => value ? this.set(key, value) : this.delete(key),

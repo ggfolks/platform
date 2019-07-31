@@ -51,24 +51,46 @@ test("reactive maps", () => {
   expect(Array.from(map.entries())).toEqual([["a", "eh"], ["c", "see"]])
   expect(hist).toEqual(xhist)
 
+  const aval = map.getValue("a")
+  const ahist :Array<string|undefined> = []
+  aval.onValue(v => ahist.push(v))
+  expect(aval.current).toEqual("eh")
+  expect(ahist).toEqual(["eh"])
+
+  const amval = map.getMutable("a")
+  const amhist :Array<string|undefined> = []
+  amval.onValue(v => amhist.push(v))
+  expect(amval.current).toEqual("eh")
+  expect(amhist).toEqual(["eh"])
+
   const cval = map.getValue("c")
-  const valhist :Array<string|undefined> = []
-  cval.onValue(v => valhist.push(v))
+  const chist :Array<string|undefined> = []
+  cval.onValue(v => chist.push(v))
   expect(cval.current).toEqual("see")
-  expect(valhist).toEqual(["see"])
+  expect(chist).toEqual(["see"])
 
   map.set("c", "see")
   expect(cval.current).toEqual("see")
-  expect(valhist).toEqual(["see"])
+  expect(chist).toEqual(["see"])
 
   map.set("c", "cee")
   expect(cval.current).toEqual("cee")
-  expect(valhist).toEqual(["see", "cee"])
+  expect(chist).toEqual(["see", "cee"])
 
   map.delete("c")
   expect(cval.current).toEqual(undefined)
-  expect(valhist).toEqual(["see", "cee", undefined])
+  expect(chist).toEqual(["see", "cee", undefined])
 
   map.set("c", "see!")
-  expect(valhist).toEqual(["see", "cee", undefined, "see!"])
+  expect(chist).toEqual(["see", "cee", undefined, "see!"])
+
+  // regression test for bug where we weren't testing key in projected values
+  expect(aval.current).toEqual("eh")
+  expect(ahist).toEqual(["eh"])
+  expect(amval.current).toEqual("eh")
+  expect(amhist).toEqual(["eh"])
+
+  amval.update("aye")
+  expect(map.get("a")).toEqual("aye")
+  expect(amhist).toEqual(["eh", "aye"])
 })
