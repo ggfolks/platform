@@ -136,7 +136,7 @@ test("basic subject", () => {
   }
 
   const rm = Mutable.local("")
-  testSubject(rm, v => rm.update(v))
+  testSubject(rm.toSubject(), v => rm.update(v))
 
   const em = new Emitter<string>()
   testSubject(em.toSubject(), v => em.emit(v))

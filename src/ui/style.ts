@@ -1,7 +1,7 @@
 import {PMap} from "../core/util"
 import {dim2} from "../core/math"
 import {Color} from "../core/color"
-import {Subject, Value} from "../core/react"
+import {Subject} from "../core/react"
 import {makeRoundRectPath} from "./util"
 
 // TODO?: ImageConfig = string | {source/path/url :string, scale :number} | ?
@@ -28,7 +28,7 @@ function readDef<C> (type :string, defs :PMap<C>, id :string) :C {
   throw new Error(`Missing ${type} style def '${id}'`)
 }
 
-const noPaint = Value.constant<Paint|undefined>(undefined)
+const NoPaint = Subject.constant<Paint|undefined>(undefined)
 
 /** Defines styles which can be referenced by name in element configuration. */
 export interface StyleDefs {
@@ -84,7 +84,7 @@ export class StyleContext {
   }
 
   resolvePaintOpt (spec :Spec<PaintConfig>|undefined) :Subject<Paint|undefined> {
-    return spec ? this.resolvePaint(spec) : noPaint
+    return spec ? this.resolvePaint(spec) : NoPaint
   }
 }
 
@@ -172,9 +172,9 @@ export abstract class Paint {
 export function makePaint (ctx :StyleContext, config :PaintConfig) :Subject<Paint> {
   const type :string = config.type
   switch (config.type) {
-  case   "color": return Value.constant(new ColorPaint(ctx.resolveColor(config.color)))
+  case   "color": return Subject.constant(new ColorPaint(ctx.resolveColor(config.color)))
   case  "linear":
-  case  "radial": return Value.constant(new GradientPaint(ctx, config))
+  case  "radial": return Subject.constant(new GradientPaint(ctx, config))
   case "pattern": return ctx.image.resolve(config.image).map(img => {
       if (img instanceof HTMLImageElement) return new PatternPaint(img, config)
       // TODO: return error pattern
@@ -341,6 +341,8 @@ export interface BackgroundConfig {
   }
 }
 
+const NoDecor = Subject.constant(NoopDecor)
+
 /** Creates a background based on the supplied `config`. */
 export function makeBackground (ctx :StyleContext, config :BackgroundConfig) :Subject<Decoration> {
   if (config.fill) return ctx.resolvePaint(config.fill).map(fill => {
@@ -360,9 +362,9 @@ export function makeBackground (ctx :StyleContext, config :BackgroundConfig) :Su
     }
   })
   // TODO
-  else if (config.image) return Value.constant(NoopDecor)
+  else if (config.image) return NoDecor
   // TODO: log a warning?
-  else return Value.constant(NoopDecor)
+  else return NoDecor
 }
 
 /** Defines a border rendered around a [[Box]]. */

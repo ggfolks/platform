@@ -217,20 +217,20 @@ function createObject3D (objectConfig: Object3DConfig) :Subject<Object3D> {
       return loadGLTF(gltfConfig.url).map(original => original.clone())
 
     case "perspectiveCamera":
-      return Value.constant(new PerspectiveCamera())
+      return Subject.constant(new PerspectiveCamera())
 
     case "directionalLight":
       const dlConfig = objectConfig as DirectionalLightConfig
-      return Value.constant(new DirectionalLight(dlConfig.color, dlConfig.intensity))
+      return Subject.constant(new DirectionalLight(dlConfig.color, dlConfig.intensity))
 
     case "ambientLight":
       const alConfig = objectConfig as AmbientLightConfig
-      return Value.constant(new AmbientLight(alConfig.color, alConfig.intensity))
+      return Subject.constant(new AmbientLight(alConfig.color, alConfig.intensity))
 
     case "mesh":
       const meshConfig = objectConfig as MeshConfig
-      return Value.constant(new Mesh(createGeometry(meshConfig.geometry),
-                                     maybeCreateMaterial(meshConfig.material)))
+      return Subject.constant(new Mesh(createGeometry(meshConfig.geometry),
+                                       maybeCreateMaterial(meshConfig.material)))
     default:
       throw new Error("Unknown Object3D type: " + objectConfig.type)
   }
@@ -243,7 +243,7 @@ const errorMat = new MeshBasicMaterial({color: 0xFF0000})
 function loadGLTF (url :string) {
   let gltf = gltfs.get(url)
   if (!gltf) {
-    gltfs.set(url, gltf = Subject.derive(dispatch => {
+    gltfs.set(url, gltf = Subject.deriveSubject(dispatch => {
       new GLTFLoader().load(
         url,
         gltf => {

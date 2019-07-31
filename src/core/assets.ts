@@ -7,7 +7,7 @@ function eventToError (pre :string, err :Event|string) :Error {
 }
 
 export function loadImage (url :string) :Subject<HTMLImageElement|Error> {
-  return Subject.derive(disp => {
+  return Subject.deriveSubject(disp => {
     const image = new Image()
     image.crossOrigin = ''
     image.src = url

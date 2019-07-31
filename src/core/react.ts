@@ -17,7 +17,9 @@ export type Eq<T> = (a:T, b:T) => boolean
 //
 // Listener plumbing
 
-function addListener<T> (listeners :T[], listener :T) :Remover {
+/** Adds `listener` to `listeners`.
+  * @return a `Remover` thunk that can be used to remove `listener` from `listeners`. */
+export function addListener<T> (listeners :T[], listener :T) :Remover {
   listeners.push(listener)
   return () => {
     let ii = listeners.indexOf(listener)
@@ -39,7 +41,8 @@ export class MultiError extends Error {
   * anything, but is ignored. */
 export type ValueFn<T> = (value :T) => any
 
-function dispatchValue<T> (listeners :ValueFn<T>[], value :T) {
+/** Dispatches `value` to `listeners`. */
+export function dispatchValue<T> (listeners :ValueFn<T>[], value :T) {
   let errors
   for (let listener of listeners.slice()) {
     try {
@@ -59,7 +62,8 @@ function dispatchValue<T> (listeners :ValueFn<T>[], value :T) {
   * be anything, but is ignored. */
 export type ChangeFn<T> = (value :T, oldValue :T) => any
 
-function dispatchChange<T> (listeners :ChangeFn<T>[], value :T, oldValue :T) {
+/** Dispatches the change from `oldValue` to `value` to `listeners`. */
+export function dispatchChange<T> (listeners :ChangeFn<T>[], value :T, oldValue :T) {
   let errors
   for (let listener of listeners.slice()) {
     try {
@@ -158,7 +162,7 @@ export class Stream<T> extends Source<T> {
     * subscribe to the underlying source and call the supplied `dispatch` function to dispatch
     * values as they are received. It should return a remover thunk that can be used to clear the
     * subscription, which will be called when the last listener is removed. */
-  static derive<T> (connect :(dispatch :DispatchFn<T>) => Remover) :Stream<T> {
+  static deriveStream<T> (connect :(dispatch :DispatchFn<T>) => Remover) :Stream<T> {
     const listeners :ValueFn<T>[] = []
     let disconnect :Remover = NoopRemover
     const dispatch = (value :T) => { dispatchValue(listeners, value) }
@@ -179,8 +183,8 @@ export class Stream<T> extends Source<T> {
   /** Merges `sources` streams into a single stream that emits a value whenever any of the
     * underlying streams emit a value. */
   static merge<E> (...sources :Stream<E>[]) :Stream<E> {
-    return Stream.derive(dispatch => {
-      let removers :Remover[] = sources.map(s => s.onEmit(dispatch))
+    return new Stream(fn => {
+      const removers = sources.map(s => s.onEmit(fn))
       return () => removers.forEach(r => r())
     })
   }
@@ -198,14 +202,16 @@ export class Stream<T> extends Source<T> {
   /** Returns a stream which transforms the values of this stream via `fn`. Whenever `this` stream
     * emits a `value`, the returned stream will emit `fn(value)`. */
   map<U> (fn :(v:T) => U) :Stream<U> {
-    return Stream.derive(dispatch => this.onEmit(value => dispatch(fn(value))))
+    const onEmit = this._onEmit
+    return new Stream(lner => onEmit((value :T) => lner(fn(value))))
   }
 
   /** Returns a stream which filters the values of this stream via `pred`. Only the values emitted
     * by this stream that satisfy `pred` (cause it to return `true`) will be emitted by the returned
     * stream. */
   filter (pred :Pred<T>) :Stream<T> {
-    return Stream.derive(dispatch => this.onEmit(value => pred(value) && dispatch(value)))
+    const onEmit = this._onEmit
+    return new Stream(lner => onEmit(value => pred(value) && lner(value)))
   }
 
   /** Returns a reactive [[Value]] which starts with value `start` and is updated by combining
@@ -214,23 +220,15 @@ export class Stream<T> extends Source<T> {
     * @param eq used to check whether computed new values have actually changed.
     * [[Value]]s emit notifications only when values change. */
   fold<Z> (start :Z, fn :(a:Z, v:T) => Z, eq :Eq<Z>) :Value<Z> {
-    const stream = this
-    class FoldValue extends DerivedValue<Z> {
-      private _current = start
-      constructor (readonly eq :Eq<Z>) { super() }
-      get current () :Z { return this._current }
-      _connectToSource () {
-        return stream.onEmit(value => {
-          const ovalue = this._current
-          const nvalue = fn(ovalue, value)
-          if (!this.eq(ovalue, nvalue)) {
-            this._current = nvalue
-            this._dispatchValue(nvalue, ovalue)
-          }
-        })
+    const onEmit = this._onEmit
+    let current = start
+    return Value.deriveValue(eq, disp => onEmit(value => {
+      const ovalue = current, nvalue = fn(ovalue, value)
+      if (!eq(ovalue, nvalue)) {
+        current = nvalue
+        disp(nvalue, ovalue)
       }
-    }
-    return new FoldValue(eq)
+    }), () => current)
   }
 
   /** Returns a reactive [[Value]] which starts with value `start` and is updated by values emitted
@@ -244,7 +242,7 @@ export class Stream<T> extends Source<T> {
   /** Returns a reactive [[Subject]] that is initialized with the next value emitted by this stream
     * and then changed by each subsequent value emitted by this stream. */
   toSubject () :Subject<T> {
-    return Subject.derive(dispatch => this.onValue(dispatch))
+    return Subject.deriveSubject(dispatch => this.onValue(dispatch))
   }
 }
 
@@ -277,7 +275,15 @@ export class Emitter<T> extends Stream<T> {
   * notification for successive equal values. A given subject may choose to emit all changes
   * regardless of equality (like subjects derived from [[Stream]]s) or suppress change notifications
   * for successive equal values (like [[Value]] which is also a [[Subject]]). */
-export abstract class Subject<T> extends Source<T> {
+export class Subject<T> extends Source<T> {
+
+  /** Creates a constant subject which always contains `value`. */
+  static constant<T> (value :T) :Subject<T> {
+    return new Subject((lner, want) => {
+      if (want) lner(value)
+      return NoopRemover
+    })
+  }
 
   /** Creates a subject derived from an external event source. The `connect` function should
     * subscribe to the underlying source, call the supplied `dispatch` function with the initial
@@ -288,7 +294,7 @@ export abstract class Subject<T> extends Source<T> {
     * be called anew to resume wakefulness.
     * @param connect called when the subject receives its first listener after being in a dormant
     * state. */
-  static derive<T> (connect :(dispatch :DispatchFn<T>) => Remover) :Subject<T> {
+  static deriveSubject<T> (connect :(dispatch :DispatchFn<T>) => Remover) :Subject<T> {
     const listeners :ValueFn<T>[] = []
     let disconnect = NoopRemover
     let occupied = false
@@ -298,45 +304,40 @@ export abstract class Subject<T> extends Source<T> {
       latest = value
       dispatchValue(listeners, value)
     }
-    class DerivedSubject extends Subject<T> {
-      onEmit (fn :ValueFn<T>) :Remover { return this.addListener(fn, false) }
-      onValue (fn :ValueFn<T>) :Remover { return this.addListener(fn, true) }
-      protected addListener (fn :ValueFn<T>, wantValue :boolean) :Remover {
-        const needConnect = listeners.length === 0
-        let remover :Remover
-        if (needConnect) {
-          if (wantValue) {
-            remover = addListener(listeners, fn)
-            disconnect = connect(dispatch)
-          } else {
-            disconnect = connect(dispatch)
-            remover = addListener(listeners, fn)
-          }
-        } else {
+    function onValue (fn :ValueFn<T>, wantValue :boolean) :Remover {
+      const needConnect = listeners.length === 0
+      let remover :Remover
+      if (needConnect) {
+        if (wantValue) {
           remover = addListener(listeners, fn)
-          if (wantValue && occupied) fn(latest)
+          disconnect = connect(dispatch)
+        } else {
+          disconnect = connect(dispatch)
+          remover = addListener(listeners, fn)
         }
-        return () => {
-          remover()
-          if (listeners.length == 0) {
-            disconnect()
-            disconnect = NoopRemover
-            occupied = false
-            latest = undefined as any // don't retain a reference to latest
-          }
+      } else {
+        remover = addListener(listeners, fn)
+        if (wantValue && occupied) fn(latest)
+      }
+      return () => {
+        remover()
+        if (listeners.length == 0) {
+          disconnect()
+          disconnect = NoopRemover
+          occupied = false
+          latest = undefined as any // don't retain a reference to latest
         }
       }
-      toString () { return `Subject(${latest})` }
     }
-    return new DerivedSubject()
+    return new Subject(onValue)
   }
 
-  /** Joins `sources` into a single subject which contains the underlying subjects combined into a
-    * single array. This subject will initially complete once all of the underlying subjects have
-    * initially completed. Then, when any of the underlying subjects changes, this subject will
+  /** Joins `sources` into a single subject which contains the underlying sources combined into a
+    * single array. This subject will initially complete once all of the underlying sources have
+    * initially completed. Then, when any of the underlying sources changes, this subject will
     * change and the changed element will be reflected in its new value. */
-  static join<A> (...sources :Subject<A>[]) :Subject<A[]> {
-    return Subject.derive(dispatch => {
+  static join<A> (...sources :Source<A>[]) :Subject<A[]> {
+    return Subject.deriveSubject(dispatch => {
       const ready :boolean[] = []
       const current :A[] = []
       const removers = sources.map((source, idx) => source.onValue(value => {
@@ -349,31 +350,34 @@ export abstract class Subject<T> extends Source<T> {
     })
   }
 
-  /** Joins two subjects into a single "tuple" subject. See [[Subject.join]] for details. */
-  static join2<A,B> (a :Subject<A>, b :Subject<B>) :Subject<[A,B]> {
+  /** Joins two sources into a single "tuple" subject. See [[Subject.join]] for details. */
+  static join2<A,B> (a :Source<A>, b :Source<B>) :Subject<[A,B]> {
     return Subject.join(a as any, b as any) as Subject<[A, B]>
   }
 
-  /** Joins three subjects into a single "triple" subject. See [[Subject.join]] for details. */
-  static join3<A,B,C> (a :Subject<A>, b :Subject<B>, c :Subject<C>) :Subject<[A,B,C]> {
+  /** Joins three sources into a single "triple" subject. See [[Subject.join]] for details. */
+  static join3<A,B,C> (a :Source<A>, b :Source<B>, c :Source<C>) :Subject<[A,B,C]> {
     return Subject.join(a as any, b as any, c as any) as Subject<[A, B, C]>
   }
+
+  constructor (readonly _connect :(lner :ValueFn<T>, wantValue :boolean) => Remover) { super() }
 
   /** Registers `fn` to be called only with new values whenever this subject changes, _not_ with the
     * current value.
     * @return a remover thunk (invoke with no args to unregister `fn`). */
-  abstract onEmit (fn :ValueFn<T>) :Remover
+  onEmit (fn :ValueFn<T>) :Remover { return this._connect(fn, false) }
 
   /** Registers `fn` to be called with the current value (if one is available), and with new values
     * whenever this subject changes.
     * @return a remover thunk (invoke with no args to unregister `fn`). */
-  abstract onValue (fn :ValueFn<T>) :Remover
+  onValue (fn :ValueFn<T>) :Remover { return this._connect(fn, true) }
 
   /** Creates a subject which transforms this subject via `fn`. The new subject will emit
     * transformed changes whenever this subject changes.
     * @param fn a referentially transparent transformer function. */
   map<U> (fn :(v:T) => U) :Subject<U> {
-    return Subject.derive(dispatch => this.onValue(value => dispatch(fn(value))))
+    const {_connect} = this
+    return new Subject((lner, wantValue) => _connect((v:T) => lner(fn(v)), wantValue))
   }
 
   /** Creates a subject which transforms this subject via `fn`. The new subject will emit
@@ -384,10 +388,11 @@ export abstract class Subject<T> extends Source<T> {
     * @param onSleep a function called when the mapped subject loses its last listener. It is passed
     * the most recently computed mapped value, if one is available. */
   mapTrace<U> (onWake :() => U|void, fn :(v:T) => U, onSleep :(v:U|void) => void) :Subject<U> {
-    return Subject.derive(dispatch => {
+    const {_connect} = this
+    return Subject.deriveSubject(dispatch => {
       let latest = onWake()
       if (latest) dispatch(latest)
-      const unsub = this.onValue(value => dispatch(latest = fn(value)))
+      const unsub = _connect(value => dispatch(latest = fn(value)), true)
       return () => {
         unsub()
         onSleep(latest)
@@ -403,16 +408,18 @@ export abstract class Subject<T> extends Source<T> {
 
 /** A reactive primitive that contains a value, which may subsequently change. The current value may
   * be observed by listening via [[Value.onValue]], or by calling [[Value.current]]. */
-export abstract class Value<T> extends Subject<T> {
+export class Value<T> extends Source<T> {
 
   /** Creates a constant value which always contains `value`. */
   static constant<T> (value :T) :Value<T> {
-    return new ConstantValue(value)
+    // note: we use refEquals here as we must provide something for eq, but it's never used because
+    // constant values never change, thus we never have to compare an old and a new value
+    return new Value(refEquals, lner => NoopRemover, () => value)
   }
 
   /** Creates a constant (data) value which always contains `value` or `undefined`. */
   static constantOpt<T> (value? :T) :Value<T|undefined> {
-    return new ConstantValue(value)
+    return this.constant(value)
   }
 
   /** Creates a value from `stream` which starts with the value `start` and is updated by values
@@ -429,56 +436,99 @@ export abstract class Value<T> extends Subject<T> {
     return stream.toValue(start, refEquals)
   }
 
+  /** Creates a value derived from an external source. The `current` function should return the
+    * current value. The `connect` function should subscribe to the underlying source, and call
+    * `dispatch` when any future values that arrive. It should return a remover thunk that can be
+    * used to clear the subscription. The remover thunk will be called when the last listener to the
+    * subject is removed and the subject goes dormant. If a new listener subsequently arrives,
+    * `connect` will be called anew to resume wakefulness.
+    * @param connect called when the value receives its first listener after being in a dormant
+    * state. */
+  static deriveValue<T> (eq :Eq<T>, connect :(dispatch :ChangeFn<T>) => Remover,
+                         current :() => T) :Value<T> {
+    const listeners :ValueFn<T>[] = []
+    let disconnect = NoopRemover
+    const dispatch = (value :T, ovalue :T) => dispatchChange(listeners, value, ovalue)
+    return new Value(eq, listener => {
+      const needConnect = listeners.length === 0
+      const remover = addListener(listeners, listener)
+      if (needConnect) disconnect = connect(dispatch)
+      return () => {
+        remover()
+        if (listeners.length === 0) {
+          disconnect()
+          disconnect = NoopRemover
+        }
+      }
+    }, current)
+  }
+
   /** Joins `sources` into a single value which contains the underlying values combined into a
     * single array. When any of the underlying values changes, this value will change and the
     * changed element will be reflected in its new value. */
   static join<A> (...sources :Value<A>[]) :Value<A[]> {
-    return new JoinedValue(sources)
+    const current = () => sources.map(source => source.current)
+    return Value.deriveValue((as, bs) => {
+      for (let ii = 0, ll = sources.length; ii < ll; ii += 1) {
+        if (!sources[ii].eq(as[ii], bs[ii])) return false
+      }
+      return true
+    }, disp => {
+      const prev = current()
+      const curr = current()
+      const removers = sources.map((source, idx) => source.onChange((val, oval) => {
+        prev[idx] = oval
+        curr[idx] = val
+        disp(curr, prev)
+      }))
+      return () => removers.forEach(r => r())
+    }, current)
   }
 
   /** Joins two values into a single "tuple" value. When either of the underlying values changes,
     * this value will change and the changed element will be reflected in its new value. */
   static join2<A,B> (a :Value<A>, b :Value<B>) :Value<[A,B]> {
-    return (new JoinedValue([a, b]) as any) as Value<[A,B]>
+    return this.join<any>(a, b) as any as Value<[A,B]>
   }
 
   /** Joins three values into a single "triple" value. When any of the underlying values changes,
     * this value will change and the changed element will be reflected in its new value. */
   static join3<A,B,C> (a :Value<A>, b :Value<B>, c :Value<C>) :Value<[A,B,C]> {
-    return (new JoinedValue([a, b, c]) as any) as Value<[A,B,C]>
+    return this.join<any>(a, b, c) as any as Value<[A,B,C]>
   }
 
-  /** The function used to test new values for equality with old values. */
-  abstract get eq () :Eq<T>
+  constructor (
+    /** The function used to test new values for equality with old values. */
+    readonly eq :Eq<T>,
+    private readonly _onChange :(fn :ChangeFn<T>) => Remover,
+    private readonly _current :() => T) { super() }
 
   /** The current value contained by this value. */
-  abstract get current () :T
-
-  /** Registers `fn` to be called with old and new values whenever this subject changes.
-    * @return a remover thunk (invoke with no args to unregister `fn`). */
-  abstract onChange (fn :ChangeFn<T>) :Remover
+  get current () :T { return this._current() }
 
   /** Registers `fn` to be called with the new value whenever this subject changes.
     * @return a remover thunk (invoke with no args to unregister `fn`). */
-  onEmit (fn :ValueFn<T>) :Remover {
-    return this.onChange(fn)
-  }
+  onEmit (fn :ValueFn<T>) :Remover { return this._onChange(fn) }
 
   /** Registers `fn` to be called with the most recently observed value (immediately) and again with
     * the new value whenever this subject changes.
     * @return a remover thunk (invoke with no args to unregister `fn`). */
   onValue (fn :ValueFn<T>) :Remover {
-    const remover = this.onChange(fn)
+    const remover = this._onChange(fn)
     fn(this.current)
     return remover
   }
+
+  /** Registers `fn` to be called with old and new values whenever this subject changes.
+    * @return a remover thunk (invoke with no args to unregister `fn`). */
+  onChange (fn :ChangeFn<T>) :Remover { return this._onChange(fn) }
 
   /** Creates a value which transforms this value via `fn`. The new value will emit changes
     * whenever this value changes and the transformed value differs from the previous transformed
     * value. [[refEquals]] will be used to determine when the transformed value changes.
     * @param fn a referentially transparent transformer function. */
   map<U> (fn :(v:T) => U) :Value<U> {
-    return new MappedValue(this, fn, refEquals)
+    return this.mapEq(fn, refEquals)
   }
 
   /** Creates a value which transforms this value via `fn`. The new value will emit changes
@@ -486,7 +536,7 @@ export abstract class Value<T> extends Subject<T> {
     * value. [[dataEquals]] will be used to determine when the transformed value changes.
     * @param fn a referentially transparent transformer function. */
   mapData<U extends Data> (fn :(v:T) => U) :Value<U> {
-    return new MappedValue(this, fn, dataEquals)
+    return this.mapEq(fn, dataEquals)
   }
 
   /** Creates a value which transforms this value via `fn`. The new value will emit changes
@@ -495,7 +545,20 @@ export abstract class Value<T> extends Subject<T> {
     * @param fn a referentially transparent transformer function.
     * @param eq used to determine when the transformed value changes. */
   mapEq<U> (fn :(v:T) => U, eq :Eq<U>) :Value<U> {
-    return new MappedValue(this, fn, eq)
+    const {_current, _onChange} = this
+    let connected = false, latest :U
+    return Value.deriveValue(eq, disp => {
+      connected = true
+      latest = fn(_current())
+      const unlisten = _onChange((value, ovalue) => {
+        let current = fn(value), previous = latest
+        if (!eq(current, previous)) {
+          latest = current
+          disp(current, previous)
+        }
+      })
+      return () => { connected = false ; unlisten() }
+    }, () => connected ? latest : fn(_current()))
   }
 
   /** Creates a value which transforms this value via `fn` into a result value. The value of the
@@ -507,8 +570,8 @@ export abstract class Value<T> extends Subject<T> {
     * avoid unexpected behavior, all values returned by `fn` should use the same equality testing
     * semantics. */
   switchMap<R> (fn :(v:T) => Value<R>) :Value<R> {
-    const source = this
-    let savedSourceValue = source.current
+    const {_current, _onChange, eq} = this
+    let savedSourceValue = _current()
     let mappedValue = fn(savedSourceValue)
     let latest = mappedValue.current
     function onSourceValue (value :T) :R {
@@ -516,50 +579,54 @@ export abstract class Value<T> extends Subject<T> {
       mappedValue = fn(value)
       return latest = mappedValue.current
     }
-
-    class SwitchMappedValue extends DerivedValue<R> {
-      get eq () :Eq<R> { return refEquals }
-      get current () :R {
-        // rather than recreate a mapped reactive value every time our value is requested,
-        // we cache the source value from which we most recently created our mapped value
-        // if it has not changed, we reuse the mapped value; this assumes referential
-        // transparency on the part of fn
-        let sourceValue = source.current
-        if (!source.eq(sourceValue, savedSourceValue)) {
-          savedSourceValue = sourceValue
-          mappedValue = fn(sourceValue)
-        }
-        return mappedValue.current
+    return Value.deriveValue(refEquals, disp => {
+      const current = _current()
+      if (!eq(current, savedSourceValue)) onSourceValue(current)
+      const dispatcher = (value :R, ovalue :R) => {
+        const previous = latest
+        latest = value
+        disp(value, previous)
       }
-
-      _connectToSource () {
-        if (!source.eq(source.current, savedSourceValue)) onSourceValue(source.current)
-        const dispatcher = (value :R, ovalue :R) => {
-          const previous = latest
-          latest = value
-          this._dispatchValue(value, previous)
+      let disconnect = mappedValue.onChange(dispatcher)
+      let unlisten = _onChange((value, ovalue) => {
+        disconnect()
+        let previous = latest, current = onSourceValue(value)
+        disconnect = mappedValue.onChange(dispatcher)
+        if (!mappedValue.eq(current, previous)) {
+          disp(current, previous)
         }
-        let disconnect = mappedValue.onChange(dispatcher)
-        let unlisten = source.onChange((value, ovalue) => {
-          disconnect()
-          let previous = latest, current = onSourceValue(value)
-          disconnect = mappedValue.onChange(dispatcher)
-          if (!mappedValue.eq(current, previous)) {
-            this._dispatchValue(current, previous)
-          }
-        })
-        return () => {
-          disconnect()
-          return unlisten()
-        }
+      })
+      return () => {
+        disconnect()
+        unlisten()
       }
-    }
-    return new SwitchMappedValue()
+    }, () => {
+      // rather than recreate a mapped reactive value every time our value is requested, we cache
+      // the source value from which we most recently created our mapped value if it has not
+      // changed, we reuse the mapped value; this assumes referential transparency for fn
+      let sourceValue = _current()
+      if (!eq(sourceValue, savedSourceValue)) {
+        savedSourceValue = sourceValue
+        mappedValue = fn(sourceValue)
+      }
+      return mappedValue.current
+    })
   }
 
   /** Returns a `Stream` that emits values whenever this value changes. */
   toStream () :Stream<T> {
-    return new Stream<T>(fn => this.onChange(fn))
+    return new Stream<T>(this._onChange)
+  }
+
+  /** Returns a `Subject` that contains this value's current value and changes values whenever this
+    * value changes. */
+  toSubject () :Subject<T> {
+    const {_current, _onChange} = this
+    return new Subject((lner, wantValue) => {
+      const remover = _onChange(lner)
+      if (wantValue) lner(_current())
+      return remover
+    })
   }
 
   /** Returns a `Promise` that completes when this value's current value satisfies `pred`. If the
@@ -571,8 +638,9 @@ export abstract class Value<T> extends Subject<T> {
     if (pred(current)) {
       return Promise.resolve(current)
     }
+    const onChange = this._onChange
     return new Promise((resolve, reject) => {
-      let remover = this.onChange(value => {
+      let remover = onChange(value => {
         if (pred(value)) {
           remover()
           resolve(value)
@@ -584,197 +652,74 @@ export abstract class Value<T> extends Subject<T> {
   toString () { return `Value(${this.current})` }
 }
 
-abstract class DerivedValue<T> extends Value<T> {
-  private _listeners :ChangeFn<T>[] = []
-  private _disconnect = NoopRemover
-
-  abstract _connectToSource () :Remover
-
-  _dispatchValue (current :T, previous :T) {
-    dispatchChange(this._listeners, current, previous)
-  }
-
-  onChange (listener :ChangeFn<T>) :Remover {
-    const needConnect = this._listeners.length === 0
-    const remover = addListener(this._listeners, listener)
-    if (needConnect) this._disconnect = this._connectToSource()
-    return () => {
-      remover()
-      if (this._listeners.length === 0) {
-        this._disconnect()
-        this._disconnect = NoopRemover
-      }
-    }
-  }
-
-  protected get isConnected () :boolean { return this._disconnect !== NoopRemover }
-}
-
-class ConstantValue<T> extends Value<T> {
-  constructor (readonly current :T) { super() }
-  // note: we use refEquals here as we must provide something for eq, but it's never used because
-  // constant values never change, thus we never have to compare an old and a new value
-  get eq () :Eq<T> { return refEquals }
-  onChange (fn :ChangeFn<T>) :Remover { return NoopRemover }
-}
-
-class JoinedValue extends DerivedValue<any[]> {
-  readonly eq :Eq<any[]>
-  constructor (readonly sources :Value<any>[]) {
-    super()
-    this.eq = (as, bs) => {
-      for (let ii = 0, ll = sources.length; ii < ll; ii += 1) {
-        if (!sources[ii].eq(as[ii], bs[ii])) return false
-      }
-      return true
-    }
-  }
-
-  get current () { return this.sources.map(source => source.current) }
-
-  _connectToSource () :Remover {
-    const prev = this.current
-    const curr = this.current
-    const removers = this.sources.map((source, idx) => source.onChange((val, oval) => {
-      prev[idx] = oval
-      curr[idx] = val
-      this._dispatchValue(curr, prev)
-    }))
-    return () => removers.forEach(r => r())
-  }
-}
-
 /** A `Value` which can be mutated by external callers. */
-export abstract class Mutable<T> extends Value<T> {
+export class Mutable<T> extends Value<T> {
 
   /** Creates a local mutable value, which starts with value `start`.
     * Changes to this value will be determined using [[dataEquals]]. */
   static local<T extends Data> (start :T) :Mutable<Widen<T>> {
-    return new LocalMutable(start as Widen<T>, dataEquals)
+    return this.localEq(start as Widen<T>, dataEquals)
   }
 
   /** Creates a local mutable value, which starts with value `start` or `undefined`.
     * Changes to this value will be determined using [[dataEquals]]. */
   static localOpt<T extends Data> (start? :T) :Mutable<Widen<T|undefined>> {
-    return new LocalMutable(start as Widen<T|undefined>, dataEquals)
+    return this.localEq(start as Widen<T|undefined>, dataEquals)
   }
 
   /** Creates a local mutable value, which starts with value `start`.
     * Changes to this value will be determined using [[refEquals]]. */
   static localRef<T> (start :T) :Mutable<T> {
-    return new LocalMutable(start, refEquals)
+    return this.localEq(start, refEquals)
   }
 
   /** Creates a local mutable value, which starts with value `start`.
     * Changes to this value will be determined using `eq`. */
   static localEq<T> (start :T, eq :Eq<T>) :Mutable<T> {
-    return new LocalMutable(start, eq)
+    const listeners :ValueFn<T>[] = []
+    let current = start
+    return new Mutable(eq, lner => addListener(listeners, lner), () => current, newValue => {
+      const oldValue = current
+      if (!eq(oldValue, newValue)) {
+        current = newValue
+        dispatchChange(listeners, newValue, oldValue)
+      }
+    })
+  }
+
+  /** Creates a mutable value derived from an external source. The `current` function should return
+    * the current value and the `update` function should update it. The `connect` function should
+    * subscribe to the underlying source, and call `dispatch` when any future values that arrive. It
+    * should return a remover thunk that can be used to clear the subscription. The remover thunk
+    * will be called when the last listener to the subject is removed and the subject goes dormant.
+    * If a new listener subsequently arrives, `connect` will be called anew to resume wakefulness.
+    * @param connect called when the mutable receives its first listener after being in a dormant
+    * state. */
+  static deriveMutable<T> (connect :(dispatch :ChangeFn<T>) => Remover,
+                           current :() => T, update :(t:T) => void, eq :Eq<T>) :Mutable<T> {
+    const listeners :ValueFn<T>[] = []
+    let disconnect = NoopRemover
+    const dispatch = (value :T, ovalue :T) => dispatchChange(listeners, value, ovalue)
+    return new Mutable(eq, lner => {
+      const needConnect = listeners.length === 0
+      const remover = addListener(listeners, lner)
+      if (needConnect) disconnect = connect(dispatch)
+      return () => {
+        remover()
+        if (listeners.length === 0) {
+          disconnect()
+          disconnect = NoopRemover
+        }
+      }
+    }, current, update)
+  }
+
+  constructor (eq :Eq<T>, onChange :(fn:ChangeFn<T>) => Remover, current :() => T,
+               private readonly _update :(v:T) => void) {
+    super(eq, onChange, current)
   }
 
   /** Updates this mutable value to `newValue`. If `newValue` differs from the current value,
     * listeners will be notified of the change. */
-  abstract update (newValue :T) :void
-}
-
-class LocalMutable<T> extends Mutable<T> {
-  private _listeners :ChangeFn<T>[] = []
-
-  constructor (private _value :T, readonly eq :Eq<T>) { super() }
-
-  get current () :T { return this._value }
-
-  update (newValue :T) {
-    const oldValue = this._value
-    if (!this.eq(oldValue, newValue)) {
-      this._value = newValue
-      dispatchChange(this._listeners, newValue, oldValue)
-    }
-  }
-
-  onChange (listener :ChangeFn<T>) :Remover {
-    return addListener(this._listeners, listener)
-  }
-}
-
-class MappedValue<S,T> extends DerivedValue<T> {
-  private _latest! :T // initialized in _connectToSource; only used when connected
-
-  get current () :T { return this.isConnected ? this._latest : this.fn(this.source.current) }
-
-  constructor (
-    readonly source :Value<S>,
-    readonly fn :(value :S) => T,
-    readonly eq :Eq<T>
-  ) { super() }
-
-  _connectToSource () {
-    this._latest = this.current
-    return this.source.onChange((value :S, ovalue :S) => {
-      let current = this.fn(value), previous = this._latest
-      if (!this.eq(current, previous)) {
-        this._latest = current
-        this._dispatchValue(current, previous)
-      }
-    })
-  }
-}
-
-// TODO: these are just interface definitions for now, to sketch out the API
-// eventually they'll be abstract classes like RStream/RValue
-
-//
-// Reactive maps
-
-export interface RMap<K,V> extends Iterable<[K,V]> {
-
-  size :number
-  has (key :K) :boolean
-  get (key :K) :V|undefined
-
-  set (key :K, value :V) :this
-  delete (key :K) :boolean
-  clear (): void
-
-  // entries () :Iterator<[K,V]>
-  keys () :Iterator<K>
-  values () :Iterator<V>
-  forEach (fn :(k:K, v:V) => void) :void
-}
-
-//
-// Reactive sets
-
-export interface RSet<E> extends Iterable<E> {
-
-  size :number
-  has (elem :E) :boolean
-
-  add (elem :E) :this
-  delete (elem :E) :boolean
-  clear (): void
-
-  // entries () :Iterator<[E,E]>
-  // keys () :Iterator<E>
-  // values () :Iterator<E>
-  forEach (fn :(e:E) => void) :void
-}
-
-//
-// Reactive lists
-
-export interface RList<E> extends Iterable<E> {
-
-  size :number
-  length :number
-
-  elemAt (index :number) :E
-  append (elem :E) :void
-  insert (elem :E, index :number) :void
-  update (elem :E, index :number) :void
-  delete (index :number) :void
-  clear (): void
-
-  forEach (fn :(e:E) => void) :void
-
-  slice (start :number|void, length :number|void) :E[]
+  update (newValue :T) { this._update(newValue) }
 }
