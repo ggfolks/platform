@@ -1,4 +1,4 @@
-import {Value} from "../core/react"
+import {Subject} from "../core/react"
 import {StyleDefs} from "./style"
 import {Model} from "./model"
 import {UI, Theme} from "./ui"
@@ -48,11 +48,11 @@ const theme :Theme = {
 }
 
 const noopResolver = {
-  resolve: (path :string) => Value.constant(new Error("unsupported"))
+  resolve: (path :string) => Subject.constant(new Error("unsupported"))
 }
 
 test("style resolution", () => {
-  const ui = new UI(theme, styles, noopResolver, Model.fromData({}))
+  const ui = new UI(theme, styles, noopResolver, new Model({}))
 
   const lstyles = {stroke: "$lightGray", disabled: {font: "$italic"}}
   const scope = {id: "button", states: ["normal", "disabled", "pressed"]}
