@@ -23,7 +23,7 @@ import {GLTFLoader} from "three/examples/jsm/loaders/GLTFLoader"
 import {Subject} from "../core/react"
 import {RMap} from "../core/rcollect"
 import {NoopRemover} from "../core/util"
-import {Touch} from "../input/input"
+import {Pointer} from "../input/hand"
 import {
   Component,
   Domain,
@@ -109,7 +109,7 @@ export interface ToonMaterialConfig extends MaterialConfig {
 }
 
 const rendererSize = new Vector2()
-const touchCoords = new Vector2()
+const pointerCoords = new Vector2()
 const raycaster = new Raycaster()
 const intersections :Intersection[] = []
 const hoveredSet :Set<ID> = new Set()
@@ -130,7 +130,7 @@ export class SceneSystem extends System {
                readonly obj :Component<Object3D>,
                readonly hovered? :IDSetComponent,
                readonly pressed? :IDSetComponent,
-               readonly touches? :RMap<number, Touch>) {
+               readonly pointers? :RMap<number, Pointer>) {
     super(domain, Matcher.hasAllC(trans.id, obj.id))
   }
 
@@ -139,14 +139,14 @@ export class SceneSystem extends System {
     this.update()
     renderer.getSize(rendererSize)
     const aspect = rendererSize.x / rendererSize.y
-    if (this.hovered && this.pressed && this.touches) {
+    if (this.hovered && this.pressed && this.pointers) {
       hoveredSet.clear()
       pressedSet.clear()
-      for (const [identifier, touch] of this.touches) {
+      for (const [identifier, pointer] of this.pointers) {
         // pressed objects stay hovered until the press ends
         const pressedObject = this._pressedObjects.get(identifier)
         if (pressedObject) {
-          if (touch.pressed) {
+          if (pointer.pressed) {
             this._maybeNoteHovered(identifier, true, pressedObject)
             continue
           } else {
@@ -155,9 +155,9 @@ export class SceneSystem extends System {
         }
         for (const camera of this._cameras) {
           raycaster.setFromCamera(
-            touchCoords.set(
-              touch.position[0] / rendererSize.x * 2 - 1,
-              1 - touch.position[1] / rendererSize.y * 2,
+            pointerCoords.set(
+              pointer.position[0] / rendererSize.x * 2 - 1,
+              1 - pointer.position[1] / rendererSize.y * 2,
             ),
             camera,
           )
@@ -168,18 +168,18 @@ export class SceneSystem extends System {
             while (ancestor && ancestor.userData.id === undefined) {
               ancestor = ancestor.parent
             }
-            if (ancestor && this._maybeNoteHovered(identifier, touch.pressed, ancestor)) {
+            if (ancestor && this._maybeNoteHovered(identifier, pointer.pressed, ancestor)) {
               noted = true
               break
             }
           }
           // if we didn't hit anything else, "hover" on the camera
-          if (!noted) this._maybeNoteHovered(identifier, touch.pressed, camera)
+          if (!noted) this._maybeNoteHovered(identifier, pointer.pressed, camera)
         }
       }
-      // remove any pressed objects whose touches are no longer in the map
+      // remove any pressed objects whose pointers are no longer in the map
       for (const identifier of this._pressedObjects.keys()) {
-        if (!this.touches.has(identifier)) this._pressedObjects.delete(identifier)
+        if (!this.pointers.has(identifier)) this._pressedObjects.delete(identifier)
       }
       this.hovered.updateAll(hoveredSet)
       this.pressed.updateAll(pressedSet)

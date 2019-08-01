@@ -1,15 +1,12 @@
 import {vec2} from "gl-matrix"
 import {Disposable} from "../core/util"
 import {Mutable, Value} from "../core/react"
-import {MutableMap, RMap} from "../core/rcollect"
-import {Touch} from "./input"
 
 /** Provides reactive values for mouse state. */
 export class Mouse implements Disposable {
 
   private _buttonStates :Map<number, Mutable<boolean>> = new Map()
   private _movement = Mutable.local(vec2.create())
-  private _touches :MutableMap<number, Touch> = MutableMap.local()
   private _lastScreen? :vec2
   private _lastOffset? :vec2
   private _accumulatedMovement = vec2.create()
@@ -20,9 +17,14 @@ export class Mouse implements Disposable {
     return this._movement
   }
 
-  /** Returns a reactive view of the map from identifiers to active touches. */
-  get touches () :RMap<number, Touch> {
-    return this._touches
+  /** Returns the last offset position recorded for the mouse, if any. */
+  get lastOffset () {
+    return this._lastOffset
+  }
+
+  /** Returns whether or not the mouse has entered the canvas. */
+  get entered () {
+    return this._entered
   }
 
   constructor (private _canvas :HTMLElement) {
@@ -45,21 +47,6 @@ export class Mouse implements Disposable {
     }
     // @ts-ignore zero missing in type definition?
     vec2.zero(this._accumulatedMovement)
-
-    if (this._entered && this._lastOffset) {
-      const pressed = this._getButtonState(0).current
-      const touch = this._touches.get(0)
-      if (!(touch &&
-            vec2.exactEquals(touch.position, this._lastOffset) &&
-            vec2.exactEquals(touch.movement, this._movement.current) &&
-            touch.pressed === pressed)) {
-        this._touches.set(0, new Touch(vec2.clone(this._lastOffset),
-                                       vec2.clone(this._movement.current),
-                                       pressed))
-      }
-    } else if (this._touches.size !== 0) {
-      this._touches.delete(0)
-    }
   }
 
   dispose () {
