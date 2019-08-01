@@ -20,3 +20,5 @@
   anything changes
 
 - Do we want hover? (Doesn't really work on touch, so maybe not worth it for mouse/desktop?)
+
+- Unfocus all roots if we click outside any root?
