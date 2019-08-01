@@ -20,7 +20,8 @@ import {
 } from "three"
 import {GLTFLoader} from "three/examples/jsm/loaders/GLTFLoader"
 
-import {Subject, Value} from "../core/react"
+import {Subject} from "../core/react"
+import {RMap} from "../core/rcollect"
 import {NoopRemover} from "../core/util"
 import {Touch} from "../input/input"
 import {
@@ -122,13 +123,14 @@ export class SceneSystem extends System {
   readonly scene :Scene = new Scene()
 
   private _cameras :Set<Camera> = new Set()
+  private _pressedObjects :Map<number, Object3D> = new Map()
 
   constructor (domain :Domain,
                readonly trans :TransformComponent,
                readonly obj :Component<Object3D>,
                readonly hovered? :IDSetComponent,
                readonly pressed? :IDSetComponent,
-               readonly touches? :Value<Touch[]>) {
+               readonly touches? :RMap<number, Touch>) {
     super(domain, Matcher.hasAllC(trans.id, obj.id))
   }
 
@@ -140,7 +142,17 @@ export class SceneSystem extends System {
     if (this.hovered && this.pressed && this.touches) {
       hoveredSet.clear()
       pressedSet.clear()
-      for (const touch of this.touches.current) {
+      for (const [identifier, touch] of this.touches) {
+        // pressed objects stay hovered until the press ends
+        const pressedObject = this._pressedObjects.get(identifier)
+        if (pressedObject) {
+          if (touch.pressed) {
+            this._maybeNoteHovered(identifier, true, pressedObject)
+            continue
+          } else {
+            this._pressedObjects.delete(identifier)
+          }
+        }
         for (const camera of this._cameras) {
           raycaster.setFromCamera(
             touchCoords.set(
@@ -150,20 +162,24 @@ export class SceneSystem extends System {
             camera,
           )
           intersections.length = 0
+          let noted = false
           for (const intersection of raycaster.intersectObject(this.scene, true, intersections)) {
             let ancestor :Object3D | null = intersection.object
             while (ancestor && ancestor.userData.id === undefined) {
               ancestor = ancestor.parent
             }
-            if (ancestor) {
-              const comps = this.domain.entityConfig(ancestor.userData.id).components
-              if (comps[this.hovered.id]) {
-                hoveredSet.add(ancestor.userData.id)
-                if (touch.pressed && comps[this.pressed.id]) pressedSet.add(ancestor.userData.id)
-              }
+            if (ancestor && this._maybeNoteHovered(identifier, touch.pressed, ancestor)) {
+              noted = true
+              break
             }
           }
+          // if we didn't hit anything else, "hover" on the camera
+          if (!noted) this._maybeNoteHovered(identifier, touch.pressed, camera)
         }
+      }
+      // remove any pressed objects whose touches are no longer in the map
+      for (const identifier of this._pressedObjects.keys()) {
+        if (!this.touches.has(identifier)) this._pressedObjects.delete(identifier)
       }
       this.hovered.updateAll(hoveredSet)
       this.pressed.updateAll(pressedSet)
@@ -175,6 +191,22 @@ export class SceneSystem extends System {
       }
       renderer.render(this.scene, camera)
     }
+  }
+
+  _maybeNoteHovered (identifier :number, pressed :boolean, object :Object3D) {
+    const id = object.userData.id
+    const comps = this.domain.entityConfig(id).components
+    let noted = false
+    if (comps[(this.hovered as IDSetComponent).id]) {
+      hoveredSet.add(id)
+      noted = true
+    }
+    if (pressed && comps[(this.pressed as IDSetComponent).id]) {
+      pressedSet.add(id)
+      this._pressedObjects.set(identifier, object)
+      noted = true
+    }
+    return noted
   }
 
   /** Updates the transforms of the scene.  Called automatically by [[render]]. */

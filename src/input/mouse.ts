@@ -1,6 +1,7 @@
 import {vec2} from "gl-matrix"
 import {Disposable} from "../core/util"
 import {Mutable, Value} from "../core/react"
+import {MutableMap, RMap} from "../core/rcollect"
 import {Touch} from "./input"
 
 /** Provides reactive values for mouse state. */
@@ -8,7 +9,7 @@ export class Mouse implements Disposable {
 
   private _buttonStates :Map<number, Mutable<boolean>> = new Map()
   private _movement = Mutable.local(vec2.create())
-  private _touches = Mutable.local([] as Touch[])
+  private _touches :MutableMap<number, Touch> = MutableMap.local()
   private _lastScreen? :vec2
   private _lastOffset? :vec2
   private _accumulatedMovement = vec2.create()
@@ -19,8 +20,8 @@ export class Mouse implements Disposable {
     return this._movement
   }
 
-  /** Returns a reactive view of the array of active touches. */
-  get touches () :Value<Touch[]> {
+  /** Returns a reactive view of the map from identifiers to active touches. */
+  get touches () :RMap<number, Touch> {
     return this._touches
   }
 
@@ -47,14 +48,14 @@ export class Mouse implements Disposable {
 
     if (this._entered && this._lastOffset) {
       const pressed = this._getButtonState(0).current
-      const touch = this._touches.current[0]
+      const touch = this._touches.get(0)
       if (
         !(touch && vec2.exactEquals(touch.position, this._lastOffset) && touch.pressed === pressed)
       ) {
-        this._touches.update([new Touch(vec2.clone(this._lastOffset), pressed)])
+        this._touches.set(0, new Touch(vec2.clone(this._lastOffset), pressed))
       }
-    } else if (this._touches.current.length !== 0) {
-      this._touches.update([])
+    } else if (this._touches.size !== 0) {
+      this._touches.delete(0)
     }
   }
 
