@@ -49,10 +49,13 @@ export class Mouse implements Disposable {
     if (this._entered && this._lastOffset) {
       const pressed = this._getButtonState(0).current
       const touch = this._touches.get(0)
-      if (
-        !(touch && vec2.exactEquals(touch.position, this._lastOffset) && touch.pressed === pressed)
-      ) {
-        this._touches.set(0, new Touch(vec2.clone(this._lastOffset), pressed))
+      if (!(touch &&
+            vec2.exactEquals(touch.position, this._lastOffset) &&
+            vec2.exactEquals(touch.movement, this._movement.current) &&
+            touch.pressed === pressed)) {
+        this._touches.set(0, new Touch(vec2.clone(this._lastOffset),
+                                       vec2.clone(this._movement.current),
+                                       pressed))
       }
     } else if (this._touches.size !== 0) {
       this._touches.delete(0)
