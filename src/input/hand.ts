@@ -59,7 +59,6 @@ export class Hand implements Disposable {
       if (!(pointer &&
             vec2.exactEquals(pointer.position, position) &&
             vec2.exactEquals(pointer.movement, movement))) {
-        console.log(touch.identifier)
         this._pointers.set(touch.identifier, new Pointer(vec2.clone(position),
                                                          vec2.clone(movement),
                                                          true))
