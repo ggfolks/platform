@@ -171,21 +171,24 @@ class LocalMutableList<E> extends MutableList<E> {
 
 export type SetChange<E> = {type :"added", elem :E} | {type :"deleted", elem :E}
 
-export interface RSet<E> extends Iterable<E> {
+export interface RSet<E> extends ReadonlySet<E> {
 
   size :number
   has (elem :E) :boolean
 
-  add (elem :E) :this
-  delete (elem :E) :boolean
-  clear (): void
-
   // entries () :Iterator<[E,E]>
   // keys () :Iterator<E>
   // values () :Iterator<E>
-  forEach (fn :(e:E) => void) :void
+  forEach (fn :(e:E, edup:E, s:ReadonlySet<E>) => void) :void
 
   onChange (fn :(change :SetChange<E>) => any) :Remover
+}
+
+export interface MutableSet<E> extends RSet<E> {
+
+  add (elem :E) :this
+  delete (elem :E) :boolean
+  clear (): void
 }
 
 //

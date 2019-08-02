@@ -116,3 +116,9 @@ export class BitSet {
     return nbits
   }
 }
+
+export type Timestamp = number
+
+export const Timestamp = {
+  now: () => Date.now() // TODO: fancier timestamp?
+}

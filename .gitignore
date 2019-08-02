@@ -2,6 +2,7 @@ demo/node_modules
 demo/tsconfig.tsbuildinfo
 docs
 lib/core
+lib/data
 lib/entity
 lib/graph
 lib/input
