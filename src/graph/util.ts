@@ -1,6 +1,6 @@
 import {Clock} from "../core/clock"
 import {refEquals} from "../core/data"
-import {Mutable} from "../core/react"
+import {Mutable, Value} from "../core/react"
 import {Graph} from "./graph"
 import {InputEdge, Node, NodeConfig, NodeTypeRegistry, OutputEdge} from "./node"
 
@@ -66,23 +66,22 @@ export interface LatchConfig extends NodeConfig {
 }
 
 class Latch extends Node {
-  private _output :Mutable<any> = Mutable.localData(0)
 
   constructor (graph :Graph, id :string, readonly config :LatchConfig) {
     super(graph, id, config)
   }
 
   getOutput ()  {
-    return this._output
-  }
-
-  connect () {
-    const value = this.graph.getValue(this.config.value, 0)
-    this._removers.push(this.graph.getValue(this.config.store, false).onValue(store => {
-      if (store) {
-        this._output.update(value.current)
-      }
-    }))
+    let stored :any
+    return Value
+      .join2(
+        this.graph.getValue(this.config.store, false),
+        this.graph.getValue(this.config.value, undefined),
+      )
+      .map(([store, value]) => {
+        if (stored === undefined || store) stored = value
+        return stored
+      })
   }
 }
 

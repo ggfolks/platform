@@ -1,7 +1,8 @@
 import {Clock} from "../core/clock"
+import {refEquals} from "../core/data"
 import {BitSet, PMap} from "../core/util"
 import {vec2} from "../core/math"
-import {Stream, Emitter} from "../core/react"
+import {ChangeFn, Eq, Stream, Emitter, Value} from "../core/react"
 import {Graph} from "../graph/graph"
 import {NodeContext} from "../graph/node"
 import {EntityNodeContext} from "./node"
@@ -122,6 +123,9 @@ export interface ComponentConfig<T> {}
   * all entities in a single domain. */
 export abstract class Component<T> {
 
+  private _values :Map<ID, Value<T>> = new Map()
+  private _changeFns :Map<ID, ChangeFn<T>> = new Map()
+
   /** Creates a component that returns `value` for all entities. Calls to `update` will throw an
     * error. */
   static constant<T> (id :string, value :T) :Component<T> {
@@ -146,10 +150,36 @@ export abstract class Component<T> {
     * for invalid components. */
   abstract read (id :ID) :T
 
+  /** Returns a reactive view of the value for entity `id`. */
+  getValue (id :ID) {
+    let value = this._values.get(id)
+    if (!value) {
+      this._values.set(id, value = Value.deriveValue(
+        this._eq,
+        changeFn => {
+          this._changeFns.set(id, changeFn)
+          return () => {
+            this._changeFns.delete(id)
+            this._values.delete(id)
+          }
+        },
+        () => this.read(id),
+      ))
+    }
+    return value
+  }
+
+  protected get _eq () :Eq<T> { return refEquals }
+
   /** Updates the value of this component for entity `id`. If entity `id` does not have this
     * component, the behavior of this method is undefined and may throw an error. Correct code must
     * not update component values for invalid components. */
   abstract update (id :ID, value :T) :void
+
+  protected _noteUpdated (id :ID, value :T, oldValue :T) {
+    const changeFn = this._changeFns.get(id)
+    if (changeFn) changeFn(value, oldValue)
+  }
 
   /** Called when an entity which has this component is added to the owning domain.
     * @param config any component configuration data supplied for the entity. */
@@ -171,7 +201,11 @@ export class DenseValueComponent<T> extends Component<T> {
   constructor (readonly id :string, private readonly defval :T) { super() }
 
   read (index :number) :T { return this.values[index] }
-  update (index :number, value :T) { this.values[index] = value }
+  update (index :number, value :T) {
+    const oldValue = this.values[index]
+    this.values[index] = value
+    this._noteUpdated(index, value, oldValue)
+  }
 
   added (id :ID, config? :ValueComponentConfig<T>) {
     const init = config && 'initial' in config ? config.initial : this.defval
@@ -191,7 +225,9 @@ export class SparseValueComponent<T> extends Component<T> {
     return this.values.get(id) as T
   }
   update (id :ID, value :T) {
+    const oldValue = this.values.get(id) as T
     this.values.set(id, value)
+    this._noteUpdated(id, value, oldValue)
   }
 
   added (id :ID, config? :ValueComponentConfig<T>) {
@@ -220,7 +256,11 @@ export abstract class TypedArrayComponent<E, A> extends Component<E> {
     return this.batches[id >> this.batchBits][id & this.batchMask]
   }
   update (id :ID, value :E) {
-    this.batches[id >> this.batchBits][id & this.batchMask] = value
+    const batch = this.batches[id >> this.batchBits]
+    const index = id & this.batchMask
+    const oldValue = batch[index]
+    batch[index] = value
+    this._noteUpdated(id, value, oldValue)
   }
 
   added (id :ID, config? :ValueComponentConfig<number>) {
@@ -257,17 +297,23 @@ export class IDSetComponent extends Component<boolean> {
   updateAll (set :Set<ID>) {
     // remove anything not present in the new set
     for (const id of this._ids) {
-      if (!set.has(id)) this._ids.delete(id)
+      if (!set.has(id)) this.update(id, false)
     }
 
     // add anything not present in the old set
     for (const id of set) {
-      this._ids.add(id)
+      this.update(id, true)
     }
   }
 
   read (id :number) :boolean { return this._ids.has(id) }
-  update (id :number, value :boolean) { value ? this._ids.add(id) : this._ids.delete(id) }
+  update (id :number, value :boolean) {
+    const oldValue = this._ids.has(id)
+    if (oldValue !== value) {
+      value ? this._ids.add(id) : this._ids.delete(id)
+      this._noteUpdated(id, value, oldValue)
+    }
+  }
 
   added (id :ID, config? :ValueComponentConfig<boolean>) {
     if (config && config.initial) {
@@ -285,6 +331,8 @@ export abstract class ArrayComponent<T> extends Component<T> {
     * copied into `into` and `into` will be returned. */
   abstract read (id :ID, into? :T) :T
 }
+
+const oldVec2 = vec2.create()
 
 export class Vec2Component extends ArrayComponent<vec2> {
   private readonly batches :Float32Array[] = []
@@ -307,8 +355,10 @@ export class Vec2Component extends ArrayComponent<vec2> {
   }
   update (id :ID, value :Float32Array|number[]) {
     const batch = this.batch(id), start = this.start(id)
+    vec2.set(oldVec2, batch[start+0], batch[start+1])
     batch[start+0] = value[0]
     batch[start+1] = value[1]
+    this._noteUpdated(id, value as vec2, oldVec2)
   }
 
   added (id :ID, config? :ValueComponentConfig<Float32Array>) {
@@ -331,11 +381,13 @@ export class Vec2Component extends ArrayComponent<vec2> {
 export class Float32ArrayComponent extends ArrayComponent<Float32Array> {
   private readonly batches :Float32Array[] = []
   private readonly batchMask :number
+  private readonly oldValue :Float32Array
 
   constructor (readonly id :string, private readonly defval :Float32Array,
                private readonly batchBits :number = 8) {
     super()
     this.batchMask = (1 << batchBits) - 1
+    this.oldValue = new Float32Array(defval.length)
   }
 
   read (id :ID, into? :Float32Array) :Float32Array {
@@ -347,7 +399,9 @@ export class Float32ArrayComponent extends ArrayComponent<Float32Array> {
     else return batch.subarray(start, start+size)
   }
   update (id :ID, value :Float32Array|number[]) {
+    this.read(id, this.oldValue)
     this.batch(id).set(value, this.start(id))
+    this._noteUpdated(id, value as Float32Array, this.oldValue)
   }
 
   added (id :ID, config? :ValueComponentConfig<Float32Array>) {

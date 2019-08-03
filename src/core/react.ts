@@ -257,6 +257,9 @@ export class Stream<T> extends Source<T> {
 export class Emitter<T> extends Stream<T> {
   private readonly _listeners :ValueFn<T>[] = []
 
+  /** Checks whether the emitter has any listeners. */
+  get active () { return this._listeners.length > 0 }
+  
   constructor () { super(lner => addListener(this._listeners, lner)) }
 
   /** Emits `value` on this stream. Any current listeners will be notified of the value. */

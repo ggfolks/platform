@@ -67,6 +67,7 @@ class MouseMovement extends Node {
   }
 }
 
+/** Interface for nodes that filter by pointer configuration. */
 export interface PointerConfig extends NodeConfig {
   index? :number
   count? :number

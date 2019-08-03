@@ -1,4 +1,3 @@
-import {Mutable} from "../core/react"
 import {Graph} from "../graph/graph"
 import {InputEdge, Node, NodeConfig, NodeContext, NodeTypeRegistry, OutputEdge} from "../graph/node"
 import {Component, Domain, EntityConfig, ID} from "./entity"
@@ -43,13 +42,11 @@ export class EntityComponentNode<T extends Component<any>> extends EntityNode {
     super(graph, id, config)
   }
 
-  connect () {
+  protected get _component () {
     const ctx = this.graph.ctx as EntityNodeContext
     const component = ctx.domain.component(this.config.component) as unknown
-    this._connectComponent(component as T)
+    return component as T
   }
-
-  protected _connectComponent (component :T) {}
 }
 
 /** A node that adds an entity when its input transitions to true. */
@@ -104,23 +101,13 @@ export interface ReadComponentConfig extends EntityComponentConfig {
 }
 
 class ReadComponent extends EntityComponentNode<Component<any>> {
-  private _output :Mutable<any> = Mutable.localData(0)
 
   constructor (graph :Graph, id :string, readonly config :ReadComponentConfig) {
     super(graph, id, config)
   }
 
   getOutput () {
-    return this._output
-  }
-
-  protected _connectComponent (component :Component<any>) {
-    // TODO: use a reactive view of the component value
-    this._removers.push(
-      this.graph.clock.onValue(clock => {
-        this._output.update(component.read(this._entityId))
-      })
-    )
+    return this._component.getValue(this._entityId)
   }
 }
 
@@ -136,10 +123,10 @@ class UpdateComponent extends EntityComponentNode<Component<any>> {
     super(graph, id, config)
   }
 
-  protected _connectComponent (component :Component<any>) {
+  connect () {
     this._removers.push(
       this.graph.getValue(this.config.input, 0).onValue(value => {
-        component.update(this._entityId, value)
+        this._component.update(this._entityId, value)
       })
     )
   }

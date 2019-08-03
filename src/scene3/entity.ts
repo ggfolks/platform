@@ -11,11 +11,13 @@ import {
   MeshToonMaterial,
   Object3D,
   PerspectiveCamera,
+  Plane,
   RGBAFormat,
   Raycaster,
   Scene,
   SphereBufferGeometry,
   Vector2,
+  Vector3,
   WebGLRenderer,
 } from "three"
 import {GLTFLoader} from "three/examples/jsm/loaders/GLTFLoader"
@@ -29,7 +31,6 @@ import {
   Domain,
   EntityConfig,
   ID,
-  IDSetComponent,
   Matcher,
   System,
 } from "../entity/entity"
@@ -112,8 +113,13 @@ const rendererSize = new Vector2()
 const pointerCoords = new Vector2()
 const raycaster = new Raycaster()
 const intersections :Intersection[] = []
-const hoveredSet :Set<ID> = new Set()
-const pressedSet :Set<ID> = new Set()
+let hovered :Map<ID, HoverMap> = new Map()
+let lastHovered :Map<ID, HoverMap> = new Map()
+const direction = new Vector3()
+const point = new Vector3()
+const plane = new Plane()
+const movement = new Vector3()
+const cameraDelta = new Vector3()
 
 /** Manages a group of scene nodes based on [[TransformComponent]] for 3D transform and a scene
  * object component. Users of this system must call [[SceneSystem.update]] on every frame. */
@@ -128,8 +134,7 @@ export class SceneSystem extends System {
   constructor (domain :Domain,
                readonly trans :TransformComponent,
                readonly obj :Component<Object3D>,
-               readonly hovered? :IDSetComponent,
-               readonly pressed? :IDSetComponent,
+               readonly hovers? :Component<HoverMap>,
                readonly pointers? :RMap<number, Pointer>) {
     super(domain, Matcher.hasAllC(trans.id, obj.id))
   }
@@ -139,20 +144,9 @@ export class SceneSystem extends System {
     this.update()
     renderer.getSize(rendererSize)
     const aspect = rendererSize.x / rendererSize.y
-    if (this.hovered && this.pressed && this.pointers) {
-      hoveredSet.clear()
-      pressedSet.clear()
+    if (this.hovers && this.pointers) {
+      hovered.clear()
       for (const [identifier, pointer] of this.pointers) {
-        // pressed objects stay hovered until the press ends
-        const pressedObject = this._pressedObjects.get(identifier)
-        if (pressedObject) {
-          if (pointer.pressed) {
-            this._maybeNoteHovered(identifier, true, pressedObject)
-            continue
-          } else {
-            this._pressedObjects.delete(identifier)
-          }
-        }
         for (const camera of this._cameras) {
           raycaster.setFromCamera(
             pointerCoords.set(
@@ -161,6 +155,38 @@ export class SceneSystem extends System {
             ),
             camera,
           )
+          if (camera.userData.lastOrigin) {
+            cameraDelta.subVectors(raycaster.ray.origin, camera.userData.lastOrigin)
+            camera.userData.lastOrigin.copy(raycaster.ray.origin)
+          } else {
+            cameraDelta.set(0, 0, 0)
+            camera.userData.lastOrigin = raycaster.ray.origin.clone()
+          }
+
+          // pressed objects stay hovered until the press ends
+          const pressedObject = this._pressedObjects.get(identifier)
+          if (pressedObject) {
+            if (pointer.pressed) {
+              // constrain motion to a plane aligned with the camera direction
+              const hoverMap = this.hovers.read(pressedObject.userData.id)
+              const hover = hoverMap && hoverMap.get(identifier)
+              if (hover) {
+                plane.setFromNormalAndCoplanarPoint(
+                  camera.getWorldDirection(direction),
+                  hover.position,
+                )
+                this._maybeNoteHovered(
+                  identifier,
+                  pointer,
+                  pressedObject,
+                  raycaster.ray.intersectPlane(plane, point) || point.copy(hover.position),
+                )
+                continue
+              }
+            } else {
+              this._pressedObjects.delete(identifier)
+            }
+          }
           intersections.length = 0
           let noted = false
           for (const intersection of raycaster.intersectObject(this.scene, true, intersections)) {
@@ -168,21 +194,36 @@ export class SceneSystem extends System {
             while (ancestor && ancestor.userData.id === undefined) {
               ancestor = ancestor.parent
             }
-            if (ancestor && this._maybeNoteHovered(identifier, pointer.pressed, ancestor)) {
+            if (
+              ancestor &&
+              this._maybeNoteHovered(identifier, pointer, ancestor, intersection.point)
+            ) {
               noted = true
               break
             }
           }
           // if we didn't hit anything else, "hover" on the camera
-          if (!noted) this._maybeNoteHovered(identifier, pointer.pressed, camera)
+          if (!noted) {
+            // use intersection with a plane one unit in front of the camera
+            const dp = camera.getWorldDirection(direction).dot(raycaster.ray.direction)
+            this._maybeNoteHovered(identifier, pointer, camera, raycaster.ray.at(1 / dp, point))
+          }
         }
       }
       // remove any pressed objects whose pointers are no longer in the map
       for (const identifier of this._pressedObjects.keys()) {
         if (!this.pointers.has(identifier)) this._pressedObjects.delete(identifier)
       }
-      this.hovered.updateAll(hoveredSet)
-      this.pressed.updateAll(pressedSet)
+      // clear the components of any entities not in the current map
+      for (const id of lastHovered.keys()) {
+        if (!hovered.has(id)) this.hovers.update(id, new Map())
+      }
+      // update the components of any entities in the current map
+      for (const [id, map] of hovered) {
+        this.hovers.update(id, map)
+      }
+      // swap for next time
+      [lastHovered, hovered] = [hovered, lastHovered]
     }
     for (const camera of this._cameras) {
       if (camera instanceof PerspectiveCamera && camera.aspect !== aspect) {
@@ -193,20 +234,35 @@ export class SceneSystem extends System {
     }
   }
 
-  _maybeNoteHovered (identifier :number, pressed :boolean, object :Object3D) {
+  _maybeNoteHovered (identifier :number, pointer :Pointer, object :Object3D, position :Vector3) {
     const id = object.userData.id
     const comps = this.domain.entityConfig(id).components
-    let noted = false
-    if (comps[(this.hovered as IDSetComponent).id]) {
-      hoveredSet.add(id)
-      noted = true
+    const hovers = this.hovers as Component<HoverMap>
+    if (!comps[hovers.id]) {
+      return false
     }
-    if (pressed && comps[(this.pressed as IDSetComponent).id]) {
-      pressedSet.add(id)
-      this._pressedObjects.set(identifier, object)
-      noted = true
+    let map = hovered.get(id)
+    if (!map) {
+      hovered.set(id, map = new Map())
     }
-    return noted
+    let omap = hovers.read(id)
+    const ohover = omap && omap.get(identifier)
+    if (ohover) {
+      movement.subVectors(position, ohover.position).sub(cameraDelta)
+      if (
+        position.equals(ohover.position) &&
+        movement.equals(ohover.movement) &&
+        pointer.pressed === ohover.pressed
+      ) {
+        map.set(identifier, ohover)
+      } else {
+        map.set(identifier, new Hover(position.clone(), movement.clone(), pointer.pressed))
+      }
+    } else {
+      map.set(identifier, new Hover(position.clone(), new Vector3(), pointer.pressed))
+    }
+    if (pointer.pressed) this._pressedObjects.set(identifier, object)
+    return true
   }
 
   /** Updates the transforms of the scene.  Called automatically by [[render]]. */
@@ -241,6 +297,16 @@ export class SceneSystem extends System {
     super.deleted(id)
   }
 }
+
+/** Describes a hover point. */
+export class Hover {
+  constructor (readonly position :Vector3,
+               readonly movement :Vector3,
+               readonly pressed :boolean) {}
+}
+
+/** Maps hover identifiers to hover objects. */
+export type HoverMap = Map<number, Hover>
 
 function createObject3D (objectConfig: Object3DConfig) :Subject<Object3D> {
   switch (objectConfig.type) {
