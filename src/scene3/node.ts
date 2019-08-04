@@ -9,8 +9,10 @@ import {HoverMap} from "./entity"
 /** Rotates by an amount determined by the inputs. */
 export interface HoverConfig extends EntityComponentConfig, PointerConfig {
   type :"hover"
-  position :OutputEdge<Vector3>
-  movement :OutputEdge<Vector3>
+  worldPosition :OutputEdge<Vector3>
+  worldMovement :OutputEdge<Vector3>
+  viewPosition :OutputEdge<Vector3>
+  viewMovement :OutputEdge<Vector3>
   pressed :OutputEdge<boolean>
   hovered :OutputEdge<boolean>
 }
@@ -36,8 +38,10 @@ class Hover extends EntityComponentNode<Component<HoverMap>> {
       return
     })
     switch (name) {
-      case "position":
-      case "movement": return hover.map(hover => hover ? hover[name] : zeroVector)
+      case "worldPosition":
+      case "worldMovement":
+      case "viewPosition":
+      case "viewMovement": return hover.map(hover => hover ? hover[name] : zeroVector)
       case "pressed": return hover.map(hover => Boolean(hover && hover.pressed))
       default: return hover.map(Boolean)
     }

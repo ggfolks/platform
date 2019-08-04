@@ -118,8 +118,9 @@ let lastHovered :Map<ID, HoverMap> = new Map()
 const direction = new Vector3()
 const point = new Vector3()
 const plane = new Plane()
-const movement = new Vector3()
-const cameraDelta = new Vector3()
+const worldMovement = new Vector3()
+const viewPosition = new Vector3()
+const viewMovement = new Vector3()
 
 /** Manages a group of scene nodes based on [[TransformComponent]] for 3D transform and a scene
  * object component. Users of this system must call [[SceneSystem.update]] on every frame. */
@@ -148,6 +149,9 @@ export class SceneSystem extends System {
       hovered.clear()
       for (const [identifier, pointer] of this.pointers) {
         for (const camera of this._cameras) {
+          // make sure forward/inverse world matrices are up-to-date
+          camera.updateMatrixWorld()
+
           raycaster.setFromCamera(
             pointerCoords.set(
               pointer.position[0] / rendererSize.x * 2 - 1,
@@ -155,13 +159,6 @@ export class SceneSystem extends System {
             ),
             camera,
           )
-          if (camera.userData.lastOrigin) {
-            cameraDelta.subVectors(raycaster.ray.origin, camera.userData.lastOrigin)
-            camera.userData.lastOrigin.copy(raycaster.ray.origin)
-          } else {
-            cameraDelta.set(0, 0, 0)
-            camera.userData.lastOrigin = raycaster.ray.origin.clone()
-          }
 
           // pressed objects stay hovered until the press ends
           const pressedObject = this._pressedObjects.get(identifier)
@@ -173,13 +170,14 @@ export class SceneSystem extends System {
               if (hover) {
                 plane.setFromNormalAndCoplanarPoint(
                   camera.getWorldDirection(direction),
-                  hover.position,
+                  point.copy(hover.viewPosition).applyMatrix4(camera.matrixWorld),
                 )
                 this._maybeNoteHovered(
                   identifier,
                   pointer,
+                  camera,
                   pressedObject,
-                  raycaster.ray.intersectPlane(plane, point) || point.copy(hover.position),
+                  raycaster.ray.intersectPlane(plane, point) || point.copy(hover.worldPosition),
                 )
                 continue
               }
@@ -196,7 +194,7 @@ export class SceneSystem extends System {
             }
             if (
               ancestor &&
-              this._maybeNoteHovered(identifier, pointer, ancestor, intersection.point)
+              this._maybeNoteHovered(identifier, pointer, camera, ancestor, intersection.point)
             ) {
               noted = true
               break
@@ -206,7 +204,13 @@ export class SceneSystem extends System {
           if (!noted) {
             // use intersection with a plane one unit in front of the camera
             const dp = camera.getWorldDirection(direction).dot(raycaster.ray.direction)
-            this._maybeNoteHovered(identifier, pointer, camera, raycaster.ray.at(1 / dp, point))
+            this._maybeNoteHovered(
+              identifier,
+              pointer,
+              camera,
+              camera,
+              raycaster.ray.at(1 / dp, point),
+            )
           }
         }
       }
@@ -234,7 +238,13 @@ export class SceneSystem extends System {
     }
   }
 
-  _maybeNoteHovered (identifier :number, pointer :Pointer, object :Object3D, position :Vector3) {
+  _maybeNoteHovered (
+    identifier :number,
+    pointer :Pointer,
+    camera :Camera,
+    object :Object3D,
+    worldPosition :Vector3,
+  ) {
     const id = object.userData.id
     const comps = this.domain.entityConfig(id).components
     const hovers = this.hovers as Component<HoverMap>
@@ -248,18 +258,34 @@ export class SceneSystem extends System {
     let omap = hovers.read(id)
     const ohover = omap && omap.get(identifier)
     if (ohover) {
-      movement.subVectors(position, ohover.position).sub(cameraDelta)
+      worldMovement.subVectors(worldPosition, ohover.worldPosition)
+      viewPosition.copy(worldPosition).applyMatrix4(camera.matrixWorldInverse)
+      viewMovement.subVectors(viewPosition, ohover.viewPosition)
       if (
-        position.equals(ohover.position) &&
-        movement.equals(ohover.movement) &&
+        worldPosition.equals(ohover.worldPosition) &&
+        worldMovement.equals(ohover.worldMovement) &&
+        viewPosition.equals(ohover.viewPosition) &&
+        viewMovement.equals(ohover.viewMovement) &&
         pointer.pressed === ohover.pressed
       ) {
         map.set(identifier, ohover)
       } else {
-        map.set(identifier, new Hover(position.clone(), movement.clone(), pointer.pressed))
+        map.set(identifier, new Hover(
+          worldPosition.clone(),
+          worldMovement.clone(),
+          viewPosition.clone(),
+          viewMovement.clone(),
+          pointer.pressed,
+        ))
       }
     } else {
-      map.set(identifier, new Hover(position.clone(), new Vector3(), pointer.pressed))
+      map.set(identifier, new Hover(
+        worldPosition.clone(),
+        new Vector3(),
+        worldPosition.clone().applyMatrix4(camera.matrixWorldInverse),
+        new Vector3(),
+        pointer.pressed,
+      ))
     }
     if (pointer.pressed) this._pressedObjects.set(identifier, object)
     return true
@@ -300,8 +326,10 @@ export class SceneSystem extends System {
 
 /** Describes a hover point. */
 export class Hover {
-  constructor (readonly position :Vector3,
-               readonly movement :Vector3,
+  constructor (readonly worldPosition :Vector3,
+               readonly worldMovement :Vector3,
+               readonly viewPosition :Vector3,
+               readonly viewMovement :Vector3,
                readonly pressed :boolean) {}
 }
 
