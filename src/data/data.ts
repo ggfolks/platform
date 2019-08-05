@@ -27,22 +27,75 @@ class DMutable<T> extends Mutable<T> {
   static create<T> (eq :Eq<T>, owner :DObject, name :string, vtype :ValueType, start :T) {
     const listeners :ValueFn<T>[] = []
     let current = start
-    return new DMutable(eq, lner => addListener(listeners, lner), () => current, (value, sync) => {
+    const update = (value :T, fromSync? :boolean) => {
       const ov = current
       if (!eq(ov, value)) {
         dispatchChange(listeners, current = value, ov)
-        if (sync) owner.sendSync({type: "valset", name, vtype, value})
+        if (!fromSync) owner.sendSync({type: "valset", name, vtype, value})
       }
-    })
+    }
+    return new DMutable(eq, lner => addListener(listeners, lner), () => current, update)
   }
 
   constructor (eq :Eq<T>, onChange :(fn:ChangeFn<T>) => Remover, current :() => T,
-               protected readonly _update :(v:T, sync?:boolean) => void) {
+               protected readonly _update :(v:T, fromSync?:boolean) => void) {
     super(eq, onChange, current, _update)
   }
 
-  applyUpdate (value :T) {
-    this._update(value, true)
+  update (newValue :T, fromSync? :boolean) { this._update(newValue, fromSync) }
+}
+
+class DMutableSet<E> extends MutableSet<E> {
+  protected data = new Set<E>()
+
+  constructor (readonly owner :DObject,
+               readonly name :string,
+               readonly etype :ValueType) { super() }
+
+  add (elem :E, fromSync? :boolean) :this {
+    const size = this.data.size
+    this.data.add(elem)
+    if (this.data.size !== size) {
+      this.notifyAdd(elem)
+      if (!fromSync) this.owner.sendSync({type: "setadd", name: this.name, elem, etype: this.etype})
+    }
+    return this
+  }
+
+  delete (elem :E, fromSync? :boolean) :boolean {
+    if (!this.data.delete(elem)) return false
+    this.notifyDelete(elem)
+    if (!fromSync) this.owner.sendSync({type: "setdel", name: this.name, elem})
+    return true
+  }
+}
+
+class DMutableMap<K,V> extends MutableMap<K,V> {
+  protected data = new Map<K,V>()
+
+  constructor (readonly owner :DObject, readonly name :string,
+               readonly ktype :KeyType, readonly vtype :ValueType) { super() }
+
+  set (key :K, value :V, fromSync? :boolean) :this {
+    const data = this.data, prev = data.get(key)
+    data.set(key, value)
+    this.notifySet(key, value, prev)
+    if (!fromSync) {
+      const {owner, name, ktype, vtype} = this
+      owner.sendSync({type: "mapset", name, key, value, ktype, vtype})
+    }
+    return this
+  }
+
+  delete (key :K, fromSync? :boolean) :boolean {
+    const data = this.data, prev = data.get(key)
+    if (!data.delete(key)) return false
+    this.notifyDelete(key, prev as V)
+    if (!fromSync) {
+      const {owner, name, ktype} = this
+      owner.sendSync({type: "mapdel", name, key, ktype})
+    }
+    return true
   }
 }
 
@@ -71,8 +124,8 @@ export type DObjectType = { new (source :DataSource, path :Path) :DObject }
 
 // sync messages come down from server (no need for type information, we've already decoded)
 type ValSetMsg = {type :"valset", name :string, value :any}
-type SetAddMsg = {type :"setadd", name :string, entry :any}
-type SetDelMsg = {type :"setdel", name :string}
+type SetAddMsg = {type :"setadd", name :string, elem :any}
+type SetDelMsg = {type :"setdel", name :string, elem :any}
 type MapSetMsg = {type :"mapset", name :string, key :any, value :any}
 type MapDelMsg = {type :"mapdel", name :string, key :any}
 export type SyncMsg = ValSetMsg | SetAddMsg | SetDelMsg | MapSetMsg | MapDelMsg
@@ -118,11 +171,11 @@ export abstract class DObject implements Disposable {
 
   applySync (msg :SyncMsg) {
     switch (msg.type) {
-    case "valset": (this[msg.name] as DMutable<any>).applyUpdate(msg.value) ; break
-    case "setadd": throw new Error("TODO")
-    case "setdel": throw new Error("TODO")
-    case "mapset": throw new Error("TODO")
-    case "mapdel": throw new Error("TODO")
+    case "valset": (this[msg.name] as DMutable<any>).update(msg.value, true) ; break
+    case "setadd": (this[msg.name] as DMutableSet<any>).add(msg.elem, true) ; break
+    case "setdel": (this[msg.name] as DMutableSet<any>).delete(msg.elem, true) ; break
+    case "mapset": (this[msg.name] as DMutableMap<any,any>).set(msg.key, msg.value, true) ; break
+    case "mapdel": (this[msg.name] as DMutableMap<any,any>).delete(msg.key, true) ; break
     }
   }
 
@@ -140,13 +193,13 @@ export abstract class DObject implements Disposable {
 
   protected set<E> () :MutableSet<E> {
     const [name, meta] = this.metaIter.next().value
-    if (meta.type === "set") throw new Error("TODO")
+    if (meta.type === "set") return new DMutableSet(this, name, meta.etype)
     throw new Error(`Metadata mismatch [name=${name}, meta=${meta}], asked to create 'set'`)
   }
 
   protected map<K,V> () :MutableMap<K,V> {
     const [name, meta] = this.metaIter.next().value
-    if (meta.type === "map") return MutableMap.local()
+    if (meta.type === "map") return new DMutableMap(this, name, meta.ktype, meta.vtype)
     throw new Error(`Metadata mismatch [name=${name}, meta=${meta}], asked to create 'map'`)
   }
 
@@ -167,7 +220,7 @@ export abstract class DObject implements Disposable {
 // Metadata decorators
 
 export type KeyType = "boolean" | "int8" | "int16" | "int32" | "float32" | "float64" | "number"
-                    | "string" | "timestamp"
+                    | "string" | "timestamp" | "id"
 export type ValueType = KeyType | "record"
 
 type ValueMeta = {type: "value", vtype: ValueType}

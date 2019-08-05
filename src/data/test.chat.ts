@@ -64,7 +64,7 @@ export class RoomObject extends DObject {
   @dvalue("string")
   name = this.value("")
 
-  @dmap("int32", "record")
+  @dmap("id", "record")
   occupants = this.map<ID, OccupantInfo>()
 
   @dvalue("int32")
