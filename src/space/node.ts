@@ -81,27 +81,73 @@ class Vector3Split extends Node {
   }
 }
 
-/** Multiplies a vector by a scalar. */
-export interface MultiplyScalarConfig extends NodeConfig {
-  type :"multiplyScalar"
-  v :InputEdge<Vector3>
-  s :InputEdge<number>
+/** Applies an Euler angle rotation to a vector. */
+export interface Vector3ApplyEulerConfig extends NodeConfig {
+  type :"Vector3.applyEuler"
+  vector :InputEdge<Vector3>
+  euler :InputEdge<Euler>
   output :OutputEdge<Vector3>
 }
 
-class MultiplyScalar extends Node {
+class Vector3ApplyEuler extends Node {
 
-  constructor (graph :Graph, id :string, readonly config :MultiplyScalarConfig) {
+  constructor (graph :Graph, id :string, readonly config :Vector3ApplyEulerConfig) {
     super(graph, id, config)
   }
 
   getOutput () {
     return Value
       .join2(
-        this.graph.getValue(this.config.v, new Vector3()),
-        this.graph.getValue(this.config.s, 1),
+        this.graph.getValue(this.config.vector, new Vector3()),
+        this.graph.getValue(this.config.euler, new Euler()),
       )
-      .map(([v, s]) => v.clone().multiplyScalar(s))
+      .map(([vector, euler]) => vector.clone().applyEuler(euler))
+  }
+}
+
+/** Projects a vector onto a plane. */
+export interface Vector3ProjectOnPlaneConfig extends NodeConfig {
+  type :"Vector3.projectOnPlane"
+  planeNormal? :Vector3
+  input :InputEdge<Vector3>
+  output :OutputEdge<Vector3>
+}
+
+class Vector3ProjectOnPlane extends Node {
+
+  constructor (graph :Graph, id :string, readonly config :Vector3ProjectOnPlaneConfig) {
+    super(graph, id, config)
+  }
+
+  getOutput () {
+    const planeNormal = this.config.planeNormal || new Vector3(0, 1, 0)
+    return this.graph.getValue(this.config.input, new Vector3()).map(
+      vector => vector.clone().projectOnPlane(planeNormal),
+    )
+  }
+}
+
+/** Multiplies a vector by a scalar. */
+export interface Vector3MultiplyScalarConfig extends NodeConfig {
+  type :"Vector3.multiplyScalar"
+  vector :InputEdge<Vector3>
+  scalar :InputEdge<number>
+  output :OutputEdge<Vector3>
+}
+
+class Vector3MultiplyScalar extends Node {
+
+  constructor (graph :Graph, id :string, readonly config :Vector3MultiplyScalarConfig) {
+    super(graph, id, config)
+  }
+
+  getOutput () {
+    return Value
+      .join2(
+        this.graph.getValue(this.config.vector, new Vector3()),
+        this.graph.getValue(this.config.scalar, 1),
+      )
+      .map(([vector, scalar]) => vector.clone().multiplyScalar(scalar))
   }
 }
 
@@ -216,7 +262,9 @@ export function registerSpaceNodes (registry :NodeTypeRegistry) {
   registry.registerNodeType("Euler", EulerNode)
   registry.registerNodeType("Vector3", Vector3Node)
   registry.registerNodeType("Vector3.split", Vector3Split)
-  registry.registerNodeType("multiplyScalar", MultiplyScalar)
+  registry.registerNodeType("Vector3.applyEuler", Vector3ApplyEuler)
+  registry.registerNodeType("Vector3.projectOnPlane", Vector3ProjectOnPlane)
+  registry.registerNodeType("Vector3.multiplyScalar", Vector3MultiplyScalar)
   registry.registerNodeType("randomDirection", RandomDirection)
   registry.registerNodeType("rotate", Rotate)
   registry.registerNodeType("translate", Translate)
