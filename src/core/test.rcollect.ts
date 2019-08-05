@@ -1,4 +1,4 @@
-import {ListChange, MutableList, MapChange, MutableMap} from "./rcollect"
+import {ListChange, MutableList, MapChange, MutableMap, MutableSet, SetChange} from "./rcollect"
 
 test("reactive lists", () => {
   const list = MutableList.localData<string>()
@@ -24,6 +24,61 @@ test("reactive lists", () => {
   xhist.push({type: "updated", index: 1, elem: "d", prev: "c"})
   expect(list.slice()).toEqual(["a", "d"])
   expect(hist).toEqual(xhist)
+})
+
+test("reactive sets", () => {
+  const set = MutableSet.local<string>()
+  const hist :SetChange<string>[] = []
+  const xhist :SetChange<string>[] = []
+  set.onChange(change => hist.push(change))
+
+  set.add("a")
+  xhist.push({type: "added", elem: "a"})
+  set.add("b")
+  xhist.push({type: "added", elem: "b"})
+  set.add("c")
+  xhist.push({type: "added", elem: "c"})
+  expect(Array.from(set.values())).toEqual(["a", "b", "c"])
+  expect(hist).toEqual(xhist)
+
+  set.delete("b")
+  xhist.push({type: "deleted", elem: "b"})
+  expect(Array.from(set.values())).toEqual(["a", "c"])
+  expect(hist).toEqual(xhist)
+
+  set.add("bee")
+  xhist.push({type: "added", elem: "bee"})
+  expect(Array.from(set.values())).toEqual(["a", "c", "bee"])
+  expect(hist).toEqual(xhist)
+
+  const aval = set.hasValue("a")
+  const ahist :Array<boolean> = []
+  aval.onValue(v => ahist.push(v))
+  expect(aval.current).toEqual(true)
+  expect(ahist).toEqual([true])
+
+  expect(set.delete("a")).toEqual(true)
+  expect(aval.current).toEqual(false)
+  expect(ahist).toEqual([true, false])
+  expect(set.delete("a")).toEqual(false)
+  expect(aval.current).toEqual(false)
+  expect(ahist).toEqual([true, false])
+  set.add("a")
+  expect(aval.current).toEqual(true)
+  expect(ahist).toEqual([true, false, true])
+
+  const zval = set.hasValue("z")
+  const zhist :Array<boolean> = []
+  zval.onValue(v => zhist.push(v))
+  expect(zval.current).toEqual(false)
+  expect(zhist).toEqual([false])
+
+  set.add("z")
+  expect(zval.current).toEqual(true)
+  expect(zhist).toEqual([false, true])
+  set.add("z")
+  expect(zval.current).toEqual(true)
+  expect(zhist).toEqual([false, true])
 })
 
 test("reactive maps", () => {

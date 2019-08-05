@@ -171,24 +171,119 @@ class LocalMutableList<E> extends MutableList<E> {
 
 export type SetChange<E> = {type :"added", elem :E} | {type :"deleted", elem :E}
 
-export interface RSet<E> extends ReadonlySet<E> {
+/** A reactive set: emits change events when entries are added or deleted. A client can choose to
+  * observe fine-grained list changes (via [[onChange]]) or treat the set as a `Source` and simply
+  * reprocess the entire set any time it changes. */
+export abstract class RSet<E> extends Source<ReadonlySet<E>> implements ReadonlySet<E> {
+  protected abstract get data () :ReadonlySet<E>
 
-  size :number
-  has (elem :E) :boolean
+  /** The number of entries in this set. */
+  get size () :number { return this.data.size }
 
-  // entries () :Iterator<[E,E]>
-  // keys () :Iterator<E>
-  // values () :Iterator<E>
-  forEach (fn :(e:E, edup:E, s:ReadonlySet<E>) => void) :void
+  /** Returns whether `elem` is in this set. */
+  has (elem :E) :boolean { return this.data.has(elem) }
 
-  onChange (fn :(change :SetChange<E>) => any) :Remover
+  /** Returns an iterator over the entries (values) of this set, in insertion order. */
+  values () { return this.data.values() }
+  /** Applies `fn` to each entry in this set, in insertion order. */
+  forEach (fn :(e:E, edup:E, s:ReadonlySet<E>) => void) { this.data.forEach(fn) }
+
+  /** Returns an iterator over the entries of this set, in insertion order. This method only exists
+    * to conform to the strange JavaScript set API. Use [[values]]. */
+  keys () { return this.data.keys() }
+  /** Returns an iterator over the entries ([E,E]) of this set, in insertion order. This method only
+    * exists to conform to the strange JavaScript set API. Use [[values]]. */
+  entries () { return this.data.entries() }
+
+  /** Returns an iterator over the entries of this set, in insertion order. */
+  [Symbol.iterator] () :IterableIterator<E> { return this.data[Symbol.iterator]() }
+
+  /** Registers `fn` to be notified of changes to this set.
+    * @return a remover thunk (invoke with no args to unregister `fn`). */
+  abstract onChange (fn :(change :SetChange<E>) => any) :Remover
+
+  // from Source
+  onEmit (fn :ValueFn<ReadonlySet<E>>) :Remover {
+    return this.onChange(change => fn(this.data))
+  }
+  onValue (fn :ValueFn<ReadonlySet<E>>) :Remover {
+    const remover = this.onEmit(fn)
+    fn(this.data)
+    return remover
+  }
+  map<T> (fn :(m:ReadonlySet<E>) => T) :Source<T> {
+    return new Subject((lner, want) => {
+      if (want) lner(fn(this.data))
+      return this.onChange(_ => lner(fn(this.data)))
+    })
+  }
 }
 
-export interface MutableSet<E> extends RSet<E> {
+/** A mutable [[RSet]] which provides an API for added and deleting elements. */
+export abstract class MutableSet<E> extends RSet<E> implements Set<E> {
+  private _listeners :ValueFn<SetChange<E>>[] = []
+  protected abstract get data () :Set<E>
 
-  add (elem :E) :this
-  delete (elem :E) :boolean
-  clear (): void
+  /** Creates a local mutable set. */
+  static local<E> () :MutableSet<E> { return new LocalMutableSet() }
+
+  /** Returns a [[Value]] that reflects whether `elem` is a member of this set. When its membership
+    * changes, the value will emit a change. */
+  hasValue (elem :E) :Value<boolean> {
+    return Value.deriveValue(refEquals, disp => this.onChange(change => {
+      if (change.elem === elem) {
+        const has = change.type === "added"
+        disp(has, !has)
+      }
+    }), () => this.has(elem))
+  }
+
+  /** Adds `elem` to this set. If it was not already a member of this set, listeners will be
+    * notified of the addition. */
+  abstract add (elem :E) :this
+
+  /** Removes `elem` from this set. If it was a member of the set and was thus actually removed,
+    * listeners will be notified of the deletion.
+    * @return `true` if elem was in the set and was removed, `false` otherise. */
+  abstract delete (elem :E) :boolean
+
+  /** Removes all elements from this set, notifying listeners of any deletions. */
+  clear () {
+    // TODO: do we want a bulk delete event?
+    for (const elem of this) this.delete(elem)
+  }
+
+  forEach (fn :(e:E, edup:E, s:Set<E>) => void) { this.data.forEach(fn) }
+
+  onChange (fn :(change :SetChange<E>) => any) :Remover {
+    return addListener(this._listeners, fn)
+  }
+
+  get [Symbol.toStringTag] () :string { return this.data[Symbol.toStringTag] }
+
+  protected notifyAdd (elem :E) {
+    dispatchValue(this._listeners, {type: "added", elem} as SetChange<E>)
+  }
+  protected notifyDelete (elem :E) {
+    dispatchValue(this._listeners, {type: "deleted", elem} as SetChange<E>)
+  }
+}
+
+class LocalMutableSet<E> extends MutableSet<E> {
+  protected data = new Set<E>()
+
+  add (elem :E) :this {
+    const size = this.data.size
+    this.data.add(elem)
+    if (this.data.size !== size) this.notifyAdd(elem)
+    return this
+  }
+
+  delete (elem :E) :boolean {
+    const changed = this.data.delete(elem)
+    if (changed) this.notifyDelete(elem)
+    return changed
+  }
 }
 
 //
@@ -278,8 +373,8 @@ export abstract class RMap<K,V> extends Source<ReadonlyMap<K,V>> implements Read
   }
   map<T> (fn :(m:ReadonlyMap<K,V>) => T) :Source<T> {
     return new Subject((lner, want) => {
-      if (want) lner(fn(this))
-      return this.onChange(_ => lner(fn(this)))
+      if (want) lner(fn(this.data))
+      return this.onChange(_ => lner(fn(this.data)))
     })
   }
 }
@@ -300,7 +395,7 @@ export abstract class MutableMap<K,V> extends RMap<K,V> implements Map<K,V> {
   abstract delete (key :K) :boolean
 
   /** Deletes all mappings from this map. Notifies listeners of any deletions. */
-  clear (): void {
+  clear () {
     // TODO: do we want a bulk delete event?
     for (const key of this.keys()) this.delete(key)
   }
