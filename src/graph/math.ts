@@ -1,6 +1,6 @@
 import {Value} from "../core/react"
 import {Graph} from "./graph"
-import {InputEdges, Node, NodeConfig, NodeTypeRegistry, OutputEdge} from "./node"
+import {InputEdge, InputEdges, Node, NodeConfig, NodeTypeRegistry, OutputEdge} from "./node"
 
 /** Outputs a single constant. */
 export interface ConstantConfig extends NodeConfig {
@@ -119,10 +119,37 @@ class Random extends Node {
   }
 }
 
+/** Tracks the sum of its input over time, subject to optional min and max constraints. */
+export interface AccumulateConfig extends NodeConfig {
+  type :"random"
+  min? :number
+  max? :number
+  input: InputEdge<number>
+  output :OutputEdge<number>
+}
+
+class Accumulate extends Node {
+
+  constructor (graph :Graph, id :string, readonly config :AccumulateConfig) {
+    super(graph, id, config)
+  }
+
+  getOutput () {
+    let sum = 0
+    return this.graph.getValue(this.config.input, 0).map(value => {
+      sum += value
+      if (this.config.min !== undefined) sum = Math.max(this.config.min, sum)
+      if (this.config.max !== undefined) sum = Math.min(this.config.max, sum)
+      return sum
+    })
+  }
+}
+
 /** Registers the nodes in this module with the supplied registry. */
 export function registerMathNodes (registry :NodeTypeRegistry) {
   registry.registerNodeType("constant", Constant)
   registry.registerNodeType("subtract", Subtract)
   registry.registerNodeType("multiply", Multiply)
   registry.registerNodeType("random", Random)
+  registry.registerNodeType("accumulate", Accumulate)
 }

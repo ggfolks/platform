@@ -11,6 +11,7 @@ export type CoordinateFrame = "world" | "local"
 /** Creates a set of Euler angles from individual components. */
 export interface EulerConfig extends NodeConfig {
   type :"Euler"
+  order? :string
   x :InputEdge<number>
   y :InputEdge<number>
   z :InputEdge<number>
@@ -30,7 +31,7 @@ class EulerNode extends Node {
         this.graph.getValue(this.config.y, 0),
         this.graph.getValue(this.config.z, 0),
       )
-      .map(([x, y, z]) => new Euler(x, y, z))
+      .map(([x, y, z]) => new Euler(x, y, z, this.config.order))
   }
 }
 
@@ -57,6 +58,26 @@ class Vector3Node extends Node {
         this.graph.getValue(this.config.z, 0),
       )
       .map(([x, y, z]) => new Vector3(x, y, z))
+  }
+}
+
+/** Splits a vector into its individual components. */
+export interface Vector3SplitConfig extends NodeConfig {
+  type :"Vector3.split"
+  input :InputEdge<Vector3>
+  x :OutputEdge<number>
+  y :OutputEdge<number>
+  z :OutputEdge<number>
+}
+
+class Vector3Split extends Node {
+
+  constructor (graph :Graph, id :string, readonly config :Vector3SplitConfig) {
+    super(graph, id, config)
+  }
+
+  getOutput (name :string = "x") {
+    return this.graph.getValue(this.config.input, new Vector3()).map(value => value[name])
   }
 }
 
@@ -168,12 +189,36 @@ class Translate extends EntityComponentNode<TransformComponent> {
   }
 }
 
+/** Sets an entity's rotation. */
+export interface UpdateRotationConfig extends EntityComponentConfig {
+  type :"updateRotation"
+  input :InputEdge<Euler>
+}
+
+class UpdateRotation extends EntityComponentNode<TransformComponent> {
+
+  constructor (graph :Graph, id :string, readonly config :UpdateRotationConfig) {
+    super(graph, id, config)
+  }
+
+  connect () {
+    const quaternion = new Quaternion()
+    this._removers.push(
+      this.graph.getValue(this.config.input, new Euler()).onValue(euler => {
+        this._component.updateQuaternion(this._entityId, quaternion.setFromEuler(euler))
+      }),
+    )
+  }
+}
+
 /** Registers the nodes in this module with the supplied registry. */
 export function registerSpaceNodes (registry :NodeTypeRegistry) {
   registry.registerNodeType("Euler", EulerNode)
   registry.registerNodeType("Vector3", Vector3Node)
+  registry.registerNodeType("Vector3.split", Vector3Split)
   registry.registerNodeType("multiplyScalar", MultiplyScalar)
   registry.registerNodeType("randomDirection", RandomDirection)
   registry.registerNodeType("rotate", Rotate)
   registry.registerNodeType("translate", Translate)
+  registry.registerNodeType("updateRotation", UpdateRotation)
 }
