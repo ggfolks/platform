@@ -9,7 +9,7 @@ import {Value, Mutable, Subject} from "../core/react"
 export type GLC = WebGLRenderingContext
 export const GLC = WebGLRenderingContext
 
-const checkErrors = true
+const checkErrors = false
 
 /** Checks `glc` for any unreported errors iff error checking is enabled. If any errors are found,
   * they are logged, tagged with the supplied `op` string (which should generally be the GL call
