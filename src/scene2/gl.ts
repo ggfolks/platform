@@ -361,11 +361,16 @@ export type RendererConfig = {
 }
 
 export class Renderer {
+  /** The canvas element that displays the main frame buffer. */
   readonly canvas :HTMLCanvasElement
+  /** The GL context used by this renderer. */
   readonly glc :GLC
+  /** A render target that renders to the main frame buffer. */
   readonly target :RenderTarget
-  readonly scale :Scale // TODO: support change in scale factor?
+  /** The size of the canvas that displays our frame buffer in display units. */
   readonly size :Value<dim2>
+  /** The scale from display units to physical pixels (i.e. `physical/display`). */
+  readonly scale :Scale // TODO: support change in scale factor?
 
   constructor (config :RendererConfig) {
     const canvas = this.canvas = document.createElement("canvas")
@@ -402,7 +407,7 @@ export class Renderer {
       target.pixelSize = dim2.ceil(psize, psize)
       canvas.width = target.pixelSize[0]
       canvas.height = target.pixelSize[1]
-      // set the canvas's CSS size to the logical size; the browser works in logical pixels
+      // set the canvas's CSS size to the logical size; the browser works in display units
       canvas.style.width = `${rsize[0]}px`
       canvas.style.height = `${rsize[1]}px`
     })
