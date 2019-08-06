@@ -20,7 +20,7 @@ class Key extends Node {
 
   constructor (graph :Graph, id :string, readonly config :KeyConfig) { super(graph, id, config) }
 
-  getOutput () {
+  protected _createOutput () {
     return Keyboard.instance.getKeyState(this.config.code)
   }
 }
@@ -38,7 +38,7 @@ class MouseButton extends Node {
     super(graph, id, config)
   }
 
-  getOutput () {
+  protected _createOutput () {
     const hand = (this.graph.ctx as InputNodeContext).hand
     return hand ? hand.mouse.getButtonState(this.config.button || 0) : Value.constant(false)
   }
@@ -57,7 +57,7 @@ class MouseMovement extends Node {
     super(graph, id, config)
   }
 
-  getOutput (name? :string) {
+  protected _createOutput (name? :string) {
     const hand = (this.graph.ctx as InputNodeContext).hand
     if (!hand) {
       return Value.constant(0)
@@ -86,7 +86,7 @@ class PointerMovement extends Node {
     super(graph, id, config)
   }
 
-  getOutput (name? :string) {
+  protected _createOutput (name? :string) {
     const hand = (this.graph.ctx as InputNodeContext).hand
     if (!hand) {
       return Value.constant(0)

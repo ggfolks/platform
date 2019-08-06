@@ -106,7 +106,7 @@ class ReadComponent extends EntityComponentNode<Component<any>> {
     super(graph, id, config)
   }
 
-  getOutput () {
+  protected _createOutput () {
     return this._component.getValue(this._entityId)
   }
 }

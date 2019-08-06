@@ -19,7 +19,7 @@ class TimeoutNode extends Node {
     super(graph, id, config)
   }
 
-  getOutput ()  {
+  protected _createOutput () {
     return this._output
   }
 
@@ -47,7 +47,7 @@ class IntervalNode extends Node {
     super(graph, id, config)
   }
 
-  getOutput ()  {
+  protected _createOutput () {
     return this._output
   }
 
@@ -71,7 +71,7 @@ class Latch extends Node {
     super(graph, id, config)
   }
 
-  getOutput ()  {
+  protected _createOutput () {
     let stored :any
     return Value
       .join2(
@@ -99,7 +99,7 @@ class ClockNode extends Node {
     super(graph, id, config)
   }
 
-  getOutput (name? :string) {
+  protected _createOutput (name? :string) {
     const field :(clock :Clock) => number =
       (name === "time" || name === "elapsed") ? clock => clock[name] : clock => clock.dt
     return this.graph.clock.map(field).toValue(0, refEquals)

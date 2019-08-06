@@ -24,7 +24,7 @@ class EulerNode extends Node {
     super(graph, id, config)
   }
 
-  getOutput () {
+  protected _createOutput () {
     return Value
       .join(
         this.graph.getValue(this.config.x, 0),
@@ -50,7 +50,7 @@ class Vector3Node extends Node {
     super(graph, id, config)
   }
 
-  getOutput () {
+  protected _createOutput () {
     return Value
       .join(
         this.graph.getValue(this.config.x, 0),
@@ -76,7 +76,7 @@ class Vector3Split extends Node {
     super(graph, id, config)
   }
 
-  getOutput (name :string = "x") {
+  protected _createOutput (name :string = "x") {
     return this.graph.getValue(this.config.input, new Vector3()).map(value => value[name])
   }
 }
@@ -95,7 +95,7 @@ class Vector3ApplyEuler extends Node {
     super(graph, id, config)
   }
 
-  getOutput () {
+  protected _createOutput () {
     return Value
       .join2(
         this.graph.getValue(this.config.vector, new Vector3()),
@@ -119,7 +119,7 @@ class Vector3ProjectOnPlane extends Node {
     super(graph, id, config)
   }
 
-  getOutput () {
+  protected _createOutput () {
     const planeNormal = this.config.planeNormal || new Vector3(0, 1, 0)
     return this.graph.getValue(this.config.input, new Vector3()).map(
       vector => vector.clone().projectOnPlane(planeNormal),
@@ -141,7 +141,7 @@ class Vector3MultiplyScalar extends Node {
     super(graph, id, config)
   }
 
-  getOutput () {
+  protected _createOutput () {
     return Value
       .join2(
         this.graph.getValue(this.config.vector, new Vector3()),
@@ -158,17 +158,16 @@ export interface RandomDirectionConfig extends NodeConfig {
 }
 
 class RandomDirection extends Node {
-  private _output = this.graph.clock.fold(
-    createRandomDirection(),
-    (direction, clock) => createRandomDirection(),
-  )
 
   constructor (graph :Graph, id :string, readonly config :RandomDirectionConfig) {
     super(graph, id, config)
   }
 
-  getOutput () {
-    return this._output
+  protected _createOutput () {
+    return this.graph.clock.fold(
+      createRandomDirection(),
+      (direction, clock) => createRandomDirection(),
+    )
   }
 }
 

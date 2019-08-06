@@ -32,12 +32,18 @@ export interface NodeContext {
 /** Parent class for all nodes. */
 export abstract class Node implements Disposable {
   protected _removers :Remover[] = []
+  private _outputs :Map<string | undefined, Value<any>> = new Map()
 
   constructor (readonly graph :Graph, readonly id :string, readonly config :NodeConfig) {}
 
   /** Returns the value corresponding to the identified output, or the default if none. */
   getOutput (name? :string) :Value<any> {
-    throw new Error("Unknown output " + name)
+    // create outputs lazily
+    let output = this._outputs.get(name)
+    if (!output) {
+      this._outputs.set(name, output = this._createOutput(name))
+    }
+    return output
   }
 
   /** Connects and initializes the node. */
@@ -47,6 +53,10 @@ export abstract class Node implements Disposable {
     for (const remover of this._removers) {
       remover()
     }
+  }
+
+  protected _createOutput (name? :string) :Value<any> {
+    throw new Error("Unknown output " + name)
   }
 }
 

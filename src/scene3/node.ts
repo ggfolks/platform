@@ -25,7 +25,7 @@ class Hover extends EntityComponentNode<Component<HoverMap>> {
     super(graph, id, config)
   }
 
-  getOutput (name? :string) {
+  protected _createOutput (name? :string) {
     const index = this.config.index || 0
     const count = this.config.count === undefined ? 1 : this.config.count
     const hover = this._component.getValue(this._entityId).map(hovers => {

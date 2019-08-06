@@ -15,7 +15,7 @@ class Constant extends Node {
     super(graph, id, config)
   }
 
-  getOutput () {
+  protected _createOutput () {
     return Value.constant(this.config.value)
   }
 }
@@ -32,7 +32,7 @@ class Operator extends Node {
     super(graph, id, config)
   }
 
-  getOutput () {
+  protected _createOutput () {
     return this.graph
       .getValues(this.config.inputs, this._defaultInputValue)
       .map(values => this._apply(values))
@@ -100,22 +100,28 @@ class Multiply extends Operator {
 /** Emits a random number. */
 export interface RandomConfig extends NodeConfig {
   type :"random"
-  min :number
-  max :number
+  min? :number
+  max? :number
   output :OutputEdge<number>
 }
 
 class Random extends Node {
-  private _output = Value
-    .fromStreamRef(this.graph.clock, {time: 0, elapsed: 0, dt: 0})
-    .map(clock => Math.random() * (this.config.max - this.config.min) + this.config.min)
-
+  
   constructor (graph :Graph, id :string, readonly config :RandomConfig) {
     super(graph, id, config)
   }
 
-  getOutput () {
-    return this._output
+  protected _createOutput () {
+    return this.graph.clock.fold(
+      this._getRandomValue(),
+      (value, clock) => this._getRandomValue(),
+    )
+  }
+
+  protected _getRandomValue () {
+    const min = this.config.min === undefined ? 0 : this.config.min
+    const max = this.config.max === undefined ? 1 : this.config.max
+    return Math.random() * (max - min) + min
   }
 }
 
@@ -134,7 +140,7 @@ class Accumulate extends Node {
     super(graph, id, config)
   }
 
-  getOutput () {
+  protected _createOutput () {
     let sum = 0
     return this.graph.getValue(this.config.input, 0).map(value => {
       sum += value
