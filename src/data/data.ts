@@ -2,6 +2,8 @@ import {Disposable, Remover} from "../core/util"
 import {Data, dataEquals, refEquals} from "../core/data"
 import {ChangeFn, Eq, Mutable, ValueFn, addListener, dispatchChange} from "../core/react"
 import {MutableSet, MutableMap} from "../core/rcollect"
+import {KeyType, ValueType} from "../core/codec"
+import {getPropMetas} from "./meta"
 
 export type ID = string
 
@@ -120,7 +122,7 @@ export class DQueue<M> {
 
 export type DHandler<O,M> = (obj :O, msg :M, auth: Auth) => void
 
-export type DObjectType = { new (source :DataSource, path :Path) :DObject }
+export type DObjectType = { new (source :DataSource, path :Path, ...rest :any[]) :DObject }
 
 // sync messages come down from server (no need for type information, we've already decoded)
 type ValSetMsg = {type :"valset", name :string, value :any}
@@ -215,44 +217,3 @@ export abstract class DObject implements Disposable {
     throw new Error(`Metadata mismatch [name=${name}, meta=${meta}], asked to create 'queue'`)
   }
 }
-
-//
-// Metadata decorators
-
-export type KeyType = "boolean" | "int8" | "int16" | "int32" | "float32" | "float64" | "number"
-                    | "string" | "timestamp" | "id"
-export type ValueType = KeyType | "record"
-
-type ValueMeta = {type: "value", vtype: ValueType}
-type SetMeta = {type: "set", etype: ValueType}
-type MapMeta = {type: "map", ktype: KeyType, vtype: ValueType}
-type CollectionMeta = {type: "collection", ktype: KeyType, otype: DObjectType}
-type QueueMeta = {type: "queue", mtype: ValueType}
-type Meta = ValueMeta | SetMeta | MapMeta | CollectionMeta | QueueMeta
-
-export function getPropMetas (proto :Function|Object) :Map<string, Meta> {
-  const atarget = proto as any
-  const props = atarget["__props__"]
-  if (props) return props
-  return atarget["__props__"] = new Map()
-}
-
-export function dobject (ctor :Function) {
-  // const atarget = ctor.prototype as any
-  // TODO: anything?
-}
-
-const propAdder = (prop :Meta) =>
-  (proto :Function|Object, name :string, descrip? :PropertyDescriptor) =>
-    void getPropMetas(proto).set(name, prop)
-
-export const dvalue = (vtype :ValueType) =>
-  propAdder({type: "value", vtype})
-export const dset = (etype :ValueType) =>
-  propAdder({type: "set", etype})
-export const dmap = (ktype :KeyType, vtype :ValueType) =>
-  propAdder({type: "map", ktype, vtype})
-export const dqueue = <O,M>(mtype :ValueType, handler :DHandler<O,M>) =>
-  propAdder({type: "queue", mtype})
-export const dcollection = (ktype :KeyType, otype :DObjectType) =>
-  propAdder({type: "collection", ktype, otype})

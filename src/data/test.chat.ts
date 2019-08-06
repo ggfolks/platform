@@ -1,7 +1,9 @@
+import {TextEncoder, TextDecoder} from "util"
 import {Timestamp} from "../core/util"
-import {MutableSet} from "../core/rcollect"
-import {Auth, ID, DataSource, DObject, DObjectType, MetaMsg, Path, ValueType, SyncReq,
-        getPropMetas, dobject, dset, dmap, dvalue, dcollection, dqueue} from "./data"
+import {Encoder, Decoder, ValueType} from "../core/codec"
+import {getPropMetas, dobject, dset, dmap, dvalue, dcollection, dqueue} from "./meta"
+import {Auth, ID, DataSource, DObject, DObjectType, MetaMsg, Path, SyncReq} from "./data"
+import {addObject, getObject} from "./client"
 
 //
 // User object: maintains info on a user
@@ -148,7 +150,7 @@ export class RootObject extends DObject {
   canSubscribe (auth :Auth) :boolean { return true }
 
   @dset("record")
-  publicRooms :MutableSet<RoomInfo> = this.set<RoomInfo>()
+  publicRooms = this.set<RoomInfo>()
 
   @dcollection("string", UserObject)
   users = this.collection<ID, UserObject>()
@@ -211,4 +213,30 @@ test("access", () => {
 
   expect(user.canWrite("lastLogin", auth1)).toEqual(false)
   expect(user.canWrite("lastLogin", auths)).toEqual(true)
+})
+
+test("codec", () => {
+  const source = new TestDataSource()
+  const path = ["rooms", "1"]
+  const room = new RoomObject(source, path)
+  room.name.update("Test room")
+  room.occupants.set("1", {username: "Testy Testerson"})
+  room.occupants.set("2", {username: "Sandy Clause"})
+  room.nextMsgId.update(4)
+  const now = Timestamp.now()
+  room.messages.set(1, {sender: "1", sent: now-5*60*1000, text: "Yo Sandy!"})
+  room.messages.set(2, {sender: "2", sent: now-3*60*1000, text: "Hiya Testy."})
+  room.messages.set(3, {sender: "1", sent: now-1*60*1000, text: "How's the elves?"})
+
+  const enc = new Encoder(new TextEncoder() as any)
+  addObject(room, enc)
+
+  const msg = enc.finish()
+  const dec = new Decoder(msg.buffer, new TextDecoder() as any)
+  const droom = getObject<RoomObject>(RoomObject, dec, source, path)
+
+  expect(droom.name.current).toEqual(room.name.current)
+  expect(Array.from(droom.occupants)).toEqual(Array.from(room.occupants))
+  expect(droom.nextMsgId.current).toEqual(room.nextMsgId.current)
+  expect(Array.from(droom.messages)).toEqual(Array.from(room.messages))
 })
