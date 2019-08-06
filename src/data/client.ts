@@ -77,7 +77,7 @@ export function addObject (obj :DObject, enc :Encoder) {
 }
 
 export function getObject<T extends DObject> (
-  type :DObjectType, dec :Decoder, source :DataSource, path :Path
+  type :DObjectType<T>, dec :Decoder, source :DataSource, path :Path
 ) :T {
   const metas = getPropMetas(type.prototype)
   // TODO: get extra constructor args from dconst metadata
@@ -91,5 +91,5 @@ export function getObject<T extends DObject> (
     case "queue": break // TODO
     }
   }
-  return obj as T
+  return obj
 }

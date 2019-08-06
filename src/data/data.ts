@@ -101,11 +101,11 @@ class DMutableMap<K,V> extends MutableMap<K,V> {
   }
 }
 
-export class DCollection<K,V> {
+export class DCollection<K,V extends DObject> {
 
-  constructor (readonly owner :DObject, readonly name :string, readonly otype :DObjectType) {}
+  constructor (readonly owner :DObject, readonly name :string, readonly otype :DObjectType<V>) {}
 
-  subscribe<T extends DObject> (key :DKey) :Promise<T> {
+  subscribe (key :DKey) :Promise<V> {
     return this.owner.source.subscribe(this.owner.path.concat([this.name, key]), this.otype)
   }
 }
@@ -122,7 +122,9 @@ export class DQueue<M> {
 
 export type DHandler<O,M> = (obj :O, msg :M, auth: Auth) => void
 
-export type DObjectType = { new (source :DataSource, path :Path, ...rest :any[]) :DObject }
+export type DObjectType<T extends DObject> = {
+  new (source :DataSource, path :Path, ...rest :any[]) :T
+}
 
 // sync messages come down from server (no need for type information, we've already decoded)
 type ValSetMsg = {type :"valset", name :string, value :any}
@@ -142,7 +144,7 @@ export type SyncReq = ValSetReq | SetAddReq | SetDelReq | MapSetReq | MapDelReq
 
 export interface DataSource {
 
-  subscribe<T extends DObject> (path :Path, otype :DObjectType) :Promise<T>
+  subscribe<T extends DObject> (path :Path, otype :DObjectType<T>) :Promise<T>
 
   post<M> (path :Path, msg :M, mtype :ValueType) :void
   // TODO: variants that wait for the message to be processed? also return channels?
@@ -205,7 +207,7 @@ export abstract class DObject implements Disposable {
     throw new Error(`Metadata mismatch [name=${name}, meta=${meta}], asked to create 'map'`)
   }
 
-  protected collection<K,V> () {
+  protected collection<K,V extends DObject> () {
     const [name, meta] = this.metaIter.next().value
     if (meta.type === "collection") return new DCollection<K,V>(this, name, meta.otype)
     throw new Error(`Metadata mismatch [name=${name}, meta=${meta}], asked to create 'collection'`)

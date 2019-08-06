@@ -7,7 +7,7 @@ import {DHandler, DObjectType} from "./data"
 type ValueMeta = {type: "value", vtype: ValueType}
 type SetMeta = {type: "set", etype: ValueType}
 type MapMeta = {type: "map", ktype: KeyType, vtype: ValueType}
-type CollectionMeta = {type: "collection", ktype: KeyType, otype: DObjectType}
+type CollectionMeta = {type: "collection", ktype: KeyType, otype: DObjectType<any>}
 type QueueMeta = {type: "queue", mtype: ValueType}
 type Meta = ValueMeta | SetMeta | MapMeta | CollectionMeta | QueueMeta
 
@@ -35,5 +35,5 @@ export const dmap = (ktype :KeyType, vtype :ValueType) =>
   propAdder({type: "map", ktype, vtype})
 export const dqueue = <O,M>(mtype :ValueType, handler :DHandler<O,M>) =>
   propAdder({type: "queue", mtype})
-export const dcollection = (ktype :KeyType, otype :DObjectType) =>
+export const dcollection = (ktype :KeyType, otype :DObjectType<any>) =>
   propAdder({type: "collection", ktype, otype})

@@ -178,7 +178,7 @@ function handleChatReq (obj :RootObject, req :ChatReq, auth :Auth) {
 
 class TestDataSource implements DataSource {
 
-  subscribe<T extends DObject> (path :Path, otype :DObjectType) :Promise<T> {
+  subscribe<T extends DObject> (path :Path, otype :DObjectType<T>) :Promise<T> {
     return Promise.reject(new Error("test"))
   }
   post<M> (path :Path, msg :M, mtype :ValueType) {} // noop!
