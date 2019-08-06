@@ -45,12 +45,12 @@ export abstract class Node implements Disposable {
       // it may be that our call to _createOutput ends up triggering a recursive call to getOutput
       // on this node.  in that case, we have a cycle.  when that happens, we use the value from
       // the previous frame
-      let current = defaultValue
+      let current = this._maybeOverrideDefaultValue(name, defaultValue)
       this._outputs.set(name, Value.deriveValue(
         refEquals,
         dispatch => this.graph.clock.onEmit(() => {
           const previous = current
-          current = this.getOutput(name, defaultValue).current
+          current = (this._outputs.get(name) as Value<T>).current
           if (current !== previous) dispatch(current, previous)
         }),
         () => current
@@ -67,6 +67,12 @@ export abstract class Node implements Disposable {
     for (const remover of this._removers) {
       remover()
     }
+  }
+
+  /** Gives subclasses a chance to overrule the default value provided by the output consumer.  For
+   * example, in a multiply node, 1 makes a better default than zero. */
+  protected _maybeOverrideDefaultValue (name :string | undefined, defaultValue :any) {
+    return defaultValue
   }
 
   protected _createOutput (name :string | undefined, defaultValue :any) :Value<any> {

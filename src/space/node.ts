@@ -38,7 +38,6 @@ class EulerNode extends Node {
 /** Creates a vector from individual components. */
 export interface Vector3Config extends NodeConfig {
   type :"Vector3"
-  defaultValue? :number
   x :InputEdge<number>
   y :InputEdge<number>
   z :InputEdge<number>
@@ -52,12 +51,11 @@ class Vector3Node extends Node {
   }
 
   protected _createOutput () {
-    const defaultValue = this.config.defaultValue || 0
     return Value
       .join(
-        this.graph.getValue(this.config.x, defaultValue),
-        this.graph.getValue(this.config.y, defaultValue),
-        this.graph.getValue(this.config.z, defaultValue),
+        this.graph.getValue(this.config.x, 0),
+        this.graph.getValue(this.config.y, 0),
+        this.graph.getValue(this.config.z, 0),
       )
       .map(([x, y, z]) => new Vector3(x, y, z))
   }

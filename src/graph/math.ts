@@ -38,6 +38,10 @@ class Operator extends Node {
       .map(values => this._apply(values))
   }
 
+  protected _maybeOverrideDefaultValue (name :string | undefined, defaultValue :any) {
+    return this._defaultInputValue
+  }
+
   protected get _defaultInputValue () :number {
     return 0
   }
