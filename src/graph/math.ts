@@ -106,7 +106,7 @@ export interface RandomConfig extends NodeConfig {
 }
 
 class Random extends Node {
-  
+
   constructor (graph :Graph, id :string, readonly config :RandomConfig) {
     super(graph, id, config)
   }

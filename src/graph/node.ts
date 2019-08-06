@@ -1,3 +1,4 @@
+import {refEquals} from "../core/data"
 import {Value} from "../core/react"
 import {Remover} from "../core/util"
 import {Disposable} from "../core/util"
@@ -37,11 +38,24 @@ export abstract class Node implements Disposable {
   constructor (readonly graph :Graph, readonly id :string, readonly config :NodeConfig) {}
 
   /** Returns the value corresponding to the identified output, or the default if none. */
-  getOutput (name? :string) :Value<any> {
+  getOutput<T> (name :string | undefined, defaultValue :T) :Value<T> {
     // create outputs lazily
     let output = this._outputs.get(name)
     if (!output) {
-      this._outputs.set(name, output = this._createOutput(name))
+      // it may be that our call to _createOutput ends up triggering a recursive call to getOutput
+      // on this node.  in that case, we have a cycle.  when that happens, we use the value from
+      // the previous frame
+      let current = defaultValue
+      this._outputs.set(name, Value.deriveValue(
+        refEquals,
+        dispatch => this.graph.clock.onEmit(() => {
+          const previous = current
+          current = this.getOutput(name, defaultValue).current
+          if (current !== previous) dispatch(current, previous)
+        }),
+        () => current
+      ))
+      this._outputs.set(name, output = this._createOutput(name, defaultValue))
     }
     return output
   }
@@ -55,7 +69,7 @@ export abstract class Node implements Disposable {
     }
   }
 
-  protected _createOutput (name? :string) :Value<any> {
+  protected _createOutput (name :string | undefined, defaultValue :any) :Value<any> {
     throw new Error("Unknown output " + name)
   }
 }

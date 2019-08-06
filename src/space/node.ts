@@ -38,6 +38,7 @@ class EulerNode extends Node {
 /** Creates a vector from individual components. */
 export interface Vector3Config extends NodeConfig {
   type :"Vector3"
+  defaultValue? :number
   x :InputEdge<number>
   y :InputEdge<number>
   z :InputEdge<number>
@@ -51,11 +52,12 @@ class Vector3Node extends Node {
   }
 
   protected _createOutput () {
+    const defaultValue = this.config.defaultValue || 0
     return Value
       .join(
-        this.graph.getValue(this.config.x, 0),
-        this.graph.getValue(this.config.y, 0),
-        this.graph.getValue(this.config.z, 0),
+        this.graph.getValue(this.config.x, defaultValue),
+        this.graph.getValue(this.config.y, defaultValue),
+        this.graph.getValue(this.config.z, defaultValue),
       )
       .map(([x, y, z]) => new Vector3(x, y, z))
   }
@@ -234,6 +236,27 @@ class Translate extends EntityComponentNode<TransformComponent> {
   }
 }
 
+/** Sets an entity's position. */
+export interface UpdatePositionConfig extends EntityComponentConfig {
+  type :"updatePosition"
+  input :InputEdge<Vector3>
+}
+
+class UpdatePosition extends EntityComponentNode<TransformComponent> {
+
+  constructor (graph :Graph, id :string, readonly config :UpdatePositionConfig) {
+    super(graph, id, config)
+  }
+
+  connect () {
+    this._removers.push(
+      this.graph.getValue(this.config.input, new Vector3()).onValue(position => {
+        this._component.updatePosition(this._entityId, position)
+      }),
+    )
+  }
+}
+
 /** Sets an entity's rotation. */
 export interface UpdateRotationConfig extends EntityComponentConfig {
   type :"updateRotation"
@@ -256,6 +279,27 @@ class UpdateRotation extends EntityComponentNode<TransformComponent> {
   }
 }
 
+/** Sets an entity's scale. */
+export interface UpdateScaleConfig extends EntityComponentConfig {
+  type :"updateScale"
+  input :InputEdge<Vector3>
+}
+
+class UpdateScale extends EntityComponentNode<TransformComponent> {
+
+  constructor (graph :Graph, id :string, readonly config :UpdateScaleConfig) {
+    super(graph, id, config)
+  }
+
+  connect () {
+    this._removers.push(
+      this.graph.getValue(this.config.input, new Vector3()).onValue(scale => {
+        this._component.updateScale(this._entityId, scale)
+      }),
+    )
+  }
+}
+
 /** Registers the nodes in this module with the supplied registry. */
 export function registerSpaceNodes (registry :NodeTypeRegistry) {
   registry.registerNodeType("Euler", EulerNode)
@@ -267,5 +311,7 @@ export function registerSpaceNodes (registry :NodeTypeRegistry) {
   registry.registerNodeType("randomDirection", RandomDirection)
   registry.registerNodeType("rotate", Rotate)
   registry.registerNodeType("translate", Translate)
+  registry.registerNodeType("updatePosition", UpdatePosition)
   registry.registerNodeType("updateRotation", UpdateRotation)
+  registry.registerNodeType("updateScale", UpdateScale)
 }

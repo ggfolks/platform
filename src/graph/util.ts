@@ -71,15 +71,15 @@ class Latch extends Node {
     super(graph, id, config)
   }
 
-  protected _createOutput () {
-    let stored :any
+  protected _createOutput (name :string | undefined, defaultValue :any) {
+    let stored :any = defaultValue
     return Value
       .join2(
         this.graph.getValue(this.config.store, false),
-        this.graph.getValue(this.config.value, undefined),
+        this.graph.getValue(this.config.value, defaultValue),
       )
       .map(([store, value]) => {
-        if (stored === undefined || store) stored = value
+        if (store) stored = value
         return stored
       })
   }

@@ -38,10 +38,10 @@ export class Graph implements Disposable {
     }
     if (Array.isArray(input)) {
       const [nodeId, outputName] = input
-      return this._requireNode(nodeId).getOutput(outputName)
+      return this._requireNode(nodeId).getOutput(outputName, defaultValue)
     }
     if (typeof input === "string") {
-      return this._requireNode(input).getOutput()
+      return this._requireNode(input).getOutput(undefined, defaultValue)
     }
     return Value.constant(input)
   }
