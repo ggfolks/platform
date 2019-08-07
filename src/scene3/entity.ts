@@ -22,6 +22,7 @@ import {
   WebGLRenderer,
 } from "three"
 import {GLTFLoader} from "three/examples/jsm/loaders/GLTFLoader"
+import {SkeletonUtils} from "three/examples/jsm/utils/SkeletonUtils"
 
 import {Subject} from "../core/react"
 import {RMap} from "../core/rcollect"
@@ -338,7 +339,7 @@ function createObject3D (objectConfig: Object3DConfig) :Subject<Object3D> {
   switch (objectConfig.type) {
     case "gltf":
       const gltfConfig = objectConfig as GLTFConfig
-      return loadGLTF(gltfConfig.url).map(original => original.clone())
+      return loadGLTF(gltfConfig.url).map(original => SkeletonUtils.clone(original) as Object3D)
 
     case "perspectiveCamera":
       return Subject.constant(new PerspectiveCamera())
