@@ -175,6 +175,40 @@ class Sign extends Node {
   }
 }
 
+/** Outputs the absolute value of the input. */
+export interface AbsConfig extends NodeConfig {
+  type :"abs"
+  input: InputEdge<number>
+  output :OutputEdge<number>
+}
+
+class Abs extends Node {
+
+  constructor (graph :Graph, id :string, readonly config :AbsConfig) {
+    super(graph, id, config)
+  }
+
+  protected _createOutput () {
+    return this.graph.getValue(this.config.input, 0).map(Math.abs)
+  }
+}
+
+/** Outputs the minimum of the inputs. */
+export interface MinConfig extends OperatorConfig {
+  type :"min"
+}
+
+class Min extends Operator {
+
+  constructor (graph :Graph, id :string, readonly config :MinConfig) {
+    super(graph, id, config)
+  }
+
+  protected _apply (values :number[]) :number {
+    return Math.min(...values)
+  }
+}
+
 /** Registers the nodes in this module with the supplied registry. */
 export function registerMathNodes (registry :NodeTypeRegistry) {
   registry.registerNodeType("constant", Constant)
@@ -183,4 +217,6 @@ export function registerMathNodes (registry :NodeTypeRegistry) {
   registry.registerNodeType("random", Random)
   registry.registerNodeType("accumulate", Accumulate)
   registry.registerNodeType("sign", Sign)
+  registry.registerNodeType("abs", Abs)
+  registry.registerNodeType("min", Min)
 }
