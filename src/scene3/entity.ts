@@ -12,6 +12,7 @@ import {
   Object3D,
   PerspectiveCamera,
   Plane,
+  PlaneBufferGeometry,
   RGBAFormat,
   Raycaster,
   Scene,
@@ -35,7 +36,6 @@ import {
   System,
 } from "../entity/entity"
 import {TransformComponent} from "../space/entity"
-import {createHeightfieldGeometry} from "./terrain"
 
 /** Base class for 3D object configs. */
 export interface Object3DConfig {
@@ -91,11 +91,9 @@ export interface BoxBufferConfig extends GeometryConfig {
   type :"boxBuffer"
 }
 
-/** Configuration for heightfield buffer geometry. */
-export interface HeightfieldBufferConfig extends GeometryConfig {
-  type :"heightfieldBuffer"
-  data :Float32Array[]
-  elementSize :number
+/** Configuration for plane buffer geometry. */
+export interface PlaneBufferConfig extends GeometryConfig {
+  type :"planeBuffer"
 }
 
 /** Base class for material configs. */
@@ -423,9 +421,8 @@ function createGeometry (geometryConfig :GeometryConfig) {
       return new SphereBufferGeometry()
     case "boxBuffer":
       return new BoxBufferGeometry()
-    case "heightfieldBuffer":
-      const hfConfig = geometryConfig as HeightfieldBufferConfig
-      return createHeightfieldGeometry(hfConfig.data, hfConfig.elementSize, 5)
+    case "planeBuffer":
+      return new PlaneBufferGeometry()
     default:
       throw new Error("Unknown geometry type: " + geometryConfig.type)
   }

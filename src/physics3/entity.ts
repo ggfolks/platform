@@ -1,4 +1,4 @@
-import {Body, Box, Heightfield, Sphere, Vec3, World} from "cannon"
+import {Body, Box, Plane, Sphere, Vec3, World} from "cannon"
 
 import {Clock} from "../core/clock"
 import {Component, Domain, EntityConfig, ID, Matcher, System} from "../entity/entity"
@@ -25,11 +25,9 @@ export interface BoxConfig {
   type :"box"
 }
 
-/** A configuration for a heightfield shape. */
-export interface HeightfieldConfig {
-  type :"heightfield"
-  data :Float32Array[]
-  elementSize :number
+/** A configuration for a plane shape. */
+export interface PlaneConfig {
+  type :"plane"
 }
 
 /** Manages a group of physical bodies. Users of this system must call [[PhysicsSystem.update]] on
@@ -81,10 +79,8 @@ function createShape (config :ShapeConfig) {
       return new Sphere(1)
     case "box":
       return new Box(new Vec3(0.5, 0.5, 0.5))
-    case "heightfield":
-      const hfConfig = config as HeightfieldConfig
-      // @ts-ignore data is number[][], not number[]
-      return new Heightfield(hfConfig.data, {elementSize: hfConfig.elementSize})
+    case "plane":
+      return new Plane()
     default:
       throw new Error("Unknown shape type: " + config.type)
   }
