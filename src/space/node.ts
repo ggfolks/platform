@@ -152,6 +152,38 @@ class Vector3MultiplyScalar extends Node {
   }
 }
 
+/** Computes the signed angle between two vectors about an axis. */
+export interface Vector3AngleBetweenConfig extends NodeConfig {
+  type :"Vector3.angleBetween"
+  axis? :Vector3
+  v1 :InputEdge<Vector3>
+  v2 :InputEdge<Vector3>
+  output :OutputEdge<number>
+}
+
+class Vector3AngleBetween extends Node {
+
+  constructor (graph :Graph, id :string, readonly config :Vector3AngleBetweenConfig) {
+    super(graph, id, config)
+  }
+
+  protected _createOutput () {
+    const axis = this.config.axis || new Vector3(0, 1, 0)
+    const first = new Vector3()
+    const second = new Vector3()
+    return Value
+      .join2(
+        this.graph.getValue(this.config.v1, new Vector3()),
+        this.graph.getValue(this.config.v2, new Vector3()),
+      )
+      .map(([v1, v2]) => {
+        first.copy(v1).projectOnPlane(axis).normalize()
+        second.copy(v2).projectOnPlane(axis).normalize()
+        return Math.acos(first.dot(second)) * (first.cross(second).dot(axis) < 0 ? -1 : 1)
+      })
+  }
+}
+
 /** Produces a unit vector in a random direction. */
 export interface RandomDirectionConfig extends NodeConfig {
   type :"randomDirection"
@@ -367,6 +399,7 @@ export function registerSpaceNodes (registry :NodeTypeRegistry) {
   registry.registerNodeType("Vector3.applyEuler", Vector3ApplyEuler)
   registry.registerNodeType("Vector3.projectOnPlane", Vector3ProjectOnPlane)
   registry.registerNodeType("Vector3.multiplyScalar", Vector3MultiplyScalar)
+  registry.registerNodeType("Vector3.angleBetween", Vector3AngleBetween)
   registry.registerNodeType("randomDirection", RandomDirection)
   registry.registerNodeType("rotate", Rotate)
   registry.registerNodeType("translate", Translate)
