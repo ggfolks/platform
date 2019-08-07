@@ -155,6 +155,26 @@ class Accumulate extends Node {
   }
 }
 
+/** Outputs the sign of the input (-1, 0, or +1). */
+export interface SignConfig extends NodeConfig {
+  type :"sign"
+  input: InputEdge<number>
+  output :OutputEdge<number>
+}
+
+class Sign extends Node {
+
+  constructor (graph :Graph, id :string, readonly config :SignConfig) {
+    super(graph, id, config)
+  }
+
+  protected _createOutput () {
+    return this.graph.getValue(this.config.input, 0).map(
+      value => value < 0 ? -1 : value > 0 ? 1 : 0,
+    )
+  }
+}
+
 /** Registers the nodes in this module with the supplied registry. */
 export function registerMathNodes (registry :NodeTypeRegistry) {
   registry.registerNodeType("constant", Constant)
@@ -162,4 +182,5 @@ export function registerMathNodes (registry :NodeTypeRegistry) {
   registry.registerNodeType("multiply", Multiply)
   registry.registerNodeType("random", Random)
   registry.registerNodeType("accumulate", Accumulate)
+  registry.registerNodeType("sign", Sign)
 }

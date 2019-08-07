@@ -1,4 +1,5 @@
-import {Euler, Math as ThreeMath, Quaternion, Vector3} from "three"
+import {Euler, Math as ThreeMath, Matrix4, Quaternion, Vector3} from "three"
+
 import {Value} from "../core/react"
 import {Graph} from "../graph/graph"
 import {InputEdge, Node, NodeConfig, NodeTypeRegistry, OutputEdge} from "../graph/node"
@@ -234,6 +235,37 @@ class Translate extends EntityComponentNode<TransformComponent> {
   }
 }
 
+/** Reads an entity's transform. */
+export interface ReadTransformConfig extends EntityComponentConfig {
+  type :"readTransform"
+  position :OutputEdge<Vector3>
+  quaternion :OutputEdge<Quaternion>
+  scale :OutputEdge<Vector3>
+}
+
+class ReadTransform extends EntityComponentNode<TransformComponent> {
+
+  constructor (graph :Graph, id :string, readonly config :ReadTransformConfig) {
+    super(graph, id, config)
+  }
+
+  protected _createOutput (name :string | undefined, defaultValue :any) {
+    let getter :() => any
+    switch (name) {
+      case "quaternion":
+        getter = () => this._component.readQuaternion(this._entityId, new Quaternion())
+        break;
+      case "scale":
+        getter = () => this._component.readScale(this._entityId, new Vector3())
+        break;
+      default:
+        getter = () => this._component.readPosition(this._entityId, new Vector3())
+        break;
+    }
+    return this.graph.clock.fold(getter(), getter)
+  }
+}
+
 /** Sets an entity's position. */
 export interface UpdatePositionConfig extends EntityComponentConfig {
   type :"updatePosition"
@@ -298,6 +330,35 @@ class UpdateScale extends EntityComponentNode<TransformComponent> {
   }
 }
 
+/** Transforms a point from world space to the local space of the entity. */
+export interface WorldToLocalConfig extends EntityComponentConfig {
+  type :"updateScale"
+  input :InputEdge<Vector3>
+  output :OutputEdge<Vector3>
+}
+
+class WorldToLocal extends EntityComponentNode<TransformComponent> {
+
+  constructor (graph :Graph, id :string, readonly config :WorldToLocalConfig) {
+    super(graph, id, config)
+  }
+
+  protected _createOutput () {
+    const position = new Vector3()
+    const quaternion = new Quaternion()
+    const scale = new Vector3()
+    const matrix = new Matrix4()
+    const inverse = new Matrix4()
+    return this.graph.getValue(this.config.input, new Vector3()).map(point => {
+      this._component.readPosition(this._entityId, position)
+      this._component.readQuaternion(this._entityId, quaternion)
+      this._component.readScale(this._entityId, scale)
+      inverse.getInverse(matrix.compose(position, quaternion, scale))
+      return point.clone().applyMatrix4(inverse)
+    })
+  }
+}
+
 /** Registers the nodes in this module with the supplied registry. */
 export function registerSpaceNodes (registry :NodeTypeRegistry) {
   registry.registerNodeType("Euler", EulerNode)
@@ -309,7 +370,9 @@ export function registerSpaceNodes (registry :NodeTypeRegistry) {
   registry.registerNodeType("randomDirection", RandomDirection)
   registry.registerNodeType("rotate", Rotate)
   registry.registerNodeType("translate", Translate)
+  registry.registerNodeType("readTransform", ReadTransform)
   registry.registerNodeType("updatePosition", UpdatePosition)
   registry.registerNodeType("updateRotation", UpdateRotation)
   registry.registerNodeType("updateScale", UpdateScale)
+  registry.registerNodeType("worldToLocal", WorldToLocal)
 }
