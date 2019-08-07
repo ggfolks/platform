@@ -177,9 +177,9 @@ class Vector3AngleBetween extends Node {
         this.graph.getValue(this.config.v2, new Vector3()),
       )
       .map(([v1, v2]) => {
-        first.copy(v1).projectOnPlane(axis).normalize()
-        second.copy(v2).projectOnPlane(axis).normalize()
-        return Math.acos(first.dot(second)) * (first.cross(second).dot(axis) < 0 ? -1 : 1)
+        first.copy(v1).projectOnPlane(axis)
+        second.copy(v2).projectOnPlane(axis)
+        return first.angleTo(second) * (first.cross(second).dot(axis) < 0 ? -1 : 1)
       })
   }
 }
