@@ -1,11 +1,12 @@
 import {Timestamp} from "../core/util"
-import {Encoder, Decoder, ValueType} from "./codec"
+import {Encoder, Decoder, ValueType, setTextCodec} from "./codec"
 
 import {TextEncoder, TextDecoder} from "util"
+setTextCodec(() => new TextEncoder() as any, () => new TextDecoder() as any)
 
 test("codec", () => {
 
-  const enc = new Encoder(new TextEncoder() as any)
+  const enc = new Encoder()
   const vts :[any, ValueType][] = [
     [true, "boolean"],
     [false, "boolean"],
@@ -31,7 +32,7 @@ test("codec", () => {
 
   const msg = enc.finish()
 
-  const dec = new Decoder(msg.buffer, new TextDecoder() as any)
+  const dec = new Decoder(msg)
   for (const [v,t] of vts) {
     const rv = dec.getValue(t)
     // console.log(`Read ${rv} (wrote ${v})`)

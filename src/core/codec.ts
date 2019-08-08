@@ -123,8 +123,8 @@ const getFloat32 = (dec :Decoder) => dec.data.getFloat32(dec.prepGet(4))
 const getFloat64 = (dec :Decoder) => dec.data.getFloat64(dec.prepGet(8))
 
 function getString (dec :Decoder) {
-  const bytes = getSize16(dec)
-  return dec.decoder.decode(new Uint8Array(dec.buffer, dec.prepGet(bytes), bytes))
+  const bytes = getSize16(dec), offset = dec.prepGet(bytes)
+  return dec.decoder.decode(dec.source.subarray(offset, offset+bytes))
 }
 
 function getDataArray (dec :Decoder) {
@@ -242,16 +242,22 @@ const valueCodecs :{[key :string]: [DataEncoder<any>, DataDecoder<any>]} = {
   record   : [addRecord,  getRecord]
 }
 
+// hacky crap to work around Jest weirdness
+let mkTextEncoder = () => new TextEncoder()
+let mkTextDecoder = () => new TextDecoder()
+export function setTextCodec (mkEnc :() => TextEncoder, mkDec :() => TextDecoder) {
+  mkTextEncoder = mkEnc
+  mkTextDecoder = mkDec
+}
+
 const DefaultEncoderSize = 256
 const EncoderExpandSize = 256
 
 export class Encoder {
+  readonly encoder = mkTextEncoder()
   buffer = new ArrayBuffer(DefaultEncoderSize)
   data = new DataView(this.buffer)
   pos = 0
-
-  // we have to accept an optional TextEncoder to work around Jest limitations, sigh
-  constructor (readonly encoder = new TextEncoder()) {}
 
   prepAdd (size :number) :DataView {
     const npos = this.pos + size, capacity = this.buffer.byteLength
@@ -274,7 +280,7 @@ export class Encoder {
     for (const elem of data) addValue(this, elem, etype)
   }
 
-  addSet (set :ReadonlySet<any>, etype :ValueType) {
+  addSet (set :ReadonlySet<any>, etype :KeyType) {
     addSize32(this, set.size)
     for (const elem of set) addValue(this, elem, etype)
   }
@@ -289,18 +295,22 @@ export class Encoder {
 
   finish () :Uint8Array {
     const encoded = new Uint8Array(this.buffer, 0, this.pos)
-    this.pos = 0
+    this.reset()
     return encoded
+  }
+
+  reset () {
+    this.pos = 0
   }
 }
 
 export class Decoder {
+  readonly decoder = mkTextDecoder()
   readonly data :DataView
   pos = 0
 
-  // we have to accept an optional TextDecoder to work around Jest limitations, sigh
-  constructor (readonly buffer :ArrayBuffer, readonly decoder = new TextDecoder()) {
-    this.data = new DataView(buffer)
+  constructor (readonly source :Uint8Array) {
+    this.data = new DataView(source.buffer, source.byteOffset, source.byteLength)
   }
 
   prepGet (size :number) {
@@ -317,15 +327,36 @@ export class Decoder {
     return data
   }
 
-  getSet<E> (etype :ValueType, into :Set<E>) :Set<E> {
+  getSet<E> (etype :KeyType, into :Set<E>) :Set<E> {
     const size = getSize32(this)
     for (let ii = 0; ii < size; ii += 1) into.add(getValue(this, etype))
+    return into
+  }
+
+  syncSet<E> (etype :KeyType, into :Set<E>) {
+    const size = getSize32(this)
+    const tmp = new Set<E>()
+    for (let ii = 0; ii < size; ii += 1) tmp.add(getValue(this, etype))
+    for (const elem of into) if (!tmp.has(elem)) into.delete(elem)
+    for (const elem of tmp) into.add(elem)
     return into
   }
 
   getMap<K,V> (ktype :KeyType, vtype :ValueType, into :Map<K,V>) :Map<K,V> {
     const size = getSize32(this)
     for (let ii = 0; ii < size; ii += 1) into.set(getValue(this, ktype), getValue(this, vtype))
+    return into
+  }
+
+  syncMap<K,V> (ktype :KeyType, vtype :ValueType, into :Map<K,V>) {
+    const size = getSize32(this)
+    const keys = [], vals :V[] = []
+    for (let ii = 0; ii < size; ii += 1) {
+      keys.push(getValue(this, ktype))
+      vals.push(getValue(this, vtype))
+    }
+    for (const key of into.keys()) if (!keys.includes(key)) into.delete(key)
+    for (let ii = 0; ii < size; ii += 1) into.set(keys[ii], vals[ii])
     return into
   }
 }
