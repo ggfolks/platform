@@ -1,11 +1,13 @@
-import {AnimationMixer, Vector3} from "three"
+import {AnimationMixer, Intersection, Object3D, Raycaster, Vector3} from "three"
 
-import {Subject} from "../core/react"
+import {Subject, Value} from "../core/react"
+import {Noop} from "../core/util"
 import {Graph} from "../graph/graph"
 import {InputEdge, NodeTypeRegistry, OutputEdge} from "../graph/node"
 import {Component} from "../entity/entity"
 import {EntityComponentConfig, EntityComponentNode} from "../entity/node"
 import {PointerConfig} from "../input/node"
+import {CoordinateFrame} from "../space/node"
 import {HoverMap, loadGLTFAnimationClip} from "./entity"
 
 /** Emits information about a single hover point. */
@@ -85,8 +87,82 @@ class AnimationActionNode extends EntityComponentNode<Component<AnimationMixer>>
   }
 }
 
+/** Casts a ray into the scene. */
+export interface RaycasterConfig extends EntityComponentConfig {
+  type :"Raycaster"
+  frame? :CoordinateFrame
+  origin :InputEdge<Vector3>
+  direction :InputEdge<Vector3>
+  distance :OutputEdge<number>
+}
+
+const NoIntersection = {distance: Infinity} as Intersection
+
+class RaycasterNode extends EntityComponentNode<Component<Object3D>> {
+
+  private _intersection? :Value<Intersection>
+  private _origin? :Value<Vector3>
+  private _direction? :Value<Vector3>
+
+  constructor (graph :Graph, id :string, readonly config :RaycasterConfig) {
+    super(graph, id, config)
+  }
+
+  connect () {
+    // subscribe to updates so that we can poll the current value
+    this._disposer.add(this._getOrigin().onValue(Noop))
+    this._disposer.add(this._getDirection().onValue(Noop))
+  }
+
+  protected _createOutput () {
+    return this._getIntersection().map(intersection => intersection.distance)
+  }
+
+  protected _getIntersection () {
+    if (!this._intersection) {
+      const raycaster = new Raycaster()
+      const target :Intersection[] = []
+      this._intersection = this.graph.clock.fold(NoIntersection, () => {
+        target.length = 0
+        const object = this._component.read(this._entityId)
+        let ancestor = object
+        while (ancestor.parent) ancestor = ancestor.parent
+        raycaster.set(this._getOrigin().current, this._getDirection().current)
+        if (this.config.frame !== "world") raycaster.ray.applyMatrix4(object.matrixWorld)
+        raycaster.intersectObject(ancestor, true, target)
+        intersectionLoop: for (const intersection of target) {
+          ancestor = intersection.object
+          while (ancestor.parent) {
+            // no intersecting with the firing object
+            if (ancestor === object) continue intersectionLoop
+            ancestor = ancestor.parent
+          }
+          return intersection
+        }
+        return NoIntersection
+      })
+    }
+    return this._intersection
+  }
+
+  protected _getOrigin () {
+    if (!this._origin) {
+      this._origin = this.graph.getValue(this.config.origin, new Vector3())
+    }
+    return this._origin
+  }
+
+  protected _getDirection () {
+    if (!this._direction) {
+      this._direction = this.graph.getValue(this.config.direction, new Vector3(0, 0, 1))
+    }
+    return this._direction
+  }
+}
+
 /** Registers the nodes in this module with the supplied registry. */
 export function registerScene3Nodes (registry :NodeTypeRegistry) {
   registry.registerNodeType("hover", Hover)
   registry.registerNodeType("AnimationAction", AnimationActionNode)
+  registry.registerNodeType("Raycaster", RaycasterNode)
 }
