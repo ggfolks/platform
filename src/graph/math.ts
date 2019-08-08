@@ -190,9 +190,29 @@ class Min extends Operator<number> {
   protected get _defaultInputValue () :number {
     return 0
   }
-  
+
   protected _apply (values :number[]) :number {
     return Math.min(...values)
+  }
+}
+
+/** Outputs the maximum of the inputs. */
+export interface MaxConfig extends OperatorConfig<number> {
+  type :"max"
+}
+
+class Max extends Operator<number> {
+
+  constructor (graph :Graph, id :string, readonly config :MaxConfig) {
+    super(graph, id, config)
+  }
+
+  protected get _defaultInputValue () :number {
+    return 0
+  }
+
+  protected _apply (values :number[]) :number {
+    return Math.max(...values)
   }
 }
 
@@ -206,4 +226,5 @@ export function registerMathNodes (registry :NodeTypeRegistry) {
   registry.registerNodeType("sign", Sign)
   registry.registerNodeType("abs", Abs)
   registry.registerNodeType("min", Min)
+  registry.registerNodeType("max", Max)
 }
