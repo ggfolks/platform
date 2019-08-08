@@ -17,16 +17,16 @@ export type Eq<T> = (a:T, b:T) => boolean
 //
 // Listener plumbing
 
+function removeListener<T> (listeners :T[], listener :T) {
+  let ii = listeners.indexOf(listener)
+  if (ii >= 0) listeners.splice(ii, 1)
+}
+
 /** Adds `listener` to `listeners`.
   * @return a `Remover` thunk that can be used to remove `listener` from `listeners`. */
 export function addListener<T> (listeners :T[], listener :T) :Remover {
   listeners.push(listener)
-  return () => {
-    let ii = listeners.indexOf(listener)
-    if (ii >= 0) {
-      listeners.splice(ii, 1)
-    }
-  }
+  return () => removeListener(listeners, listener)
 }
 
 /** An error that encapsulates multiple errors. Thrown when dispatching to reactive callbacks
@@ -37,16 +37,25 @@ export class MultiError extends Error {
   }
 }
 
-/** A callback "function" that consumes a value from a reactive source. Return value may be
-  * anything, but is ignored. */
+/** A sentinel value that can be returned by listener functions to indicate that their registration
+  * should be removed. */
+export const Remove = {}
+
+/** A callback "function" that consumes a value from a reactive source. If the function returns
+  * `Remove` it will be removed from the reactive source, any other return value will be ignored. */
 export type ValueFn<T> = (value :T) => any
 
-/** Dispatches `value` to `listeners`. */
-export function dispatchValue<T> (listeners :ValueFn<T>[], value :T) {
-  let errors
+/** Dispatches `value` to `listeners`.
+ * @return true if any listeners were removed. */
+export function dispatchValue<T> (listeners :ValueFn<T>[], value :T) :boolean {
+  let removed = false, errors
+  // TODO: revamp to avoid duping array
   for (let listener of listeners.slice()) {
     try {
-      listener(value)
+      if (listener(value) === Remove) {
+        removeListener(listeners, listener)
+        removed = true
+      }
     } catch (error) {
       if (!errors) errors = []
       errors.push(error)
@@ -56,18 +65,25 @@ export function dispatchValue<T> (listeners :ValueFn<T>[], value :T) {
     if (errors.length === 1) throw errors[0]
     else throw new MultiError(errors)
   }
+  return removed
 }
 
 /** A callback "function" that consumes a change in value, from a reactive source. Return value may
   * be anything, but is ignored. */
 export type ChangeFn<T> = (value :T, oldValue :T) => any
 
-/** Dispatches the change from `oldValue` to `value` to `listeners`. */
-export function dispatchChange<T> (listeners :ChangeFn<T>[], value :T, oldValue :T) {
-  let errors
+/**
+ * Dispatches the change from `oldValue` to `value` to `listeners`.
+ * @return true if any listeners were removed. */
+export function dispatchChange<T> (listeners :ChangeFn<T>[], value :T, oldValue :T) :boolean {
+  let removed = false, errors
+  // TODO: revamp to avoid duping array
   for (let listener of listeners.slice()) {
     try {
-      listener(value, oldValue)
+      if (listener(value, oldValue) === Remove) {
+        removeListener(listeners, listener)
+        removed = true
+      }
     } catch (error) {
       if (!errors) {
         errors = []
@@ -82,6 +98,7 @@ export function dispatchChange<T> (listeners :ChangeFn<T>[], value :T, oldValue 
       throw new MultiError(errors)
     }
   }
+  return removed
 }
 
 //
@@ -99,15 +116,17 @@ export abstract class Source<T> {
   /** Registers `fn` to be called when `source` contains or emits non-`undefined` values.
     * @return a remover thunk (invoke with no args to unregister `fn`). */
   static whenDefined<T> (source :Source<T|undefined>, fn :ValueFn<T>) :Remover {
-    return source.onValue(v => { if (v !== undefined) fn(v) })
+    return source.onValue(v => (v === undefined) ? undefined : fn(v))
   }
 
   /** Registers `fn` to be called the first time `source` contains or emits a non-`undefined` value.
     * `fn` will be called zero or one times.
     * @return a remover thunk (invoke with no args to unregister `fn`). */
   static onceDefined<T> (source :Source<T|undefined>, fn :ValueFn<T>) :Remover {
-    let remover :Remover
-    return (remover = source.onValue(v => { if (v !== undefined) { remover() ; fn(v) } }))
+    return source.onValue(v => {
+      if (v === undefined) return undefined
+      else { fn(v) ; return Remove }
+    })
   }
 
   /** Registers `fn` to be called with values emitted by this source. If the source has a current
@@ -123,30 +142,30 @@ export abstract class Source<T> {
     * called zero or one times.
     * @return a remover thunk (invoke with no args to unregister `fn`). */
   once (fn :ValueFn<T>) :Remover {
-    let remover :Remover
-    return (remover = this.onValue(v => { remover() ; fn(v) }))
+    return this.onValue(v => { fn(v) ; return Remove })
   }
 
   /** Registers `fn` to be called the next time this source emits a value. If source contains a
     * current value `fn` will _not_ be called with the current value.
     * @return a remover thunk (invoke with no args to unregister `fn`). */
   next (fn :ValueFn<T>) :Remover {
-    let remover :Remover
-    return (remover = this.onEmit(v => { remover() ; fn(v) }))
+    return this.onEmit(v => { fn(v) ; return Remove })
   }
 
   /** Registers `fn` to be called when this source contains or emits values which satisfy `pred`.
     * @return a remover thunk (invoke with no args to unregister `fn`). */
   when (pred :Pred<T>, fn :ValueFn<T>) :Remover {
-    return this.onValue(v => { if (pred(v)) fn(v) })
+    return this.onValue(v => pred(v) ? fn(v) : undefined)
   }
 
   /** Registers `fn` to be called the first time this source contains or emits a value which
     * satisfies `pred`. `fn` will be called zero or one times.
     * @return a remover thunk (invoke with no args to unregister `fn`). */
   whenOnce (pred :Pred<T>, fn :ValueFn<T>) :Remover {
-    let remover :Remover
-    return (remover = this.onValue(v => { if (pred(v)) { remover() ; fn(v) } }))
+    return this.onValue(v => {
+      if (pred(v)) { fn(v) ; return Remove }
+      else return undefined
+    })
   }
 
   /** Returns a source which transforms the values of this source via `fn`. Whenever `this` source
@@ -187,18 +206,20 @@ export class Stream<T> extends Source<T> {
   static deriveStream<T> (connect :(dispatch :DispatchFn<T>) => Remover) :Stream<T> {
     const listeners :ValueFn<T>[] = []
     let disconnect :Remover = NoopRemover
-    const dispatch = (value :T) => { dispatchValue(listeners, value) }
+    function checkEmpty () {
+      if (listeners.length == 0) {
+        disconnect()
+        disconnect = NoopRemover
+      }
+    }
+    function dispatch (value :T) {
+      if (dispatchValue(listeners, value)) checkEmpty()
+    }
     return new Stream(listener => {
       const needConnect = listeners.length === 0
       const remover = addListener(listeners, listener)
       if (needConnect) disconnect = connect(dispatch)
-      return () => {
-        remover()
-        if (listeners.length == 0) {
-          disconnect()
-          disconnect = NoopRemover
-        }
-      }
+      return () => { remover() ; checkEmpty() }
     })
   }
 
@@ -263,9 +284,7 @@ export class Emitter<T> extends Stream<T> {
   constructor () { super(lner => addListener(this._listeners, lner)) }
 
   /** Emits `value` on this stream. Any current listeners will be notified of the value. */
-  emit (value :T) {
-    dispatchValue(this._listeners, value)
-  }
+  emit (value :T) { dispatchValue(this._listeners, value) }
 
   // TODO: should we provide onWake/onSleep callbacks?
 }
@@ -309,10 +328,18 @@ export class Subject<T> extends Source<T> {
     let disconnect = NoopRemover
     let occupied = false
     let latest :T // initialized when connected; only used thereafter
-    const dispatch = (value :T) => {
+    function checkEmpty () {
+      if (listeners.length == 0) {
+        disconnect()
+        disconnect = NoopRemover
+        occupied = false
+        latest = undefined as any // don't retain a reference to latest
+      }
+    }
+    function dispatch (value :T) {
       occupied = true
       latest = value
-      dispatchValue(listeners, value)
+      if (dispatchValue(listeners, value)) checkEmpty()
     }
     function onValue (fn :ValueFn<T>, wantValue :boolean) :Remover {
       const needConnect = listeners.length === 0
@@ -329,15 +356,7 @@ export class Subject<T> extends Source<T> {
         remover = addListener(listeners, fn)
         if (wantValue && occupied) fn(latest)
       }
-      return () => {
-        remover()
-        if (listeners.length == 0) {
-          disconnect()
-          disconnect = NoopRemover
-          occupied = false
-          latest = undefined as any // don't retain a reference to latest
-        }
-      }
+      return () => { remover() ; checkEmpty() }
     }
     return new Subject(onValue)
   }
@@ -470,18 +489,20 @@ export class Value<T> extends Source<T> {
                          current :() => T) :Value<T> {
     const listeners :ValueFn<T>[] = []
     let disconnect = NoopRemover
-    const dispatch = (value :T, ovalue :T) => dispatchChange(listeners, value, ovalue)
+    function checkEmpty () {
+      if (listeners.length === 0) {
+        disconnect()
+        disconnect = NoopRemover
+      }
+    }
+    function dispatch (value :T, ovalue :T) {
+      if (dispatchChange(listeners, value, ovalue)) checkEmpty()
+    }
     return new Value(eq, listener => {
       const needConnect = listeners.length === 0
       const remover = addListener(listeners, listener)
       if (needConnect) disconnect = connect(dispatch)
-      return () => {
-        remover()
-        if (listeners.length === 0) {
-          disconnect()
-          disconnect = NoopRemover
-        }
-      }
+      return () => { remover() ; checkEmpty() }
     }, current)
   }
 
@@ -536,9 +557,8 @@ export class Value<T> extends Source<T> {
     * the new value whenever this subject changes.
     * @return a remover thunk (invoke with no args to unregister `fn`). */
   onValue (fn :ValueFn<T>) :Remover {
-    const remover = this._onChange(fn)
-    fn(this.current)
-    return remover
+    if (fn(this.current) === Remove) return NoopRemover
+    return this._onChange(fn)
   }
 
   /** Registers `fn` to be called with old and new values whenever this subject changes.
@@ -718,18 +738,20 @@ export class Mutable<T> extends Value<T> {
                            current :() => T, update :(t:T) => void, eq :Eq<T>) :Mutable<T> {
     const listeners :ValueFn<T>[] = []
     let disconnect = NoopRemover
-    const dispatch = (value :T, ovalue :T) => dispatchChange(listeners, value, ovalue)
+    function checkEmpty () {
+      if (listeners.length === 0) {
+        disconnect()
+        disconnect = NoopRemover
+      }
+    }
+    function dispatch (value :T, ovalue :T) {
+      if (dispatchChange(listeners, value, ovalue)) checkEmpty()
+    }
     return new Mutable(eq, lner => {
       const needConnect = listeners.length === 0
       const remover = addListener(listeners, lner)
       if (needConnect) disconnect = connect(dispatch)
-      return () => {
-        remover()
-        if (listeners.length === 0) {
-          disconnect()
-          disconnect = NoopRemover
-        }
-      }
+      return () => { remover() ; checkEmpty() }
     }, current, update)
   }
 

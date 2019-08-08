@@ -142,6 +142,15 @@ test("basic subject", () => {
   testSubject(em.toSubject(), v => em.emit(v))
 })
 
+// regression test for bug where once() on constant subject choked
+test("constant once", () => {
+  const val = Value.constant("foo")
+  val.once(v => expect(v).toEqual("foo"))
+
+  const sub = Subject.constant("foo")
+  sub.once(v => expect(v).toEqual("foo"))
+})
+
 //
 // Reactive value tests
 
