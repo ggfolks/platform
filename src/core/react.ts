@@ -259,7 +259,7 @@ export class Emitter<T> extends Stream<T> {
 
   /** Checks whether the emitter has any listeners. */
   get active () { return this._listeners.length > 0 }
-  
+
   constructor () { super(lner => addListener(this._listeners, lner)) }
 
   /** Emits `value` on this stream. Any current listeners will be notified of the value. */
@@ -410,7 +410,19 @@ export class Subject<T> extends Source<T> {
     })
   }
 
-  // TODO: switchMap &c?
+  /** Transforms values of this subject into new mapped subjects and observes (and forwards values
+    * from) the most recently obtained mapped subject. */
+  switchMap<R> (fn :(v:T) => Subject<R>) :Subject<R> {
+    const {_connect} = this
+    return Subject.deriveSubject<R>(disp => {
+      let disconnect = NoopRemover
+      const onSwitch = (v:T) => {
+        disconnect()
+        disconnect = fn(v).onValue(disp)
+      }
+      return _connect(onSwitch, true)
+    })
+  }
 }
 
 //
@@ -649,6 +661,17 @@ export class Value<T> extends Source<T> {
         }
       })
     })
+  }
+
+  once (fn :ValueFn<T>) :Remover {
+    fn(this.current)
+    return NoopRemover
+  }
+
+  whenOnce (pred :Pred<T>, fn :ValueFn<T>) :Remover {
+    if (!pred(this.current)) return super.whenOnce(pred, fn)
+    fn(this.current)
+    return NoopRemover
   }
 
   toString () { return `Value(${this.current})` }
