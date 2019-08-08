@@ -80,6 +80,37 @@ export abstract class Node implements Disposable {
   }
 }
 
+/** Base config for operators with N inputs and one output. */
+export interface OperatorConfig<T> extends NodeConfig {
+  inputs :InputEdges<T>
+  output :OutputEdge<T>
+}
+
+export class Operator<T> extends Node {
+
+  constructor (graph :Graph, id :string, readonly config :OperatorConfig<T>) {
+    super(graph, id, config)
+  }
+
+  protected _createOutput () {
+    return this.graph
+      .getValues(this.config.inputs, this._defaultInputValue)
+      .map(values => this._apply(values))
+  }
+
+  protected _maybeOverrideDefaultValue (name :string | undefined, defaultValue :any) {
+    return this._defaultInputValue
+  }
+
+  protected get _defaultInputValue () :T {
+    throw new Error("Not implemented")
+  }
+
+  protected _apply (values :T[]) :T {
+    throw new Error("Not implemented")
+  }
+}
+
 interface NodeConstructor<T extends NodeConfig> {
   new (graph :Graph, id :string, config :T): Node
 }

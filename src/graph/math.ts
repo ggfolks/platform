@@ -1,6 +1,14 @@
 import {Value} from "../core/react"
 import {Graph} from "./graph"
-import {InputEdge, InputEdges, Node, NodeConfig, NodeTypeRegistry, OutputEdge} from "./node"
+import {
+  InputEdge,
+  Node,
+  NodeConfig,
+  NodeTypeRegistry,
+  OperatorConfig,
+  Operator,
+  OutputEdge,
+} from "./node"
 
 /** Outputs a single constant. */
 export interface ConstantConfig extends NodeConfig {
@@ -20,46 +28,19 @@ class Constant extends Node {
   }
 }
 
-/** Base config for operators with N inputs and one output. */
-interface OperatorConfig extends NodeConfig {
-  inputs :InputEdges<number>
-  output :OutputEdge<number>
+/** Subtract/negate operator. */
+export interface SubtractConfig extends OperatorConfig<number> {
+  type :"subtract"
 }
 
-class Operator extends Node {
+class Subtract extends Operator<number> {
 
-  constructor (graph :Graph, id :string, readonly config :OperatorConfig) {
+  constructor (graph :Graph, id :string, readonly config :SubtractConfig) {
     super(graph, id, config)
-  }
-
-  protected _createOutput () {
-    return this.graph
-      .getValues(this.config.inputs, this._defaultInputValue)
-      .map(values => this._apply(values))
-  }
-
-  protected _maybeOverrideDefaultValue (name :string | undefined, defaultValue :any) {
-    return this._defaultInputValue
   }
 
   protected get _defaultInputValue () :number {
     return 0
-  }
-
-  protected _apply (values :number[]) :number {
-    throw new Error("Not implemented")
-  }
-}
-
-/** Subtract/negate operator. */
-export interface SubtractConfig extends OperatorConfig {
-  type :"subtract"
-}
-
-class Subtract extends Operator {
-
-  constructor (graph :Graph, id :string, readonly config :SubtractConfig) {
-    super(graph, id, config)
   }
 
   protected _apply (values :number[]) :number {
@@ -78,11 +59,11 @@ class Subtract extends Operator {
 }
 
 /** Multiplication operator. */
-export interface MultiplyConfig extends OperatorConfig {
+export interface MultiplyConfig extends OperatorConfig<number> {
   type :"multiply"
 }
 
-class Multiply extends Operator {
+class Multiply extends Operator<number> {
 
   constructor (graph :Graph, id :string, readonly config :MultiplyConfig) {
     super(graph, id, config)
@@ -196,16 +177,20 @@ class Abs extends Node {
 }
 
 /** Outputs the minimum of the inputs. */
-export interface MinConfig extends OperatorConfig {
+export interface MinConfig extends OperatorConfig<number> {
   type :"min"
 }
 
-class Min extends Operator {
+class Min extends Operator<number> {
 
   constructor (graph :Graph, id :string, readonly config :MinConfig) {
     super(graph, id, config)
   }
 
+  protected get _defaultInputValue () :number {
+    return 0
+  }
+  
   protected _apply (values :number[]) :number {
     return Math.min(...values)
   }
