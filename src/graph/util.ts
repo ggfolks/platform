@@ -1,7 +1,7 @@
 import {Clock} from "../core/clock"
 import {refEquals} from "../core/data"
 import {Mutable, Value} from "../core/react"
-import {Graph} from "./graph"
+import {Graph, GraphConfig} from "./graph"
 import {InputEdge, Node, NodeConfig, NodeTypeRegistry, OutputEdge} from "./node"
 
 /** Switches to true after a number of seconds have passed. */
@@ -106,10 +106,30 @@ class ClockNode extends Node {
   }
 }
 
+/** An encapsulated graph. */
+export interface SubgraphConfig extends NodeConfig {
+  type :"subgraph"
+  graph :GraphConfig
+}
+
+class Subgraph extends Node {
+
+  constructor (graph :Graph, id :string, readonly config :SubgraphConfig) {
+    super(graph, id, config)
+  }
+
+  connect () {
+    const graph = new Graph(this.graph.ctx, this.config.graph)
+    this._disposer.add(graph)
+    this._disposer.add(this.graph.clock.onValue(clock => graph.update(clock)))
+  }
+}
+
 /** Registers the nodes in this module with the supplied registry. */
 export function registerUtilNodes (registry :NodeTypeRegistry) {
   registry.registerNodeType("timeout", TimeoutNode)
   registry.registerNodeType("interval", IntervalNode)
   registry.registerNodeType("latch", Latch)
   registry.registerNodeType("clock", ClockNode)
+  registry.registerNodeType("subgraph", Subgraph)
 }

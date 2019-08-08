@@ -64,7 +64,7 @@ class AnimationActionNode extends EntityComponentNode<Component<AnimationMixer>>
   }
 
   connect () {
-    this._removers.push(
+    this._disposer.add(
       Subject
         .join3(
           this._component.getValue(this._entityId),

@@ -1,6 +1,6 @@
 import {refEquals} from "../core/data"
 import {Value} from "../core/react"
-import {Remover} from "../core/util"
+import {Disposer} from "../core/util"
 import {Disposable} from "../core/util"
 import {Graph} from "./graph"
 
@@ -32,7 +32,7 @@ export interface NodeContext {
 
 /** Parent class for all nodes. */
 export abstract class Node implements Disposable {
-  protected _removers :Remover[] = []
+  protected _disposer = new Disposer()
   private _outputs :Map<string | undefined, Value<any>> = new Map()
 
   constructor (readonly graph :Graph, readonly id :string, readonly config :NodeConfig) {}
@@ -64,9 +64,7 @@ export abstract class Node implements Disposable {
   connect () {}
 
   dispose () {
-    for (const remover of this._removers) {
-      remover()
-    }
+    this._disposer.dispose()
   }
 
   /** Gives subclasses a chance to overrule the default value provided by the output consumer.  For

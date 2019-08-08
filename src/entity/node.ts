@@ -63,7 +63,7 @@ class AddEntity extends Node {
   }
 
   connect () {
-    this._removers.push(this.graph.getValue(this.config.input, false).onValue(value => {
+    this._disposer.add(this.graph.getValue(this.config.input, false).onValue(value => {
       if (value) {
         const ctx = this.graph.ctx as EntityNodeContext
         ctx.domain.add(this.config.config)
@@ -85,7 +85,7 @@ class DeleteEntity extends EntityNode {
   }
 
   connect () {
-    this._removers.push(this.graph.getValue(this.config.input, false).onValue(value => {
+    this._disposer.add(this.graph.getValue(this.config.input, false).onValue(value => {
       if (value) {
         const ctx = this.graph.ctx as EntityNodeContext
         ctx.domain.delete(this._entityId)
@@ -124,7 +124,7 @@ class UpdateComponent extends EntityComponentNode<Component<any>> {
   }
 
   connect () {
-    this._removers.push(
+    this._disposer.add(
       this.graph.getValue(this.config.input, 0).onValue(value => {
         this._component.update(this._entityId, value)
       })

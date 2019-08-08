@@ -226,7 +226,7 @@ class Rotate extends EntityComponentNode<TransformComponent> {
   connect () {
     const quaternion = new Quaternion()
     const rotation = new Quaternion()
-    this._removers.push(
+    this._disposer.add(
       this.graph.getValue(this.config.input, new Euler()).onValue(euler => {
         this._component.readQuaternion(this._entityId, quaternion)
         rotation.setFromEuler(euler)
@@ -254,7 +254,7 @@ class Translate extends EntityComponentNode<TransformComponent> {
   connect () {
     const position = new Vector3()
     const quaternion = new Quaternion()
-    this._removers.push(
+    this._disposer.add(
       this.graph.getValue(this.config.input, new Vector3()).onValue(vector => {
         this._component.readPosition(this._entityId, position)
         if (this.config.frame !== "world") {
@@ -311,7 +311,7 @@ class UpdatePosition extends EntityComponentNode<TransformComponent> {
   }
 
   connect () {
-    this._removers.push(
+    this._disposer.add(
       this.graph.getValue(this.config.input, new Vector3()).onValue(position => {
         this._component.updatePosition(this._entityId, position)
       }),
@@ -333,7 +333,7 @@ class UpdateRotation extends EntityComponentNode<TransformComponent> {
 
   connect () {
     const quaternion = new Quaternion()
-    this._removers.push(
+    this._disposer.add(
       this.graph.getValue(this.config.input, new Euler()).onValue(euler => {
         this._component.updateQuaternion(this._entityId, quaternion.setFromEuler(euler))
       }),
@@ -354,7 +354,7 @@ class UpdateScale extends EntityComponentNode<TransformComponent> {
   }
 
   connect () {
-    this._removers.push(
+    this._disposer.add(
       this.graph.getValue(this.config.input, new Vector3()).onValue(scale => {
         this._component.updateScale(this._entityId, scale)
       }),
