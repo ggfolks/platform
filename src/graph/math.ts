@@ -158,6 +158,7 @@ class Accumulate extends Node {
 /** Outputs the sign of the input (-1, 0, or +1). */
 export interface SignConfig extends NodeConfig {
   type :"sign"
+  epsilon? :number
   input: InputEdge<number>
   output :OutputEdge<number>
 }
@@ -169,8 +170,9 @@ class Sign extends Node {
   }
 
   protected _createOutput () {
+    const epsilon = this.config.epsilon === undefined ? 0.0001 : this.config.epsilon
     return this.graph.getValue(this.config.input, 0).map(
-      value => value < 0 ? -1 : value > 0 ? 1 : 0,
+      value => value < -epsilon ? -1 : value > epsilon ? 1 : 0,
     )
   }
 }

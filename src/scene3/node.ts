@@ -1,12 +1,14 @@
-import {Vector3} from "three"
+import {AnimationMixer, Vector3} from "three"
+
+import {Subject} from "../core/react"
 import {Graph} from "../graph/graph"
-import {NodeTypeRegistry, OutputEdge} from "../graph/node"
+import {InputEdge, NodeTypeRegistry, OutputEdge} from "../graph/node"
 import {Component} from "../entity/entity"
 import {EntityComponentConfig, EntityComponentNode} from "../entity/node"
 import {PointerConfig} from "../input/node"
-import {HoverMap} from "./entity"
+import {HoverMap, loadGLTFAnimationClip} from "./entity"
 
-/** Rotates by an amount determined by the inputs. */
+/** Emits information about a single hover point. */
 export interface HoverConfig extends EntityComponentConfig, PointerConfig {
   type :"hover"
   worldPosition :OutputEdge<Vector3>
@@ -48,7 +50,43 @@ class Hover extends EntityComponentNode<Component<HoverMap>> {
   }
 }
 
+/** Controls an animation action on the entity. */
+export interface AnimationActionConfig extends EntityComponentConfig {
+  type :"AnimationAction"
+  url :string
+  play :InputEdge<boolean>
+}
+
+class AnimationActionNode extends EntityComponentNode<Component<AnimationMixer>> {
+
+  constructor (graph :Graph, id :string, readonly config :AnimationActionConfig) {
+    super(graph, id, config)
+  }
+
+  connect () {
+    this._removers.push(
+      Subject
+        .join3(
+          this._component.getValue(this._entityId),
+          loadGLTFAnimationClip(this.config.url),
+          this.graph.getValue(this.config.play, false),
+        )
+        .onValue(([mixer, clip, play]) => {
+          const action = mixer.clipAction(clip)
+          if (play) {
+            if (!action.isScheduled()) {
+              action.play()
+            }
+          } else if (action.isScheduled()) {
+            action.stop()
+          }
+        })
+    )
+  }
+}
+
 /** Registers the nodes in this module with the supplied registry. */
 export function registerScene3Nodes (registry :NodeTypeRegistry) {
   registry.registerNodeType("hover", Hover)
+  registry.registerNodeType("AnimationAction", AnimationActionNode)
 }

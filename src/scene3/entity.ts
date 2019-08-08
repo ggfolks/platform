@@ -1,5 +1,7 @@
 import {
   AmbientLight,
+  AnimationClip,
+  AnimationMixer,
   BoxBufferGeometry,
   Camera,
   Color,
@@ -24,9 +26,10 @@ import {
 import {GLTFLoader} from "three/examples/jsm/loaders/GLTFLoader"
 import {SkeletonUtils} from "three/examples/jsm/utils/SkeletonUtils"
 
+import {Clock} from "../core/clock"
 import {Subject} from "../core/react"
 import {RMap} from "../core/rcollect"
-import {NoopRemover} from "../core/util"
+import {NoopRemover, Remover} from "../core/util"
 import {Pointer} from "../input/hand"
 import {
   Component,
@@ -335,11 +338,54 @@ export class Hover {
 /** Maps hover identifiers to hover objects. */
 export type HoverMap = Map<number, Hover>
 
+/** Manages AnimationMixer instances for animated objects. */
+export class AnimationSystem extends System {
+
+  _removers :Map<ID, Remover> = new Map()
+
+  constructor (domain :Domain,
+               readonly obj :Component<Object3D>,
+               readonly mixer :Component<AnimationMixer>) {
+    super(domain, Matcher.hasAllC(obj.id, mixer.id))
+  }
+
+  update (clock :Clock) {
+    this.onEntities(id => this.mixer.read(id).update(clock.dt))
+  }
+
+  protected added (id :ID, config :EntityConfig) {
+    super.added(id, config)
+    this._removers.set(id, this.obj.getValue(id).onValue(obj => {
+      this.mixer.update(id, new AnimationMixer(obj))
+    }))
+  }
+
+  protected deleted (id :ID) {
+    super.deleted(id)
+    const remover = this._removers.get(id)
+    if (remover) {
+      this._removers.delete(id)
+      remover()
+    }
+  }
+}
+
+/**
+ * Loads a GLTF animation clip identified by an anchored URL, where the anchor tag is taken to
+ * represent the clip name.
+ */
+export function loadGLTFAnimationClip (url :string) :Subject<AnimationClip> {
+  const idx = url.indexOf('#')
+  return loadGLTF(url.substring(0, idx)).map(
+    gltf => AnimationClip.findByName(gltf.animations, url.substring(idx + 1)),
+  )
+}
+
 function createObject3D (objectConfig: Object3DConfig) :Subject<Object3D> {
   switch (objectConfig.type) {
     case "gltf":
       const gltfConfig = objectConfig as GLTFConfig
-      return loadGLTF(gltfConfig.url).map(original => SkeletonUtils.clone(original) as Object3D)
+      return loadGLTF(gltfConfig.url).map(gltf => SkeletonUtils.clone(gltf.scene) as Object3D)
 
     case "perspectiveCamera":
       return Subject.constant(new PerspectiveCamera())
@@ -361,7 +407,12 @@ function createObject3D (objectConfig: Object3DConfig) :Subject<Object3D> {
   }
 }
 
-const gltfs :Map<string, Subject<Object3D>> = new Map()
+interface GLTF {
+  scene :Object3D
+  animations :AnimationClip[]
+}
+
+const gltfs :Map<string, Subject<GLTF>> = new Map()
 const errorGeom = new BoxBufferGeometry()
 const errorMat = new MeshBasicMaterial({color: 0xFF0000})
 
@@ -385,12 +436,12 @@ function loadGLTF (url :string) {
               }
             }
           })
-          dispatch(gltf.scene)
+          dispatch(gltf)
         },
         event => { /* do nothing with progress for now */ },
         error => {
           console.error(error)
-          dispatch(new Mesh(errorGeom, errorMat))
+          dispatch({scene: new Mesh(errorGeom, errorMat), animations: []})
         },
       )
       return NoopRemover
