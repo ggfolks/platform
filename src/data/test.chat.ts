@@ -3,7 +3,7 @@ import {Mutable, Subject, Value} from "../core/react"
 import {Record} from "../core/data"
 import {Encoder, Decoder, setTextCodec} from "../core/codec"
 import {getPropMetas, dobject, dmap, dvalue, dcollection, dqueue} from "./meta"
-import {Auth, ID, DataSource, DObject, DObjectStatus, DObjectType, MetaMsg, Path,
+import {Auth, ID, DataSource, DObject, DObjectStatus, DObjectType, MetaMsg, Path, Subscriber,
         findObjectType} from "./data"
 import {DownMsg, DownType, SyncMsg, UpType, encodeDown, decodeUp,
         addObject, getObject} from "./protocol"
@@ -195,13 +195,15 @@ class TestDataSource implements DataSource {
 
 test("metas", () => {
   const rmetas = getPropMetas(RootObject.prototype)
-  expect(rmetas.get("publicRooms")).toEqual({type: "map", ktype: "id", vtype: "record"})
-  expect(rmetas.get("users")).toEqual({type: "collection", ktype: "string", otype: UserObject})
-  expect(rmetas.get("chatq")).toEqual({type: "queue"})
+  expect(rmetas[0]).toEqual({type: "map", name: "publicRooms", index: 0,
+                             ktype: "id", vtype: "record"})
+  expect(rmetas[1]).toEqual({type: "collection", name: "users", index: 1,
+                             ktype: "string", otype: UserObject})
+  expect(rmetas[3]).toEqual({type: "queue", name: "chatq", index: 3})
 
   const umetas = getPropMetas(UserObject.prototype)
-  expect(umetas.get("username")).toEqual({type: "value", vtype: "string"})
-  expect(umetas.get("lastLogin")).toEqual({type: "value", vtype: "timestamp"})
+  expect(umetas[0]).toEqual({type: "value", name: "username", index: 0, vtype: "string"})
+  expect(umetas[1]).toEqual({type: "value", name: "lastLogin", index: 1, vtype: "timestamp"})
 })
 
 test("access", () => {
@@ -236,8 +238,9 @@ test("codec", () => {
   room.messages.set(2, {sender: "2", sent: now-3*60*1000, text: "Hiya Testy."})
   room.messages.set(3, {sender: "1", sent: now-1*60*1000, text: "How's the elves?"})
 
+  const auth = {id: "0", isSystem: true}
   const enc = new Encoder()
-  addObject(room, enc)
+  addObject(auth, room, enc)
 
   const msg = enc.finish()
   const dec = new Decoder(msg)
@@ -293,59 +296,68 @@ class TestServer<R extends DObject> implements DataSource {
   sendSync (obj :DObject, msg :SyncMsg) :void {
   }
 
-  subscribeRemote (path :Path, auth :Auth) :Subject<DObject|string> {
-    return Subject.deriveSubject(disp => {
-      const obj = this.resolve<DObject>(path, findObjectType(this.rtype, path))
-      return obj.status.whenOnce(s => s.state === "connected", s => {
-        if (obj.canSubscribe(auth)) disp(obj)
-        else disp("Access denied.")
-      })
-    })
+  resolveRemote (path :Path) :DObject {
+    return this.resolve<DObject>(path, findObjectType(this.rtype, path))
   }
 
   postRemote (path :Path, msg :Record, auth :Auth) {
   }
 }
 
-class ClientHandler {
+class ClientHandler implements Subscriber {
   private readonly subscrips = new Map<number, DObject>()
   private readonly encoder = new Encoder()
-  private readonly auth :Auth
+
+  readonly auth :Auth
 
   constructor (readonly server :TestServer<any>, readonly conn :Connection, readonly id :ID) {
     this.auth = {id, isSystem: false}
   }
 
-  handleMsg (msg :Uint8Array) {
-    const upm = decodeUp(this.subscrips, new Decoder(msg))
-    switch (upm.type) {
+  handleMsg (msgData :Uint8Array) {
+    const msg = decodeUp(this.subscrips, new Decoder(msgData))
+    switch (msg.type) {
     case UpType.SUB:
-      this.server.subscribeRemote(upm.path, this.auth).once(res => {
-        if (typeof res === "string") this.sendDown({type: DownType.SUBERR, oid: upm.oid, cause: res})
-        else {
-          this.subscrips.set(upm.oid, res)
-          // TODO: add ourselves as a subscriber
-          this.sendDown({type: DownType.SUBOBJ, oid: upm.oid, obj: res})
+      const obj = this.server.resolveRemote(msg.path)
+      obj.status.whenOnce(s => s.state === "connected", s => {
+        if (obj.subscribe(this)) {
+          this.subscrips.set(msg.oid, obj)
+          this.sendDown({type: DownType.SUBOBJ, oid: msg.oid, obj})
         }
+        else this.sendDown({type: DownType.SUBERR, oid: msg.oid, cause: "Access denied."})
       })
       break
 
     case UpType.UNSUB:
+      const unobj = this.subscrips.get(msg.oid)
+      if (unobj) {
+        unobj.unsubscribe(this)
+        this.subscrips.delete(msg.oid)
+      }
       break
 
     case UpType.POST:
       break
-    // TODO: syncs
+
+    default:
+      const oid = msg.oid
+      const sobj = this.subscrips.get(oid)
+      if (sobj) sobj.applyWrite(msg, this.auth)
+      else console.warn(`Dropping sync message, no object [msg=${JSON.stringify(msg)}]`)
     }
   }
 
-  sendDown (dnm :DownMsg) {
+  sendSync (msg :SyncMsg) {
+    // TODO
+  }
+
+  sendDown (msg :DownMsg) {
     try {
-      encodeDown(dnm, this.encoder)
+      encodeDown(this.auth, msg, this.encoder)
       this.conn.client.recvMsg(this.encoder.finish())
     } catch (err) {
       this.encoder.reset()
-      console.warn(`Failed to encode down msg [msg=${JSON.stringify(dnm)}]`)
+      console.warn(`Failed to encode [msg=${JSON.stringify(msg)}]`)
       console.warn(err)
     }
   }

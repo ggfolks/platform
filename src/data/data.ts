@@ -20,14 +20,14 @@ export type MetaMsg = {type :"subscribed", userId :ID}
 
 class DMutable<T> extends Mutable<T> {
 
-  static create<T> (eq :Eq<T>, owner :DObject, name :string, vtype :ValueType, start :T) {
+  static create<T> (eq :Eq<T>, owner :DObject, idx :number, vtype :ValueType, start :T) {
     const listeners :ValueFn<T>[] = []
     let current = start
     const update = (value :T, fromSync? :boolean) => {
       const ov = current
       if (!eq(ov, value)) {
         dispatchChange(listeners, current = value, ov)
-        if (!fromSync) owner.sendSync({type: SyncType.VALSET, name, vtype, value})
+        if (!fromSync) owner.noteWrite({type: SyncType.VALSET, idx, vtype, value})
       }
     }
     return new DMutable(eq, lner => addListener(listeners, lner), () => current, update)
@@ -45,7 +45,7 @@ class DMutableSet<E> extends MutableSet<E> {
   protected data = new Set<E>()
 
   constructor (readonly owner :DObject,
-               readonly name :string,
+               readonly idx :number,
                readonly etype :KeyType) { super() }
 
   add (elem :E, fromSync? :boolean) :this {
@@ -53,8 +53,8 @@ class DMutableSet<E> extends MutableSet<E> {
     this.data.add(elem)
     if (this.data.size !== size) {
       this.notifyAdd(elem)
-      if (!fromSync) this.owner.sendSync({
-        type: SyncType.SETADD, name: this.name, elem, etype: this.etype})
+      if (!fromSync) this.owner.noteWrite({
+        type: SyncType.SETADD, idx: this.idx, elem, etype: this.etype})
     }
     return this
   }
@@ -62,8 +62,8 @@ class DMutableSet<E> extends MutableSet<E> {
   delete (elem :E, fromSync? :boolean) :boolean {
     if (!this.data.delete(elem)) return false
     this.notifyDelete(elem)
-    if (!fromSync) this.owner.sendSync({
-      type: SyncType.SETDEL, name: this.name, elem, etype: this.etype})
+    if (!fromSync) this.owner.noteWrite({
+      type: SyncType.SETDEL, idx: this.idx, elem, etype: this.etype})
     return true
   }
 }
@@ -71,7 +71,7 @@ class DMutableSet<E> extends MutableSet<E> {
 class DMutableMap<K,V> extends MutableMap<K,V> {
   protected data = new Map<K,V>()
 
-  constructor (readonly owner :DObject, readonly name :string,
+  constructor (readonly owner :DObject, readonly idx :number,
                readonly ktype :KeyType, readonly vtype :ValueType) { super() }
 
   set (key :K, value :V, fromSync? :boolean) :this {
@@ -79,8 +79,8 @@ class DMutableMap<K,V> extends MutableMap<K,V> {
     data.set(key, value)
     this.notifySet(key, value, prev)
     if (!fromSync) {
-      const {owner, name, ktype, vtype} = this
-      owner.sendSync({type: SyncType.MAPSET, name, key, value, ktype, vtype})
+      const {owner, idx, ktype, vtype} = this
+      owner.noteWrite({type: SyncType.MAPSET, idx, key, value, ktype, vtype})
     }
     return this
   }
@@ -90,8 +90,8 @@ class DMutableMap<K,V> extends MutableMap<K,V> {
     if (!data.delete(key)) return false
     this.notifyDelete(key, prev as V)
     if (!fromSync) {
-      const {owner, name, ktype} = this
-      owner.sendSync({type: SyncType.MAPDEL, name, key, ktype})
+      const {owner, idx, ktype} = this
+      owner.noteWrite({type: SyncType.MAPDEL, idx, key, ktype})
     }
     return true
   }
@@ -133,7 +133,8 @@ export function findObjectType (rtype :DObjectType<any>, path :Path) :DObjectTyp
   let curtype = rtype, idx = 0
   while (idx < path.length) {
     const curmetas = getPropMetas(curtype.prototype)
-    const col = curmetas.get(path[idx] as string)
+    // TODO: have metas include a map by name as well?
+    const colname = path[idx] as string, col = curmetas.find(m => m.name === colname)
     if (!col) throw new Error(`Missing metadata for path component [path=${path}, idx=${idx}]`)
     if (col.type !== "collection") throw new Error(
       `Expected 'collection' property at path component [path=${path}, idx=${idx}]`)
@@ -153,13 +154,19 @@ export interface DataSource {
   sendSync (obj :DObject, msg :SyncMsg) :void
 }
 
+export interface Subscriber {
+  auth :Auth
+  sendSync (msg :SyncMsg) :void
+}
+
 export type DObjectStatus = {state: "pending"}
                           | {state: "connected"}
                           | {state: "error", error :Error}
 
 export abstract class DObject implements Disposable {
   readonly metas = getPropMetas(Object.getPrototypeOf(this))
-  private metaIter = this.metas.entries()
+  private readonly subscribers :Subscriber[] = []
+  private metaIdx = 0
 
   constructor (
     readonly source :DataSource,
@@ -175,17 +182,43 @@ export abstract class DObject implements Disposable {
   canRead (prop :string, auth :Auth) :boolean { return true }
   canWrite (prop :string, auth :Auth) :boolean { return auth.isSystem }
 
-  sendSync (msg :SyncMsg) { this.source.sendSync(this, msg) }
+  /** Adds `sub` to this object's subscribers list iff `auth` is allowed to subscribe.
+    * @return `true` if subscription succeeded, `false` if it was rejected due to auth.
+    * @throw Error if subscription is attempted before the object is successfully resolved. */
+  subscribe (sub :Subscriber) :boolean {
+    const cstate = this.status.current.state
+    if (cstate !== "connected") throw new Error(`Cannot subscribe to '${cstate}' object (${this})`)
+    if (!this.canSubscribe(sub.auth)) return false
+    this.subscribers.push(sub)
+    return true
+  }
 
-  applySync (msg :SyncMsg, auth? :Auth) {
-    if (auth && !this.canWrite(msg.name, auth)) throw new Error(
-      `Sync rejected due to auth [obj=${this}, prop=${msg.name}, auth=${auth}]`)
+  unsubscribe (sub :Subscriber) {
+    const idx = this.subscribers.indexOf(sub)
+    if (idx >= 0) this.subscribers.splice(idx, 1)
+  }
+
+  noteWrite (msg :SyncMsg) {
+    this.source.sendSync(this, msg)
+    const name = this.metas[msg.idx].name
+    for (const sub of this.subscribers) if (this.canRead(name, sub.auth)) sub.sendSync(msg)
+  }
+
+  applyWrite (msg :SyncMsg, auth :Auth) {
+    const name = this.metas[msg.idx].name
+    if (!this.canRead(name, auth) || !this.canWrite(name, auth)) throw new Error(
+      `Write rejected [obj=${this}, prop=${name}, auth=${auth}]`)
+    this.applySync(msg, false)
+  }
+
+  applySync (msg :SyncMsg, fromSync = true) {
+    const prop = this[this.metas[msg.idx].name]
     switch (msg.type) {
-    case SyncType.VALSET: (this[msg.name] as DMutable<any>).update(msg.value, true) ; break
-    case SyncType.SETADD: (this[msg.name] as DMutableSet<any>).add(msg.elem, true) ; break
-    case SyncType.SETDEL: (this[msg.name] as DMutableSet<any>).delete(msg.elem, true) ; break
-    case SyncType.MAPSET: (this[msg.name] as DMutableMap<any,any>).set(msg.key, msg.value, true) ; break
-    case SyncType.MAPDEL: (this[msg.name] as DMutableMap<any,any>).delete(msg.key, true) ; break
+    case SyncType.VALSET: (prop as DMutable<any>).update(msg.value, fromSync) ; break
+    case SyncType.SETADD: (prop as DMutableSet<any>).add(msg.elem, fromSync) ; break
+    case SyncType.SETDEL: (prop as DMutableSet<any>).delete(msg.elem, fromSync) ; break
+    case SyncType.MAPSET: (prop as DMutableMap<any,any>).set(msg.key, msg.value, fromSync) ; break
+    case SyncType.MAPDEL: (prop as DMutableMap<any,any>).delete(msg.key, fromSync) ; break
     }
   }
 
@@ -194,9 +227,9 @@ export abstract class DObject implements Disposable {
   toString () { return `${this.constructor.name}@${this.path}` }
 
   protected value<T> (initVal :T, eq :Eq<T> = refEquals) :Mutable<T> {
-    const [name, meta] = this.metaIter.next().value
-    if (meta.type === "value") return DMutable.create(eq, this, name, meta.vtype, initVal)
-    throw new Error(`Metadata mismatch [name=${name}, meta=${meta}], asked to create 'value'`)
+    const index = this.metaIdx++, meta = this.metas[index]
+    if (meta.type === "value") return DMutable.create(eq, this, index, meta.vtype, initVal)
+    throw new Error(`Metadata mismatch [meta=${meta}], asked to create 'value'`)
   }
 
   protected dataValue<T extends Data> (initVal :T) :Mutable<T> {
@@ -204,26 +237,26 @@ export abstract class DObject implements Disposable {
   }
 
   protected set<E> () :MutableSet<E> {
-    const [name, meta] = this.metaIter.next().value
-    if (meta.type === "set") return new DMutableSet(this, name, meta.etype)
-    throw new Error(`Metadata mismatch [name=${name}, meta=${meta}], asked to create 'set'`)
+    const index = this.metaIdx++, meta = this.metas[index]
+    if (meta.type === "set") return new DMutableSet(this, index, meta.etype)
+    throw new Error(`Metadata mismatch [meta=${meta}], asked to create 'set'`)
   }
 
   protected map<K,V> () :MutableMap<K,V> {
-    const [name, meta] = this.metaIter.next().value
-    if (meta.type === "map") return new DMutableMap(this, name, meta.ktype, meta.vtype)
-    throw new Error(`Metadata mismatch [name=${name}, meta=${meta}], asked to create 'map'`)
+    const index = this.metaIdx++, meta = this.metas[index]
+    if (meta.type === "map") return new DMutableMap(this, index, meta.ktype, meta.vtype)
+    throw new Error(`Metadata mismatch [meta=${meta}], asked to create 'map'`)
   }
 
   protected collection<K,V extends DObject> () {
-    const [name, meta] = this.metaIter.next().value
-    if (meta.type === "collection") return new DCollection<K,V>(this, name, meta.otype)
-    throw new Error(`Metadata mismatch [name=${name}, meta=${meta}], asked to create 'collection'`)
+    const index = this.metaIdx++, meta = this.metas[index]
+    if (meta.type === "collection") return new DCollection<K,V>(this, meta.name, meta.otype)
+    throw new Error(`Metadata mismatch [meta=${meta}], asked to create 'collection'`)
   }
 
   protected queue<M extends Record> () {
-    const [name, meta] = this.metaIter.next().value
-    if (meta.type === "queue") return new DQueue(this, name)
-    throw new Error(`Metadata mismatch [name=${name}, meta=${meta}], asked to create 'queue'`)
+    const index = this.metaIdx++, meta = this.metas[index]
+    if (meta.type === "queue") return new DQueue(this, meta.name)
+    throw new Error(`Metadata mismatch [meta=${meta}], asked to create 'queue'`)
   }
 }

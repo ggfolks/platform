@@ -1,15 +1,15 @@
 import {Record} from "../core/data"
 import {Encoder, Decoder, KeyType, ValueType} from "../core/codec"
 import {Mutable} from "../core/react"
-import {DObject, Path} from "./data"
+import {Auth, DObject, Path} from "./data"
 
 export const enum SyncType { VALSET, SETADD, SETDEL, MAPSET, MAPDEL }
-type ValSetMsg = {type :SyncType.VALSET, name :string, value :any, vtype: ValueType}
-type SetAddMsg = {type :SyncType.SETADD, name :string, elem :any, etype: KeyType}
-type SetDelMsg = {type :SyncType.SETDEL, name :string, elem :any, etype: KeyType}
-type MapSetMsg = {type :SyncType.MAPSET, name :string,
+type ValSetMsg = {type :SyncType.VALSET, idx :number, value :any, vtype: ValueType}
+type SetAddMsg = {type :SyncType.SETADD, idx :number, elem :any, etype: KeyType}
+type SetDelMsg = {type :SyncType.SETDEL, idx :number, elem :any, etype: KeyType}
+type MapSetMsg = {type :SyncType.MAPSET, idx :number,
                   key :any, ktype: KeyType, value :any, vtype: ValueType}
-type MapDelMsg = {type :SyncType.MAPDEL, name :string, key :any, ktype: KeyType}
+type MapDelMsg = {type :SyncType.MAPDEL, idx :number, key :any, ktype: KeyType}
 export type SyncMsg = ValSetMsg | SetAddMsg | SetDelMsg | MapSetMsg | MapDelMsg
 
 type OidSyncMsg = SyncMsg & {oid: number}
@@ -26,7 +26,7 @@ export type DownMsg = {type :DownType.SUBOBJ, oid :number, obj :DObject}
                     | OidSyncMsg
 
 function encodeSync (sym :OidSyncMsg, enc :Encoder) {
-  enc.addValue(sym.name, "string")
+  enc.addValue(sym.idx, "size8")
   enc.addValue(sym.oid, "size32")
   switch (sym.type) {
   case SyncType.VALSET: enc.addValue(sym.value, sym.vtype) ; break
@@ -48,10 +48,10 @@ export function encodeUp (upm :UpMsg, enc :Encoder) {
   }
 }
 
-export function encodeDown (dnm :DownMsg, enc :Encoder) {
+export function encodeDown (rcpt :Auth, dnm :DownMsg, enc :Encoder) {
   enc.addValue(dnm.type, "int8")
   switch (dnm.type) {
-  case DownType.SUBOBJ: enc.addValue(dnm.oid, "size32") ; addObject(dnm.obj, enc) ; break
+  case DownType.SUBOBJ: enc.addValue(dnm.oid, "size32") ; addObject(rcpt, dnm.obj, enc) ; break
   case DownType.SUBERR: enc.addValue(dnm.oid, "size32") ; enc.addValue(dnm.cause, "string") ; break
   default: encodeSync(dnm, enc)
   }
@@ -60,29 +60,29 @@ export function encodeDown (dnm :DownMsg, enc :Encoder) {
 function decodeSync (objects :Map<number, DObject>, type :SyncType, dec :Decoder) :OidSyncMsg {
   const oid :number = dec.getValue("size32"), obj = objects.get(oid)
   if (!obj) throw new Error(`Got sync for unknown object [type=${type}, oid=${oid}]`)
-  const name = dec.getValue("string")
-  const meta = obj.metas.get(name)
+  const idx = dec.getValue("size8")
+  const meta = obj.metas[idx]
   if (!meta) throw new Error(
     `Got sync for unknown object property [type=${type}, oid=${oid}, name=${name}]`)
   const typeMismatch = () => new Error(`Expected 'value' property for valset, got '${meta.type}`)
   switch (type) {
   case SyncType.VALSET:
     if (meta.type !== "value") throw typeMismatch()
-    else return {type, oid, name, value: dec.getValue(meta.vtype), vtype: meta.vtype}
+    else return {type, oid, idx, value: dec.getValue(meta.vtype), vtype: meta.vtype}
   case SyncType.SETADD:
     if (meta.type !== "set") throw typeMismatch()
-    else return {type, oid, name, elem: dec.getValue(meta.etype), etype: meta.etype}
+    else return {type, oid, idx, elem: dec.getValue(meta.etype), etype: meta.etype}
   case SyncType.SETDEL:
     if (meta.type !== "set") throw typeMismatch()
-    else return {type, oid, name, elem: dec.getValue(meta.etype), etype: meta.etype}
+    else return {type, oid, idx, elem: dec.getValue(meta.etype), etype: meta.etype}
   case SyncType.MAPSET:
     if (meta.type !== "map") throw typeMismatch()
-    else return {type, oid, name,
+    else return {type, oid, idx,
     key: dec.getValue(meta.ktype), ktype: meta.ktype,
     value: dec.getValue(meta.vtype), vtype: meta.vtype}
   case SyncType.MAPDEL:
     if (meta.type !== "map") throw typeMismatch()
-    else return {type, oid, name, key: dec.getValue(meta.ktype), ktype: meta.ktype}
+    else return {type, oid, idx, key: dec.getValue(meta.ktype), ktype: meta.ktype}
   default: throw new Error(`Invalid req type '${type}'`)
   }
 }
@@ -109,24 +109,39 @@ export function decodeDown (objects :Map<number, DObject>, dec :Decoder) :DownMs
   }
 }
 
-export function addObject (obj :DObject, enc :Encoder) {
-  for (const [prop, meta] of obj.metas.entries()) {
+export function addObject (rcpt :Auth, obj :DObject, enc :Encoder) {
+  for (const meta of obj.metas) {
+    if (!obj.canRead(meta.name, rcpt)) continue
+    const prop = obj[meta.name]
     switch (meta.type) {
-    case "value": enc.addValue((obj[prop] as Mutable<any>).current, meta.vtype) ; break
-    case "set": enc.addSet((obj[prop] as Set<any>), meta.etype) ; break
-    case "map": enc.addMap((obj[prop] as Map<any, any>), meta.ktype, meta.vtype) ; break
+    case "value":
+      enc.addValue(meta.index, "size8")
+      enc.addValue((prop as Mutable<any>).current, meta.vtype)
+      break
+    case "set":
+      enc.addValue(meta.index, "size8")
+      enc.addSet((prop as Set<any>), meta.etype)
+      break
+    case "map":
+      enc.addValue(meta.index, "size8")
+      enc.addMap((prop as Map<any, any>), meta.ktype, meta.vtype)
+      break
     case "collection": break // TODO: anything?
     case "queue": break // TODO: anything?
     }
   }
+  enc.addValue(255, "size8") // terminator
 }
 
 export function getObject<T extends DObject> (dec :Decoder, into :T) :T {
-  for (const [prop, meta] of into.metas.entries()) {
+  while (true) {
+    const idx = dec.getValue("size8")
+    if (idx === 255) break
+    const meta = into.metas[idx], prop = into[meta.name]
     switch (meta.type) {
-    case "value": (into[prop] as Mutable<any>).update(dec.getValue(meta.vtype)) ; break
-    case "set": dec.syncSet(meta.etype, (into[prop] as Set<any>)) ; break
-    case "map": dec.syncMap(meta.ktype, meta.vtype, (into[prop] as Map<any, any>)) ; break
+    case "value": (prop as Mutable<any>).update(dec.getValue(meta.vtype)) ; break
+    case "set": dec.syncSet(meta.etype, (prop as Set<any>)) ; break
+    case "map": dec.syncMap(meta.ktype, meta.vtype, (prop as Map<any, any>)) ; break
     case "collection": break // TODO: anything?
     case "queue": break // TODO: anything?
     }
