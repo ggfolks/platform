@@ -1,7 +1,7 @@
 import {Data, DataArray, DataMap, DataMapKey, DataSet, Record, isMap, isSet} from "./data"
 
-export type KeyType = "undefined" | "boolean" | "int8" | "int16" | "int32" | "size16" | "size32"
-                    | "float32" | "float64" | "number" | "string" | "timestamp" | "id"
+export type KeyType = "undefined" | "boolean" | "int8" | "int16" | "int32" | "size8" | "size16"
+                    | "size32" | "float32" | "float64" | "number" | "string" | "timestamp" | "id"
 // TODO: support "text" value type which supported >64k of text?
 export type ValueType = KeyType | "data" | "record"
 
@@ -16,6 +16,7 @@ const addBoolean = (e :Encoder, b :boolean) => { addInt8(e, b ? 1 : 0) }
 const addInt8    = (e :Encoder, s :number) => { const p = e.pos ; e.prepAdd(1).setInt8(p, s) }
 const addInt16   = (e :Encoder, s :number) => { const p = e.pos ; e.prepAdd(2).setInt16(p, s) }
 const addInt32   = (e :Encoder, s :number) => { const p = e.pos ; e.prepAdd(4).setInt32(p, s) }
+const addSize8   = (e :Encoder, s :number) => { const p = e.pos ; e.prepAdd(1).setUint8(p, s) }
 const addSize16  = (e :Encoder, s :number) => { const p = e.pos ; e.prepAdd(2).setUint16(p, s) }
 const addSize32  = (e :Encoder, s :number) => { const p = e.pos ; e.prepAdd(4).setUint32(p, s) }
 const addFloat32 = (e :Encoder, v :number) => { const p = e.pos ; e.prepAdd(4).setFloat32(p, v) }
@@ -117,6 +118,7 @@ const getBoolean = (dec :Decoder) => dec.data.getUint8(dec.prepGet(1)) === 1
 const getInt8    = (dec :Decoder) => dec.data.getInt8(dec.prepGet(1))
 const getInt16   = (dec :Decoder) => dec.data.getInt16(dec.prepGet(2))
 const getInt32   = (dec :Decoder) => dec.data.getInt32(dec.prepGet(4))
+const getSize8   = (dec :Decoder) => dec.data.getUint8(dec.prepGet(1))
 const getSize16  = (dec :Decoder) => dec.data.getUint16(dec.prepGet(2))
 const getSize32  = (dec :Decoder) => dec.data.getUint32(dec.prepGet(4))
 const getFloat32 = (dec :Decoder) => dec.data.getFloat32(dec.prepGet(4))
@@ -230,6 +232,7 @@ const valueCodecs :{[key :string]: [DataEncoder<any>, DataDecoder<any>]} = {
   int8     : [addInt8,    getInt8],
   int16    : [addInt16,   getInt16],
   int32    : [addInt32,   getInt32],
+  size8    : [addSize8,   getSize8],
   size16   : [addSize16,  getSize16],
   size32   : [addSize32,  getSize32],
   float32  : [addFloat32, getFloat32],
