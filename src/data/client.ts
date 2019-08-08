@@ -1,95 +1,96 @@
-import {Mutable} from "../core/react"
-import {Encoder, Decoder, ValueType} from "../core/codec"
-import {DataSource, DObject, DObjectType, Path, SyncReq} from "./data"
-import {getPropMetas} from "./meta"
+import {Disposable} from "../core/util"
+import {Record} from "../core/data"
+import {Mutable, Subject} from "../core/react"
+import {Encoder, Decoder} from "../core/codec"
+import {DataSource, DObject, DObjectStatus, DObjectType, Path} from "./data"
+import {DownMsg, DownType, SyncMsg, UpMsg, UpType, encodeUp, decodeDown} from "./protocol"
 
 /** Uniquely identifies a data server; provides the info needed to establish a connection to it. */
 export type Address = {host :string, port :number, path :string}
 
-export interface Locator {
+/** Resolves the address of the server that hosts the object at `path`. */
+export type Locator = (path :Path) => Subject<Address>
 
-  /** Resolves the address of the server that hosts the object at `path`.
-    *
-    * TODO: Do we eventually want to return a Subject to support the case where an object migrates
-    * to a new server while active subscriptions exist?
-    */
-  resolve (path :Path) :Promise<Address>
-}
-
-class Connection {
-
-  constructor (readonly address :Address) {
-    // TODO: auto-start connection?
-  }
-
-  subscribe<T extends DObject> (path :Path) :Promise<T> {
-    return Promise.reject(new Error("TODO"))
-  }
-
-  post<M> (path :Path, msg :M) {
-    // TODO
-  }
-
-  sendSync (path :Path, req :SyncReq) {
-    // TODO
-  }
-}
+/** Creates `Connection` instances for clients. */
+export type Connector = (client :Client, addr :Address) => Connection
 
 export class Client implements DataSource {
   private readonly conns = new Map<Address, Connection>()
+  private readonly objects = new Map<number,DObject>()
+  private readonly encoder = new Encoder()
+  private nextOid = 1
 
-  constructor (readonly locator :Locator) {}
+  constructor (readonly locator :Locator, readonly connector :Connector) {}
 
-  async subscribe<T extends DObject> (path :Path) :Promise<T> {
-    return (await this.connFor(path)).subscribe(path)
+  resolve<T extends DObject> (path :Path, otype :DObjectType<T>) :T {
+    const oid = this.nextOid
+    this.nextOid = oid+1
+    const status = Mutable.local({state: "pending"} as DObjectStatus)
+    const obj = new otype(this, status, path, oid)
+    this.objects.set(oid, obj)
+    // TODO: keep track of which conn hosts which objects & resubscribe if we lose & regain conn
+    this.sendUp(path, {type: UpType.SUB, path, oid})
+    return obj
   }
 
-  async post<M> (path :Path, msg :M, mtype :ValueType) {
-    return (await this.connFor(path)).post(path, msg)
+  post (path :Path, msg :Record) { this.sendUp(path, {type: UpType.POST, msg}) }
+
+  sendSync (obj :DObject, req :SyncMsg) { this.sendUp(obj.path, {...req, oid: obj.oid}) }
+
+  recvMsg (msg :Uint8Array) {
+    this.handleDown(decodeDown(this.objects, new Decoder(msg)))
   }
 
-  async sendSync (path :Path, req :SyncReq) {
-    return (await this.connFor(path)).sendSync(path, req)
+  handleDown (msg :DownMsg) {
+    const obj = this.objects.get(msg.oid)
+    if (!obj) throw new Error(`Got msg for unknown object: ${JSON.stringify(msg)}`)
+    switch (msg.type) {
+    case DownType.SUBOBJ:
+      (msg.obj.status as Mutable<DObjectStatus>).update({state: "connected"})
+      break
+    case DownType.SUBERR:
+      (obj.status as Mutable<DObjectStatus>).update({state: "error", error: new Error(msg.cause)})
+      break
+    default:
+      obj.applySync(msg)
+      break
+    }
   }
 
-  // TODO: dispose connections?
+  // TODO: when do we dispose connections?
 
-  protected async connFor (path :Path) :Promise<Connection> {
-    const addr = await this.locator.resolve(path)
-    let conn = this.conns.get(addr)
-    if (!conn) this.conns.set(addr, conn = new Connection(addr))
-    return conn
+  protected connFor (path :Path) :Subject<Connection> {
+    const {locator, conns, connector} = this
+    return locator(path).map(addr => {
+      let conn = conns.get(addr)
+      if (!conn) conns.set(addr, conn = connector(this, addr))
+      return conn
+    })
+  }
+
+  protected sendUp (path :Path, msg :UpMsg) {
+    this.connFor(path).once(conn => {
+      try {
+        encodeUp(msg, this.encoder)
+        conn.sendMsg(this.encoder.finish())
+      } catch (err) {
+        this.encoder.reset()
+        // TODO: maybe just log this?
+        throw err
+      }
+    })
   }
 }
 
-export function addObject (obj :DObject, enc :Encoder) {
-  const metas = getPropMetas(Object.getPrototypeOf(obj))
-  // TODO: get extra constructor args from dconst metadata
-  for (const [prop, meta] of metas.entries()) {
-    switch (meta.type) {
-    case "value": enc.addValue((obj[prop] as Mutable<any>).current, meta.vtype) ; break
-    case "set": enc.addSet((obj[prop] as Set<any>), meta.etype) ; break
-    case "map": enc.addMap((obj[prop] as Map<any, any>), meta.ktype, meta.vtype) ; break
-    case "collection": break // TODO: anything?
-    case "queue": break // TODO: anything?
-    }
-  }
-}
+export abstract class Connection implements Disposable {
 
-export function getObject<T extends DObject> (
-  type :DObjectType<T>, dec :Decoder, source :DataSource, path :Path
-) :T {
-  const metas = getPropMetas(type.prototype)
-  // TODO: get extra constructor args from dconst metadata
-  const obj = new type(source, path)
-  for (const [prop, meta] of metas.entries()) {
-    switch (meta.type) {
-    case "value": (obj[prop] as Mutable<any>).update(dec.getValue(meta.vtype)) ; break
-    case "set": dec.getSet(meta.etype, (obj[prop] as Set<any>)) ; break
-    case "map": dec.getMap(meta.ktype, meta.vtype, (obj[prop] as Map<any, any>)) ; break
-    case "collection": break // TODO
-    case "queue": break // TODO
-    }
+  constructor (readonly client :Client, readonly addr :Address) {
+    this.connect(addr)
   }
-  return obj
+
+  abstract dispose () :void
+
+  protected abstract connect (addr :Address) :void
+
+  abstract sendMsg (msg :Uint8Array) :void
 }
