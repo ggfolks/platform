@@ -1,3 +1,4 @@
+import {Value} from "../core/react"
 import {
   InputEdge,
   Node,
@@ -51,8 +52,33 @@ class Not extends Node {
   }
 }
 
+/** Outputs x < y. */
+export interface LessThanConfig extends NodeConfig {
+  type :"lessThan"
+  x :InputEdge<number>
+  y :InputEdge<number>
+  output :OutputEdge<boolean>
+}
+
+class LessThan extends Node {
+
+  constructor (graph :Graph, id :string, readonly config :LessThanConfig) {
+    super(graph, id, config)
+  }
+
+  protected _createOutput () {
+    return Value
+      .join(
+        this.graph.getValue(this.config.x, 0),
+        this.graph.getValue(this.config.y, 0),
+      )
+      .map(([x, y]) => x < y)
+  }
+}
+
 /** Registers the nodes in this module with the supplied registry. */
 export function registerLogicNodes (registry :NodeTypeRegistry) {
   registry.registerNodeType("or", Or)
   registry.registerNodeType("not", Not)
+  registry.registerNodeType("lessThan", LessThan)
 }
