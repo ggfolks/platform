@@ -25,6 +25,8 @@ export class Hand implements Disposable {
   constructor (private _canvas :HTMLElement) {
     this.mouse = new Mouse(_canvas)
     this.touchpad = new Touchpad(_canvas)
+    _canvas.addEventListener("pointerdown", this._onPointerDown)
+    _canvas.addEventListener("pointerup", this._onPointerUp)
   }
 
   /** Updates the mouse and touchpad state.  Should be called once per frame. */
@@ -72,8 +74,18 @@ export class Hand implements Disposable {
   }
 
   dispose () {
+    this._canvas.removeEventListener("pointerdown", this._onPointerDown)
+    this._canvas.removeEventListener("pointerup", this._onPointerUp)
     this.mouse.dispose()
     this.touchpad.dispose()
+  }
+
+  private _onPointerDown = (event :PointerEvent) => {
+    this._canvas.setPointerCapture(event.pointerId)
+  }
+
+  private _onPointerUp = (event :PointerEvent) => {
+    this._canvas.releasePointerCapture(event.pointerId)
   }
 }
 
