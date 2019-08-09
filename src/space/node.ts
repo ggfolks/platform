@@ -2,7 +2,15 @@ import {Euler, Math as ThreeMath, Matrix4, Quaternion, Vector3} from "three"
 
 import {Value} from "../core/react"
 import {Graph} from "../graph/graph"
-import {InputEdge, Node, NodeConfig, NodeTypeRegistry, OutputEdge} from "../graph/node"
+import {
+  InputEdge,
+  Operator,
+  OperatorConfig,
+  Node,
+  NodeConfig,
+  NodeTypeRegistry,
+  OutputEdge,
+} from "../graph/node"
 import {EntityComponentConfig, EntityComponentNode} from "../entity/node"
 import {TransformComponent} from "./entity"
 
@@ -79,6 +87,30 @@ class Vector3Split extends Node {
 
   protected _createOutput (name :string = "x") {
     return this.graph.getValue(this.config.input, new Vector3()).map(value => value[name])
+  }
+}
+
+/** Adds a set of vectors. */
+export interface Vector3AddConfig extends OperatorConfig<Vector3> {
+  type :"Vector3.add"
+}
+
+class Vector3Add extends Operator<Vector3> {
+
+  constructor (graph :Graph, id :string, readonly config :Vector3AddConfig) {
+    super(graph, id, config)
+  }
+
+  protected get _defaultInputValue () {
+    return new Vector3()
+  }
+
+  protected _apply (values :Vector3[]) {
+    const sum = new Vector3()
+    for (const value of values) {
+      sum.add(value)
+    }
+    return sum
   }
 }
 
@@ -396,6 +428,7 @@ export function registerSpaceNodes (registry :NodeTypeRegistry) {
   registry.registerNodeType("Euler", EulerNode)
   registry.registerNodeType("Vector3", Vector3Node)
   registry.registerNodeType("Vector3.split", Vector3Split)
+  registry.registerNodeType("Vector3.add", Vector3Add)
   registry.registerNodeType("Vector3.applyEuler", Vector3ApplyEuler)
   registry.registerNodeType("Vector3.projectOnPlane", Vector3ProjectOnPlane)
   registry.registerNodeType("Vector3.multiplyScalar", Vector3MultiplyScalar)

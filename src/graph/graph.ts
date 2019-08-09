@@ -26,7 +26,7 @@ export class Graph implements Disposable {
       node.connect()
     }
   }
-  
+
   /** Retrieves a reactive value representing the identified input edges. */
   getValues<T> (inputs :InputEdges<T>, defaultValue :T) :Value<T[]> {
     if (!inputs) {
@@ -37,7 +37,7 @@ export class Graph implements Disposable {
 
   /** Retrieves a reactive value representing the identified input edge. */
   getValue<T> (input :InputEdge<T>, defaultValue :T) :Value<T> {
-    if (!input) {
+    if (input === undefined) {
       return Value.constant(defaultValue)
     }
     if (Array.isArray(input)) {

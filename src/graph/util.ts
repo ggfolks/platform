@@ -180,9 +180,6 @@ class Output extends Node {
   constructor (graph :Graph, id :string, readonly config :OutputConfig) {
     super(graph, id, config)
   }
-
-  connect () {
-  }
 }
 
 /** Registers the nodes in this module with the supplied registry. */

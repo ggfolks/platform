@@ -100,10 +100,36 @@ class LessThan extends Node {
   }
 }
 
+/** Outputs condition ? ifTrue : ifFalse. */
+export interface ConditionalConfig extends NodeConfig {
+  type :"conditional"
+  condition :InputEdge<boolean>
+  ifTrue :InputEdge<any>
+  ifFalse :OutputEdge<any>
+}
+
+class Conditional extends Node {
+
+  constructor (graph :Graph, id :string, readonly config :ConditionalConfig) {
+    super(graph, id, config)
+  }
+
+  protected _createOutput (name :string | undefined, defaultValue :any) {
+    return Value
+      .join3(
+        this.graph.getValue(this.config.condition, false),
+        this.graph.getValue(this.config.ifTrue, defaultValue),
+        this.graph.getValue(this.config.ifFalse, defaultValue),
+      )
+      .map(([condition, ifTrue, ifFalse]) => condition ? ifTrue : ifFalse)
+  }
+}
+
 /** Registers the nodes in this module with the supplied registry. */
 export function registerLogicNodes (registry :NodeTypeRegistry) {
   registry.registerNodeType("and", And)
   registry.registerNodeType("or", Or)
   registry.registerNodeType("not", Not)
   registry.registerNodeType("lessThan", LessThan)
+  registry.registerNodeType("conditional", Conditional)
 }
