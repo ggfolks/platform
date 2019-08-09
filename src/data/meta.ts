@@ -1,6 +1,6 @@
 import {Record} from "../core/data"
 import {KeyType, ValueType} from "../core/codec"
-import {DHandler, DObjectType} from "./data"
+import {DHandler, DObject, DObjectType} from "./data"
 
 //
 // Metadata decorators
@@ -9,7 +9,7 @@ type ValueMeta = {type: "value", vtype: ValueType}
 type SetMeta = {type: "set", etype: KeyType}
 type MapMeta = {type: "map", ktype: KeyType, vtype: ValueType}
 type CollectionMeta = {type: "collection", ktype: KeyType, otype: DObjectType<any>}
-type QueueMeta = {type: "queue"}
+type QueueMeta = {type: "queue", handler :DHandler<any,any>}
 type Meta = ValueMeta | SetMeta | MapMeta | CollectionMeta | QueueMeta
 
 export type PropMeta = Meta & {name :string, index :number}
@@ -39,7 +39,7 @@ export const dset = (etype :KeyType) =>
   propAdder({type: "set", etype})
 export const dmap = (ktype :KeyType, vtype :ValueType) =>
   propAdder({type: "map", ktype, vtype})
-export const dqueue = <O,M extends Record>(handler :DHandler<O,M>) =>
-  propAdder({type: "queue"})
+export const dqueue = <O extends DObject,M extends Record>(handler :DHandler<O,M>) =>
+  propAdder({type: "queue", handler})
 export const dcollection = (ktype :KeyType, otype :DObjectType<any>) =>
   propAdder({type: "collection", ktype, otype})

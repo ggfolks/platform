@@ -113,17 +113,20 @@ export class DCollection<K,V extends DObject> {
   }
 }
 
+export type DQueueAddr = { path :Path, index :number }
+
 export class DQueue<M extends Record> {
 
-  constructor (readonly owner :DObject, readonly name :string) {}
+  constructor (readonly owner :DObject, readonly index :number) {}
+
+  get addr () :DQueueAddr { return {path: this.owner.path, index: this.index} }
 
   post (msg :M) {
-    const path = this.owner.path.concat([this.name])
-    return this.owner.source.post(path, msg)
+    return this.owner.source.post(this.addr, msg)
   }
 }
 
-export type DHandler<O,M> = (obj :O, msg :M, auth: Auth) => void
+export type DHandler<O extends DObject,M> = (obj :O, msg :M, auth: Auth) => void
 
 export type DObjectType<T extends DObject> = {
   new (source :DataSource, status :Value<DObjectStatus>, path :Path, oid :number) :T
@@ -148,7 +151,8 @@ export interface DataSource {
 
   resolve<T extends DObject> (path :Path, otype :DObjectType<T>) :T
 
-  post (path :Path, msg :Record) :void
+  post (queue :DQueueAddr, msg :Record) :void
+  // TODO: optional auth for server entities that want to post to further queues with same creds?
   // TODO: variants that wait for the message to be processed? also return channels?
 
   sendSync (obj :DObject, msg :SyncMsg) :void
@@ -160,13 +164,22 @@ export interface Subscriber {
 }
 
 export type DObjectStatus = {state: "pending"}
-                          | {state: "connected"}
+                          | {state: "resolved"}
                           | {state: "error", error :Error}
 
 export abstract class DObject implements Disposable {
   readonly metas = getPropMetas(Object.getPrototypeOf(this))
   private readonly subscribers :Subscriber[] = []
   private metaIdx = 0
+
+  /** Returns the address of the queue named `name` on this object. Note: this must be called via
+    * the concrete DObject subtype that declares the queue. */
+  static queueAddr (path :Path, name :string) :DQueueAddr {
+    const metas = getPropMetas(this)
+    const qmeta = metas.find(m => m.name === name)
+    if (qmeta) return {path, index: qmeta.index}
+    throw new Error(`No queue named ${name} on ${this.constructor.name}`)
+  }
 
   constructor (
     readonly source :DataSource,
@@ -187,7 +200,7 @@ export abstract class DObject implements Disposable {
     * @throw Error if subscription is attempted before the object is successfully resolved. */
   subscribe (sub :Subscriber) :boolean {
     const cstate = this.status.current.state
-    if (cstate !== "connected") throw new Error(`Cannot subscribe to '${cstate}' object (${this})`)
+    if (cstate !== "resolved") throw new Error(`Cannot subscribe to '${cstate}' object (${this})`)
     if (!this.canSubscribe(sub.auth)) return false
     this.subscribers.push(sub)
     return true
@@ -256,7 +269,7 @@ export abstract class DObject implements Disposable {
 
   protected queue<M extends Record> () {
     const index = this.metaIdx++, meta = this.metas[index]
-    if (meta.type === "queue") return new DQueue(this, meta.name)
+    if (meta.type === "queue") return new DQueue(this, index)
     throw new Error(`Metadata mismatch [meta=${meta}], asked to create 'queue'`)
   }
 }

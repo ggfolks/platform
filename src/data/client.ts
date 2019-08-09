@@ -2,7 +2,7 @@ import {Disposable} from "../core/util"
 import {Record} from "../core/data"
 import {Mutable, Subject} from "../core/react"
 import {Encoder, Decoder} from "../core/codec"
-import {DataSource, DObject, DObjectStatus, DObjectType, Path} from "./data"
+import {DataSource, DObject, DObjectStatus, DObjectType, DQueueAddr, Path} from "./data"
 import {DownMsg, DownType, SyncMsg, UpMsg, UpType, encodeUp, decodeDown} from "./protocol"
 
 /** Uniquely identifies a data server; provides the info needed to establish a connection to it. */
@@ -17,6 +17,7 @@ export type Connector = (client :Client, addr :Address) => Connection
 export class Client implements DataSource {
   private readonly conns = new Map<Address, Connection>()
   private readonly objects = new Map<number,DObject>()
+  private readonly resolver = (oid :number) => this.objects.get(oid)
   private readonly encoder = new Encoder()
   private nextOid = 1
 
@@ -33,12 +34,14 @@ export class Client implements DataSource {
     return obj
   }
 
-  post (path :Path, msg :Record) { this.sendUp(path, {type: UpType.POST, msg}) }
+  post (queue :DQueueAddr, msg :Record) {
+    this.sendUp(queue.path, {type: UpType.POST, queue, msg})
+  }
 
   sendSync (obj :DObject, req :SyncMsg) { this.sendUp(obj.path, {...req, oid: obj.oid}) }
 
   recvMsg (msg :Uint8Array) {
-    this.handleDown(decodeDown(this.objects, new Decoder(msg)))
+    this.handleDown(decodeDown(this.resolver, new Decoder(msg)))
   }
 
   handleDown (msg :DownMsg) {
@@ -46,7 +49,7 @@ export class Client implements DataSource {
     if (!obj) throw new Error(`Got msg for unknown object: ${JSON.stringify(msg)}`)
     switch (msg.type) {
     case DownType.SUBOBJ:
-      (msg.obj.status as Mutable<DObjectStatus>).update({state: "connected"})
+      (msg.obj.status as Mutable<DObjectStatus>).update({state: "resolved"})
       break
     case DownType.SUBERR:
       (obj.status as Mutable<DObjectStatus>).update({state: "error", error: new Error(msg.cause)})

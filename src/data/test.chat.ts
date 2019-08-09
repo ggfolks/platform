@@ -3,8 +3,8 @@ import {Mutable, Subject, Value} from "../core/react"
 import {Record} from "../core/data"
 import {Encoder, Decoder, setTextCodec} from "../core/codec"
 import {getPropMetas, dobject, dmap, dvalue, dcollection, dqueue} from "./meta"
-import {Auth, ID, DataSource, DObject, DObjectStatus, DObjectType, MetaMsg, Path, Subscriber,
-        findObjectType} from "./data"
+import {Auth, ID, DataSource, DObject, DObjectStatus, DObjectType, DQueueAddr, MetaMsg,
+        Path, Subscriber, findObjectType} from "./data"
 import {DownMsg, DownType, SyncMsg, UpType, encodeDown, decodeUp,
         addObject, getObject} from "./protocol"
 import {Address, Client, Connection} from "./client"
@@ -27,21 +27,17 @@ export class UserObject extends DObject {
   @dqueue(handleUserReq)
   userq = this.queue<UserReq>()
 
-  canSubscribe (auth :Auth) :boolean {
-    return auth.id === this.key || super.canSubscribe(auth)
-  }
-  canWrite (prop :string, who :Auth) {
-    return (prop === "username") || super.canWrite(prop, who)
-  }
+  canSubscribe (auth :Auth) { return auth.id === this.key || super.canSubscribe(auth) }
+  canWrite (prop :string, who :Auth) { return (prop === "username") || super.canWrite(prop, who) }
 }
 
-type UserReq = {type: "sendUsername", path :Path}
+type UserReq = {type: "sendUsername", queue :DQueueAddr}
 
 function handleUserReq (obj :UserObject, req :UserReq, auth :Auth) {
   switch (req.type) {
   case "sendUsername":
     const rsp = {type: "setUsername", id: obj.key, username: obj.username.current}
-    obj.source.post(req.path, rsp)
+    obj.source.post(req.queue, rsp)
     break
   }
 }
@@ -88,9 +84,7 @@ export class RoomObject extends DObject {
   @dqueue(handleMetaMsg)
   metaq = this.queue<MetaMsg>()
 
-  canSubscribe (auth :Auth) :boolean {
-    return this.occupants.has(auth.id) || super.canSubscribe(auth)
-  }
+  canSubscribe (auth :Auth) { return this.occupants.has(auth.id) || super.canSubscribe(auth) }
 }
 
 function handleRoomReq (obj :RoomObject, req :RoomReq, auth :Auth) {
@@ -129,8 +123,8 @@ function handleMetaMsg (obj :RoomObject, msg :MetaMsg, auth :Auth) {
   switch (msg.type) {
   case "subscribed":
     obj.occupants.set(msg.userId, {username: "?"})
-    const req = {type: "sendUsername", path: obj.path.concat(["roomq"])}
-    obj.source.post(["users", msg.userId], req)
+    const req = {type: "sendUsername", path: obj.roomq.addr}
+    obj.source.post(UserObject.queueAddr(["users", msg.userId], "userq"), req)
     break
   case "unsubscribed":
     obj.occupants.delete(msg.userId)
@@ -153,7 +147,7 @@ interface RoomInfo {
 @dobject
 export class RootObject extends DObject {
 
-  canSubscribe (auth :Auth) :boolean { return true }
+  canSubscribe (auth :Auth) { return true }
 
   @dmap("id", "record")
   publicRooms = this.map<ID, RoomInfo>()
@@ -187,9 +181,9 @@ class TestDataSource implements DataSource {
   resolve<T extends DObject> (path :Path, otype :DObjectType<T>) :T {
     const oid = this.nextOid
     this.nextOid = oid+1
-    return new otype(this, Value.constant({state: "connected"} as DObjectStatus), path, oid)
+    return new otype(this, Value.constant({state: "resolved"} as DObjectStatus), path, oid)
   }
-  post<M> (path :Path, msg :M) {} // noop!
+  post<M> (queue :DQueueAddr, msg :M) {} // noop!
   sendSync (obj :DObject, msg :SyncMsg) {} // noop!
 }
 
@@ -199,7 +193,7 @@ test("metas", () => {
                              ktype: "id", vtype: "record"})
   expect(rmetas[1]).toEqual({type: "collection", name: "users", index: 1,
                              ktype: "string", otype: UserObject})
-  expect(rmetas[3]).toEqual({type: "queue", name: "chatq", index: 3})
+  expect(rmetas[3]).toEqual({type: "queue", name: "chatq", index: 3, handler: handleChatReq})
 
   const umetas = getPropMetas(UserObject.prototype)
   expect(umetas[0]).toEqual({type: "value", name: "username", index: 0, vtype: "string"})
@@ -276,6 +270,8 @@ test("findObjectType", () => {
 })
 
 class TestServer<R extends DObject> implements DataSource {
+  private readonly objects = new Map<string, DObject>()
+  private auth :Auth = {id: "0", isSystem: true}
 
   constructor (readonly rtype :DObjectType<R>) {}
 
@@ -283,30 +279,47 @@ class TestServer<R extends DObject> implements DataSource {
     return new ClientHandler(this, conn, id)
   }
 
-  resolve<T extends DObject> (path :Path, otype :DObjectType<T>) :T {
-    const status = Mutable.local({state: "pending"} as DObjectStatus)
-    const obj = new otype(this, status, path, 0)
-    // TODO: stick this in a table somewhere
-    return obj
+  resolve<T extends DObject> (path :Path, otype? :DObjectType<T>) :T {
+    const key = path.join(":")
+    const obj = this.objects.get(key)
+    if (obj) return obj as T
+
+    const ctor = otype || findObjectType(this.rtype, path)
+    // normally this would be pending until we loaded its persistent data, but we don't support
+    // persistent data yet, simple!
+    const status = Mutable.local({state: "resolved"} as DObjectStatus)
+    const nobj = new ctor(this, status, path, 0)
+    this.objects.set(key, nobj)
+    return nobj
   }
 
-  post (path :Path, msg :Record) :void {
+  post (queue :DQueueAddr, msg :Record, auth? :Auth) :void {
+    const obj = this.resolve<DObject>(queue.path, findObjectType(this.rtype, queue.path))
+    obj.status.whenOnce(s => s.state === "resolved", s => {
+      const meta = obj.metas[queue.index]
+      if (meta.type === "queue") meta.handler(obj, msg, auth || this.auth)
+      else console.warn(`Dropping post to invalid queue address ` +
+                        `[obj=${obj}, queue=${queue}, msg=${msg}]`)
+    })
   }
 
   sendSync (obj :DObject, msg :SyncMsg) :void {
-  }
-
-  resolveRemote (path :Path) :DObject {
-    return this.resolve<DObject>(path, findObjectType(this.rtype, path))
-  }
-
-  postRemote (path :Path, msg :Record, auth :Auth) {
+    // nothing to do here, this would only be used if we were proxying the object from some other
+    // server, but we're the source of truth for `obj`
   }
 }
 
-class ClientHandler implements Subscriber {
-  private readonly subscrips = new Map<number, DObject>()
+interface Subscription extends Subscriber {
+  obj :DObject
+}
+
+class ClientHandler {
+  private readonly subscrips = new Map<number, Subscription>()
   private readonly encoder = new Encoder()
+  private readonly resolver = (oid :number) => {
+    const sub = this.subscrips.get(oid)
+    return sub && sub.obj
+  }
 
   readonly auth :Auth
 
@@ -315,13 +328,14 @@ class ClientHandler implements Subscriber {
   }
 
   handleMsg (msgData :Uint8Array) {
-    const msg = decodeUp(this.subscrips, new Decoder(msgData))
+    const msg = decodeUp(this.resolver, new Decoder(msgData))
     switch (msg.type) {
     case UpType.SUB:
-      const obj = this.server.resolveRemote(msg.path)
-      obj.status.whenOnce(s => s.state === "connected", s => {
-        if (obj.subscribe(this)) {
-          this.subscrips.set(msg.oid, obj)
+      const obj = this.server.resolve(msg.path)
+      obj.status.whenOnce(s => s.state === "resolved", s => {
+        const sub = {obj, auth: this.auth, sendSync: (msg :SyncMsg) => this.sendDown({...msg, oid})}
+        if (obj.subscribe(sub)) {
+          this.subscrips.set(msg.oid, sub)
           this.sendDown({type: DownType.SUBOBJ, oid: msg.oid, obj})
         }
         else this.sendDown({type: DownType.SUBERR, oid: msg.oid, cause: "Access denied."})
@@ -329,26 +343,27 @@ class ClientHandler implements Subscriber {
       break
 
     case UpType.UNSUB:
-      const unobj = this.subscrips.get(msg.oid)
-      if (unobj) {
-        unobj.unsubscribe(this)
+      const sub = this.subscrips.get(msg.oid)
+      if (sub) {
+        sub.obj.unsubscribe(sub)
         this.subscrips.delete(msg.oid)
       }
       break
 
     case UpType.POST:
+      this.server.post(msg.queue, msg.msg, this.auth)
       break
 
     default:
       const oid = msg.oid
-      const sobj = this.subscrips.get(oid)
-      if (sobj) sobj.applyWrite(msg, this.auth)
-      else console.warn(`Dropping sync message, no object [msg=${JSON.stringify(msg)}]`)
+      const ssub = this.subscrips.get(oid)
+      if (ssub) ssub.obj.applyWrite(msg, this.auth)
+      else console.warn(`Dropping sync message, no subscription [msg=${JSON.stringify(msg)}]`)
     }
   }
 
-  sendSync (msg :SyncMsg) {
-    // TODO
+  sendSync (obj :DObject, msg :SyncMsg) {
+    throw new Error("TODO")
   }
 
   sendDown (msg :DownMsg) {
@@ -384,9 +399,19 @@ test("client-server", () => {
   const testAddr = {host: "test", port: 0, path: "/"}
   const testLocator = (path :Path) => Subject.constant(testAddr)
   const testServer = new TestServer(RootObject)
-  const clientA = new Client(testLocator, (c, a) => new TestConnection(c, a, testServer, "a"))
-  const clientB = new Client(testLocator, (c, a) => new TestConnection(c, a, testServer, "b"))
 
-  console.log(clientA)
-  console.log(clientB)
+  const clientA = new Client(testLocator, (c, a) => new TestConnection(c, a, testServer, "a"))
+  // const clientB = new Client(testLocator, (c, a) => new TestConnection(c, a, testServer, "b"))
+
+  const rootA = clientA.resolve([], RootObject)
+  rootA.status.onValue(s => console.log(s))
+
+  const userAA = clientA.resolve(["users", "a"], UserObject)
+  userAA.username.update("User A")
+  userAA.username.onValue(username => expect(username).toEqual("User A"))
+
+  // try to subscribe to user b's object via a, should fail
+  const userAB = clientA.resolve(["users", "b"], UserObject)
+  userAB.status.onValue(s => console.log(JSON.stringify(s)))
+  userAB.status.onValue(s => expect(s.state === "error"))
 })
