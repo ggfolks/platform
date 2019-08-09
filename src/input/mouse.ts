@@ -28,8 +28,10 @@ export class Mouse implements Disposable {
   }
 
   constructor (private _canvas :HTMLElement) {
+    _canvas.addEventListener("pointerdown", this._onPointerDown)
+    _canvas.addEventListener("pointerup", this._onPointerUp)
     _canvas.addEventListener("mousedown", this._onMouseDown)
-    _canvas.addEventListener("mouseup", this._onMouseUp)
+    document.addEventListener("mouseup", this._onMouseUp)
     _canvas.addEventListener("mousemove", this._onMouseMove)
     _canvas.addEventListener("mouseenter", this._onMouseEnter)
     _canvas.addEventListener("mouseleave", this._onMouseLeave)
@@ -50,11 +52,21 @@ export class Mouse implements Disposable {
   }
 
   dispose () {
+    this._canvas.removeEventListener("pointerdown", this._onPointerDown)
+    this._canvas.removeEventListener("pointerup", this._onPointerUp)
     this._canvas.removeEventListener("mousedown", this._onMouseDown)
-    this._canvas.removeEventListener("mouseup", this._onMouseUp)
+    document.removeEventListener("mouseup", this._onMouseUp)
     this._canvas.removeEventListener("mousemove", this._onMouseMove)
     this._canvas.removeEventListener("mouseenter", this._onMouseEnter)
     this._canvas.removeEventListener("mouseleave", this._onMouseLeave)
+  }
+
+  private _onPointerDown = (event :PointerEvent) => {
+    this._canvas.setPointerCapture(event.pointerId)
+  }
+
+  private _onPointerUp = (event :PointerEvent) => {
+    this._canvas.releasePointerCapture(event.pointerId)
   }
 
   private _onMouseDown = (event :MouseEvent) => {
