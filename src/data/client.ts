@@ -3,7 +3,7 @@ import {Record} from "../core/data"
 import {DispatchFn, Subject} from "../core/react"
 import {Encoder, Decoder} from "../core/codec"
 import {DataSource, DKey, DObject, DObjectType, DQueueAddr, Path, pathToKey} from "./data"
-import {DownMsg, DownType, SyncMsg, UpMsg, UpType, encodeUp, decodeDown} from "./protocol"
+import {DownMsg, DownType, UpMsg, UpType, encodeUp, decodeDown} from "./protocol"
 
 /** Uniquely identifies a data server; provides the info needed to establish a connection to it. */
 export type Address = {host :string, port :number, path :string}
@@ -15,11 +15,11 @@ export type Locator = (path :Path) => Subject<Address>
 export type Connector = (client :Client, addr :Address) => Connection
 
 type DObjectCompleter = {
-  create :(oid :number, ...args :any[]) => DObject
+  info :{otype :DObjectType<any>, source :DataSource, path :Path}
   complete :DispatchFn<DObject|Error>
 }
 
-export class Client implements DataSource {
+export class Client {
   private readonly conns = new Map<Address, Connection>()
   private readonly objects = new Map<number,DObject>()
   private readonly resolved = new Map<string,Subject<DObject|Error>>()
@@ -33,10 +33,19 @@ export class Client implements DataSource {
       if (obj) return obj
       throw new Error(`Unknown object [oid=${oid}]`)
     },
-    create: (oid :number, ...args :any[]) => {
+    info: (oid :number) => {
       const comp = this.completers.get(oid)
-      if (comp) return comp.create(oid, ...args)
+      if (comp) return comp.info
       throw new Error(`Cannot create unknown object [oid=${oid}]`)
+    }
+  }
+
+  private dataSource (oid :number) :DataSource {
+    return {
+      create: (path, cprop, key, otype, ...args) => this.create(path, cprop, key, otype, ...args),
+      resolve: (path, otype) => this.resolve(path, otype),
+      post: (queue, msg) => this.post(queue, msg),
+      sendSync: (obj, req) => this.sendUp(obj.path, {...req, oid})
     }
   }
 
@@ -55,7 +64,7 @@ export class Client implements DataSource {
       const oid = this.nextOid
       this.nextOid = oid+1
       this.completers.set(oid, {
-        create: (oid, ...args) => new otype(this, path, oid, ...args),
+        info: {otype, source: this.dataSource(oid), path},
         complete: res => {
           this.completers.delete(oid)
           if (res instanceof DObject) this.objects.set(oid, res)
@@ -74,8 +83,6 @@ export class Client implements DataSource {
   post (queue :DQueueAddr, msg :Record) {
     this.sendUp(queue.path, {type: UpType.POST, queue, msg})
   }
-
-  sendSync (obj :DObject, req :SyncMsg) { this.sendUp(obj.path, {...req, oid: obj.oid}) }
 
   recvMsg (msg :Uint8Array) {
     this.handleDown(decodeDown(this.resolver, new Decoder(msg)))

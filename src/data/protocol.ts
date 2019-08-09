@@ -1,7 +1,8 @@
 import {Record} from "../core/data"
 import {Encoder, Decoder, KeyType, ValueType} from "../core/codec"
 import {Mutable} from "../core/react"
-import {Auth, DObject, DQueueAddr, Path} from "./data"
+import {getPropMetas} from "./meta"
+import {Auth, DataSource, DObjectType, DObject, DQueueAddr, Path} from "./data"
 
 export const enum SyncType { VALSET, SETADD, SETDEL, MAPSET, MAPDEL }
 type ValSetMsg = {type :SyncType.VALSET, idx :number, value :any, vtype: ValueType}
@@ -81,7 +82,7 @@ export interface UpResolver {
 }
 
 export interface DownResolver extends UpResolver {
-  create (oid :number, ...args :any[]) :DObject
+  info (oid :number) :{otype :DObjectType<any>, source :DataSource, path :Path}
 }
 
 function decodeSync (objects :UpResolver, type :SyncType, dec :Decoder) :OidSyncMsg {
@@ -145,9 +146,13 @@ function getPath (dec :Decoder) :string[] { return dec.getArray("string") }
 
 export function addObject (rcpt :Auth, obj :DObject, enc :Encoder) {
   for (const meta of obj.metas) {
-    if (!obj.canRead(meta.name, rcpt)) continue
+    // we write all leading const properties; they must be readable
+    if (meta.type !== "const" && !obj.canRead(meta.name, rcpt)) continue
     const prop = obj[meta.name]
     switch (meta.type) {
+    case "const":
+      enc.addValue(prop, meta.vtype)
+      break
     case "value":
       enc.addValue(meta.index, "size8")
       enc.addValue((prop as Mutable<any>).current, meta.vtype)
@@ -168,12 +173,20 @@ export function addObject (rcpt :Auth, obj :DObject, enc :Encoder) {
 }
 
 export function getObject (dec :Decoder, oid :number, objects :DownResolver) :DObject {
-  const into = objects.create(oid) // TODO: read const args first & pass to ctor
+  const {otype, source, path} = objects.info(oid)
+  const metas = getPropMetas(otype.prototype)
+  const args = []
+  for (const meta of metas) {
+    if (meta.type === "const") args.push(dec.getValue(meta.vtype))
+    else break
+  }
+  const into = new otype(source, path, ...args)
   while (true) {
     const idx = dec.getValue("size8")
     if (idx === 255) break
     const meta = into.metas[idx], prop = into[meta.name]
     switch (meta.type) {
+    case "const": throw new Error(`Invalid const property: ${JSON.stringify(meta)}`)
     case "value": (prop as Mutable<any>).update(dec.getValue(meta.vtype)) ; break
     case "set": dec.syncSet(meta.etype, (prop as Set<any>)) ; break
     case "map": dec.syncMap(meta.ktype, meta.vtype, (prop as Map<any, any>)) ; break

@@ -3,7 +3,7 @@ import {Data, Record, dataEquals, refEquals} from "../core/data"
 import {ChangeFn, Eq, Mutable, Subject, ValueFn, addListener, dispatchChange} from "../core/react"
 import {MutableSet, MutableMap} from "../core/rcollect"
 import {KeyType, ValueType} from "../core/codec"
-import {getPropMetas} from "./meta"
+import {PropMeta, getPropMetas} from "./meta"
 import {SyncMsg, SyncType} from "./protocol"
 
 export type ID = string
@@ -100,6 +100,10 @@ class DMutableMap<K,V> extends MutableMap<K,V> {
 /** Identifies an object in a collection. */
 export type DKey = string | number
 
+/** A sentinel `DKey` value that instructs the server to autogenerate a key when creating a new
+  * object in a collection. The generated key will be of type `ID`. */
+export const AutoKey = "__auto_key__"
+
 /** Identifies the path to an object from the root of the data store. Even path elements are object
   * property names, odd path elements are object collection keys. */
 export type Path = DKey[]
@@ -136,7 +140,7 @@ export class DQueue<M extends Record> {
 export type DHandler<O extends DObject,M> = (obj :O, msg :M, auth: Auth) => void
 
 export type DObjectType<T extends DObject> = {
-  new (source :DataSource, path :Path, oid :number, ...args :any[]) :T
+  new (source :DataSource, path :Path, ...args :any[]) :T
 }
 
 export function findObjectType (rtype :DObjectType<any>, path :Path) :DObjectType<any> {
@@ -174,10 +178,19 @@ export interface Subscriber {
   sendSync (msg :SyncMsg) :void
 }
 
+function firstNonConst (metas :PropMeta[]) {
+  for (let ii = 0; ii < metas.length; ii += 1) if (metas[ii].type !== "const") return ii
+  return metas.length
+}
+
+function metaMismatch (meta :PropMeta, expect :string) :never {
+  throw new Error(`Metadata mismatch [meta=${JSON.stringify(meta)}], asked to create '${expect}'`)
+}
+
 export abstract class DObject implements Disposable {
   readonly metas = getPropMetas(Object.getPrototypeOf(this))
   private readonly subscribers :Subscriber[] = []
-  private metaIdx = 0
+  private metaIdx = firstNonConst(this.metas)
 
   /** Returns the address of the queue named `name` on this object. Note: this must be called via
     * the concrete DObject subtype that declares the queue. */
@@ -188,7 +201,7 @@ export abstract class DObject implements Disposable {
     throw new Error(`No queue named ${name} on ${this.constructor.name}`)
   }
 
-  constructor (readonly source :DataSource, readonly path :Path, readonly oid :number) {}
+  constructor (readonly source :DataSource, readonly path :Path) {}
 
   /** This object's key in its owning collection. */
   get key () { return this.path[this.path.length-1] }
@@ -244,8 +257,8 @@ export abstract class DObject implements Disposable {
 
   protected value<T> (initVal :T, eq :Eq<T> = refEquals) :Mutable<T> {
     const index = this.metaIdx++, meta = this.metas[index]
-    if (meta.type === "value") return DMutable.create(eq, this, index, meta.vtype, initVal)
-    throw new Error(`Metadata mismatch [meta=${meta}], asked to create 'value'`)
+    return (meta.type === "value") ? DMutable.create(eq, this, index, meta.vtype, initVal) :
+      metaMismatch(meta, "value")
   }
 
   protected dataValue<T extends Data> (initVal :T) :Mutable<T> {
@@ -254,25 +267,24 @@ export abstract class DObject implements Disposable {
 
   protected set<E> () :MutableSet<E> {
     const index = this.metaIdx++, meta = this.metas[index]
-    if (meta.type === "set") return new DMutableSet(this, index, meta.etype)
-    throw new Error(`Metadata mismatch [meta=${meta}], asked to create 'set'`)
+    return (meta.type === "set") ? new DMutableSet(this, index, meta.etype) :
+      metaMismatch(meta, "set")
   }
 
   protected map<K,V> () :MutableMap<K,V> {
     const index = this.metaIdx++, meta = this.metas[index]
-    if (meta.type === "map") return new DMutableMap(this, index, meta.ktype, meta.vtype)
-    throw new Error(`Metadata mismatch [meta=${meta}], asked to create 'map'`)
+    return (meta.type === "map") ? new DMutableMap(this, index, meta.ktype, meta.vtype) :
+      metaMismatch(meta, "map")
   }
 
   protected collection<K,V extends DObject> () {
     const index = this.metaIdx++, meta = this.metas[index]
-    if (meta.type === "collection") return new DCollection<K,V>(this, meta.name, meta.otype)
-    throw new Error(`Metadata mismatch [meta=${meta}], asked to create 'collection'`)
+    return (meta.type === "collection") ? new DCollection<K,V>(this, meta.name, meta.otype) :
+      metaMismatch(meta, "collection")
   }
 
   protected queue<M extends Record> () {
     const index = this.metaIdx++, meta = this.metas[index]
-    if (meta.type === "queue") return new DQueue(this, index)
-    throw new Error(`Metadata mismatch [meta=${meta}], asked to create 'queue'`)
+    return (meta.type === "queue") ? new DQueue(this, index) : metaMismatch(meta, "queue")
   }
 }

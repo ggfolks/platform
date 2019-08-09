@@ -1,8 +1,8 @@
 import {Timestamp} from "../core/util"
 import {Subject} from "../core/react"
 import {Encoder, Decoder, setTextCodec} from "../core/codec"
-import {getPropMetas, dobject, dmap, dvalue, dcollection, dqueue} from "./meta"
-import {Auth, ID, DObject, DQueueAddr, MetaMsg, Path, findObjectType} from "./data"
+import {getPropMetas, dconst, dobject, dmap, dvalue, dcollection, dqueue} from "./meta"
+import {Auth, AutoKey, ID, DataSource, DObject, DQueueAddr, MetaMsg, Path, findObjectType} from "./data"
 import {addObject, getObject} from "./protocol"
 import {Address, Client, Connection} from "./client"
 import {DataStore, Session} from "./server"
@@ -63,6 +63,14 @@ interface OccupantInfo {
 
 @dobject
 export class RoomObject extends DObject {
+
+  constructor (source :DataSource, path :Path, owner :ID) {
+    super(source, path)
+    this.owner = owner
+  }
+
+  @dconst("id")
+  readonly owner :ID
 
   @dvalue("string")
   name = this.value("")
@@ -163,7 +171,7 @@ export class RootObject extends DObject {
 function handleChatReq (obj :RootObject, req :ChatReq, auth :Auth) {
   switch (req.type) {
   case "create":
-    // TODO
+    obj.rooms.create(AutoKey)
     break
   case "join":
     // TODO
@@ -185,6 +193,10 @@ test("metas", () => {
   const umetas = getPropMetas(UserObject.prototype)
   expect(umetas[0]).toEqual({type: "value", name: "username", index: 0, vtype: "string"})
   expect(umetas[1]).toEqual({type: "value", name: "lastLogin", index: 1, vtype: "timestamp"})
+
+  const rmmetas = getPropMetas(RoomObject.prototype)
+  expect(rmmetas[0]).toEqual({type: "const", name: "owner", index: 0, vtype: "id"})
+  expect(rmmetas[1]).toEqual({type: "value", name: "name", index: 1, vtype: "string"})
 })
 
 const sysauth = {id: "system", isSystem: true}
@@ -212,8 +224,10 @@ test("access", () => {
 
 test("codec", () => {
   const store = new DataStore(RootObject)
-  store.create<RoomObject>(sysauth, [], "rooms", "1").onValue(room => {
+  store.create<RoomObject>(sysauth, [], "rooms", "1", "42").onValue(room => {
     if (room instanceof Error) throw room
+
+    expect(room.owner).toEqual("42")
 
     room.name.update("Test room")
     room.occupants.set("1", {username: "Testy Testerson"})
@@ -232,10 +246,10 @@ test("codec", () => {
     const dec = new Decoder(msg)
     const droom = getObject(dec, 0, {
       get: oid => { throw new Error(`unused`) },
-      create: oid => new RoomObject(store.source, ["rooms", "1"], oid)
+      info: oid => ({otype: RoomObject, source: store.source, path: ["rooms", "1"]})
     }) as RoomObject
 
-
+    expect(droom.owner).toEqual(room.owner)
     expect(droom.name.current).toEqual(room.name.current)
     expect(Array.from(droom.occupants)).toEqual(Array.from(room.occupants))
     expect(droom.nextMsgId.current).toEqual(room.nextMsgId.current)

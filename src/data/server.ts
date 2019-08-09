@@ -40,7 +40,7 @@ export class DataStore {
           if (obj) disp(obj as T)
           else {
             const otype = findObjectType(this.rtype, cpath)
-            const nobj = new otype(this.source, cpath, 0, ...args)
+            const nobj = new otype(this.source, cpath, ...args)
             this.objects.set(ckey, nobj)
             disp(nobj)
           }
