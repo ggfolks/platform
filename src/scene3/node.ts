@@ -125,21 +125,16 @@ class RaycasterNode extends EntityComponentNode<Component<Object3D>> {
       this._intersection = this.graph.clock.fold(NoIntersection, () => {
         target.length = 0
         const object = this._component.read(this._entityId)
-        let ancestor = object
+        const parent = object.parent as Object3D
+        let ancestor = parent
         while (ancestor.parent) ancestor = ancestor.parent
         raycaster.set(this._getOrigin().current, this._getDirection().current)
         if (this.config.frame !== "world") raycaster.ray.applyMatrix4(object.matrixWorld)
+        // remove the object itself while we raycast
+        parent.remove(object)
         raycaster.intersectObject(ancestor, true, target)
-        intersectionLoop: for (const intersection of target) {
-          ancestor = intersection.object
-          while (ancestor.parent) {
-            // no intersecting with the firing object
-            if (ancestor === object) continue intersectionLoop
-            ancestor = ancestor.parent
-          }
-          return intersection
-        }
-        return NoIntersection
+        parent.add(object)
+        return target.length > 0 ? target[0] : NoIntersection
       })
     }
     return this._intersection

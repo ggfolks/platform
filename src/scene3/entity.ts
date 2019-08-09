@@ -305,6 +305,11 @@ export class SceneSystem extends System {
 
   protected added (id :ID, config :EntityConfig) {
     super.added(id, config)
+    // start with an empty object
+    const obj = new Object3D()
+    obj.userData.id = id
+    this.obj.update(id, obj)
+    this.scene.add(obj)
     createObject3D(config.components[this.obj.id]).onValue(obj => {
       // if this is the initial, default Object3D, it won't actually be in the scene;
       // otherwise, we're replacing the model with another
