@@ -76,11 +76,16 @@ export function encodeDown (rcpt :Auth, dnm :DownMsg, enc :Encoder) {
   }
 }
 
-type ObjectResolver = (oid :number) => DObject|undefined
+export interface UpResolver {
+  get (oid :number) :DObject
+}
 
-function decodeSync (objects :ObjectResolver, type :SyncType, dec :Decoder) :OidSyncMsg {
-  const oid :number = dec.getValue("size32"), obj = objects(oid)
-  if (!obj) throw new Error(`Got sync for unknown object [type=${type}, oid=${oid}]`)
+export interface DownResolver extends UpResolver {
+  create (oid :number, ...args :any[]) :DObject
+}
+
+function decodeSync (objects :UpResolver, type :SyncType, dec :Decoder) :OidSyncMsg {
+  const oid :number = dec.getValue("size32"), obj = objects.get(oid)
   const idx = dec.getValue("size8")
   const meta = obj.metas[idx]
   if (!meta) throw new Error(
@@ -108,7 +113,7 @@ function decodeSync (objects :ObjectResolver, type :SyncType, dec :Decoder) :Oid
   }
 }
 
-export function decodeUp (objects :ObjectResolver, dec :Decoder) :UpMsg {
+export function decodeUp (objects :UpResolver, dec :Decoder) :UpMsg {
   const type = dec.getValue("int8")
   switch (type) {
   case UpType.SUB:
@@ -123,13 +128,12 @@ export function decodeUp (objects :ObjectResolver, dec :Decoder) :UpMsg {
   }
 }
 
-export function decodeDown (objects :ObjectResolver, dec :Decoder) :DownMsg {
+export function decodeDown (objects :DownResolver, dec :Decoder) :DownMsg {
   const type = dec.getValue("int8")
   switch (type) {
   case DownType.SUBOBJ:
-    const oid = dec.getValue("size32"), obj = objects(oid)
-    if (!obj) throw new Error(`Got sync for unknown object [type=${type}, oid=${oid}]`)
-    return {type, oid, obj: getObject(dec, obj)}
+    const oid = dec.getValue("size32")
+    return {type, oid, obj: getObject(dec, oid, objects)}
   case DownType.SUBERR: return {type, oid: dec.getValue("size32"), cause :dec.getValue("string")}
   default: return decodeSync(objects, type, dec)
   }
@@ -163,7 +167,8 @@ export function addObject (rcpt :Auth, obj :DObject, enc :Encoder) {
   enc.addValue(255, "size8") // terminator
 }
 
-export function getObject<T extends DObject> (dec :Decoder, into :T) :T {
+export function getObject (dec :Decoder, oid :number, objects :DownResolver) :DObject {
+  const into = objects.create(oid) // TODO: read const args first & pass to ctor
   while (true) {
     const idx = dec.getValue("size8")
     if (idx === 255) break

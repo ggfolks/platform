@@ -1,8 +1,8 @@
 import {Disposable} from "../core/util"
 import {Record} from "../core/data"
-import {Mutable, Subject} from "../core/react"
+import {DispatchFn, Subject} from "../core/react"
 import {Encoder, Decoder} from "../core/codec"
-import {DataSource, DObject, DObjectStatus, DObjectType, DQueueAddr, Path} from "./data"
+import {DataSource, DKey, DObject, DObjectType, DQueueAddr, Path, pathToKey} from "./data"
 import {DownMsg, DownType, SyncMsg, UpMsg, UpType, encodeUp, decodeDown} from "./protocol"
 
 /** Uniquely identifies a data server; provides the info needed to establish a connection to it. */
@@ -14,24 +14,61 @@ export type Locator = (path :Path) => Subject<Address>
 /** Creates `Connection` instances for clients. */
 export type Connector = (client :Client, addr :Address) => Connection
 
+type DObjectCompleter = {
+  create :(oid :number, ...args :any[]) => DObject
+  complete :DispatchFn<DObject|Error>
+}
+
 export class Client implements DataSource {
   private readonly conns = new Map<Address, Connection>()
   private readonly objects = new Map<number,DObject>()
-  private readonly resolver = (oid :number) => this.objects.get(oid)
+  private readonly resolved = new Map<string,Subject<DObject|Error>>()
+  private readonly completers = new Map<number,DObjectCompleter>()
   private readonly encoder = new Encoder()
   private nextOid = 1
 
+  private readonly resolver = {
+    get: (oid :number) => {
+      const obj = this.objects.get(oid)
+      if (obj) return obj
+      throw new Error(`Unknown object [oid=${oid}]`)
+    },
+    create: (oid :number, ...args :any[]) => {
+      const comp = this.completers.get(oid)
+      if (comp) return comp.create(oid, ...args)
+      throw new Error(`Cannot create unknown object [oid=${oid}]`)
+    }
+  }
+
   constructor (readonly locator :Locator, readonly connector :Connector) {}
 
-  resolve<T extends DObject> (path :Path, otype :DObjectType<T>) :T {
-    const oid = this.nextOid
-    this.nextOid = oid+1
-    const status = Mutable.local({state: "pending"} as DObjectStatus)
-    const obj = new otype(this, status, path, oid)
-    this.objects.set(oid, obj)
-    // TODO: keep track of which conn hosts which objects & resubscribe if we lose & regain conn
-    this.sendUp(path, {type: UpType.SUB, path, oid})
-    return obj
+  create<T extends DObject> (
+    path :Path, cprop :string, key :DKey, otype :DObjectType<T>, ...args :any[]
+  ) :Subject<T|Error> {
+    return Subject.constant(new Error(`TODO`))
+  }
+
+  resolve<T extends DObject> (path :Path, otype :DObjectType<T>) :Subject<T|Error> {
+    const key = pathToKey(path), sub = this.resolved.get(key)
+    if (sub) return sub as Subject<T|Error>
+    const nsub = Subject.deriveSubject<T|Error>(disp => {
+      const oid = this.nextOid
+      this.nextOid = oid+1
+      this.completers.set(oid, {
+        create: (oid, ...args) => new otype(this, path, oid, ...args),
+        complete: res => {
+          this.completers.delete(oid)
+          if (res instanceof DObject) this.objects.set(oid, res)
+          disp(res as T|Error)
+        }
+      })
+      this.sendUp(path, {type: UpType.SUB, path, oid})
+      return () => {
+        this.sendUp(path, {type: UpType.UNSUB, oid})
+      }
+    })
+    this.resolved.set(key, nsub)
+    return nsub
   }
 
   post (queue :DQueueAddr, msg :Record) {
@@ -45,18 +82,18 @@ export class Client implements DataSource {
   }
 
   handleDown (msg :DownMsg) {
-    const obj = this.objects.get(msg.oid)
-    if (!obj) throw new Error(`Got msg for unknown object: ${JSON.stringify(msg)}`)
-    switch (msg.type) {
-    case DownType.SUBOBJ:
-      (msg.obj.status as Mutable<DObjectStatus>).update({state: "resolved"})
-      break
-    case DownType.SUBERR:
-      (obj.status as Mutable<DObjectStatus>).update({state: "error", error: new Error(msg.cause)})
-      break
-    default:
-      obj.applySync(msg)
-      break
+    if (msg.type === DownType.SUBOBJ) {
+      const comp = this.completers.get(msg.oid)
+      if (comp) comp.complete(msg.obj)
+      else this.reportError(`Unexpected SUBOBJ response [oid=${msg.oid}]`)
+    } else if (msg.type === DownType.SUBERR) {
+      const comp = this.completers.get(msg.oid)
+      if (comp) comp.complete(new Error(msg.cause))
+      else this.reportError(`Unexpected SUBERR response [oid=${msg.oid}, cause=${msg.cause}]`)
+    } else {
+      const obj = this.objects.get(msg.oid)
+      if (obj) obj.applySync(msg)
+      throw new Error(`Unexpected SYNC msg [oid=${msg.oid}, type=${msg.type}]`)
     }
   }
 
@@ -83,6 +120,10 @@ export class Client implements DataSource {
       }
     })
   }
+
+  protected reportError (msg :string) {
+    console.warn(msg)
+  }
 }
 
 export abstract class Connection implements Disposable {
@@ -92,8 +133,6 @@ export abstract class Connection implements Disposable {
   }
 
   abstract dispose () :void
-
-  protected abstract connect (addr :Address) :void
-
   abstract sendMsg (msg :Uint8Array) :void
+  protected abstract connect (addr :Address) :void
 }

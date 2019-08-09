@@ -1,6 +1,6 @@
 import {Disposable, Remover} from "../core/util"
 import {Data, Record, dataEquals, refEquals} from "../core/data"
-import {ChangeFn, Eq, Mutable, Value, ValueFn, addListener, dispatchChange} from "../core/react"
+import {ChangeFn, Eq, Mutable, Subject, ValueFn, addListener, dispatchChange} from "../core/react"
 import {MutableSet, MutableMap} from "../core/rcollect"
 import {KeyType, ValueType} from "../core/codec"
 import {getPropMetas} from "./meta"
@@ -104,11 +104,18 @@ export type DKey = string | number
   * property names, odd path elements are object collection keys. */
 export type Path = DKey[]
 
+/** Converts `path` to a string suitable for use in a map. */
+export const pathToKey = (path :Path) => path.join(":")
+
 export class DCollection<K,V extends DObject> {
 
   constructor (readonly owner :DObject, readonly name :string, readonly otype :DObjectType<V>) {}
 
-  resolve (key :DKey) :V {
+  create (key :DKey, ...args :any[]) :Subject<V|Error> {
+    return this.owner.source.create(this.owner.path, this.name, key, this.otype, ...args)
+  }
+
+  resolve (key :DKey) :Subject<V|Error> {
     return this.owner.source.resolve(this.owner.path.concat([this.name, key]), this.otype)
   }
 }
@@ -129,7 +136,7 @@ export class DQueue<M extends Record> {
 export type DHandler<O extends DObject,M> = (obj :O, msg :M, auth: Auth) => void
 
 export type DObjectType<T extends DObject> = {
-  new (source :DataSource, status :Value<DObjectStatus>, path :Path, oid :number) :T
+  new (source :DataSource, path :Path, oid :number, ...args :any[]) :T
 }
 
 export function findObjectType (rtype :DObjectType<any>, path :Path) :DObjectType<any> {
@@ -149,7 +156,11 @@ export function findObjectType (rtype :DObjectType<any>, path :Path) :DObjectTyp
 
 export interface DataSource {
 
-  resolve<T extends DObject> (path :Path, otype :DObjectType<T>) :T
+  create<T extends DObject> (
+    path :Path, cprop :string, key :DKey, otype :DObjectType<T>, ...args :any[]
+  ) :Subject<T|Error>
+
+  resolve<T extends DObject> (path :Path, otype :DObjectType<T>) :Subject<T|Error>
 
   post (queue :DQueueAddr, msg :Record) :void
   // TODO: optional auth for server entities that want to post to further queues with same creds?
@@ -162,10 +173,6 @@ export interface Subscriber {
   auth :Auth
   sendSync (msg :SyncMsg) :void
 }
-
-export type DObjectStatus = {state: "pending"}
-                          | {state: "resolved"}
-                          | {state: "error", error :Error}
 
 export abstract class DObject implements Disposable {
   readonly metas = getPropMetas(Object.getPrototypeOf(this))
@@ -181,47 +188,43 @@ export abstract class DObject implements Disposable {
     throw new Error(`No queue named ${name} on ${this.constructor.name}`)
   }
 
-  constructor (
-    readonly source :DataSource,
-    readonly status :Value<DObjectStatus>,
-    readonly path :Path,
-    readonly oid :number
-  ) {}
+  constructor (readonly source :DataSource, readonly path :Path, readonly oid :number) {}
 
   /** This object's key in its owning collection. */
   get key () { return this.path[this.path.length-1] }
 
+  /** Whether or not the client represented by `auth` can subscribe to this object. */
   canSubscribe (auth :Auth) :boolean { return auth.isSystem }
+
+  /** Whether or not the client represented by `auth` can read the specified property. This will
+    * only be called for clients that have passed the `canSubscribe` test. */
   canRead (prop :string, auth :Auth) :boolean { return true }
+
+  /** Whether or not the client represented by `auth` can update the specified property. This will
+    * only be called for clients that have passed the `canSubscribe` and `canRead` tests. */
   canWrite (prop :string, auth :Auth) :boolean { return auth.isSystem }
 
-  /** Adds `sub` to this object's subscribers list iff `auth` is allowed to subscribe.
-    * @return `true` if subscription succeeded, `false` if it was rejected due to auth.
-    * @throw Error if subscription is attempted before the object is successfully resolved. */
-  subscribe (sub :Subscriber) :boolean {
-    const cstate = this.status.current.state
-    if (cstate !== "resolved") throw new Error(`Cannot subscribe to '${cstate}' object (${this})`)
-    if (!this.canSubscribe(sub.auth)) return false
-    this.subscribers.push(sub)
-    return true
-  }
+  /** Whether or not the client represented by `auth` can create an object in the specified
+    * collection property. This will only be called for clients that have passed the `canSubscribe`
+    * and `canRead` tests. */
+  canCreate (prop :string, auth :Auth) :boolean { return auth.isSystem }
 
-  unsubscribe (sub :Subscriber) {
-    const idx = this.subscribers.indexOf(sub)
-    if (idx >= 0) this.subscribers.splice(idx, 1)
+  /** Adds `sub` to this object's subscribers list iff `auth` is allowed to subscribe.
+    * @return `undefined` if subscription was rejected due to auth, a remover thunk that can be
+    * used to clear the subscription if subscription succeeds. */
+  subscribe (sub :Subscriber) :Remover|undefined {
+    if (!this.canSubscribe(sub.auth)) return undefined
+    this.subscribers.push(sub)
+    return () => {
+      const idx = this.subscribers.indexOf(sub)
+      if (idx >= 0) this.subscribers.splice(idx, 1)
+    }
   }
 
   noteWrite (msg :SyncMsg) {
     this.source.sendSync(this, msg)
     const name = this.metas[msg.idx].name
     for (const sub of this.subscribers) if (this.canRead(name, sub.auth)) sub.sendSync(msg)
-  }
-
-  applyWrite (msg :SyncMsg, auth :Auth) {
-    const name = this.metas[msg.idx].name
-    if (!this.canRead(name, auth) || !this.canWrite(name, auth)) throw new Error(
-      `Write rejected [obj=${this}, prop=${name}, auth=${auth}]`)
-    this.applySync(msg, false)
   }
 
   applySync (msg :SyncMsg, fromSync = true) {
