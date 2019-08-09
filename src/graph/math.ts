@@ -28,6 +28,30 @@ class Constant extends Node {
   }
 }
 
+/** Addition operator. */
+export interface AddConfig extends OperatorConfig<number> {
+  type :"add"
+}
+
+class Add extends Operator<number> {
+
+  constructor (graph :Graph, id :string, readonly config :AddConfig) {
+    super(graph, id, config)
+  }
+
+  protected get _defaultInputValue () :number {
+    return 0
+  }
+
+  protected _apply (values :number[]) :number {
+    let sum = 0
+    for (const value of values) {
+      sum += value
+    }
+    return sum
+  }
+}
+
 /** Subtract/negate operator. */
 export interface SubtractConfig extends OperatorConfig<number> {
   type :"subtract"
@@ -216,9 +240,34 @@ class Max extends Operator<number> {
   }
 }
 
+/** Computes a step function (0 if x < edge, else 1). */
+export interface StepConfig extends NodeConfig {
+  type :"step"
+  edge :InputEdge<number>
+  x :InputEdge<number>
+  output :OutputEdge<number>
+}
+
+class Step extends Node {
+
+  constructor (graph :Graph, id :string, readonly config :StepConfig) {
+    super(graph, id, config)
+  }
+
+  protected _createOutput () {
+    return Value
+      .join(
+        this.graph.getValue(this.config.edge, 0),
+        this.graph.getValue(this.config.x, 0),
+      )
+      .map(([edge, x]) => x < edge ? 0 : 1)
+  }
+}
+
 /** Registers the nodes in this module with the supplied registry. */
 export function registerMathNodes (registry :NodeTypeRegistry) {
   registry.registerNodeType("constant", Constant)
+  registry.registerNodeType("add", Add)
   registry.registerNodeType("subtract", Subtract)
   registry.registerNodeType("multiply", Multiply)
   registry.registerNodeType("random", Random)
@@ -227,4 +276,5 @@ export function registerMathNodes (registry :NodeTypeRegistry) {
   registry.registerNodeType("abs", Abs)
   registry.registerNodeType("min", Min)
   registry.registerNodeType("max", Max)
+  registry.registerNodeType("step", Step)
 }
