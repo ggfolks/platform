@@ -10,6 +10,30 @@ import {
 } from "./node"
 import {Graph} from "./graph"
 
+/** Computes the logical and of its inputs. */
+export interface AndConfig extends OperatorConfig<boolean> {
+  type :"and"
+}
+
+class And extends Operator<boolean> {
+
+  constructor (graph :Graph, id :string, readonly config :AndConfig) {
+    super(graph, id, config)
+  }
+
+  protected get _defaultInputValue () :boolean {
+    return true
+  }
+
+  protected _apply (values :boolean[]) :boolean {
+    let result = true
+    for (const value of values) {
+      result = result && value
+    }
+    return result
+  }
+}
+
 /** Computes the logical or of its inputs. */
 export interface OrConfig extends OperatorConfig<boolean> {
   type :"or"
@@ -78,6 +102,7 @@ class LessThan extends Node {
 
 /** Registers the nodes in this module with the supplied registry. */
 export function registerLogicNodes (registry :NodeTypeRegistry) {
+  registry.registerNodeType("and", And)
   registry.registerNodeType("or", Or)
   registry.registerNodeType("not", Not)
   registry.registerNodeType("lessThan", LessThan)

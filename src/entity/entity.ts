@@ -554,7 +554,9 @@ export class GraphSystem extends System {
     super.added(id, config)
     const subctx = Object.create(this._ctx)
     subctx.entityId = id
-    this.graph.update(id, new Graph(subctx, config.components[this.graph.id]))
+    const graph = new Graph(subctx, config.components[this.graph.id])
+    this.graph.update(id, graph)
+    graph.connect()
   }
 
   protected deleted (id :ID) {

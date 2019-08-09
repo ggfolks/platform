@@ -112,16 +112,76 @@ export interface SubgraphConfig extends NodeConfig {
   graph :GraphConfig
 }
 
-class Subgraph extends Node {
+export class Subgraph extends Node {
+  _containedGraph :Graph
+  _containedOutputs :Map<string, InputEdge<any>> = new Map()
 
   constructor (graph :Graph, id :string, readonly config :SubgraphConfig) {
+    super(graph, id, config)
+
+    const subctx = Object.create(graph.ctx)
+    subctx.subgraph = this
+    for (const key in config.graph) {
+      const value = config.graph[key]
+      if (value.type === 'output') {
+        this._containedOutputs.set(value.name, value.input)
+      }
+    }
+    this._disposer.add(this._containedGraph = new Graph(subctx, config.graph))
+    this._disposer.add(graph.clock.onValue(clock => this._containedGraph.update(clock)))
+  }
+
+  connect () {
+    this._containedGraph.connect()
+  }
+
+  protected _createOutput (name :string | undefined, defaultValue :any) {
+    let edge :InputEdge<any>
+    if (name === undefined) {
+      if (this._containedOutputs.size !== 1) throw new Error("No default output")
+      edge = this._containedOutputs.values().next().value
+    } else {
+      if (!this._containedOutputs.has(name)) throw new Error("Unknown output: " + name)
+      edge = this._containedOutputs.get(name)
+    }
+    return this._containedGraph.getValue(edge, defaultValue)
+  }
+}
+
+/** An input to a subgraph. */
+export interface InputConfig extends NodeConfig {
+  type :"input"
+  name :string
+  output :OutputEdge<any>
+}
+
+class Input extends Node {
+
+  constructor (graph :Graph, id :string, readonly config :InputConfig) {
+    super(graph, id, config)
+  }
+
+  protected _createOutput (name :string | undefined, defaultValue :any) {
+    const subgraph = this.graph.ctx.subgraph
+    if (!subgraph) throw new Error("Input node used outside subgraph")
+    return subgraph.graph.getValue(subgraph.config[this.config.name], defaultValue)
+  }
+}
+
+/** An output from a subgraph. */
+export interface OutputConfig extends NodeConfig {
+  type :"output"
+  name :string
+  input :InputEdge<any>
+}
+
+class Output extends Node {
+
+  constructor (graph :Graph, id :string, readonly config :OutputConfig) {
     super(graph, id, config)
   }
 
   connect () {
-    const graph = new Graph(this.graph.ctx, this.config.graph)
-    this._disposer.add(graph)
-    this._disposer.add(this.graph.clock.onValue(clock => graph.update(clock)))
   }
 }
 
@@ -132,4 +192,6 @@ export function registerUtilNodes (registry :NodeTypeRegistry) {
   registry.registerNodeType("latch", Latch)
   registry.registerNodeType("clock", ClockNode)
   registry.registerNodeType("subgraph", Subgraph)
+  registry.registerNodeType("input", Input)
+  registry.registerNodeType("output", Output)
 }

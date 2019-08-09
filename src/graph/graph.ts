@@ -18,11 +18,15 @@ export class Graph implements Disposable {
     for (let id in config) {
       this._nodes.set(id, ctx.types.createNode(this, id, config[id]))
     }
+  }
+
+  /** Connects the nodes in the graph. */
+  connect () {
     for (const node of this._nodes.values()) {
       node.connect()
     }
   }
-
+  
   /** Retrieves a reactive value representing the identified input edges. */
   getValues<T> (inputs :InputEdges<T>, defaultValue :T) :Value<T[]> {
     if (!inputs) {

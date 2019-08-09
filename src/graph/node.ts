@@ -3,6 +3,7 @@ import {Value} from "../core/react"
 import {Disposer} from "../core/util"
 import {Disposable} from "../core/util"
 import {Graph} from "./graph"
+import {Subgraph} from "./util"
 
 /** Configuration shared by all [[Node]]s. */
 export interface NodeConfig {
@@ -26,6 +27,7 @@ export type OutputEdge<T> = never
 /** Base interface for node contexts. */
 export interface NodeContext {
   types :NodeTypeRegistry
+  subgraph? :Subgraph
   // this allows NodeContext to contain "extra" stuff that TypeScript will ignore
   [extra :string] :any
 }
