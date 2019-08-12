@@ -447,6 +447,17 @@ export class Host implements Disposable {
     this.rootAdded(root, origin, ii)
   }
 
+  removeRoot (root :Root) {
+    for (let ii = 0; ii < this.roots.length; ii++) {
+      const ro = this.roots[ii]
+      if (ro[0] === root) {
+        this.roots.splice(ii, 1)
+        this.rootRemoved(root, ro[1], ii)
+        return
+      }
+    }
+  }
+
   bind (canvas :HTMLCanvasElement) :Remover {
     canvas.addEventListener("mousedown", this.onMouse)
     canvas.addEventListener("mousemove", this.onMouse)
@@ -485,4 +496,5 @@ export class Host implements Disposable {
 
   protected rootAdded (root :Root, origin :vec2, index :number) {}
   protected rootUpdated (root :Root, origin :vec2, index :number) {}
+  protected rootRemoved (root :Root, origin :vec2, index :number) {}
 }
