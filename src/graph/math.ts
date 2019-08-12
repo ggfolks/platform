@@ -151,7 +151,7 @@ class Accumulate extends Node {
 
   protected _createOutput () {
     let sum = 0
-    return this.graph.getValue(this.config.input, 0 as number).map(value => {
+    return this.graph.getValue(this.config.input, 0).map(value => {
       sum += value
       if (this.config.min !== undefined) sum = Math.max(this.config.min, sum)
       if (this.config.max !== undefined) sum = Math.min(this.config.max, sum)
