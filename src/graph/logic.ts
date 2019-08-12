@@ -93,8 +93,8 @@ class LessThan extends Node {
   protected _createOutput () {
     return Value
       .join(
-        this.graph.getValue(this.config.x, 0),
-        this.graph.getValue(this.config.y, 0),
+        this.graph.getValue(this.config.x, 0 as number),
+        this.graph.getValue(this.config.y, 0 as number),
       )
       .map(([x, y]) => x < y)
   }

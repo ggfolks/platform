@@ -182,6 +182,25 @@ class Output extends Node {
   }
 }
 
+/** Logs its input to the console. */
+export interface LogConfig extends NodeConfig {
+  type :"log"
+  input :InputEdge<any>
+}
+
+class Log extends Node {
+
+  constructor (graph :Graph, id :string, readonly config :LogConfig) {
+    super(graph, id, config)
+  }
+
+  connect () {
+    this._disposer.add(this.graph.getValue(this.config.input, undefined).onValue(
+      value => console.log(value),
+    ))
+  }
+}
+
 /** Registers the nodes in this module with the supplied registry. */
 export function registerUtilNodes (registry :NodeTypeRegistry) {
   registry.registerNodeType("timeout", TimeoutNode)
@@ -191,4 +210,5 @@ export function registerUtilNodes (registry :NodeTypeRegistry) {
   registry.registerNodeType("subgraph", Subgraph)
   registry.registerNodeType("input", Input)
   registry.registerNodeType("output", Output)
+  registry.registerNodeType("log", Log)
 }

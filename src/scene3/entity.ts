@@ -166,6 +166,9 @@ export class SceneSystem extends System {
           const pressedObject = this._pressedObjects.get(identifier)
           if (pressedObject) {
             if (pointer.pressed) {
+              if (!pressedObject.parent) {
+                continue // hold off updating until pointer released
+              }
               // constrain motion to a plane aligned with the camera direction
               const hoverMap = this.hovers.read(pressedObject.userData.id)
               const hover = hoverMap && hoverMap.get(identifier)

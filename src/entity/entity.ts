@@ -41,6 +41,11 @@ export class Domain {
   constructor (readonly config :DomainConfig,
                readonly components :PMap<Component<any>>) {}
 
+  /** Checks whether entity `id` exists in the domain. */
+  entityExists (id :ID) {
+    return Boolean(this._configs[id])
+  }
+
   /** Returns the configuration for entity `id`.
     * @throws Error if no entity exists with `id`. */
   entityConfig (id :ID) :EntityConfig {

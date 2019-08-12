@@ -180,7 +180,7 @@ class Vector3MultiplyScalar extends Node {
         this.graph.getValue(this.config.vector, new Vector3()),
         this.graph.getValue(this.config.scalar, 1),
       )
-      .map(([vector, scalar]) => vector.clone().multiplyScalar(scalar))
+      .map(([vector, scalar]) => vector.clone().multiplyScalar(scalar === undefined ? 1 : scalar))
   }
 }
 

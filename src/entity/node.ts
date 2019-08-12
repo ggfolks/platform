@@ -1,3 +1,4 @@
+import {Value} from "../core/react"
 import {Graph} from "../graph/graph"
 import {InputEdge, Node, NodeConfig, NodeContext, NodeTypeRegistry, OutputEdge} from "../graph/node"
 import {Component, Domain, EntityConfig, ID} from "./entity"
@@ -72,25 +73,43 @@ class AddEntity extends Node {
   }
 }
 
-/** A node that deletes an entity when its input transitions to true. */
-export interface DeleteEntityConfig extends EntityNodeConfig {
+/** A node that deletes its input entity. */
+export interface DeleteEntityConfig extends NodeConfig {
   type :"deleteEntity"
-  input :InputEdge<boolean>
+  input :InputEdge<ID | undefined>
 }
 
-class DeleteEntity extends EntityNode {
+class DeleteEntity extends Node {
 
   constructor (graph :Graph, id :string, readonly config :DeleteEntityConfig) {
     super(graph, id, config)
   }
 
   connect () {
-    this._disposer.add(this.graph.getValue(this.config.input, false).onValue(value => {
-      if (value) {
+    this._disposer.add(this.graph.getValue(this.config.input, undefined).onValue(async id => {
+      if (id !== undefined) {
+        await true // don't delete in the middle of a physics update
         const ctx = this.graph.ctx as EntityNodeContext
-        ctx.domain.delete(this._entityId)
+        if (ctx.domain.entityExists(id)) ctx.domain.delete(id)
       }
     }))
+  }
+}
+
+/** Outputs the entity id. */
+export interface EntityIdConfig extends EntityConfig {
+  type :"entityId"
+  output :OutputEdge<ID>
+}
+
+class EntityId extends EntityNode {
+
+  constructor (graph :Graph, id :string, readonly config :EntityIdConfig) {
+    super(graph, id, config)
+  }
+
+  protected _createOutput () {
+    return Value.constant(this._entityId)
   }
 }
 
@@ -132,10 +151,41 @@ class UpdateComponent extends EntityComponentNode<Component<any>> {
   }
 }
 
+/** Checks whether the input entity has a given tag. */
+export interface TaggedConfig extends NodeConfig {
+  type :"tagged"
+  tag :string
+  input :InputEdge<ID | undefined>
+  output :OutputEdge<boolean>
+}
+
+class Tagged extends Node {
+
+  constructor (graph :Graph, id :string, readonly config :TaggedConfig) {
+    super(graph, id, config)
+  }
+
+  protected _createOutput () {
+    return this.graph.getValue(this.config.input, undefined).map(id => {
+      if (id === undefined) {
+        return false
+      }
+      const ctx = this.graph.ctx as EntityNodeContext
+      if (!ctx.domain.entityExists(id)) {
+        return false
+      }
+      const cfg = ctx.domain.entityConfig(id)
+      return cfg.tags && cfg.tags.has(this.config.tag)
+    })
+  }
+}
+
 /** Registers the nodes in this module with the supplied registry. */
 export function registerEntityNodes (registry :NodeTypeRegistry) {
   registry.registerNodeType("addEntity", AddEntity)
   registry.registerNodeType("deleteEntity", DeleteEntity)
+  registry.registerNodeType("entityId", EntityId)
   registry.registerNodeType("readComponent", ReadComponent)
   registry.registerNodeType("updateComponent", UpdateComponent)
+  registry.registerNodeType("tagged", Tagged)
 }
