@@ -1,4 +1,4 @@
-import {Value} from "../core/react"
+import {Mutable, Value} from "../core/react"
 import {Graph} from "../graph/graph"
 import {Node, NodeConfig, NodeContext, NodeTypeRegistry, OutputEdge} from "../graph/node"
 import {Hand} from "./hand"
@@ -41,6 +41,34 @@ class MouseButton extends Node {
   protected _createOutput () {
     const hand = (this.graph.ctx as InputNodeContext).hand
     return hand ? hand.mouse.getButtonState(this.config.button || 0) : Value.constant(false)
+  }
+}
+
+/** Fires on a double mouse click. */
+export interface DoubleClickConfig extends NodeConfig {
+  type :"doubleClick"
+  output :OutputEdge<boolean>
+}
+
+class DoubleClick extends Node {
+  private _output :Mutable<boolean> = Mutable.local(false as boolean)
+
+  constructor (graph :Graph, id :string, readonly config :DoubleClickConfig) {
+    super(graph, id, config)
+  }
+
+  connect () {
+    const hand = (this.graph.ctx as InputNodeContext).hand
+    if (hand) {
+      this._disposer.add(hand.mouse.doubleClicked.onEmit(() => {
+        this._output.update(true)
+        this._output.update(false)
+      }))
+    }
+  }
+
+  protected _createOutput () {
+    return this._output
   }
 }
 
@@ -110,6 +138,7 @@ class PointerMovement extends Node {
 export function registerInputNodes (registry :NodeTypeRegistry) {
   registry.registerNodeType("key", Key)
   registry.registerNodeType("mouseButton", MouseButton)
+  registry.registerNodeType("doubleClick", DoubleClick)
   registry.registerNodeType("mouseMovement", MouseMovement)
   registry.registerNodeType("pointerMovement", PointerMovement)
 }

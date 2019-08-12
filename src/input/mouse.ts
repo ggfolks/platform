@@ -1,12 +1,13 @@
 import {vec2} from "gl-matrix"
 import {Disposable} from "../core/util"
-import {Mutable, Value} from "../core/react"
+import {Emitter, Mutable, Stream, Value} from "../core/react"
 
 /** Provides reactive values for mouse state. */
 export class Mouse implements Disposable {
 
   private _buttonStates :Map<number, Mutable<boolean>> = new Map()
   private _movement = Mutable.local(vec2.create())
+  private _doubleClicked :Emitter<void> = new Emitter()
   private _lastScreen? :vec2
   private _lastOffset? :vec2
   private _accumulatedMovement = vec2.create()
@@ -15,6 +16,11 @@ export class Mouse implements Disposable {
   /** Returns a reactive view of the movement on the current frame. */
   get movement () :Value<vec2> {
     return this._movement
+  }
+
+  /** Returns a reactive stream for double clicks. */
+  get doubleClicked () :Stream<void> {
+    return this._doubleClicked
   }
 
   /** Returns the last offset position recorded for the mouse, if any. */
@@ -30,6 +36,7 @@ export class Mouse implements Disposable {
   constructor (private _canvas :HTMLElement) {
     _canvas.addEventListener("mousedown", this._onMouseDown)
     document.addEventListener("mouseup", this._onMouseUp)
+    _canvas.addEventListener("dblclick", this._onDoubleClick)
     _canvas.addEventListener("mousemove", this._onMouseMove)
     _canvas.addEventListener("mouseenter", this._onMouseEnter)
     _canvas.addEventListener("mouseleave", this._onMouseLeave)
@@ -52,6 +59,7 @@ export class Mouse implements Disposable {
   dispose () {
     this._canvas.removeEventListener("mousedown", this._onMouseDown)
     document.removeEventListener("mouseup", this._onMouseUp)
+    this._canvas.removeEventListener("dblclick", this._onDoubleClick)
     this._canvas.removeEventListener("mousemove", this._onMouseMove)
     this._canvas.removeEventListener("mouseenter", this._onMouseEnter)
     this._canvas.removeEventListener("mouseleave", this._onMouseLeave)
@@ -63,6 +71,10 @@ export class Mouse implements Disposable {
 
   private _onMouseUp = (event :MouseEvent) => {
     this._getButtonState(event.button).update(false)
+  }
+
+  private _onDoubleClick = (event :MouseEvent) => {
+    this._doubleClicked.emit()
   }
 
   private _onMouseMove = (event :MouseEvent) => {
