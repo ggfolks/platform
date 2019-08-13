@@ -221,6 +221,7 @@ const RootState = Value.constant(RootStates[0])
 export interface RootConfig extends ElementConfig {
   type :"root"
   scale :Scale
+  transparent? :boolean
   contents :ElementConfig
 }
 
@@ -333,6 +334,9 @@ export class Root extends Element {
 
   protected rerender (canvas :CanvasRenderingContext2D) {
     const sf = this.config.scale.factor
+    if (this.config.transparent) {
+      canvas.clearRect(0, 0, this.canvasElem.width, this.canvasElem.height)
+    }
     canvas.scale(sf, sf)
     this.contents.render(canvas)
   }

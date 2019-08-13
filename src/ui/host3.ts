@@ -30,6 +30,7 @@ export class Host3 extends Host {
     const mesh = this._meshes[index] = new Mesh(DefaultPlaneBufferGeometry, new MeshBasicMaterial({
       map: texture,
       depthTest: false,
+      transparent: true,
     }))
     const rendererSize = new Vector2()
     mesh.onBeforeRender = (renderer :WebGLRenderer, scene :Scene, camera :Camera) => {
