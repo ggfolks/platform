@@ -32,6 +32,7 @@ export class Host3 extends Host {
       depthTest: false,
       transparent: true,
     }))
+    mesh.frustumCulled = false
     const rendererSize = new Vector2()
     mesh.onBeforeRender = (renderer :WebGLRenderer, scene :Scene, camera :Camera) => {
       if (camera instanceof PerspectiveCamera) {

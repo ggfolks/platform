@@ -66,7 +66,7 @@ export class Mouse implements Disposable {
   }
 
   private _onMouseDown = (event :MouseEvent) => {
-    this._getButtonState(event.button).update(true)
+    if (!event.cancelBubble) this._getButtonState(event.button).update(true)
   }
 
   private _onMouseUp = (event :MouseEvent) => {

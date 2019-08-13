@@ -287,6 +287,7 @@ export class Root extends Element {
         const niact = this.interacts[button] = this.contents.handleMouseDown(event, pos)
         // if we click and hit no interactive control, clear the focus
         if (niact === undefined) this.focus.update(undefined)
+        else event.cancelBubble = true
       }
       break
     case "mousemove":
