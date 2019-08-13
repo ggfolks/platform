@@ -1,4 +1,4 @@
-import {dim2, rect, vec2} from "../core/math"
+import {dim2, rect, vec2, vec2zero} from "../core/math"
 import {Element, ElementConfig, ElementContext} from "./element"
 
 const tmpr = rect.create()
@@ -38,6 +38,78 @@ abstract class Group extends Element {
 
   protected rerender (canvas :CanvasRenderingContext2D) {
     for (const child of this.contents) child.render(canvas)
+  }
+}
+
+/** Layout constraints for absolutely-positioned elements. */
+export type AbsConstraints = {
+  position? :number[],
+  size? :number[],
+  stretch? :boolean,
+}
+
+function absConstraints (elem :Element) :AbsConstraints {
+  return elem.config.constraints || {}
+}
+
+function absPosition (c :AbsConstraints) { return c.position || vec2zero }
+
+/** A group whose contents are positioned absolutely. */
+export abstract class AbsGroup extends Group {
+
+  handleMouseDown (event :MouseEvent, pos :vec2) {
+    // handle mouse events in reverse order of drawing
+    for (let ii = this.contents.length - 1; ii >= 0; ii--) {
+      const cc = this.contents[ii]
+      if (rect.contains(cc.bounds, pos)) {
+        // unlike Group, we assume that components can overlap
+        const interaction = cc.handleMouseDown(event, pos)
+        if (interaction) return interaction
+      }
+    }
+    return undefined
+  }
+
+  protected computePreferredSize (hintX :number, hintY :number, into :dim2) {
+    dim2.set(into, 0, 0)
+    for (const element of this.contents) {
+      const constraints = absConstraints(element)
+      if (constraints.stretch) {
+        dim2.set(into, hintX, hintY)
+        return
+      }
+      const position = absPosition(constraints)
+      const size = constraints.size || element.preferredSize(hintX, hintY)
+      into[0] = Math.max(into[0], position[0] + size[0])
+      into[1] = Math.max(into[1], position[1] + size[1])
+    }
+  }
+
+  protected relayout () {
+    for (const element of this.contents) {
+      const constraints = absConstraints(element)
+      if (constraints.stretch) {
+        element.setBounds(rect.set(tmpr, 0, 0, this.width, this.height))
+        continue
+      }
+      const position = absPosition(constraints)
+      const size = constraints.size || element.preferredSize(this.width, this.height)
+      element.setBounds(rect.set(tmpr, position[0], position[1], size[0], size[1]))
+    }
+  }
+}
+
+export interface AbsLayoutConfig extends ElementConfig {
+  type :"abslayout"
+  contents: ElementConfig[]
+}
+
+export class AbsLayout extends AbsGroup {
+  readonly contents :Element[]
+
+  constructor (ctx :ElementContext, parent :Element, readonly config :AbsLayoutConfig) {
+    super(ctx, parent, config)
+    this.contents = config.contents.map(cc => ctx.elem.create(ctx, this, cc))
   }
 }
 

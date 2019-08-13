@@ -1,10 +1,11 @@
 import {vec2} from "gl-matrix"
 
 import {vec2zero} from "../core/math"
+import {Value} from "../core/react"
 import {Graph} from "../graph/graph"
 import {InputEdge, Node, NodeConfig, NodeContext, NodeTypeRegistry} from "../graph/node"
 import {Host, Root, RootConfig} from "./element"
-import {Model, ModelData, ModelValue, Spec} from "./model"
+import {Model, ModelData, ModelValue, Spec, mapProvider} from "./model"
 import {Theme, UI} from "./ui"
 import {ImageResolver, StyleDefs} from "./style"
 
@@ -35,11 +36,12 @@ class UINode extends Node {
   connect () {
     this._disposer.add(this.graph.getValue(this.config.input, false).onValue(value => {
       if (value) {
-        const ctx = this.graph.ctx as UINodeContext
+        const graph = this.graph
+        const ctx = graph.ctx as UINodeContext
         let root :Root | undefined
         class NodeModel extends Model {
           resolve<V extends ModelValue> (spec :Spec<V>) :V {
-            // special handling for remove action
+            // special handling for remove action and node data
             if (spec === "remove") {
               const action = () => {
                 if (root) {
@@ -48,6 +50,12 @@ class UINode extends Node {
                 }
               }
               return action as V
+            } else if (spec === "nodeKeys") {
+              return graph.nodes.keysSource() as any
+            } else if (spec === "nodeData") {
+              return mapProvider(graph.nodes, value => {
+                return {type: Value.constant(value.current.config.type)}
+              }) as any
             }
             return super.resolve(spec)
           }

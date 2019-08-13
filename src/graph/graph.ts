@@ -1,5 +1,6 @@
 import {Clock} from "../core/clock"
-import {Emitter, Value} from "../core/react"
+import {Emitter, Stream, Value} from "../core/react"
+import {MutableMap, RMap} from "../core/rcollect"
 import {Disposable} from "../core/util"
 import {InputEdge, InputEdges, Node, NodeConfig, NodeContext} from "./node"
 
@@ -10,9 +11,18 @@ export interface GraphConfig {
 
 /** An execution graph. */
 export class Graph implements Disposable {
-  readonly clock = new Emitter<Clock>()
+  private _clock = new Emitter<Clock>()
+  private _nodes = MutableMap.local<string, Node>()
 
-  private _nodes :Map<string, Node> = new Map()
+  /** Returns a reactive view of the clock event stream. */
+  get clock () :Stream<Clock> {
+    return this._clock
+  }
+
+  /** Returns a reactive view of the map from node id to Node. */
+  get nodes () :RMap<string, Node> {
+    return this._nodes
+  }
 
   constructor (readonly ctx :NodeContext, config :GraphConfig) {
     for (let id in config) {
@@ -42,30 +52,22 @@ export class Graph implements Disposable {
     }
     if (Array.isArray(input)) {
       const [nodeId, outputName] = input
-      return this._requireNode(nodeId).getOutput(outputName, defaultValue)
+      return this._nodes.require(nodeId).getOutput(outputName, defaultValue)
     }
     if (typeof input === "string") {
-      return this._requireNode(input).getOutput(undefined, defaultValue)
+      return this._nodes.require(input).getOutput(undefined, defaultValue)
     }
     return Value.constant(input)
   }
 
   /** Updates the state of the graph.  Should be called once per frame. */
   update (clock :Clock) {
-    this.clock.emit(clock)
+    this._clock.emit(clock)
   }
 
   dispose () {
     for (const node of this._nodes.values()) {
       node.dispose()
     }
-  }
-
-  private _requireNode (id :string) {
-    const node = this._nodes.get(id)
-    if (!node) {
-      throw new Error("Unknown node " + id)
-    }
-    return node
   }
 }
