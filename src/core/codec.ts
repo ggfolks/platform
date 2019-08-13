@@ -1,7 +1,8 @@
+import {UUID, uuidToString, uuidFromString} from "./uuid"
 import {Data, DataArray, DataMap, DataMapKey, DataSet, Record, isMap, isSet} from "./data"
 
 export type KeyType = "undefined" | "boolean" | "int8" | "int16" | "int32" | "size8" | "size16"
-                    | "size32" | "float32" | "float64" | "number" | "string" | "timestamp" | "id"
+                    | "size32" | "float32" | "float64" | "number" | "string" | "timestamp" | "uuid"
 // TODO: support "text" value type which supported >64k of text?
 export type ValueType = KeyType | "data" | "record"
 
@@ -68,6 +69,12 @@ function addString (enc :Encoder, text :string) {
   }
 }
 
+function addUUID (enc :Encoder, uuid :UUID) {
+  const p = enc.pos
+  enc.prepAdd(16)
+  uuidFromString(uuid, enc.bytes, p)
+}
+
 function addDataIterable (enc :Encoder, iter :Iterable<Data>, size :number) {
   addSize32(enc, size)
   if (size > 0) {
@@ -127,6 +134,11 @@ const getFloat64 = (dec :Decoder) => dec.data.getFloat64(dec.prepGet(8))
 function getString (dec :Decoder) {
   const bytes = getSize16(dec), offset = dec.prepGet(bytes)
   return dec.decoder.decode(dec.source.subarray(offset, offset+bytes))
+}
+
+function getUUID (dec :Decoder) {
+  const offset = dec.prepGet(16)
+  return uuidToString(dec.source.subarray(offset, offset+16))
 }
 
 function getDataArray (dec :Decoder) {
@@ -240,7 +252,7 @@ const valueCodecs :{[key :string]: [DataEncoder<any>, DataDecoder<any>]} = {
   number   : [addFloat64, getFloat64],
   string   : [addString,  getString],
   timestamp: [addFloat64, getFloat64], // TODO
-  id       : [addString,  getString], // TODO
+  uuid     : [addUUID,    getUUID],
   data     : [addData,    getData],
   record   : [addRecord,  getRecord]
 }
@@ -260,6 +272,7 @@ export class Encoder {
   readonly encoder = mkTextEncoder()
   buffer = new ArrayBuffer(DefaultEncoderSize)
   data = new DataView(this.buffer)
+  bytes = new Uint8Array(this.buffer)
   pos = 0
 
   prepAdd (size :number) :DataView {

@@ -1,11 +1,14 @@
 import {Timestamp} from "../core/util"
+import {uuidv1} from "../core/uuid"
 import {Encoder, Decoder, ValueType, setTextCodec} from "./codec"
 
 import {TextEncoder, TextDecoder} from "util"
 setTextCodec(() => new TextEncoder() as any, () => new TextDecoder() as any)
 
-test("codec", () => {
+// @ts-ignore: sigh jest
+Object.defineProperty(global.self, 'crypto', {value: require('crypto')})
 
+test("codec", () => {
   const enc = new Encoder()
   const vts :[any, ValueType][] = [
     [true, "boolean"],
@@ -25,6 +28,7 @@ test("codec", () => {
     ["The quick brown fox jumped over the lazy dog.", "string"],
     ["I ♥︎ math.", "string"],
     ["€∞☛✔︎", "string"],
+    [uuidv1(), "uuid"],
     [Timestamp.now(), "timestamp"]
   ]
 
