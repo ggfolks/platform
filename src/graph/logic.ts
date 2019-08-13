@@ -26,11 +26,10 @@ class And extends Operator<boolean> {
   }
 
   protected _apply (values :boolean[]) :boolean {
-    let result = true
     for (const value of values) {
-      result = result && value
+      if (!value) return false
     }
-    return result
+    return true
   }
 }
 
@@ -50,11 +49,10 @@ class Or extends Operator<boolean> {
   }
 
   protected _apply (values :boolean[]) :boolean {
-    let result = false
     for (const value of values) {
-      result = result || value
+      if (value) return true
     }
-    return result
+    return false
   }
 }
 
@@ -104,7 +102,7 @@ class LessThan extends Node {
 export interface ConditionalConfig extends NodeConfig {
   type :"conditional"
   condition :InputEdge<boolean>
-  ifTrue :InputEdge<any>
+  ifTrue :OutputEdge<any>
   ifFalse :OutputEdge<any>
 }
 
