@@ -164,6 +164,14 @@ export abstract class Element implements Disposable {
     return undefined
   }
 
+  /** Requests that this element handle the supplied wheel event.
+    * @param event the event forwarded from the browser.
+    * @param pos the position of the event relative to the root origin.
+    * @return whether or not the wheel was handled, and thus should not be further propagated. */
+  handleWheel (event :WheelEvent, pos :vec2) :boolean {
+    return false
+  }
+
   /** Finds the first child with the specified `type`. */
   findChild (type :string) :Element|undefined {
     return (this.config.type === type) ? this : undefined
@@ -315,6 +323,13 @@ export class Root extends Element {
     focus && focus.handleKeyEvent(event)
   }
 
+  dispatchWheelEvent (event :WheelEvent, origin :vec2) {
+    const pos = vec2.set(tmpv, event.offsetX-origin[0], event.offsetY-origin[1])
+    if (rect.contains(this.contents.bounds, pos) && this.contents.handleWheel(event, pos)) {
+      event.cancelBubble = true
+    }
+  }
+
   protected computePreferredSize (hintX :number, hintY :number, into :dim2) {
     dim2.copy(into, this.contents.preferredSize(hintX, hintY))
   }
@@ -444,6 +459,7 @@ export class Control extends Element {
 export class Host implements Disposable {
   private readonly onMouse = (event :MouseEvent) => this.handleMouseEvent(event)
   private readonly onKey = (event :KeyboardEvent) => this.handleKeyEvent(event)
+  private readonly onWheel = (event :WheelEvent) => this.handleWheelEvent(event)
   protected readonly roots :[Root, vec2][] = []
 
   addRoot (root :Root, origin :vec2) {
@@ -464,12 +480,14 @@ export class Host implements Disposable {
     canvas.addEventListener("mousedown", this.onMouse)
     canvas.addEventListener("mousemove", this.onMouse)
     canvas.addEventListener("mouseup", this.onMouse)
+    canvas.addEventListener("wheel", this.onWheel)
     document.addEventListener("keydown", this.onKey)
     document.addEventListener("keyup", this.onKey)
     return () => {
       canvas.removeEventListener("mousedown", this.onMouse)
       canvas.removeEventListener("mousemove", this.onMouse)
       canvas.removeEventListener("mouseup", this.onMouse)
+      canvas.removeEventListener("wheel", this.onWheel)
       document.removeEventListener("keydown", this.onKey)
       document.removeEventListener("keyup", this.onKey)
     }
@@ -481,6 +499,9 @@ export class Host implements Disposable {
   handleKeyEvent (event :KeyboardEvent) {
     // TODO: maintain a notion of which root currently has focus (if any)
     for (const ro of this.roots) ro[0].dispatchKeyEvent(event)
+  }
+  handleWheelEvent (event :WheelEvent) {
+    for (const ro of this.roots) ro[0].dispatchWheelEvent(event, ro[1])
   }
 
   update (clock :Clock) {

@@ -101,7 +101,10 @@ export class Box extends Element {
     return rect.contains(this.contents.bounds, pos) ?
       this.contents.handleMouseDown(event, pos) : undefined
   }
-
+  handleWheel (event :WheelEvent, pos :vec2) {
+    return rect.contains(this.contents.bounds, pos) && this.contents.handleWheel(event, pos)
+  }
+  
   dispose () {
     super.dispose()
     this.contents.dispose()

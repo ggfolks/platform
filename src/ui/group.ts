@@ -15,6 +15,12 @@ abstract class Group extends Element {
     }
     return undefined
   }
+  handleWheel (event :WheelEvent, pos :vec2) :boolean {
+    for (const cc of this.contents) {
+      if (rect.contains(cc.bounds, pos) && cc.handleWheel(event, pos)) return true
+    }
+    return false
+  }
 
   findChild (type :string) :Element|undefined {
     const self = super.findChild(type)
@@ -68,6 +74,14 @@ export abstract class AbsGroup extends Group {
       }
     }
     return undefined
+  }
+
+  handleWheel (event :WheelEvent, pos :vec2) {
+    for (let ii = this.contents.length - 1; ii >= 0; ii--) {
+      const cc = this.contents[ii]
+      if (rect.contains(cc.bounds, pos) && cc.handleWheel(event, pos)) return true
+    }
+    return false
   }
 
   protected computePreferredSize (hintX :number, hintY :number, into :dim2) {
