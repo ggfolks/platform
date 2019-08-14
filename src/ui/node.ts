@@ -64,7 +64,7 @@ class UINode extends Node {
         root = ui.createRoot(this.config.root)
         if (this.config.size) {
           root.pack(this.config.size[0], this.config.size[1])
-        }
+        } // TODO: else pack to preferred size
         ctx.host.addRoot(root, this.config.origin || vec2zero)
       }
     }))
