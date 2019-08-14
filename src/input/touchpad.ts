@@ -7,25 +7,31 @@ export class Touchpad implements Disposable {
   readonly touches :Map<number, Touch> = new Map()
 
   constructor (private _canvas :HTMLElement) {
-    _canvas.addEventListener("touchstart", this._onTouchEvent)
-    _canvas.addEventListener("touchmove", this._onTouchEvent)
-    _canvas.addEventListener("touchcancel", this._onTouchEvent)
-    _canvas.addEventListener("touchend", this._onTouchEvent)
+    _canvas.addEventListener("touchstart", this._onTouchStartMove)
+    _canvas.addEventListener("touchmove", this._onTouchStartMove)
+    _canvas.addEventListener("touchcancel", this._onTouchCancelEnd)
+    _canvas.addEventListener("touchend", this._onTouchCancelEnd)
   }
 
   dispose () {
-    this._canvas.removeEventListener("touchstart", this._onTouchEvent)
-    this._canvas.removeEventListener("touchmove", this._onTouchEvent)
-    this._canvas.removeEventListener("touchcancel", this._onTouchEvent)
-    this._canvas.removeEventListener("touchend", this._onTouchEvent)
+    this._canvas.removeEventListener("touchstart", this._onTouchStartMove)
+    this._canvas.removeEventListener("touchmove", this._onTouchStartMove)
+    this._canvas.removeEventListener("touchcancel", this._onTouchCancelEnd)
+    this._canvas.removeEventListener("touchend", this._onTouchCancelEnd)
   }
 
-  private _onTouchEvent = (event :TouchEvent) => {
+  private _onTouchStartMove = (event :TouchEvent) => {
     event.preventDefault()
-    this.touches.clear()
-    for (let ii = 0; ii < event.touches.length; ii++) {
-      const touch = event.touches.item(ii)
+    for (let ii = 0; ii < event.changedTouches.length; ii++) {
+      const touch = event.changedTouches.item(ii)
       if (touch) this.touches.set(touch.identifier, touch)
+    }
+  }
+
+  private _onTouchCancelEnd = (event :TouchEvent) => {
+    for (let ii = 0; ii < event.changedTouches.length; ii++) {
+      const touch = event.changedTouches.item(ii)
+      if (touch) this.touches.delete(touch.identifier)
     }
   }
 }
