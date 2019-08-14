@@ -36,8 +36,9 @@ class UINode extends Node {
   connect () {
     this._disposer.add(this.graph.getValue(this.config.input, false).onValue(value => {
       if (value) {
-        const graph = this.graph
-        const ctx = graph.ctx as UINodeContext
+        let graph = this.graph
+        while (graph.ctx.subgraph) graph = graph.ctx.subgraph.graph
+        const ctx = this.graph.ctx as UINodeContext
         let root :Root | undefined
         class NodeModel extends Model {
           resolve<V extends ModelValue> (spec :Spec<V>) :V {
