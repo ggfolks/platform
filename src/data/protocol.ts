@@ -85,8 +85,8 @@ export interface DownResolver extends UpResolver {
   info (oid :number) :{otype :DObjectType<any>, source :DataSource, path :Path}
 }
 
-function decodeSync (objects :UpResolver, type :SyncType, dec :Decoder) :OidSyncMsg {
-  const oid :number = dec.getValue("size32"), obj = objects.get(oid)
+function decodeSync (resolver :UpResolver, type :SyncType, dec :Decoder) :OidSyncMsg {
+  const oid :number = dec.getValue("size32"), obj = resolver.get(oid)
   const idx = dec.getValue("size8")
   const meta = obj.metas[idx]
   if (!meta) throw new Error(
@@ -114,7 +114,7 @@ function decodeSync (objects :UpResolver, type :SyncType, dec :Decoder) :OidSync
   }
 }
 
-export function decodeUp (objects :UpResolver, dec :Decoder) :UpMsg {
+export function decodeUp (resolver :UpResolver, dec :Decoder) :UpMsg {
   const type = dec.getValue("int8")
   switch (type) {
   case UpType.SUB:
@@ -125,18 +125,18 @@ export function decodeUp (objects :UpResolver, dec :Decoder) :UpMsg {
     const queue = {path: getPath(dec), index: dec.getValue("size8")}
     return {type, queue, msg: dec.getValue("record")}
   default:
-    return decodeSync(objects, type, dec)
+    return decodeSync(resolver, type, dec)
   }
 }
 
-export function decodeDown (objects :DownResolver, dec :Decoder) :DownMsg {
+export function decodeDown (resolver :DownResolver, dec :Decoder) :DownMsg {
   const type = dec.getValue("int8")
   switch (type) {
   case DownType.SUBOBJ:
     const oid = dec.getValue("size32")
-    return {type, oid, obj: getObject(dec, oid, objects)}
+    return {type, oid, obj: getObject(dec, oid, resolver)}
   case DownType.SUBERR: return {type, oid: dec.getValue("size32"), cause :dec.getValue("string")}
-  default: return decodeSync(objects, type, dec)
+  default: return decodeSync(resolver, type, dec)
   }
 }
 
@@ -147,7 +147,7 @@ function getPath (dec :Decoder) :string[] { return dec.getArray("string") }
 export function addObject (rcpt :Auth, obj :DObject, enc :Encoder) {
   for (const meta of obj.metas) {
     // we write all leading const properties; they must be readable
-    if (meta.type !== "const" && !obj.canRead(meta.name, rcpt)) continue
+    if (!(meta.type === "const" || obj.canRead(meta.name, rcpt))) continue
     const prop = obj[meta.name]
     switch (meta.type) {
     case "const":
@@ -172,8 +172,8 @@ export function addObject (rcpt :Auth, obj :DObject, enc :Encoder) {
   enc.addValue(255, "size8") // terminator
 }
 
-export function getObject (dec :Decoder, oid :number, objects :DownResolver) :DObject {
-  const {otype, source, path} = objects.info(oid)
+export function getObject (dec :Decoder, oid :number, resolver :DownResolver) :DObject {
+  const {otype, source, path} = resolver.info(oid)
   const metas = getPropMetas(otype.prototype)
   const args = []
   for (const meta of metas) {

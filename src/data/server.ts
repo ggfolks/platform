@@ -1,15 +1,19 @@
 import {Remover, NoopRemover} from "../core/util"
+import {UUID, UUID0, uuidv1} from "../core/uuid"
 import {Record} from "../core/data"
 import {Subject} from "../core/react"
 import {Encoder, Decoder} from "../core/codec"
-import {Auth, DataSource, DKey, DObject, DObjectType, DQueueAddr, ID, Path, Subscriber,
+import {CollectionMeta} from "./meta"
+import {Auth, AutoKey, DataSource, DKey, DObject, DObjectType, DQueueAddr, Path, Subscriber,
         findObjectType, pathToKey} from "./data"
 import {DownType, DownMsg, UpType, SyncMsg, decodeUp, encodeDown} from "./protocol"
 
-const sysAuth :Auth = {id: "0", isSystem: true}
+const sysAuth :Auth = {id: UUID0, isSystem: true}
 
 export class DataStore {
   private readonly objects = new Map<string, DObject>()
+  private readonly counters = new Map<string, number>()
+
   readonly source :DataSource = {
     create: (path, cprop, key, otype, ...args) => this.create(sysAuth, path, cprop, key, ...args),
     resolve: (path, otype) => this.resolve(path),
@@ -24,25 +28,29 @@ export class DataStore {
     this.objects.set("", new rtype(this.source, [], 0))
   }
 
-  create<T extends DObject> (
-    auth :Auth, path :Path, cprop :string, key :DKey, ...args :any[]
-  ) :Subject<T|Error> {
+  create (auth :Auth, path :Path, cprop :string, key :DKey, ...args :any[]) :Subject<DKey|Error> {
     return this.resolve(path).switchMap(res => {
       try {
         if (res instanceof Error) throw new Error(
           `Unable to resolve parent object for create ${JSON.stringify({path, cprop, key, res})}`)
         if (!res.canSubscribe(auth) || !res.canCreate(cprop, auth)) this.authFail(
           `Create check failed [auth=${auth}, obj=${res}, prop=${cprop}]`)
-        const cpath = path.concat([cprop, key]), ckey = pathToKey(cpath)
-        if (this.objects.has(ckey)) throw new Error(`Object already exists at path '${cpath}'`)
-        return Subject.deriveSubject<T|Error>(disp => {
-          const obj = this.objects.get(ckey)
-          if (obj) disp(obj as T)
+        const cmeta = res.metas.find(m => m.name === cprop)
+        if (!cmeta) throw new Error(
+          `Cannot create object in unknown collection [path=${path}, cprop=${cprop}]`)
+        if (cmeta.type !== "collection") throw new Error(
+          `Cannot create object in non-collection property [path=${path}, cprop=${cprop}]`)
+        const gkey = key === AutoKey ? this._generateKey(path, cmeta, cprop) : key
+        const opath = path.concat([cprop, gkey]), okey = pathToKey(opath)
+        if (this.objects.has(okey)) throw new Error(`Object already exists at path '${opath}'`)
+        return Subject.deriveSubject<DKey|Error>(disp => {
+          const obj = this.objects.get(okey)
+          if (obj) disp(gkey)
           else {
-            const otype = findObjectType(this.rtype, cpath)
-            const nobj = new otype(this.source, cpath, ...args)
-            this.objects.set(ckey, nobj)
-            disp(nobj)
+            const otype = findObjectType(this.rtype, opath)
+            const nobj = new otype(this.source, opath, ...args)
+            this.objects.set(okey, nobj)
+            disp(gkey)
           }
           return NoopRemover
         })
@@ -50,6 +58,24 @@ export class DataStore {
         return Subject.constant(err)
       }
     })
+  }
+
+  _generateKey (path :Path, meta :CollectionMeta, cprop :string) :DKey {
+    switch (meta.autoPolicy) {
+    case "noauto":
+      throw new Error(
+        `Cannot auto generate key for 'noauto' collection [path=${path}, cprop=${cprop}]`)
+    case "sequential":
+      const ckey = pathToKey(path.concat([cprop]))
+      const next = this.counters.get(ckey) || 1
+      this.counters.set(ckey, next+1)
+      return next
+    case "uuid":
+      return uuidv1()
+    default:
+      throw new Error(
+        `Unknown auto-gen policy [path=${path}, cprop=${cprop}, policy='${meta.autoPolicy}']`)
+    }
   }
 
   resolve<T extends DObject> (path :Path) :Subject<T|Error> {
@@ -63,11 +89,14 @@ export class DataStore {
   }
 
   post (auth :Auth, queue :DQueueAddr, msg :Record) {
+    // TODO: keep the object around for a bit instead of letting it immediately get unresolved after
+    // our queue message is processed...
     this.resolve<DObject>(queue.path).once(res => {
       try {
         if (res instanceof Error) throw res
         const meta = res.metas[queue.index]
         if (meta.type !== "queue") throw new Error(`Not a queue prop at path`)
+        // TODO: check canSubscribe permission?
         meta.handler(res, msg, auth)
       } catch (err) {
         console.warn(`Failed to post [auth=${auth}, queue=${queue}, msg={$msg}, err=${err}]`)
@@ -105,7 +134,7 @@ export abstract class Session {
 
   readonly auth :Auth
 
-  constructor (readonly store :DataStore, readonly id :ID) {
+  constructor (readonly store :DataStore, readonly id :UUID) {
     this.auth = {id, isSystem: false}
   }
 

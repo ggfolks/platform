@@ -1,14 +1,18 @@
+import {UUID, UUID0, uuidv1} from "../core/uuid"
 import {Timestamp} from "../core/util"
 import {Subject} from "../core/react"
 import {Encoder, Decoder, setTextCodec} from "../core/codec"
 import {getPropMetas, dconst, dobject, dmap, dvalue, dcollection, dqueue} from "./meta"
-import {Auth, AutoKey, ID, DataSource, DObject, DQueueAddr, MetaMsg, Path, findObjectType} from "./data"
+import {Auth, AutoKey, DataSource, DKey, DObject, MetaMsg, Path, findObjectType} from "./data"
 import {addObject, getObject} from "./protocol"
 import {Address, Client, Connection} from "./client"
 import {DataStore, Session} from "./server"
 
 import {TextEncoder, TextDecoder} from "util"
 setTextCodec(() => new TextEncoder() as any, () => new TextDecoder() as any)
+
+// @ts-ignore: sigh jest
+Object.defineProperty(global.self, 'crypto', {value: require('crypto')})
 
 //
 // User object: maintains info on a user
@@ -22,6 +26,9 @@ export class UserObject extends DObject {
   @dvalue("timestamp")
   lastLogin = this.value(0)
 
+  @dvalue("size32")
+  currentRoom = this.value<number>(0)
+
   @dqueue(handleUserReq)
   userq = this.queue<UserReq>()
 
@@ -29,14 +36,16 @@ export class UserObject extends DObject {
   canWrite (prop :string, who :Auth) { return (prop === "username") || super.canWrite(prop, who) }
 }
 
-type UserReq = {type: "sendUsername", queue :DQueueAddr}
+type UserReq = {type: "enter", room: number}
 
 function handleUserReq (obj :UserObject, req :UserReq, auth :Auth) {
   switch (req.type) {
-  case "sendUsername":
-    const rsp = {type: "setUsername", id: obj.key, username: obj.username.current}
-    obj.source.post(req.queue, rsp)
-    break
+  case "enter":
+    if (auth.isSystem) {
+      obj.currentRoom.update(req.room)
+      obj.source.post(RoomObject.queueAddr(["rooms", req.room], "roomq"),
+                      {type: "joined", id: obj.key, username: obj.username.current})
+    }
   }
 }
 
@@ -45,13 +54,14 @@ function handleUserReq (obj :UserObject, req :UserReq, auth :Auth) {
 
 type MID = number
 
-type RoomReq = {type: "speak", text :string} |
-               {type: "edit", mid :MID, newText :string} |
-               {type: "addOccupant", id :ID} |
-               {type: "setUsername", id :ID, username :string}
+type RoomReq = {type: "join", id :UUID}
+             | {type: "joined", id :UUID, username :string}
+             | {type: "speak", text :string}
+             | {type: "edit", mid :MID, newText :string}
+             | {type: "delete"}
 
 interface Message {
-  sender :ID
+  sender :UUID
   sent :Timestamp
   text :string
   edited? :Timestamp
@@ -64,24 +74,24 @@ interface OccupantInfo {
 @dobject
 export class RoomObject extends DObject {
 
-  constructor (source :DataSource, path :Path, owner :ID) {
+  constructor (source :DataSource, path :Path, owner :UUID) {
     super(source, path)
     this.owner = owner
   }
 
-  @dconst("id")
-  readonly owner :ID
+  @dconst("uuid")
+  readonly owner :UUID
 
   @dvalue("string")
   name = this.value("")
 
-  @dmap("id", "record")
-  occupants = this.map<ID, OccupantInfo>()
+  @dmap("uuid", "record")
+  occupants = this.map<UUID, OccupantInfo>()
 
-  @dvalue("int32")
+  @dvalue("size32")
   nextMsgId = this.value(1)
 
-  @dmap("int32", "record")
+  @dmap("size32", "record")
   messages = this.map<MID, Message>()
 
   @dqueue(handleRoomReq)
@@ -95,6 +105,19 @@ export class RoomObject extends DObject {
 
 function handleRoomReq (obj :RoomObject, req :RoomReq, auth :Auth) {
   switch (req.type) {
+  case "join":
+    // we could do an auth or ban list check here
+    obj.occupants.set(req.id, {username: "?"})
+    obj.source.post(UserObject.queueAddr(["users", auth.id], "userq"), {type: "enter", room: obj.key})
+    break
+
+  case "joined":
+    if (auth.isSystem) {
+      const info = obj.occupants.get(req.id)
+      if (info) obj.occupants.set(req.id, {...info, username: req.username})
+    }
+    break
+
   case "speak":
     if (obj.occupants.has(auth.id) || auth.isSystem) {
       const mid = obj.nextMsgId.current
@@ -109,29 +132,11 @@ function handleRoomReq (obj :RoomObject, req :RoomReq, auth :Auth) {
       obj.messages.set(req.mid, {...msg, text: req.newText, edited: Timestamp.now()})
     }
     break
-
-  case "addOccupant":
-    if (auth.isSystem) {
-      obj.occupants.set(req.id, {username: "?"})
-    }
-    break
-
-  case "setUsername":
-    if (auth.isSystem) {
-      const info = obj.occupants.get(req.id)
-      if (info) obj.occupants.set(req.id, {...info, username: req.username})
-    }
-    break
   }
 }
 
 function handleMetaMsg (obj :RoomObject, msg :MetaMsg, auth :Auth) {
   switch (msg.type) {
-  case "subscribed":
-    obj.occupants.set(msg.userId, {username: "?"})
-    const req = {type: "sendUsername", path: obj.roomq.addr}
-    obj.source.post(UserObject.queueAddr(["users", msg.userId], "userq"), req)
-    break
   case "unsubscribed":
     obj.occupants.delete(msg.userId)
     break
@@ -142,8 +147,6 @@ function handleMetaMsg (obj :RoomObject, msg :MetaMsg, auth :Auth) {
 // Root object: manages chat rooms
 
 type ChatReq = {type :"create" , name :string}
-             | {type :"join", id :ID}
-             | {type :"delete", id :ID}
 
 interface RoomInfo {
   name :string
@@ -155,14 +158,14 @@ export class RootObject extends DObject {
 
   canSubscribe (auth :Auth) { return true }
 
-  @dmap("id", "record")
-  publicRooms = this.map<ID, RoomInfo>()
+  @dmap("size32", "record")
+  publicRooms = this.map<number, RoomInfo>()
 
-  @dcollection("string", UserObject)
-  users = this.collection<ID, UserObject>()
+  @dcollection("string", UserObject, "uuid")
+  users = this.collection<UUID, UserObject>()
 
-  @dcollection("string", RoomObject)
-  rooms = this.collection<ID, RoomObject>()
+  @dcollection("size32", RoomObject, "sequential")
+  rooms = this.collection<number, RoomObject>()
 
   @dqueue(handleChatReq)
   chatq = this.queue<ChatReq>()
@@ -171,13 +174,11 @@ export class RootObject extends DObject {
 function handleChatReq (obj :RootObject, req :ChatReq, auth :Auth) {
   switch (req.type) {
   case "create":
-    obj.rooms.create(AutoKey)
-    break
-  case "join":
-    // TODO
-    break
-  case "delete":
-    // TODO
+    obj.rooms.create(AutoKey, auth.id).once(res => {
+      if (typeof res === "string") obj.source.post(
+        UserObject.queueAddr(["users", auth.id], "userq"), {type: "enter", room: res})
+    })
+    // TODO: need to get key for room & send it back to requester
     break
   }
 }
@@ -185,9 +186,9 @@ function handleChatReq (obj :RootObject, req :ChatReq, auth :Auth) {
 test("metas", () => {
   const rmetas = getPropMetas(RootObject.prototype)
   expect(rmetas[0]).toEqual({type: "map", name: "publicRooms", index: 0,
-                             ktype: "id", vtype: "record"})
+                             ktype: "size32", vtype: "record"})
   expect(rmetas[1]).toEqual({type: "collection", name: "users", index: 1,
-                             ktype: "string", otype: UserObject})
+                             ktype: "string", otype: UserObject, autoPolicy: "uuid"})
   expect(rmetas[3]).toEqual({type: "queue", name: "chatq", index: 3, handler: handleChatReq})
 
   const umetas = getPropMetas(UserObject.prototype)
@@ -195,21 +196,30 @@ test("metas", () => {
   expect(umetas[1]).toEqual({type: "value", name: "lastLogin", index: 1, vtype: "timestamp"})
 
   const rmmetas = getPropMetas(RoomObject.prototype)
-  expect(rmmetas[0]).toEqual({type: "const", name: "owner", index: 0, vtype: "id"})
+  expect(rmmetas[0]).toEqual({type: "const", name: "owner", index: 0, vtype: "uuid"})
   expect(rmmetas[1]).toEqual({type: "value", name: "name", index: 1, vtype: "string"})
 })
 
-const sysauth = {id: "system", isSystem: true}
+const sysauth = {id: UUID0, isSystem: true}
+
+function createAndResolve<T extends DObject> (
+  store :DataStore, auth :Auth, ppath :Path, cprop :string, key :DKey, ...args :any[]
+) :Subject<T|Error> {
+  return store.create(auth, ppath, cprop, key, ...args).
+    switchMap(kres => (kres instanceof Error) ?
+              Subject.constant(kres) :
+              store.resolve<T>(ppath.concat([cprop, kres])))
+}
 
 test("access", () => {
   const store = new DataStore(RootObject)
-  const auth1 = {id: "1", isSystem: false}
-  const auth2 = {id: "2", isSystem: false}
+  const auth1 = {id: uuidv1(), isSystem: false}
+  const auth2 = {id: uuidv1(), isSystem: false}
 
-  store.create<UserObject>(sysauth, [], "users", "1").onValue(user => {
+  createAndResolve(store, sysauth, [], "users", auth1.id).onValue(user => {
     if (user instanceof Error) throw user
 
-    expect(user.key).toEqual("1")
+    expect(user.key).toEqual(auth1.id)
 
     expect(user.canSubscribe(auth1)).toEqual(true)
     expect(user.canSubscribe(auth2)).toEqual(false)
@@ -223,24 +233,24 @@ test("access", () => {
 })
 
 test("codec", () => {
-  const store = new DataStore(RootObject)
-  store.create<RoomObject>(sysauth, [], "rooms", "1", "42").onValue(room => {
+  const store = new DataStore(RootObject), ownerId = uuidv1()
+  createAndResolve<RoomObject>(store, sysauth, [], "rooms", "1", ownerId).onValue(room => {
     if (room instanceof Error) throw room
 
-    expect(room.owner).toEqual("42")
+    expect(room.owner).toEqual(ownerId)
 
+    const id1 = uuidv1(), id2 = uuidv1()
     room.name.update("Test room")
-    room.occupants.set("1", {username: "Testy Testerson"})
-    room.occupants.set("2", {username: "Sandy Clause"})
+    room.occupants.set(id1, {username: "Testy Testerson"})
+    room.occupants.set(id2, {username: "Sandy Clause"})
     room.nextMsgId.update(4)
     const now = Timestamp.now()
-    room.messages.set(1, {sender: "1", sent: now-5*60*1000, text: "Yo Sandy!"})
-    room.messages.set(2, {sender: "2", sent: now-3*60*1000, text: "Hiya Testy."})
-    room.messages.set(3, {sender: "1", sent: now-1*60*1000, text: "How's the elves?"})
+    room.messages.set(1, {sender: id1, sent: now-5*60*1000, text: "Yo Sandy!"})
+    room.messages.set(2, {sender: id2, sent: now-3*60*1000, text: "Hiya Testy."})
+    room.messages.set(3, {sender: id1, sent: now-1*60*1000, text: "How's the elves?"})
 
-    const auth = {id: "0", isSystem: true}
     const enc = new Encoder()
-    addObject(auth, room, enc)
+    addObject(sysauth, room, enc)
 
     const msg = enc.finish()
     const dec = new Decoder(msg)
@@ -263,13 +273,13 @@ class CObject extends DObject {
 }
 class BObject extends DObject {
   @dcollection("string", CObject)
-  cs = this.collection<ID, CObject>()
+  cs = this.collection<UUID, CObject>()
 }
 class AObject extends DObject {
   @dcollection("string", BObject)
-  bs = this.collection<ID, BObject>()
+  bs = this.collection<UUID, BObject>()
   @dcollection("string", CObject)
-  cs = this.collection<ID, CObject>()
+  cs = this.collection<UUID, CObject>()
 }
 
 test("findObjectType", () => {
@@ -281,14 +291,14 @@ test("findObjectType", () => {
 })
 
 class ClientHandler extends Session {
-  constructor (store :DataStore, id :ID, readonly conn :Connection) { super(store, id) }
+  constructor (store :DataStore, id :UUID, readonly conn :Connection) { super(store, id) }
   sendMsg (msg :Uint8Array) { this.conn.client.recvMsg(msg) }
 }
 
 class TestConnection extends Connection {
   private readonly handler :ClientHandler
 
-  constructor (client :Client, addr :Address, store :DataStore, id :ID) {
+  constructor (client :Client, addr :Address, store :DataStore, id :UUID) {
     super(client, addr)
     this.handler = new ClientHandler(store, id, this)
   }
@@ -303,30 +313,32 @@ test("client-server", () => {
   const testLocator = (path :Path) => Subject.constant(testAddr)
   const testStore = new DataStore(RootObject)
 
-  testStore.create(sysauth, [], "users", "a").onValue(res => {
+  const ida = uuidv1(), idb = uuidv1()
+  testStore.create(sysauth, [], "users", ida).onValue(res => {
     if (res instanceof Error) throw res
   })
-  testStore.create(sysauth, [], "users", "b").onValue(res => {
+  testStore.create(sysauth, [], "users", idb).onValue(res => {
     if (res instanceof Error) throw res
   })
 
-  const clientA = new Client(testLocator, (c, a) => new TestConnection(c, a, testStore, "a"))
+  const clientA = new Client(testLocator, (c, a) => new TestConnection(c, a, testStore, ida))
   // const clientB = new Client(testLocator, (c, a) => new TestConnection(c, a, testServer, "b"))
 
-  clientA.resolve(["users", "a"], UserObject).once(resAA => {
+  clientA.resolve(["users", ida], UserObject).once(resAA => {
     if (resAA instanceof Error) throw resAA
     resAA.username.update("User A")
     resAA.username.onValue(username => expect(username).toEqual("User A"))
   })
 
   // try to subscribe to user b's object via a, should fail
-  clientA.resolve(["users", "b"], UserObject).once(resAB => {
+  clientA.resolve(["users", idb], UserObject).once(resAB => {
     if (!(resAB instanceof Error)) throw new Error(`Expected access denied, got ${resAB}.`)
     expect(resAB.message).toEqual("Access denied.")
   })
 
-  clientA.resolve(["users", "c"], UserObject).once(resAC => {
+  const idc = uuidv1()
+  clientA.resolve(["users", idc], UserObject).once(resAC => {
     if (!(resAC instanceof Error)) throw new Error(`Expected no such object, got ${resAC}.`)
-    expect(resAC.message).toEqual(`No object at path '${["users", "c"]}'`)
+    expect(resAC.message).toEqual(`No object at path '${["users", idc]}'`)
   })
 })

@@ -1,4 +1,5 @@
 import {Disposable, Remover} from "../core/util"
+import {UUID} from "../core/uuid"
 import {Data, Record, dataEquals, refEquals} from "../core/data"
 import {ChangeFn, Eq, Mutable, Subject, ValueFn, addListener, dispatchChange} from "../core/react"
 import {MutableSet, MutableMap} from "../core/rcollect"
@@ -6,17 +7,15 @@ import {KeyType, ValueType} from "../core/codec"
 import {PropMeta, getPropMetas} from "./meta"
 import {SyncMsg, SyncType} from "./protocol"
 
-export type ID = string
-
 export type Auth = {
-  id :ID
+  id :UUID
   // TODO: change this to something extensible like: hasToken("admin"|"support"|"system")
   // or maybe those tokens are named "isAdmin" etc. and are jammed into this object...
   isSystem :boolean
 }
 
-export type MetaMsg = {type :"subscribed", userId :ID}
-                    | {type :"unsubscribed", userId :ID}
+export type MetaMsg = {type :"subscribed", userId :UUID}
+                    | {type :"unsubscribed", userId :UUID}
 
 class DMutable<T> extends Mutable<T> {
 
@@ -98,7 +97,7 @@ class DMutableMap<K,V> extends MutableMap<K,V> {
 }
 
 /** Identifies an object in a collection. */
-export type DKey = string | number
+export type DKey = number | string | UUID
 
 /** A sentinel `DKey` value that instructs the server to autogenerate a key when creating a new
   * object in a collection. The generated key will be of type `ID`. */
@@ -111,11 +110,18 @@ export type Path = DKey[]
 /** Converts `path` to a string suitable for use in a map. */
 export const pathToKey = (path :Path) => path.join(":")
 
+/** Defines the policy for auto-generating keys for a `DCollection`.
+  * - `noauto` - keys will never be auto-generated. This is the default.
+  * - `sequential` - keys are monotonically increasing integers. This is only valid for
+  *   non-persistent collections.
+  * - `uuid` - keys are 128-bit V1 UUIDs. This is valid for persistent collections. */
+export type AutoPolicy = "noauto" | "sequential" | "uuid"
+
 export class DCollection<K,V extends DObject> {
 
   constructor (readonly owner :DObject, readonly name :string, readonly otype :DObjectType<V>) {}
 
-  create (key :DKey, ...args :any[]) :Subject<V|Error> {
+  create (key :DKey, ...args :any[]) :Subject<DKey|Error> {
     return this.owner.source.create(this.owner.path, this.name, key, this.otype, ...args)
   }
 
@@ -161,8 +167,8 @@ export function findObjectType (rtype :DObjectType<any>, path :Path) :DObjectTyp
 export interface DataSource {
 
   create<T extends DObject> (
-    path :Path, cprop :string, key :DKey, otype :DObjectType<T>, ...args :any[]
-  ) :Subject<T|Error>
+    path :Path, cprop :string, key :DKey, ...args :any[]
+  ) :Subject<DKey|Error>
 
   resolve<T extends DObject> (path :Path, otype :DObjectType<T>) :Subject<T|Error>
 

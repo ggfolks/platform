@@ -53,7 +53,7 @@ export class Client {
 
   create<T extends DObject> (
     path :Path, cprop :string, key :DKey, otype :DObjectType<T>, ...args :any[]
-  ) :Subject<T|Error> {
+  ) :Subject<DKey|Error> {
     return Subject.constant(new Error(`TODO`))
   }
 
