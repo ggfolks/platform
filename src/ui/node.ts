@@ -4,10 +4,10 @@ import {vec2zero} from "../core/math"
 import {Scale} from "../core/ui"
 import {Value} from "../core/react"
 import {Graph} from "../graph/graph"
-import {inputEdge} from "../graph/meta"
+import {getNodeMeta, inputEdge} from "../graph/meta"
 import {Node, NodeConfig, NodeContext, NodeTypeRegistry} from "../graph/node"
 import {Host, Root, RootConfig} from "./element"
-import {Model, ModelData, ModelValue, Spec, mapProvider} from "./model"
+import {Model, ModelData, ModelKey, ModelValue, Spec, mapProvider} from "./model"
 import {Theme, UI} from "./ui"
 import {ImageResolver, StyleDefs} from "./style"
 
@@ -57,7 +57,18 @@ class UINode extends Node {
               return graph.nodes.keysSource() as any
             } else if (spec === "nodeData") {
               return mapProvider(graph.nodes, value => {
-                return {type: Value.constant(value.current.config.type)}
+                const type = value.current.config.type
+                const meta = getNodeMeta(type)
+                const resolveName = {
+                  resolve: (key :ModelKey) => new Model({name: Value.constant(key)}),
+                }
+                return {
+                  type: Value.constant(type),
+                  inputKeys: Value.constant(Object.keys(meta.inputs)),
+                  outputKeys: Value.constant(Object.keys(meta.outputs)),
+                  input: resolveName,
+                  output: resolveName,
+                }
               }) as any
             }
             return super.resolve(spec)

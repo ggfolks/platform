@@ -39,21 +39,22 @@ export class GraphViewer extends AbsGroup {
             contents: {
               type: "column",
               contents: [
-                {
-                  type: "label",
-                  text: "type",
-                },
+                {type: "label", text: "type"},
                 {
                   type: "row",
                   contents: [
                     {
-                      type: "column",
-                      contents: [],
+                      type: "list",
+                      element: {type: "label", text: "name"},
+                      data: "input",
+                      keys: "inputKeys",
                     },
                     {
-                      type: "column",
-                      contents: [],
-                    }
+                      type: "list",
+                      element: {type: "label", text: "name"},
+                      data: "output",
+                      keys: "outputKeys",
+                    },
                   ],
                 }
               ],
