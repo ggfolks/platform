@@ -1,6 +1,7 @@
 import {Mutable, Value} from "../core/react"
 import {Graph} from "../graph/graph"
-import {Node, NodeConfig, NodeContext, NodeTypeRegistry, OutputEdge} from "../graph/node"
+import {outputEdge} from "../graph/meta"
+import {Node, NodeConfig, NodeContext, NodeTypeRegistry} from "../graph/node"
 import {Hand} from "./hand"
 import {Keyboard} from "./keyboard"
 
@@ -10,10 +11,10 @@ export interface InputNodeContext extends NodeContext {
 }
 
 /** Provides an output of false or true depending on whether a key is pressed. */
-export interface KeyConfig extends NodeConfig {
-  type :"key"
-  code :number
-  output :OutputEdge<boolean>
+abstract class KeyConfig implements NodeConfig {
+  type = "key"
+  code = 0
+  @outputEdge("boolean") output = undefined
 }
 
 class Key extends Node {
@@ -26,10 +27,10 @@ class Key extends Node {
 }
 
 /** Provides an output of false or true depending on whether a mouse button is pressed. */
-export interface MouseButtonConfig extends NodeConfig {
-  type :"mouseButton"
-  button? :number
-  output :OutputEdge<boolean>
+abstract class MouseButtonConfig implements NodeConfig {
+  type = "mouseButton"
+  button? = 0
+  @outputEdge("boolean") output = undefined
 }
 
 class MouseButton extends Node {
@@ -45,9 +46,9 @@ class MouseButton extends Node {
 }
 
 /** Fires on a double mouse click. */
-export interface DoubleClickConfig extends NodeConfig {
-  type :"doubleClick"
-  output :OutputEdge<boolean>
+abstract class DoubleClickConfig implements NodeConfig {
+  type = "doubleClick"
+  @outputEdge("boolean") output = undefined
 }
 
 class DoubleClick extends Node {
@@ -73,10 +74,10 @@ class DoubleClick extends Node {
 }
 
 /** Provides outputs of x and y describing mouse movement in pixels. */
-export interface MouseMovementConfig extends NodeConfig {
-  type :"mouseMovement"
-  x :OutputEdge<number>
-  y :OutputEdge<number>
+abstract class MouseMovementConfig implements NodeConfig {
+  type = "mouseMovement"
+  @outputEdge("number") x = undefined
+  @outputEdge("number") y = undefined
 }
 
 class MouseMovement extends Node {
@@ -102,10 +103,12 @@ export interface PointerConfig extends NodeConfig {
 }
 
 /** Provides outputs of x and y describing pointer movement in pixels. */
-export interface PointerMovementConfig extends PointerConfig {
-  type :"pointerMovement"
-  x :OutputEdge<number>
-  y :OutputEdge<number>
+abstract class PointerMovementConfig implements PointerConfig {
+  type = "pointerMovement"
+  index = undefined
+  count = undefined
+  @outputEdge("number") x = undefined
+  @outputEdge("number") y = undefined
 }
 
 class PointerMovement extends Node {

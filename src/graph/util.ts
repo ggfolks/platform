@@ -2,13 +2,14 @@ import {Clock} from "../core/clock"
 import {refEquals} from "../core/data"
 import {Mutable, Value} from "../core/react"
 import {Graph, GraphConfig} from "./graph"
-import {InputEdge, Node, NodeConfig, NodeTypeRegistry, OutputEdge} from "./node"
+import {inputEdge, outputEdge} from "./meta"
+import {InputEdge, Node, NodeConfig, NodeTypeRegistry} from "./node"
 
 /** Switches to true after a number of seconds have passed. */
-export interface TimeoutConfig extends NodeConfig {
-  type :"timeout"
-  seconds :number
-  output :OutputEdge<boolean>
+abstract class TimeoutConfig implements NodeConfig {
+  type = "timeout"
+  seconds = 0
+  @outputEdge("boolean") output = undefined
 }
 
 class TimeoutNode extends Node {
@@ -30,10 +31,10 @@ class TimeoutNode extends Node {
 }
 
 /** Pulses true at regular intervals. */
-export interface IntervalConfig extends NodeConfig {
-  type :"interval"
-  seconds :number
-  output :OutputEdge<boolean>
+abstract class IntervalConfig implements NodeConfig {
+  type = "interval"
+  seconds = 0
+  @outputEdge("boolean") output = undefined
 }
 
 class IntervalNode extends Node {
@@ -58,11 +59,11 @@ class IntervalNode extends Node {
 }
 
 /** Stores a value, updating from the value input when the store input is set. */
-export interface LatchConfig extends NodeConfig {
-  type :"latch"
-  store :InputEdge<boolean>
-  value :InputEdge<any>
-  output :OutputEdge<any>
+abstract class LatchConfig implements NodeConfig {
+  type = "latch"
+  @inputEdge("boolean") store = undefined
+  @inputEdge("any") value = undefined
+  @outputEdge("any") output = undefined
 }
 
 class Latch extends Node {
@@ -86,11 +87,11 @@ class Latch extends Node {
 }
 
 /** Provides the time, elapsed, and dt (default) fields from the clock. */
-export interface ClockConfig extends NodeConfig {
-  type :"clock"
-  time :OutputEdge<number>
-  elapsed :OutputEdge<number>
-  dt :OutputEdge<number>
+abstract class ClockConfig implements NodeConfig {
+  type = "clock"
+  @outputEdge("number") time = undefined
+  @outputEdge("number") elapsed = undefined
+  @outputEdge("number") dt = undefined
 }
 
 class ClockNode extends Node {
@@ -107,9 +108,9 @@ class ClockNode extends Node {
 }
 
 /** An encapsulated graph. */
-export interface SubgraphConfig extends NodeConfig {
-  type :"subgraph"
-  graph :GraphConfig
+abstract class SubgraphConfig implements NodeConfig {
+  type = "subgraph"
+  graph :GraphConfig = {}
 }
 
 export class Subgraph extends Node {
@@ -149,10 +150,10 @@ export class Subgraph extends Node {
 }
 
 /** An input to a subgraph. */
-export interface InputConfig extends NodeConfig {
-  type :"input"
-  name :string
-  output :OutputEdge<any>
+abstract class InputConfig implements NodeConfig {
+  type = "input"
+  name = ""
+  @outputEdge("any") output = undefined
 }
 
 class Input extends Node {
@@ -169,10 +170,10 @@ class Input extends Node {
 }
 
 /** An output from a subgraph. */
-export interface OutputConfig extends NodeConfig {
-  type :"output"
-  name :string
-  input :InputEdge<any>
+abstract class OutputConfig implements NodeConfig {
+  type = "output"
+  name = ""
+  @inputEdge("any") input = undefined
 }
 
 class Output extends Node {
@@ -183,9 +184,9 @@ class Output extends Node {
 }
 
 /** Logs its input to the console. */
-export interface LogConfig extends NodeConfig {
-  type :"log"
-  input :InputEdge<any>
+abstract class LogConfig implements NodeConfig {
+  type = "log"
+  @inputEdge("any") input = undefined
 }
 
 class Log extends Node {

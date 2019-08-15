@@ -1,9 +1,11 @@
 import {vec2} from "gl-matrix"
 
 import {vec2zero} from "../core/math"
+import {Scale} from "../core/ui"
 import {Value} from "../core/react"
 import {Graph} from "../graph/graph"
-import {InputEdge, Node, NodeConfig, NodeContext, NodeTypeRegistry} from "../graph/node"
+import {inputEdge} from "../graph/meta"
+import {Node, NodeConfig, NodeContext, NodeTypeRegistry} from "../graph/node"
 import {Host, Root, RootConfig} from "./element"
 import {Model, ModelData, ModelValue, Spec, mapProvider} from "./model"
 import {Theme, UI} from "./ui"
@@ -18,13 +20,13 @@ export interface UINodeContext extends NodeContext {
 }
 
 /** Creates a UI element when the input becomes true. */
-export interface UINodeConfig extends NodeConfig {
-  type :"UI"
+abstract class UINodeConfig implements NodeConfig {
+  type = "UI"
   model? :ModelData
-  root :RootConfig
+  root :RootConfig = {type: "root", scale: Scale.ONE, contents: {type: ""}}
   origin? :vec2
   size? :vec2
-  input :InputEdge<boolean>
+  @inputEdge("boolean") input = undefined
 }
 
 class UINode extends Node {

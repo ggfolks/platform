@@ -2,14 +2,13 @@ import {Euler, Math as ThreeMath, Matrix4, Quaternion, Vector3} from "three"
 
 import {Value} from "../core/react"
 import {Graph} from "../graph/graph"
+import {inputEdge, inputEdges, outputEdge} from "../graph/meta"
 import {
-  InputEdge,
   Operator,
   OperatorConfig,
   Node,
   NodeConfig,
   NodeTypeRegistry,
-  OutputEdge,
 } from "../graph/node"
 import {EntityComponentConfig, EntityComponentNode} from "../entity/node"
 import {TransformComponent} from "./entity"
@@ -18,13 +17,13 @@ import {TransformComponent} from "./entity"
 export type CoordinateFrame = "world" | "local"
 
 /** Creates a set of Euler angles from individual components. */
-export interface EulerConfig extends NodeConfig {
-  type :"Euler"
-  order? :string
-  x :InputEdge<number>
-  y :InputEdge<number>
-  z :InputEdge<number>
-  output :OutputEdge<Euler>
+abstract class EulerConfig implements NodeConfig {
+  type = "Euler"
+  order? = "XYZ"
+  @inputEdge("number") x = undefined
+  @inputEdge("number") y = undefined
+  @inputEdge("number") z = undefined
+  @outputEdge("Euler") output = undefined
 }
 
 class EulerNode extends Node {
@@ -45,12 +44,12 @@ class EulerNode extends Node {
 }
 
 /** Creates a vector from individual components. */
-export interface Vector3Config extends NodeConfig {
-  type :"Vector3"
-  x :InputEdge<number>
-  y :InputEdge<number>
-  z :InputEdge<number>
-  output :OutputEdge<Vector3>
+abstract class Vector3Config implements NodeConfig {
+  type = "Vector3"
+  @inputEdge("number") x = undefined
+  @inputEdge("number") y = undefined
+  @inputEdge("number") z = undefined
+  @outputEdge("Vector3") output = undefined
 }
 
 class Vector3Node extends Node {
@@ -71,12 +70,12 @@ class Vector3Node extends Node {
 }
 
 /** Splits a vector into its individual components. */
-export interface Vector3SplitConfig extends NodeConfig {
-  type :"Vector3.split"
-  input :InputEdge<Vector3>
-  x :OutputEdge<number>
-  y :OutputEdge<number>
-  z :OutputEdge<number>
+abstract class Vector3SplitConfig implements NodeConfig {
+  type = "Vector3.split"
+  @inputEdge("Vector3") input = undefined
+  @outputEdge("Vector3") x = undefined
+  @outputEdge("Vector3") y = undefined
+  @outputEdge("Vector3") z = undefined
 }
 
 class Vector3Split extends Node {
@@ -91,8 +90,10 @@ class Vector3Split extends Node {
 }
 
 /** Adds a set of vectors. */
-export interface Vector3AddConfig extends OperatorConfig<Vector3> {
-  type :"Vector3.add"
+abstract class Vector3AddConfig implements OperatorConfig<Vector3> {
+  type = "Vector3.add"
+  @inputEdges("Vector3") inputs = undefined
+  @outputEdge("Vector3") output = undefined
 }
 
 class Vector3Add extends Operator<Vector3> {
@@ -115,11 +116,11 @@ class Vector3Add extends Operator<Vector3> {
 }
 
 /** Applies an Euler angle rotation to a vector. */
-export interface Vector3ApplyEulerConfig extends NodeConfig {
-  type :"Vector3.applyEuler"
-  vector :InputEdge<Vector3>
-  euler :InputEdge<Euler>
-  output :OutputEdge<Vector3>
+abstract class Vector3ApplyEulerConfig implements NodeConfig {
+  type = "Vector3.applyEuler"
+  @inputEdge("Vector3") vector = undefined
+  @inputEdge("Euler") euler = undefined
+  @outputEdge("Vector3") output = undefined
 }
 
 class Vector3ApplyEuler extends Node {
@@ -139,11 +140,11 @@ class Vector3ApplyEuler extends Node {
 }
 
 /** Projects a vector onto a plane. */
-export interface Vector3ProjectOnPlaneConfig extends NodeConfig {
-  type :"Vector3.projectOnPlane"
-  planeNormal? :Vector3
-  input :InputEdge<Vector3>
-  output :OutputEdge<Vector3>
+abstract class Vector3ProjectOnPlaneConfig implements NodeConfig {
+  type = "Vector3.projectOnPlane"
+  planeNormal? = new Vector3()
+  @inputEdge("Vector3") input = undefined
+  @outputEdge("Vector3") output = undefined
 }
 
 class Vector3ProjectOnPlane extends Node {
@@ -161,11 +162,11 @@ class Vector3ProjectOnPlane extends Node {
 }
 
 /** Multiplies a vector by a scalar. */
-export interface Vector3MultiplyScalarConfig extends NodeConfig {
-  type :"Vector3.multiplyScalar"
-  vector :InputEdge<Vector3>
-  scalar :InputEdge<number>
-  output :OutputEdge<Vector3>
+abstract class Vector3MultiplyScalarConfig implements NodeConfig {
+  type = "Vector3.multiplyScalar"
+  @inputEdge("Vector3") vector = undefined
+  @inputEdge("number") scalar = undefined
+  @outputEdge("Vector3") output = undefined
 }
 
 class Vector3MultiplyScalar extends Node {
@@ -185,12 +186,12 @@ class Vector3MultiplyScalar extends Node {
 }
 
 /** Computes the signed angle between two vectors about an axis. */
-export interface Vector3AngleBetweenConfig extends NodeConfig {
-  type :"Vector3.angleBetween"
-  axis? :Vector3
-  v1 :InputEdge<Vector3>
-  v2 :InputEdge<Vector3>
-  output :OutputEdge<number>
+abstract class Vector3AngleBetweenConfig implements NodeConfig {
+  type = "Vector3.angleBetween"
+  axis? = new Vector3()
+  @inputEdge("Vector3") v1 = undefined
+  @inputEdge("Vector3") v2 = undefined
+  @outputEdge("number") output = undefined
 }
 
 class Vector3AngleBetween extends Node {
@@ -217,9 +218,9 @@ class Vector3AngleBetween extends Node {
 }
 
 /** Produces a unit vector in a random direction. */
-export interface RandomDirectionConfig extends NodeConfig {
-  type :"randomDirection"
-  output :OutputEdge<Vector3>
+abstract class RandomDirectionConfig implements NodeConfig {
+  type = "randomDirection"
+  @outputEdge("Vector3") output = undefined
 }
 
 class RandomDirection extends Node {
@@ -245,10 +246,11 @@ function createRandomDirection () {
 }
 
 /** Rotates by an amount determined by the inputs. */
-export interface RotateConfig extends EntityComponentConfig {
-  type :"rotate"
+abstract class RotateConfig implements EntityComponentConfig {
+  type = "rotate"
+  component = ""
   frame? :CoordinateFrame
-  input :InputEdge<Euler>
+  @inputEdge("Euler") input = undefined
 }
 
 class Rotate extends EntityComponentNode<TransformComponent> {
@@ -271,10 +273,11 @@ class Rotate extends EntityComponentNode<TransformComponent> {
 }
 
 /** Translates by an amount determined by the inputs. */
-export interface TranslateConfig extends EntityComponentConfig {
-  type :"translate"
+abstract class TranslateConfig implements EntityComponentConfig {
+  type = "translate"
+  component = ""
   frame? :CoordinateFrame
-  input :InputEdge<Vector3>
+  @inputEdge("Vector3") input = undefined
 }
 
 class Translate extends EntityComponentNode<TransformComponent> {
@@ -300,11 +303,12 @@ class Translate extends EntityComponentNode<TransformComponent> {
 }
 
 /** Reads an entity's transform. */
-export interface ReadTransformConfig extends EntityComponentConfig {
-  type :"readTransform"
-  position :OutputEdge<Vector3>
-  quaternion :OutputEdge<Quaternion>
-  scale :OutputEdge<Vector3>
+abstract class ReadTransformConfig implements EntityComponentConfig {
+  type = "readTransform"
+  component = ""
+  @outputEdge("Vector3") position = undefined
+  @outputEdge("Quaternion") quaternion = undefined
+  @outputEdge("Vector3") scale = undefined
 }
 
 class ReadTransform extends EntityComponentNode<TransformComponent> {
@@ -331,9 +335,10 @@ class ReadTransform extends EntityComponentNode<TransformComponent> {
 }
 
 /** Sets an entity's position. */
-export interface UpdatePositionConfig extends EntityComponentConfig {
-  type :"updatePosition"
-  input :InputEdge<Vector3>
+abstract class UpdatePositionConfig implements EntityComponentConfig {
+  type = "updatePosition"
+  component = ""
+  @inputEdge("Vector3") input = undefined
 }
 
 class UpdatePosition extends EntityComponentNode<TransformComponent> {
@@ -352,9 +357,10 @@ class UpdatePosition extends EntityComponentNode<TransformComponent> {
 }
 
 /** Sets an entity's rotation. */
-export interface UpdateRotationConfig extends EntityComponentConfig {
-  type :"updateRotation"
-  input :InputEdge<Euler>
+abstract class UpdateRotationConfig implements EntityComponentConfig {
+  type = "updateRotation"
+  component = ""
+  @inputEdge("Euler") input = undefined
 }
 
 class UpdateRotation extends EntityComponentNode<TransformComponent> {
@@ -374,9 +380,10 @@ class UpdateRotation extends EntityComponentNode<TransformComponent> {
 }
 
 /** Sets an entity's scale. */
-export interface UpdateScaleConfig extends EntityComponentConfig {
-  type :"updateScale"
-  input :InputEdge<Vector3>
+abstract class UpdateScaleConfig implements EntityComponentConfig {
+  type = "updateScale"
+  component = ""
+  @inputEdge("Vector3") input = undefined
 }
 
 class UpdateScale extends EntityComponentNode<TransformComponent> {
@@ -387,7 +394,7 @@ class UpdateScale extends EntityComponentNode<TransformComponent> {
 
   connect () {
     this._disposer.add(
-      this.graph.getValue(this.config.input, new Vector3()).onValue(scale => {
+      this.graph.getValue(this.config.input, new Vector3(1, 1, 1)).onValue(scale => {
         this._component.updateScale(this._entityId, scale)
       }),
     )
@@ -395,10 +402,11 @@ class UpdateScale extends EntityComponentNode<TransformComponent> {
 }
 
 /** Transforms a point from world space to the local space of the entity. */
-export interface WorldToLocalConfig extends EntityComponentConfig {
-  type :"updateScale"
-  input :InputEdge<Vector3>
-  output :OutputEdge<Vector3>
+abstract class WorldToLocalConfig implements EntityComponentConfig {
+  type = "updateScale"
+  component = ""
+  @inputEdge("Vector3") input = undefined
+  @outputEdge("Vector3") output = undefined
 }
 
 class WorldToLocal extends EntityComponentNode<TransformComponent> {

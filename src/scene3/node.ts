@@ -3,7 +3,8 @@ import {AnimationMixer, Intersection, Object3D, Raycaster, Vector3} from "three"
 import {Subject, Value} from "../core/react"
 import {Noop} from "../core/util"
 import {Graph} from "../graph/graph"
-import {InputEdge, NodeTypeRegistry, OutputEdge} from "../graph/node"
+import {inputEdge, outputEdge} from "../graph/meta"
+import {NodeTypeRegistry} from "../graph/node"
 import {Component} from "../entity/entity"
 import {EntityComponentConfig, EntityComponentNode} from "../entity/node"
 import {PointerConfig} from "../input/node"
@@ -11,14 +12,17 @@ import {CoordinateFrame} from "../space/node"
 import {HoverMap, loadGLTFAnimationClip} from "./entity"
 
 /** Emits information about a single hover point. */
-export interface HoverConfig extends EntityComponentConfig, PointerConfig {
-  type :"hover"
-  worldPosition :OutputEdge<Vector3>
-  worldMovement :OutputEdge<Vector3>
-  viewPosition :OutputEdge<Vector3>
-  viewMovement :OutputEdge<Vector3>
-  pressed :OutputEdge<boolean>
-  hovered :OutputEdge<boolean>
+abstract class HoverConfig implements EntityComponentConfig, PointerConfig {
+  type = "hover"
+  component = ""
+  index = undefined
+  count = undefined
+  @outputEdge("Vector3") worldPosition = undefined
+  @outputEdge("Vector3") worldMovement = undefined
+  @outputEdge("Vector3") viewPosition = undefined
+  @outputEdge("Vector3") viewMovement = undefined
+  @outputEdge("boolean") pressed = undefined
+  @outputEdge("boolean") hovered = undefined
 }
 
 const zeroVector = new Vector3()
@@ -53,10 +57,11 @@ class Hover extends EntityComponentNode<Component<HoverMap>> {
 }
 
 /** Controls an animation action on the entity. */
-export interface AnimationActionConfig extends EntityComponentConfig {
-  type :"AnimationAction"
-  url :string
-  play :InputEdge<boolean>
+abstract class AnimationActionConfig implements EntityComponentConfig {
+  type = "AnimationAction"
+  component = ""
+  url = ""
+  @inputEdge("boolean") play = undefined
 }
 
 class AnimationActionNode extends EntityComponentNode<Component<AnimationMixer>> {
@@ -88,12 +93,13 @@ class AnimationActionNode extends EntityComponentNode<Component<AnimationMixer>>
 }
 
 /** Casts a ray into the scene. */
-export interface RaycasterConfig extends EntityComponentConfig {
-  type :"Raycaster"
+abstract class RaycasterConfig implements EntityComponentConfig {
+  type = "Raycaster"
+  component = ""
   frame? :CoordinateFrame
-  origin :InputEdge<Vector3>
-  direction :InputEdge<Vector3>
-  distance :OutputEdge<number>
+  @inputEdge("Vector3") origin = undefined
+  @inputEdge("Vector3") direction = undefined
+  @outputEdge("number") distance = undefined
 }
 
 const NoIntersection = {distance: Infinity} as Intersection

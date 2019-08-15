@@ -3,15 +3,17 @@ import {Body, ICollisionEvent} from "cannon"
 import {refEquals} from "../core/data"
 import {Value} from "../core/react"
 import {Graph} from "../graph/graph"
-import {NodeTypeRegistry, OutputEdge} from "../graph/node"
+import {outputEdge} from "../graph/meta"
+import {NodeTypeRegistry} from "../graph/node"
 import {Component, ID} from "../entity/entity"
 import {EntityComponentConfig, EntityComponentNode} from "../entity/node"
 import {UserDataBody} from "./entity"
 
 /** Fires upon collision with another entity. */
-export interface CollidedConfig extends EntityComponentConfig {
-  type :"collided"
-  entity :OutputEdge<ID | undefined>
+abstract class CollidedConfig implements EntityComponentConfig {
+  type = "collided"
+  component = ""
+  @outputEdge("ID | undefined") entity = undefined
 }
 
 class Collided extends EntityComponentNode<Component<Body>> {

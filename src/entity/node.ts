@@ -1,6 +1,7 @@
 import {Value} from "../core/react"
 import {Graph} from "../graph/graph"
-import {InputEdge, Node, NodeConfig, NodeContext, NodeTypeRegistry, OutputEdge} from "../graph/node"
+import {inputEdge, outputEdge} from "../graph/meta"
+import {Node, NodeConfig, NodeContext, NodeTypeRegistry} from "../graph/node"
 import {Component, Domain, EntityConfig, ID} from "./entity"
 
 /** Context for nodes relating to entities. */
@@ -51,10 +52,10 @@ export class EntityComponentNode<T extends Component<any>> extends EntityNode {
 }
 
 /** A node that adds an entity when its input transitions to true. */
-export interface AddEntityConfig extends NodeConfig {
-  type :"addEntity"
-  config :EntityConfig
-  input :InputEdge<boolean>
+abstract class AddEntityConfig implements NodeConfig {
+  type = "addEntity"
+  config :EntityConfig = {components: {}}
+  @inputEdge("boolean") input = undefined
 }
 
 class AddEntity extends Node {
@@ -73,10 +74,12 @@ class AddEntity extends Node {
   }
 }
 
+const undefinedId = undefined as (ID | undefined)
+
 /** A node that deletes its input entity. */
-export interface DeleteEntityConfig extends NodeConfig {
-  type :"deleteEntity"
-  input :InputEdge<ID | undefined>
+abstract class DeleteEntityConfig implements NodeConfig {
+  type = "deleteEntity"
+  @inputEdge("ID | undefined") input = undefined
 }
 
 class DeleteEntity extends Node {
@@ -86,7 +89,7 @@ class DeleteEntity extends Node {
   }
 
   connect () {
-    this._disposer.add(this.graph.getValue(this.config.input, undefined).onValue(async id => {
+    this._disposer.add(this.graph.getValue(this.config.input, undefinedId).onValue(async id => {
       if (id !== undefined) {
         await true // don't delete in the middle of a physics update
         const ctx = this.graph.ctx as EntityNodeContext
@@ -97,9 +100,9 @@ class DeleteEntity extends Node {
 }
 
 /** Outputs the entity id. */
-export interface EntityIdConfig extends EntityConfig {
-  type :"entityId"
-  output :OutputEdge<ID>
+abstract class EntityIdConfig implements EntityNodeConfig {
+  type = "entityId"
+  @outputEdge("ID") output = undefined
 }
 
 class EntityId extends EntityNode {
@@ -114,9 +117,10 @@ class EntityId extends EntityNode {
 }
 
 /** Provides the value of a component as an output. */
-export interface ReadComponentConfig extends EntityComponentConfig {
-  type :"readComponent"
-  output :OutputEdge<any>
+abstract class ReadComponentConfig implements EntityComponentConfig {
+  type = "readComponent"
+  component = ""
+  @outputEdge("any") output = undefined
 }
 
 class ReadComponent extends EntityComponentNode<Component<any>> {
@@ -131,9 +135,10 @@ class ReadComponent extends EntityComponentNode<Component<any>> {
 }
 
 /** Updates the value of a component according to the input. */
-export interface UpdateComponentConfig extends EntityComponentConfig {
-  type :"updateComponent"
-  input :InputEdge<any>
+abstract class UpdateComponentConfig implements EntityComponentConfig {
+  type = "updateComponent"
+  component = ""
+  @inputEdge("any") input = undefined
 }
 
 class UpdateComponent extends EntityComponentNode<Component<any>> {
@@ -152,11 +157,11 @@ class UpdateComponent extends EntityComponentNode<Component<any>> {
 }
 
 /** Checks whether the input entity has a given tag. */
-export interface TaggedConfig extends NodeConfig {
-  type :"tagged"
-  tag :string
-  input :InputEdge<ID | undefined>
-  output :OutputEdge<boolean>
+abstract class TaggedConfig implements NodeConfig {
+  type = "tagged"
+  tag = ""
+  @inputEdge("ID | undefined") input = undefined
+  @outputEdge("boolean") output = undefined
 }
 
 class Tagged extends Node {
@@ -166,7 +171,7 @@ class Tagged extends Node {
   }
 
   protected _createOutput () {
-    return this.graph.getValue(this.config.input, undefined).map(id => {
+    return this.graph.getValue(this.config.input, undefinedId).map(id => {
       if (id === undefined) {
         return false
       }

@@ -1,18 +1,19 @@
 import {Value} from "../core/react"
+import {Graph} from "./graph"
+import {inputEdge, inputEdges, outputEdge} from "./meta"
 import {
-  InputEdge,
   Node,
   NodeConfig,
   NodeTypeRegistry,
   OperatorConfig,
   Operator,
-  OutputEdge,
 } from "./node"
-import {Graph} from "./graph"
 
 /** Computes the logical and of its inputs. */
-export interface AndConfig extends OperatorConfig<boolean> {
-  type :"and"
+abstract class AndConfig implements OperatorConfig<boolean> {
+  type = "and"
+  @inputEdges("boolean") inputs = undefined
+  @outputEdge("boolean") output = undefined
 }
 
 class And extends Operator<boolean> {
@@ -34,8 +35,10 @@ class And extends Operator<boolean> {
 }
 
 /** Computes the logical or of its inputs. */
-export interface OrConfig extends OperatorConfig<boolean> {
-  type :"or"
+abstract class OrConfig implements OperatorConfig<boolean> {
+  type = "or"
+  @inputEdges("boolean") inputs = undefined
+  @outputEdge("boolean") output = undefined
 }
 
 class Or extends Operator<boolean> {
@@ -57,10 +60,10 @@ class Or extends Operator<boolean> {
 }
 
 /** Provides the negation of its input. */
-export interface NotConfig extends NodeConfig {
-  type :"not"
-  input :InputEdge<boolean>
-  output :OutputEdge<boolean>
+abstract class NotConfig implements NodeConfig {
+  type = "not"
+  @inputEdge("boolean") input = undefined
+  @outputEdge("boolean") output = undefined
 }
 
 class Not extends Node {
@@ -75,11 +78,11 @@ class Not extends Node {
 }
 
 /** Outputs x < y. */
-export interface LessThanConfig extends NodeConfig {
-  type :"lessThan"
-  x :InputEdge<number>
-  y :InputEdge<number>
-  output :OutputEdge<boolean>
+abstract class LessThanConfig implements NodeConfig {
+  type = "lessThan"
+  @inputEdge("number") x = undefined
+  @inputEdge("number") y = undefined
+  @outputEdge("boolean") output = undefined
 }
 
 class LessThan extends Node {
@@ -99,11 +102,11 @@ class LessThan extends Node {
 }
 
 /** Outputs condition ? ifTrue : ifFalse. */
-export interface ConditionalConfig extends NodeConfig {
-  type :"conditional"
-  condition :InputEdge<boolean>
-  ifTrue :OutputEdge<any>
-  ifFalse :OutputEdge<any>
+abstract class ConditionalConfig implements NodeConfig {
+  type = "conditional"
+  @inputEdge("boolean") condition = undefined
+  @outputEdge("any") ifTrue = undefined
+  @outputEdge("any") ifFalse = undefined
 }
 
 class Conditional extends Node {

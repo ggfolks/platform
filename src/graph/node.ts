@@ -22,7 +22,7 @@ export type InputEdge<T> = undefined | NodeInput<T>
 export type InputEdges<T> = undefined | InputEdge<T>[]
 
 /** Used to describe output edges, whose connection states are omitted from configs. */
-export type OutputEdge<T> = never
+export type OutputEdge<T> = undefined
 
 /** Base interface for node contexts. */
 export interface NodeContext {

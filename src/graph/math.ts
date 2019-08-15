@@ -1,20 +1,19 @@
 import {Value} from "../core/react"
 import {Graph} from "./graph"
+import {inputEdge, inputEdges, outputEdge} from "./meta"
 import {
-  InputEdge,
   Node,
   NodeConfig,
   NodeTypeRegistry,
   OperatorConfig,
   Operator,
-  OutputEdge,
 } from "./node"
 
 /** Outputs a single constant. */
-export interface ConstantConfig extends NodeConfig {
-  type :"constant"
-  value :number
-  output :OutputEdge<number>
+abstract class ConstantConfig implements NodeConfig {
+  type = "constant"
+  value = 0
+  @outputEdge("number") output = undefined
 }
 
 class Constant extends Node {
@@ -29,8 +28,10 @@ class Constant extends Node {
 }
 
 /** Addition operator. */
-export interface AddConfig extends OperatorConfig<number> {
-  type :"add"
+abstract class AddConfig implements OperatorConfig<number> {
+  type = "add"
+  @inputEdges("number") inputs = undefined
+  @outputEdge("number") output = undefined
 }
 
 class Add extends Operator<number> {
@@ -53,8 +54,10 @@ class Add extends Operator<number> {
 }
 
 /** Subtract/negate operator. */
-export interface SubtractConfig extends OperatorConfig<number> {
-  type :"subtract"
+abstract class SubtractConfig implements OperatorConfig<number> {
+  type = "subtract"
+  @inputEdges("number") inputs = undefined
+  @outputEdge("number") output = undefined
 }
 
 class Subtract extends Operator<number> {
@@ -83,8 +86,10 @@ class Subtract extends Operator<number> {
 }
 
 /** Multiplication operator. */
-export interface MultiplyConfig extends OperatorConfig<number> {
-  type :"multiply"
+abstract class MultiplyConfig implements OperatorConfig<number> {
+  type = "multiply"
+  @inputEdges("number") inputs = undefined
+  @outputEdge("number") output = undefined
 }
 
 class Multiply extends Operator<number> {
@@ -107,11 +112,11 @@ class Multiply extends Operator<number> {
 }
 
 /** Emits a random number. */
-export interface RandomConfig extends NodeConfig {
-  type :"random"
+abstract class RandomConfig implements NodeConfig {
+  type = "random"
   min? :number
   max? :number
-  output :OutputEdge<number>
+  @outputEdge("number") output = undefined
 }
 
 class Random extends Node {
@@ -135,12 +140,12 @@ class Random extends Node {
 }
 
 /** Tracks the sum of its input over time, subject to optional min and max constraints. */
-export interface AccumulateConfig extends NodeConfig {
-  type :"random"
+abstract class AccumulateConfig implements NodeConfig {
+  type = "random"
   min? :number
   max? :number
-  input: InputEdge<number>
-  output :OutputEdge<number>
+  @inputEdge("number") input = undefined
+  @outputEdge("number") output = undefined
 }
 
 class Accumulate extends Node {
@@ -161,11 +166,11 @@ class Accumulate extends Node {
 }
 
 /** Outputs the sign of the input (-1, 0, or +1). */
-export interface SignConfig extends NodeConfig {
-  type :"sign"
+abstract class SignConfig implements NodeConfig {
+  type = "sign"
   epsilon? :number
-  input: InputEdge<number>
-  output :OutputEdge<number>
+  @inputEdge("number") input = undefined
+  @outputEdge("number") output = undefined
 }
 
 class Sign extends Node {
@@ -183,10 +188,10 @@ class Sign extends Node {
 }
 
 /** Outputs the absolute value of the input. */
-export interface AbsConfig extends NodeConfig {
-  type :"abs"
-  input: InputEdge<number>
-  output :OutputEdge<number>
+abstract class AbsConfig implements NodeConfig {
+  type = "abs"
+  @inputEdge("number") input = undefined
+  @outputEdge("number") output = undefined
 }
 
 class Abs extends Node {
@@ -201,8 +206,10 @@ class Abs extends Node {
 }
 
 /** Outputs the minimum of the inputs. */
-export interface MinConfig extends OperatorConfig<number> {
-  type :"min"
+abstract class MinConfig implements OperatorConfig<number> {
+  type = "min"
+  @inputEdges("number") inputs = undefined
+  @outputEdge("number") output = undefined
 }
 
 class Min extends Operator<number> {
@@ -221,8 +228,10 @@ class Min extends Operator<number> {
 }
 
 /** Outputs the maximum of the inputs. */
-export interface MaxConfig extends OperatorConfig<number> {
-  type :"max"
+abstract class MaxConfig implements OperatorConfig<number> {
+  type = "max"
+  @inputEdges("number") inputs = undefined
+  @outputEdge("number") output = undefined
 }
 
 class Max extends Operator<number> {
@@ -241,11 +250,11 @@ class Max extends Operator<number> {
 }
 
 /** Computes a step function (0 if x < edge, else 1). */
-export interface StepConfig extends NodeConfig {
-  type :"step"
-  edge :InputEdge<number>
-  x :InputEdge<number>
-  output :OutputEdge<number>
+abstract class StepConfig implements NodeConfig {
+  type = "step"
+  @inputEdge("number") edge = undefined
+  @inputEdge("number") x = undefined
+  @outputEdge("number") output = undefined
 }
 
 class Step extends Node {
