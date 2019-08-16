@@ -122,3 +122,31 @@ export type Timestamp = number
 export const Timestamp = {
   now: () => Date.now() // TODO: fancier timestamp?
 }
+
+// TODO: replace JSON.stringify with dataToString
+// TODO: allow log filtering (>= level), capture & rerouting
+
+export type Level = "debug" | "info" | "warn" | "error"
+
+export function formatArgs (...args :any[]) :string {
+  let str = ""
+  for (let ii = 0, ll = args.length - (args.length%2); ii < ll; ii += 2) {
+    if (str.length > 0) str += ", "
+    str += `${args[ii]}=${JSON.stringify(args[ii+1])}`
+  }
+  return str
+}
+
+export function logAt (level :Level, msg :string, ...args :any[]) {
+  let logfn = level === "error" ? console.error : level === "warn" ? console.warn : console.log
+  const fargs = formatArgs(...args)
+  logfn(fargs.length > 0 ? `${msg} [${fargs}]` : msg)
+  if (args.length % 2 === 1) logfn(args[args.length-1])
+}
+
+export const log = {
+  debug: (msg :string, ...args :any[]) => logAt("debug", msg, ...args),
+  info : (msg :string, ...args :any[]) => logAt("info" , msg, ...args),
+  warn : (msg :string, ...args :any[]) => logAt("warn" , msg, ...args),
+  error: (msg :string, ...args :any[]) => logAt("error", msg, ...args),
+}
