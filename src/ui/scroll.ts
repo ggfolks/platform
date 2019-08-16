@@ -10,6 +10,7 @@ export interface ScrollViewConfig extends ControlConfig {
 export class ScrollView extends Control {
   private _offset = Mutable.local(vec2.create())
   private _scale = Mutable.local(1)
+  private _laidOut = false
 
   constructor (ctx :ElementContext, parent :Element, readonly config :ScrollViewConfig) {
     super(ctx, parent, config)
@@ -56,6 +57,12 @@ export class ScrollView extends Control {
   protected relayout () {
     const size = this.contents.preferredSize(this.width, this.height)
     this.contents.setBounds(rect.fromValues(this.x, this.y, size[0], size[1]))
+
+    // scale to fit on first layout if larger than viewport
+    if (this._laidOut) return
+    this._laidOut = true
+    if (size[0] <= this.width && size[1] <= this.height) return
+    this._scale.update(Math.min(this.width / size[0], this.height / size[1]))
   }
 
   protected rerender (canvas :CanvasRenderingContext2D) {

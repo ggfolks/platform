@@ -58,15 +58,18 @@ class UINode extends Node {
             } else if (spec === "nodeData") {
               return mapProvider(graph.nodes, value => {
                 const type = value.current.config.type
-                const resolveName = {
-                  resolve: (key :ModelKey) => new Model({name: Value.constant(key)}),
-                }
                 return {
                   type: Value.constant(type),
                   inputKeys: Value.constant(Object.keys(value.current.inputsMeta)),
                   outputKeys: Value.constant(Object.keys(value.current.outputsMeta)),
-                  input: resolveName,
-                  output: resolveName,
+                  input: {
+                    resolve: (key :ModelKey) => new Model({
+                      name: Value.constant(key),
+                      multiple: Value.constant(value.current.inputsMeta[key].multiple),
+                      value: Value.constant(value.current.config[key]),
+                    }),
+                  },
+                  output: {resolve: (key :ModelKey) => new Model({name: Value.constant(key)})},
                 }
               }) as any
             }
