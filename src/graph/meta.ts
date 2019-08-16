@@ -12,7 +12,7 @@ export interface EdgeMeta {
 export interface InputEdgeMeta extends EdgeMeta {
 
   /** Whether or not the input accepts multiple connections. */
-  multiple :boolean
+  multiple? :boolean
 }
 
 /** The edge metadata for a node type. */

@@ -4,7 +4,7 @@ import {vec2zero} from "../core/math"
 import {Scale} from "../core/ui"
 import {Value} from "../core/react"
 import {Graph} from "../graph/graph"
-import {getNodeMeta, inputEdge} from "../graph/meta"
+import {inputEdge} from "../graph/meta"
 import {Node, NodeConfig, NodeContext, NodeTypeRegistry} from "../graph/node"
 import {Host, Root, RootConfig} from "./element"
 import {Model, ModelData, ModelKey, ModelValue, Spec, mapProvider} from "./model"
@@ -58,14 +58,13 @@ class UINode extends Node {
             } else if (spec === "nodeData") {
               return mapProvider(graph.nodes, value => {
                 const type = value.current.config.type
-                const meta = getNodeMeta(type)
                 const resolveName = {
                   resolve: (key :ModelKey) => new Model({name: Value.constant(key)}),
                 }
                 return {
                   type: Value.constant(type),
-                  inputKeys: Value.constant(Object.keys(meta.inputs)),
-                  outputKeys: Value.constant(Object.keys(meta.outputs)),
+                  inputKeys: Value.constant(Object.keys(value.current.inputsMeta)),
+                  outputKeys: Value.constant(Object.keys(value.current.outputsMeta)),
                   input: resolveName,
                   output: resolveName,
                 }

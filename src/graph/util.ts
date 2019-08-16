@@ -1,8 +1,9 @@
 import {Clock} from "../core/clock"
 import {refEquals} from "../core/data"
 import {Mutable, Value} from "../core/react"
+import {PMap} from "../core/util"
 import {Graph, GraphConfig} from "./graph"
-import {inputEdge, outputEdge} from "./meta"
+import {EdgeMeta, InputEdgeMeta, inputEdge, outputEdge} from "./meta"
 import {InputEdge, Node, NodeConfig, NodeTypeRegistry} from "./node"
 
 /** Switches to true after a number of seconds have passed. */
@@ -116,6 +117,16 @@ abstract class SubgraphConfig implements NodeConfig {
 export class Subgraph extends Node {
   _containedGraph :Graph
   _containedOutputs :Map<string, InputEdge<any>> = new Map()
+  _inputsMeta :PMap<InputEdgeMeta> = {}
+  _outputsMeta :PMap<EdgeMeta> = {}
+
+  get inputsMeta () {
+    return this._inputsMeta
+  }
+
+  get outputsMeta () {
+    return this._outputsMeta
+  }
 
   constructor (graph :Graph, id :string, readonly config :SubgraphConfig) {
     super(graph, id, config)
@@ -124,8 +135,12 @@ export class Subgraph extends Node {
     subctx.subgraph = this
     for (const key in config.graph) {
       const value = config.graph[key]
-      if (value.type === 'output') {
+      if (value.type === 'input') {
+        this._inputsMeta[value.name] = {type: "any"} // TODO: infer
+
+      } else if (value.type === 'output') {
         this._containedOutputs.set(value.name, value.input)
+        this._outputsMeta[value.name] = {type: "any"} // TODO: infer
       }
     }
     this._disposer.add(this._containedGraph = new Graph(subctx, config.graph))
