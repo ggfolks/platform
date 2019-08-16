@@ -64,6 +64,7 @@ export interface ElementConfig {
   type :string
   visible? :Spec<Value<boolean>>
   constraints? :Record
+  scopeId? :string
   // this allows ElementConfig to contain "extra" stuff that TypeScript will ignore; this is
   // necessary to allow a subtype of ElementConfig to be supplied where a container element wants
   // some sort of ElementConfig; we can only plumb sharp types so deep
@@ -84,6 +85,7 @@ export abstract class Element implements Disposable {
   protected readonly _bounds :rect = rect.create()
   protected readonly _psize :dim2 = dim2.fromValues(-1, -1)
   protected readonly _valid = Mutable.local(false)
+  protected readonly _configScope? :StyleScope
   protected readonly disposer = new Disposer()
 
   readonly parent :Element|undefined
@@ -92,6 +94,7 @@ export abstract class Element implements Disposable {
   constructor (ctx :ElementContext, parent :Element|undefined, config :ElementConfig) {
     this.parent = parent
     this.visible = config.visible ? ctx.model.resolve(config.visible) : trueValue
+    if (config.scopeId) this._configScope = {id: config.scopeId, states: RootStates}
     this.invalidateOnChange(this.visible)
   }
 
@@ -102,7 +105,7 @@ export abstract class Element implements Disposable {
   get bounds () :rect { return this._bounds }
 
   abstract get config () :ElementConfig
-  get styleScope () :StyleScope { return this.requireParent.styleScope }
+  get styleScope () :StyleScope { return this._configScope || this.requireParent.styleScope }
   get root () :Root { return this.requireParent.root }
   get valid () :Value<boolean> { return this._valid }
   get state () :Value<string> { return this.requireParent.state }

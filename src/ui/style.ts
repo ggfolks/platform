@@ -324,8 +324,8 @@ export type FitConfig = "start"| "center"  | "end" | "stretch"
 export interface BackgroundConfig {
   /** The paint used to fill this background (if it is a filled background). */
   fill? :Spec<PaintConfig>
-  /** The corner radius if a filled background is used. */
-  cornerRadius? :number // TODO: support [ul, ur, lr, ll] radii as well
+  /** The corner radius or radii ([ul, ur, lr, ll]) if a filled background is used. */
+  cornerRadius? :number|number[]
   /** A shadow rendered behind this background. */
   shadow? :Spec<ShadowConfig>
   /** Defines an image which is rendered for the background. */
@@ -371,8 +371,8 @@ export function makeBackground (ctx :StyleContext, config :BackgroundConfig) :Su
 export interface BorderConfig {
   /** The paint used to stroke this border. */
   stroke :Spec<PaintConfig>
-  /** The corner radius of the border. */
-  cornerRadius? :number // TODO: support [ul, ur, lr, ll] radii as well
+  /** The corner radius or radii ([ul, ur, lr, ll]) of the border. */
+  cornerRadius? :number|number[]
   /** A shadow rendered behind this border. */
   shadow? :Spec<ShadowConfig>
 }

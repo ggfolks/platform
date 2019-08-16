@@ -3,7 +3,15 @@ import {Record} from "../core/data"
 import {makeConfig} from "../core/config"
 import {ImageResolver, StyleContext, StyleDefs} from "./style"
 import {Model} from "./model"
-import {Element, ElementConfig, ElementContext, StyleScope, Root, RootConfig} from "./element"
+import {
+  Element,
+  ElementConfig,
+  ElementContext,
+  StyleScope,
+  Root,
+  RootConfig,
+  RootStates,
+} from "./element"
 import * as E from "./element"
 import * as X from "./box"
 import * as G from "./group"
@@ -81,7 +89,11 @@ export class UI {
   }
 
   createElement (ctx :ElementContext, parent :Element, config :ElementConfig) :Element {
-    const rstyles = this.resolveStyles(parent.styleScope, config.type, config.style as Record)
+    const rstyles = this.resolveStyles(
+      config.scopeId ? {id: config.scopeId, states: RootStates} : parent.styleScope,
+      config.type,
+      config.style as Record,
+    )
     const rconfig = {...config, style: rstyles} as any
     switch (config.type) {
     case         "box": return new X.Box(ctx, parent, rconfig as X.BoxConfig)

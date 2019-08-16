@@ -141,7 +141,7 @@ class Random extends Node {
 
 /** Tracks the sum of its input over time, subject to optional min and max constraints. */
 abstract class AccumulateConfig implements NodeConfig {
-  type = "random"
+  type = "accumulate"
   min? :number
   max? :number
   @inputEdge("number") input = undefined
