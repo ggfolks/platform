@@ -1,11 +1,11 @@
 import {UUID, UUID0, uuidv1} from "../core/uuid"
-import {Timestamp} from "../core/util"
-import {Subject} from "../core/react"
+import {Disposer, Timestamp, log} from "../core/util"
+import {Mutable, Source, Subject} from "../core/react"
 import {Encoder, Decoder, setTextCodec} from "../core/codec"
 import {getPropMetas, dconst, dobject, dmap, dvalue, dcollection, dqueue} from "./meta"
 import {Auth, AutoKey, DataSource, DKey, DObject, MetaMsg, Path, findObjectType} from "./data"
 import {addObject, getObject} from "./protocol"
-import {Address, Client, Connection} from "./client"
+import {Address, Client, Connection, Subscription} from "./client"
 import {DataStore, Session} from "./server"
 
 import {TextEncoder, TextDecoder} from "util"
@@ -14,8 +14,14 @@ setTextCodec(() => new TextEncoder() as any, () => new TextDecoder() as any)
 // @ts-ignore: sigh jest
 Object.defineProperty(global.self, 'crypto', {value: require('crypto')})
 
+const DebugLog = false
+
 //
 // User object: maintains info on a user
+
+type RoomState = {type :"none"}
+               | {type :"created", id :number}
+               | {type :"joined", id :number}
 
 @dobject
 export class UserObject extends DObject {
@@ -26,8 +32,8 @@ export class UserObject extends DObject {
   @dvalue("timestamp")
   lastLogin = this.value(0)
 
-  @dvalue("size32")
-  currentRoom = this.value<number>(0)
+  @dvalue("record")
+  room = this.value<RoomState>({type: "none"})
 
   @dqueue(handleUserReq)
   userq = this.queue<UserReq>()
@@ -36,16 +42,25 @@ export class UserObject extends DObject {
   canWrite (prop :string, who :Auth) { return (prop === "username") || super.canWrite(prop, who) }
 }
 
-type UserReq = {type: "enter", room: number}
+const userQ = (id :UUID) => UserObject.queueAddr(["users", id], "userq")
+
+type UserReq = {type :"enter", room :number}
+             | {type :"created", room :number}
 
 function handleUserReq (obj :UserObject, req :UserReq, auth :Auth) {
+  if (DebugLog) log.debug("handleUserReq", "req", req)
   switch (req.type) {
   case "enter":
     if (auth.isSystem) {
-      obj.currentRoom.update(req.room)
-      obj.source.post(RoomObject.queueAddr(["rooms", req.room], "roomq"),
-                      {type: "joined", id: obj.key, username: obj.username.current})
+      obj.room.update({type: "joined", id: req.room})
+      obj.source.post(roomQ(req.room), {type: "joined", id: obj.key, username: obj.username.current})
     }
+    break
+  case "created":
+    if (auth.isSystem) {
+      obj.room.update({type: "created", id: req.room})
+    }
+    break
   }
 }
 
@@ -54,11 +69,12 @@ function handleUserReq (obj :UserObject, req :UserReq, auth :Auth) {
 
 type MID = number
 
-type RoomReq = {type: "join", id :UUID}
-             | {type: "joined", id :UUID, username :string}
-             | {type: "speak", text :string}
-             | {type: "edit", mid :MID, newText :string}
-             | {type: "delete"}
+type RoomReq = {type :"join"}
+             | {type :"joined", id :UUID, username :string}
+             | {type :"speak", text :string}
+             | {type :"edit", mid :MID, newText :string}
+             | {type :"rename", name :string}
+             | {type :"delete"}
 
 interface Message {
   sender :UUID
@@ -100,15 +116,22 @@ export class RoomObject extends DObject {
   @dqueue(handleMetaMsg)
   metaq = this.queue<MetaMsg>()
 
-  canSubscribe (auth :Auth) { return this.occupants.has(auth.id) || super.canSubscribe(auth) }
+  canSubscribe (auth :Auth) {
+    if (DebugLog) log.debug("canSubscribe", "auth", auth, "occs", this.occupants.entries())
+    return this.occupants.has(auth.id) || super.canSubscribe(auth)
+  }
 }
 
+const roomQ = (id :number) => RoomObject.queueAddr(["rooms", id], "roomq")
+
 function handleRoomReq (obj :RoomObject, req :RoomReq, auth :Auth) {
+  if (DebugLog) log.debug("handleRoomReq", "req", req)
   switch (req.type) {
   case "join":
     // we could do an auth or ban list check here
-    obj.occupants.set(req.id, {username: "?"})
-    obj.source.post(UserObject.queueAddr(["users", auth.id], "userq"), {type: "enter", room: obj.key})
+    obj.occupants.set(auth.id, {username: "?"})
+    obj.source.post(userQ(auth.id), {type: "enter", room: obj.key})
+    obj.source.post(sysChatQ, {type: "occupied", id: obj.key, occupants: obj.occupants.size})
     break
 
   case "joined":
@@ -132,13 +155,29 @@ function handleRoomReq (obj :RoomObject, req :RoomReq, auth :Auth) {
       obj.messages.set(req.mid, {...msg, text: req.newText, edited: Timestamp.now()})
     }
     break
+
+  case "rename":
+    if (auth.isSystem || auth.id === obj.owner) {
+      obj.name.update(req.name)
+      obj.source.post(sysChatQ, {type: "renamed", id: obj.key, name: req.name})
+    }
+    break
+
+  case "delete":
+    // TODO
+    break
   }
 }
 
 function handleMetaMsg (obj :RoomObject, msg :MetaMsg, auth :Auth) {
+  if (DebugLog) log.debug("handleMetaMsg", "msg", msg)
   switch (msg.type) {
+  case "created":
+    obj.source.post(sysChatQ, {type: "created", id: obj.key, name: obj.name.current})
+    break
   case "unsubscribed":
-    obj.occupants.delete(msg.userId)
+    obj.occupants.delete(msg.id)
+    obj.source.post(sysChatQ, {type: "occupied", id: obj.key, occupants: obj.occupants.size})
     break
   }
 }
@@ -147,6 +186,11 @@ function handleMetaMsg (obj :RoomObject, msg :MetaMsg, auth :Auth) {
 // Root object: manages chat rooms
 
 type ChatReq = {type :"create" , name :string}
+
+type SysChatReq = {type :"created", id :number, name :string}
+                | {type :"renamed", id :number, name :string}
+                | {type :"occupied", id :number, occupants :number}
+                | {type :"deleted", id :number}
 
 interface RoomInfo {
   name :string
@@ -169,17 +213,49 @@ export class RootObject extends DObject {
 
   @dqueue(handleChatReq)
   chatq = this.queue<ChatReq>()
+
+  @dqueue(handleSysChatReq)
+  syschatq = this.queue<SysChatReq>()
+
+  updateRoom (id :number, op :(info :RoomInfo) => RoomInfo) {
+    const oinfo = this.publicRooms.get(id)
+    if (oinfo) this.publicRooms.set(id, op(oinfo))
+    else log.warn("No room for update", "id", id)
+  }
 }
 
+const chatQ = RootObject.queueAddr([], "chatq")
+const sysChatQ = RootObject.queueAddr([], "syschatq")
+
 function handleChatReq (obj :RootObject, req :ChatReq, auth :Auth) {
+  if (DebugLog) log.debug("handleChatReq", "req", req)
   switch (req.type) {
   case "create":
     obj.rooms.create(AutoKey, auth.id).once(res => {
-      if (typeof res === "string") obj.source.post(
-        UserObject.queueAddr(["users", auth.id], "userq"), {type: "enter", room: res})
+      if (res instanceof Error) console.warn(res)
+      else obj.source.post(userQ(auth.id), {type: "created", room: res})
     })
-    // TODO: need to get key for room & send it back to requester
     break
+  }
+}
+
+function handleSysChatReq (obj :RootObject, req :SysChatReq, auth :Auth) {
+  if (DebugLog) log.debug("handleSysChatReq", "req", req)
+  if (auth.isSystem) {
+    switch (req.type) {
+    case "created":
+      obj.publicRooms.set(req.id, {name: req.name, occupants: 0})
+      break
+    case "renamed":
+      obj.updateRoom(req.id, oinfo => ({...oinfo, name: req.name}))
+      break
+    case "occupied":
+      obj.updateRoom(req.id, oinfo => ({...oinfo, occupants: req.occupants}))
+      break
+    case "deleted":
+      obj.publicRooms.delete(req.id)
+      break
+    }
   }
 }
 
@@ -290,25 +366,40 @@ test("findObjectType", () => {
   expect(findObjectType(AObject, ["bs", "1", "cs", "1"])).toStrictEqual(CObject)
 })
 
+type RunQueue = Array<() => void>
+function process (queue :RunQueue) {
+  while (queue.length > 0) {
+    queue.shift()!()
+  }
+}
+
 class ClientHandler extends Session {
-  constructor (store :DataStore, id :UUID, readonly conn :Connection) { super(store, id) }
-  sendMsg (msg :Uint8Array) { this.conn.client.recvMsg(msg) }
+  constructor (store :DataStore, id :UUID, readonly conn :Connection, readonly queue :RunQueue) {
+    super(store, id) }
+  sendMsg (data :Uint8Array) {
+    const cdata = data.slice()
+    this.queue.push(() => this.conn.client.recvMsg(cdata))
+  }
 }
 
 class TestConnection extends Connection {
   private readonly handler :ClientHandler
 
-  constructor (client :Client, addr :Address, store :DataStore, id :UUID) {
+  constructor (client :Client, addr :Address, store :DataStore, id :UUID, readonly queue :RunQueue) {
     super(client, addr)
-    this.handler = new ClientHandler(store, id, this)
+    this.handler = new ClientHandler(store, id, this, queue)
   }
 
-  sendMsg (msg :Uint8Array) { this.handler.handleMsg(msg) }
+  sendMsg (data :Uint8Array) {
+    const cdata = data.slice()
+    this.queue.push(() => this.handler.handleMsg(cdata))
+  }
+
   dispose () { this.handler.dispose() }
   protected connect (addr :Address) {} // nothing
 }
 
-test("client-server", () => {
+test("subscribe-auth", () => {
   const testAddr = {host: "test", port: 0, path: "/"}
   const testLocator = (path :Path) => Subject.constant(testAddr)
   const testStore = new DataStore(RootObject)
@@ -321,24 +412,107 @@ test("client-server", () => {
     if (res instanceof Error) throw res
   })
 
-  const clientA = new Client(testLocator, (c, a) => new TestConnection(c, a, testStore, ida))
-  // const clientB = new Client(testLocator, (c, a) => new TestConnection(c, a, testServer, "b"))
+  const queue :RunQueue = []
 
+  const clientA = new Client(testLocator, (c, a) => new TestConnection(c, a, testStore, ida, queue))
   clientA.resolve(["users", ida], UserObject).once(resAA => {
     if (resAA instanceof Error) throw resAA
-    resAA.username.update("User A")
-    resAA.username.onValue(username => expect(username).toEqual("User A"))
+    expect(resAA.key).toBe(ida)
   })
-
   // try to subscribe to user b's object via a, should fail
   clientA.resolve(["users", idb], UserObject).once(resAB => {
     if (!(resAB instanceof Error)) throw new Error(`Expected access denied, got ${resAB}.`)
     expect(resAB.message).toEqual("Access denied.")
   })
-
+  // try to subscribe to a non-existent user, should fail
   const idc = uuidv1()
   clientA.resolve(["users", idc], UserObject).once(resAC => {
     if (!(resAC instanceof Error)) throw new Error(`Expected no such object, got ${resAC}.`)
     expect(resAC.message).toEqual(`No object at path '${["users", idc]}'`)
   })
+
+  process(queue)
+})
+
+test("subscribe-post", done => {
+  const testAddr = {host: "test", port: 0, path: "/"}
+  const testLocator = (path :Path) => Subject.constant(testAddr)
+  const testStore = new DataStore(RootObject)
+
+  const ida = uuidv1(), idb = uuidv1()
+  testStore.create(sysauth, [], "users", ida).onValue(res => {
+    if (res instanceof Error) throw res
+  })
+  testStore.create(sysauth, [], "users", idb).onValue(res => {
+    if (res instanceof Error) throw res
+  })
+
+  const queue :RunQueue = []
+
+  class Chatter {
+    readonly subs = new Disposer()
+    readonly client :Client
+    readonly state = Mutable.local("preauth")
+    readonly root = new Subscription(RootObject)
+    readonly user = new Subscription(UserObject)
+    readonly room = new Subscription(RoomObject)
+
+    constructor (id :UUID) {
+      this.client = new Client(testLocator, (c, a) => new TestConnection(c, a, testStore, id, queue))
+      this.root.subscribe(this.client, [])
+      this.user.subscribe(this.client, ["users", id])
+
+      Source.whenDefined(this.user.object, user => {
+        this.state.update("authed")
+        user.room.onValue(rs => {
+          switch (rs.type) {
+          case "none": this.room.clear() ; break
+          case "joined": this.room.subscribe(this.client, ["rooms", rs.id]) ; break
+          case "created": this.client.post(roomQ(rs.id), {type: "join"}) ; break
+          }
+        })
+      })
+
+      Source.whenDefined(this.room.object, room => {
+        this.state.update("entered")
+        room.messages.onChange(change => {
+          this.state.update(`heard${room.messages.size}`)
+        })
+      })
+    }
+
+    join (room :number) {
+      this.client.post(roomQ(1), {type: "join"})
+    }
+
+    speak (msg :string) {
+      this.room.current.roomq.post({type: "speak", text: msg})
+    }
+
+    dispose () { this.subs.dispose() }
+  }
+
+  const chatA = new Chatter(ida)
+  const chatB = new Chatter(idb)
+
+  Subject.join2(chatA.state, chatB.state).onValue(([a,b]) => {
+    // console.log(`States ${a} / ${b}`)
+    if (a === "authed" && b === "authed") {
+      chatA.client.post(chatQ, {type: "create", name: "Test Room"})
+    } else if (a === "entered" && b === "entered") {
+      chatA.speak("Hello world.")
+    } else if (a === "entered") {
+      const rkey = chatB.root.current.publicRooms.keys().next().value
+      expect(rkey).toBe(1)
+      chatB.join(rkey)
+    } else if (a === "heard2" && b === "heard2") {
+      chatA.dispose()
+      chatB.dispose()
+      done()
+    } else if (a === "heard1" && b === "heard1") {
+      chatB.speak("Hello.")
+    }
+  })
+
+  process(queue)
 })

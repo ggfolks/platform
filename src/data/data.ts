@@ -14,10 +14,12 @@ export type Auth = {
   isSystem :boolean
 }
 
-export type MetaMsg = {type :"subscribed", userId :UUID}
-                    | {type :"unsubscribed", userId :UUID}
+export type MetaMsg = {type :"created"}
+                    | {type :"destroyed"}
+                    | {type :"subscribed", id :UUID}
+                    | {type :"unsubscribed", id :UUID}
 
-class DMutable<T> extends Mutable<T> {
+export class DMutable<T> extends Mutable<T> {
 
   static create<T> (eq :Eq<T>, owner :DObject, idx :number, vtype :ValueType, start :T) {
     const listeners :ValueFn<T>[] = []
@@ -201,10 +203,10 @@ export abstract class DObject implements Disposable {
   /** Returns the address of the queue named `name` on this object. Note: this must be called via
     * the concrete DObject subtype that declares the queue. */
   static queueAddr (path :Path, name :string) :DQueueAddr {
-    const metas = getPropMetas(this)
+    const metas = getPropMetas(this.prototype)
     const qmeta = metas.find(m => m.name === name)
     if (qmeta) return {path, index: qmeta.index}
-    throw new Error(`No queue named ${name} on ${this.constructor.name}`)
+    throw new Error(`No queue named ${name} on ${this.name}`)
   }
 
   constructor (readonly source :DataSource, readonly path :Path) {}

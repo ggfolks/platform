@@ -1,9 +1,11 @@
-import {Disposable} from "../core/util"
-import {Record} from "../core/data"
-import {DispatchFn, Subject} from "../core/react"
+import {Disposable, NoopRemover, log} from "../core/util"
+import {Record, refEquals} from "../core/data"
+import {DispatchFn, Emitter, Mutable, Stream, Subject, Value} from "../core/react"
 import {Encoder, Decoder} from "../core/codec"
 import {DataSource, DKey, DObject, DObjectType, DQueueAddr, Path, pathToKey} from "./data"
 import {DownMsg, DownType, UpMsg, UpType, encodeUp, decodeDown} from "./protocol"
+
+const DebugLog = false
 
 /** Uniquely identifies a data server; provides the info needed to establish a connection to it. */
 export type Address = {host :string, port :number, path :string}
@@ -31,12 +33,12 @@ export class Client {
     get: (oid :number) => {
       const obj = this.objects.get(oid)
       if (obj) return obj
-      throw new Error(`Unknown object [oid=${oid}]`)
+      else throw new Error(`Unknown object [oid=${oid}]`)
     },
     info: (oid :number) => {
       const comp = this.completers.get(oid)
       if (comp) return comp.info
-      throw new Error(`Cannot create unknown object [oid=${oid}]`)
+      else throw new Error(`Cannot create unknown object [oid=${oid}]`)
     }
   }
 
@@ -67,6 +69,7 @@ export class Client {
         info: {otype, source: this.dataSource(oid), path},
         complete: res => {
           this.completers.delete(oid)
+          if (DebugLog) log.debug("Got SUB rsp", "oid", oid, "res", res);
           if (res instanceof DObject) this.objects.set(oid, res)
           disp(res as T|Error)
         }
@@ -74,6 +77,7 @@ export class Client {
       this.sendUp(path, {type: UpType.SUB, path, oid})
       return () => {
         this.sendUp(path, {type: UpType.UNSUB, oid})
+        this.objects.delete(oid)
       }
     })
     this.resolved.set(key, nsub)
@@ -84,8 +88,8 @@ export class Client {
     this.sendUp(queue.path, {type: UpType.POST, queue, msg})
   }
 
-  recvMsg (msg :Uint8Array) {
-    this.handleDown(decodeDown(this.resolver, new Decoder(msg)))
+  recvMsg (data :Uint8Array) {
+    this.handleDown(decodeDown(this.resolver, new Decoder(data)))
   }
 
   handleDown (msg :DownMsg) {
@@ -100,7 +104,7 @@ export class Client {
     } else {
       const obj = this.objects.get(msg.oid)
       if (obj) obj.applySync(msg)
-      throw new Error(`Unexpected SYNC msg [oid=${msg.oid}, type=${msg.type}]`)
+      else throw new Error(`Unexpected SYNC msg [oid=${msg.oid}, type=${msg.type}]`)
     }
   }
 
@@ -116,6 +120,7 @@ export class Client {
   }
 
   protected sendUp (path :Path, msg :UpMsg) {
+    if (DebugLog) log.debug("sendUp", "path", path, "msg", msg);
     this.connFor(path).once(conn => {
       try {
         encodeUp(msg, this.encoder)
@@ -142,4 +147,42 @@ export abstract class Connection implements Disposable {
   abstract dispose () :void
   abstract sendMsg (msg :Uint8Array) :void
   protected abstract connect (addr :Address) :void
+}
+
+interface Resolver {
+  resolve<T extends DObject> (path :Path, otype :DObjectType<T>) :Subject<T|Error>
+}
+
+export class Subscription<T extends DObject> implements Disposable {
+  private rem = NoopRemover
+  private obj = Mutable.local<T|undefined>(undefined, refEquals)
+  private err = new Emitter<Error>()
+
+  constructor (readonly otype :DObjectType<T>) {}
+
+  get current () :T {
+    const obj = this.obj.current
+    if (obj !== undefined) return obj
+    throw new Error(`No object for subscription [otype=${this.otype}]`)
+  }
+  get object () :Value<T|undefined> { return this.obj }
+  get errors () :Stream<Error> { return this.err }
+
+  subscribe (source :Resolver, path :Path) {
+    this.rem()
+    this.rem = source.resolve(path, this.otype).onValue(res => {
+      if (res instanceof Error) this.err.emit(res)
+      else this.obj.update(res)
+    })
+  }
+
+  clear () {
+    this.rem()
+    this.rem = NoopRemover
+    this.obj.update(undefined)
+  }
+
+  dispose () {
+    this.clear()
+  }
 }

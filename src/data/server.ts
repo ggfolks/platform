@@ -1,14 +1,16 @@
-import {Remover, NoopRemover} from "../core/util"
+import {Remover, NoopRemover, log} from "../core/util"
 import {UUID, UUID0, uuidv1} from "../core/uuid"
 import {Record} from "../core/data"
 import {Subject} from "../core/react"
 import {Encoder, Decoder} from "../core/codec"
-import {CollectionMeta} from "./meta"
-import {Auth, AutoKey, DataSource, DKey, DObject, DObjectType, DQueueAddr, Path, Subscriber,
+import {CollectionMeta, getPropMetas} from "./meta"
+import {Auth, AutoKey, DataSource, DKey, DObject, DObjectType, DQueueAddr, MetaMsg, Path, Subscriber,
         findObjectType, pathToKey} from "./data"
 import {DownType, DownMsg, UpType, SyncMsg, decodeUp, encodeDown} from "./protocol"
 
 const sysAuth :Auth = {id: UUID0, isSystem: true}
+
+const DebugLog = false
 
 export class DataStore {
   private readonly objects = new Map<string, DObject>()
@@ -50,6 +52,7 @@ export class DataStore {
             const otype = findObjectType(this.rtype, opath)
             const nobj = new otype(this.source, opath, ...args)
             this.objects.set(okey, nobj)
+            this.postMeta(nobj, {type: "created"})
             disp(gkey)
           }
           return NoopRemover
@@ -95,13 +98,28 @@ export class DataStore {
       try {
         if (res instanceof Error) throw res
         const meta = res.metas[queue.index]
-        if (meta.type !== "queue") throw new Error(`Not a queue prop at path`)
+        if (meta.type !== "queue") throw new Error(`Not a queue prop at path [type=${meta.type}]`)
         // TODO: check canSubscribe permission?
         meta.handler(res, msg, auth)
       } catch (err) {
-        console.warn(`Failed to post [auth=${auth}, queue=${queue}, msg={$msg}, err=${err}]`)
+        log.warn("Failed to post", "auth", auth, "queue", queue, "msg", msg, err)
       }
     })
+  }
+
+  postMeta (obj :DObject, msg :MetaMsg) {
+    const metas = getPropMetas(Object.getPrototypeOf(obj))
+    const meta = metas.find(m => m.name === "metaq")
+    if (!meta) return
+    if (meta.type !== "queue") {
+      log.warn("Expected 'queue' type for 'metaq' property", "type", meta.type, "obj", obj)
+      return
+    }
+    try {
+      meta.handler(obj, msg, sysAuth)
+    } catch (err) {
+      log.warn("Failed to post meta", "obj", obj, "msg", msg, err)
+    }
   }
 
   sync (auth :Auth, obj :DObject, msg :SyncMsg) {
@@ -111,7 +129,7 @@ export class DataStore {
   }
 
   protected authFail (msg :string) :never {
-    console.warn(msg)
+    log.warn(msg)
     throw new Error(`Access denied.`)
   }
 }
@@ -140,6 +158,7 @@ export abstract class Session {
 
   handleMsg (msgData :Uint8Array) {
     const msg = decodeUp(this.resolver, new Decoder(msgData))
+    if (DebugLog) log.debug("handleMsg", "msg", msg)
     switch (msg.type) {
     case UpType.SUB:
       const sendErr = (err :Error) => this.sendDown({
@@ -147,14 +166,19 @@ export abstract class Session {
       this.store.resolve(msg.path).onValue(res => {
         if (res instanceof Error) sendErr(res)
         else {
+          const oid = msg.oid
           const sendSync = (msg :SyncMsg) => this.sendDown({...msg, oid})
           const sub = {obj: res, unsub: NoopRemover, auth: this.auth, sendSync}
           const unsub = res.subscribe(sub)
           if (!unsub) sendErr(new Error("Access denied."))
           else {
-            sub.unsub = unsub
-            this.subscrips.set(msg.oid, sub)
-            this.sendDown({type: DownType.SUBOBJ, oid: msg.oid, obj: res})
+            sub.unsub = () => {
+              this.store.postMeta(res, {type: "unsubscribed", id: this.id})
+              unsub()
+            }
+            this.subscrips.set(oid, sub)
+            this.sendDown({type: DownType.SUBOBJ, oid, obj: res})
+            this.store.postMeta(res, {type: "subscribed", id: this.id})
           }
         }
       })
@@ -176,7 +200,7 @@ export abstract class Session {
       const oid = msg.oid
       const ssub = this.subscrips.get(oid)
       if (ssub) this.store.sync(this.auth, ssub.obj, msg)
-      else console.warn(`Dropping sync message, no subscription [msg=${JSON.stringify(msg)}]`)
+      else log.warn("Dropping sync message, no subscription", "msg", msg)
     }
   }
 
@@ -185,8 +209,7 @@ export abstract class Session {
       encodeDown(this.auth, msg, this.encoder)
     } catch (err) {
       this.encoder.reset()
-      console.warn(`Failed to encode [msg=${msg.type}]`)
-      console.warn(err)
+      log.warn("Failed to encode", "msg", msg, err)
       return
     }
     this.sendMsg(this.encoder.finish())

@@ -320,6 +320,16 @@ export class Encoder {
   }
 }
 
+export interface SyncSet<E> extends Set<E> {
+  add (elem :E, fromSync? :boolean) :this
+  delete (elem :E, fromSync? :boolean) :boolean
+}
+
+export interface SyncMap<K,V> extends Map<K,V>{
+  set (key :K, value :V, fromSync? :boolean) :this
+  delete (key :K, fromSync? :boolean) :boolean
+}
+
 export class Decoder {
   readonly decoder = mkTextDecoder()
   readonly data :DataView
@@ -349,12 +359,12 @@ export class Decoder {
     return into
   }
 
-  syncSet<E> (etype :KeyType, into :Set<E>) {
+  syncSet<E> (etype :KeyType, into :SyncSet<E>) {
     const size = getSize32(this)
     const tmp = new Set<E>()
     for (let ii = 0; ii < size; ii += 1) tmp.add(getValue(this, etype))
-    for (const elem of into) if (!tmp.has(elem)) into.delete(elem)
-    for (const elem of tmp) into.add(elem)
+    for (const elem of into) if (!tmp.has(elem)) into.delete(elem, true)
+    for (const elem of tmp) into.add(elem, true)
     return into
   }
 
@@ -364,15 +374,15 @@ export class Decoder {
     return into
   }
 
-  syncMap<K,V> (ktype :KeyType, vtype :ValueType, into :Map<K,V>) {
+  syncMap<K,V> (ktype :KeyType, vtype :ValueType, into :SyncMap<K,V>) {
     const size = getSize32(this)
     const keys = [], vals :V[] = []
     for (let ii = 0; ii < size; ii += 1) {
       keys.push(getValue(this, ktype))
       vals.push(getValue(this, vtype))
     }
-    for (const key of into.keys()) if (!keys.includes(key)) into.delete(key)
-    for (let ii = 0; ii < size; ii += 1) into.set(keys[ii], vals[ii])
+    for (const key of into.keys()) if (!keys.includes(key)) into.delete(key, true)
+    for (let ii = 0; ii < size; ii += 1) into.set(keys[ii], vals[ii], true)
     return into
   }
 }

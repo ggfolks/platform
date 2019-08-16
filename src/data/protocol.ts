@@ -1,8 +1,9 @@
+import {log} from "../core/util"
 import {Record} from "../core/data"
 import {Encoder, Decoder, KeyType, ValueType} from "../core/codec"
 import {Mutable} from "../core/react"
 import {getPropMetas} from "./meta"
-import {Auth, DataSource, DObjectType, DObject, DQueueAddr, Path} from "./data"
+import {Auth, DataSource, DMutable, DObjectType, DObject, DQueueAddr, Path} from "./data"
 
 export const enum SyncType { VALSET, SETADD, SETDEL, MAPSET, MAPDEL }
 type ValSetMsg = {type :SyncType.VALSET, idx :number, value :any, vtype: ValueType}
@@ -38,7 +39,10 @@ function encodeSync (sym :OidSyncMsg, enc :Encoder) {
   }
 }
 
+const DebugLog = false
+
 export function encodeUp (upm :UpMsg, enc :Encoder) {
+  if (DebugLog) log.debug("encodeUp", "msg", upm)
   enc.addValue(upm.type, "int8")
   switch (upm.type) {
   case UpType.SUB:
@@ -54,13 +58,13 @@ export function encodeUp (upm :UpMsg, enc :Encoder) {
     enc.addValue(upm.msg, "record")
     break
   default:
-    enc.addValue(upm.oid, "size32")
     encodeSync(upm, enc)
     break
   }
 }
 
 export function encodeDown (rcpt :Auth, dnm :DownMsg, enc :Encoder) {
+  if (DebugLog) log.debug("encodeDown", "msg", dnm)
   enc.addValue(dnm.type, "int8")
   switch (dnm.type) {
   case DownType.SUBOBJ:
@@ -86,9 +90,9 @@ export interface DownResolver extends UpResolver {
 }
 
 function decodeSync (resolver :UpResolver, type :SyncType, dec :Decoder) :OidSyncMsg {
-  const oid :number = dec.getValue("size32"), obj = resolver.get(oid)
-  const idx = dec.getValue("size8")
-  const meta = obj.metas[idx]
+  const idx :number = dec.getValue("size8"), oid :number = dec.getValue("size32")
+  if (DebugLog) log.debug("decodeSync", "idx", idx, "oid", oid)
+  const obj = resolver.get(oid), meta = obj.metas[idx]
   if (!meta) throw new Error(
     `Got sync for unknown object property [type=${type}, oid=${oid}, name=${name}]`)
   const typeMismatch = () => new Error(`Expected 'value' property for valset, got '${meta.type}`)
@@ -116,6 +120,7 @@ function decodeSync (resolver :UpResolver, type :SyncType, dec :Decoder) :OidSyn
 
 export function decodeUp (resolver :UpResolver, dec :Decoder) :UpMsg {
   const type = dec.getValue("int8")
+  if (DebugLog) log.debug("decodeUp", "type", type)
   switch (type) {
   case UpType.SUB:
     return {type, oid: dec.getValue("size32"), path: getPath(dec)}
@@ -131,12 +136,15 @@ export function decodeUp (resolver :UpResolver, dec :Decoder) :UpMsg {
 
 export function decodeDown (resolver :DownResolver, dec :Decoder) :DownMsg {
   const type = dec.getValue("int8")
+  if (DebugLog) log.debug("decodeDown", "type", type)
   switch (type) {
   case DownType.SUBOBJ:
     const oid = dec.getValue("size32")
     return {type, oid, obj: getObject(dec, oid, resolver)}
-  case DownType.SUBERR: return {type, oid: dec.getValue("size32"), cause :dec.getValue("string")}
-  default: return decodeSync(resolver, type, dec)
+  case DownType.SUBERR:
+    return {type, oid: dec.getValue("size32"), cause :dec.getValue("string")}
+  default:
+    return decodeSync(resolver, type, dec)
   }
 }
 
@@ -187,7 +195,7 @@ export function getObject (dec :Decoder, oid :number, resolver :DownResolver) :D
     const meta = into.metas[idx], prop = into[meta.name]
     switch (meta.type) {
     case "const": throw new Error(`Invalid const property: ${JSON.stringify(meta)}`)
-    case "value": (prop as Mutable<any>).update(dec.getValue(meta.vtype)) ; break
+    case "value": (prop as DMutable<any>).update(dec.getValue(meta.vtype), true) ; break
     case "set": dec.syncSet(meta.etype, (prop as Set<any>)) ; break
     case "map": dec.syncMap(meta.ktype, meta.vtype, (prop as Map<any, any>)) ; break
     case "collection": break // TODO: anything?
