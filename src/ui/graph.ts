@@ -102,8 +102,8 @@ export class GraphViewer extends AbsGroup {
           elem = ctx.elem.create({...ctx, model}, this, config)
           this.elements.set(key, elem)
         }
-        contents.push(elem);
-        (elem.config.constraints as Record).position[0] = x
+        contents.push(elem)
+        elem.config.constraints!.position[0] = x
         x += elem.preferredSize(this.width, this.height)[0] + 40
       }
       this.invalidate()
