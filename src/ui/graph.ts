@@ -1,4 +1,3 @@
-import {Record} from "../core/data"
 import {Source, Value} from "../core/react"
 import {Element, ElementConfig, ElementContext} from "./element"
 import {AbsGroup} from "./group"
