@@ -149,3 +149,27 @@ test("reactive maps", () => {
   expect(map.get("a")).toEqual("aye")
   expect(amhist).toEqual(["eh", "aye"])
 })
+
+type Hooman = {name :string, age :number, weird :boolean}
+
+test("rmap projectValue", () => {
+  const map = MutableMap.local<string,Hooman>()
+  const age = map.projectValue("bob", b => b.age)
+  const hist :number[] = [], xhist :number[] = []
+  age.onValue(age => age && hist.push(age))
+  expect(age.current).toBe(undefined)
+
+  const bob = {name: "Bob", age: 42, weird: true}
+  map.set("bob", bob)
+  expect(age.current).toBe(42)
+  xhist.push(42)
+  expect(hist).toEqual(xhist)
+
+  map.set("bob", {...bob, age: 43})
+  expect(age.current).toBe(43)
+  xhist.push(43)
+  expect(hist).toEqual(xhist)
+
+  map.delete("bob")
+  expect(age.current).toBe(undefined)
+})

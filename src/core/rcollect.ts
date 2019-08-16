@@ -337,12 +337,26 @@ export abstract class RMap<K,V> extends Source<ReadonlyMap<K,V>> implements Read
     * value will emit a change. While no mapping exists for key, the value will contain `undefined`.
     * @param eq the equality function to use to compare successive values. */
   getValue (key :K, eq :Eq<V|undefined> = refEquals) :Value<V|undefined> {
+    return this.projectValue(key, v => v, eq)
+  }
+
+  /** Returns a [[Value]] that reflects a projection (via `fn)`) of the value of this map at `key`.
+    * When mapping changes, `fn` will be applied to the new value to obtain the projected value, and
+    * if it differs from the previously projected value, a change will be emitted. The projection
+    * function will only ever be called with an actual value; while no mapping exists for key, the
+    * value will contain `undefined`.
+    * @param eq the equality function to use to compare successive projected values. */
+  projectValue<W> (key :K, fn :(v:V) => W, eq :Eq<W|undefined> = refEquals) :Value<W|undefined> {
     return Value.deriveValue(eq, disp => this.onChange(change => {
       if (change.key === key) {
-        const ovalue = change.prev, nvalue = change.type === "set" ? change.value : undefined
+        const ovalue = change.prev === undefined ? undefined : fn(change.prev)
+        const nvalue = change.type === "set" ? fn(change.value) : undefined
         if (!eq(ovalue, nvalue)) disp(nvalue, ovalue)
       }
-    }), () => this.get(key))
+    }), () => {
+      const v = this.get(key)
+      return v === undefined ? undefined : fn(v)
+    })
   }
 
   /** Returns a reactive view of the keys of this map. The source will immediately contain the
