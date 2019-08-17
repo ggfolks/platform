@@ -59,6 +59,7 @@ class UINode extends Node {
               return mapProvider(graph.nodes, value => {
                 const type = value.current.config.type
                 return {
+                  id: Value.constant(value.current.id),
                   type: Value.constant(type),
                   inputKeys: Value.constant(Object.keys(value.current.inputsMeta)),
                   outputKeys: Value.constant(Object.keys(value.current.outputsMeta)),

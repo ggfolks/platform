@@ -1,8 +1,11 @@
+import {dim2, rect, vec2} from "../core/math"
 import {Source, Value} from "../core/react"
 import {InputEdge, InputEdges} from "../graph/node"
 import {Element, ElementConfig, ElementContext} from "./element"
-import {AbsConstraints, AbsGroup} from "./group"
+import {AbsConstraints, AbsGroup, Row} from "./group"
+import {List} from "./list"
 import {Model, ModelKey, ModelProvider, Spec} from "./model"
+import {DefaultPaint, PaintConfig} from "./style"
 
 /** Visualizes a graph. */
 export interface GraphViewerConfig extends ElementConfig {
@@ -11,8 +14,10 @@ export interface GraphViewerConfig extends ElementConfig {
   keys :Spec<Source<IterableIterator<string>>>
 }
 
+type InputValue = InputEdge<any> | InputEdges<any>
+
 export class GraphViewer extends AbsGroup {
-  readonly elements = new Map<string, Element>()
+  readonly elements = new Map<string, {node :Element, edges :Element}>()
   readonly contents :Element[] = []
 
   constructor (ctx :ElementContext, parent :Element, readonly config :GraphViewerConfig) {
@@ -23,10 +28,11 @@ export class GraphViewer extends AbsGroup {
       const {contents, elements} = this
       // first dispose no longer used elements
       const kset = new Set(keys)
-      for (const [ekey, elem] of elements.entries()) {
+      for (const [ekey, elems] of elements.entries()) {
         if (!kset.has(ekey)) {
           elements.delete(ekey)
-          elem.dispose()
+          elems.node.dispose()
+          elems.edges.dispose()
         }
       }
       // now create/reuse elements for the new keys
@@ -101,10 +107,16 @@ export class GraphViewer extends AbsGroup {
               ],
             },
           }
-          elem = ctx.elem.create({...ctx, model}, this, config)
+          const subctx = {...ctx, model}
+          elem = {
+            node: ctx.elem.create(subctx, this, config),
+            edges: ctx.elem.create(subctx, this, {type: "edgeview"}),
+          }
           this.elements.set(key, elem)
         }
-        contents.push(elem)
+        // render edges below nodes
+        contents.push(elem.node)
+        contents.unshift(elem.edges)
       }
       // perform initial layout now that we have the elements and their preferred sizes
       if (models) {
@@ -138,7 +150,7 @@ export class GraphViewer extends AbsGroup {
               continue
             }
             layoutNodes.delete(key)
-            const element = graphViewer.elements.get(key) as Element
+            const element = graphViewer.elements.get(key)!.node
             column.elements.push(element)
             const size = element.preferredSize(-1, -1)
             column.width = Math.max(column.width, size[0])
@@ -190,7 +202,7 @@ export class GraphViewer extends AbsGroup {
       for (const inputKey of inputKeys.current) {
         // remove anything from roots that's used as an input
         const data = input.resolve(inputKey)
-        const value = data.resolve("value" as Spec<Value<InputEdge<any>|InputEdges<any>>>)
+        const value = data.resolve("value" as Spec<Value<InputValue>>)
         const multiple = data.resolve("multiple" as Spec<Value<boolean>>)
         if (multiple.current) {
           if (Array.isArray(value.current)) value.current.forEach(pushInput)
@@ -210,5 +222,126 @@ export class GraphViewer extends AbsGroup {
       const [key, layoutNode] = layoutNodes.entries().next().value
       y += layoutNode.layoutRoot(key, y)
     }
+  }
+}
+
+/** Visualizes a node's input edges. */
+export interface EdgeViewConfig extends ElementConfig {
+  type :"edgeview"
+}
+
+/** Defines the styles that apply to [[EdgeView]]. */
+export interface EdgeViewStyle {
+  stroke? :Spec<PaintConfig>
+  lineWidth? :number
+}
+
+export class EdgeView extends Element {
+  private _nodeId :Value<string>
+  private _inputKeys :Value<string[]>
+  private _input :ModelProvider
+  private _inputs :Value<InputValue[]>
+  private _edges :{from :vec2, to :vec2[]}[] = []
+  private _paint = this.observe(DefaultPaint)
+  private _lineWidth = 1
+
+  constructor (ctx :ElementContext, parent :Element, readonly config :EdgeViewConfig) {
+    super(ctx, parent, config)
+    this._nodeId = ctx.model.resolve("id" as Spec<Value<string>>)
+    this._inputKeys = ctx.model.resolve("inputKeys" as Spec<Value<string[]>>)
+    this._input = ctx.model.resolve("input" as Spec<ModelProvider>)
+    this.invalidateOnChange(this._inputs = this._inputKeys.switchMap(inputKeys => {
+      return Value.join(...inputKeys.map(inputKey => {
+        return this._input.resolve(inputKey).resolve("value" as Spec<Value<InputValue>>)
+      }))
+    }))
+    const style = this.getStyle(this.config.style, "normal") as EdgeViewStyle
+    if (style.stroke) this._paint.observe(ctx.style.resolvePaint(style.stroke))
+    if (style.lineWidth) this._lineWidth = style.lineWidth
+  }
+
+  protected computePreferredSize (hintX :number, hintY :number, into :dim2) {
+    // find corresponding node
+    const node = this._requireValidatedNode(this._nodeId.current)
+    const inputList = node.findChild("list") as List
+
+    this._edges.length = 0
+    const min = vec2.fromValues(Infinity, Infinity)
+    const max = vec2.fromValues(-Infinity, -Infinity)
+
+    const inputKeys = this._inputKeys.current
+    const inputs = this._inputs.current
+    for (let ii = 0; ii < inputKeys.length; ii++) {
+      const input = inputs[ii]
+      if (input === undefined) continue
+      const inputKey = inputKeys[ii]
+      const source = inputList.contents[ii]
+      const from = vec2.fromValues(source.x, source.y + source.height / 2)
+      vec2.min(min, min, from)
+      vec2.max(max, max, from)
+      const to :vec2[] = []
+      const addEdge = (input :InputEdge<any>) => {
+        let targetId :string
+        let outputId :string|undefined
+        if (Array.isArray(input)) {
+          [targetId, outputId] = input
+        } else if (typeof input === "string") {
+          targetId = input
+        } else {
+          return // TODO: constants
+        }
+        const targetNode = this._requireValidatedNode(targetId)
+        const row = targetNode.findChild("row") as Row
+        const outputList = row.contents[1].findChild("list") as List
+        const target = outputId ? outputList.getElement(outputId) : outputList.contents[0]
+        if (target) {
+          const toPos = vec2.fromValues(target.x + target.width, target.y + target.height / 2)
+          to.push(toPos)
+          vec2.min(min, min, toPos)
+          vec2.max(max, max, toPos)
+        }
+      }
+      const inputModel = this._input.resolve(inputKey)
+      const multiple = inputModel.resolve("multiple" as Spec<Value<boolean>>)
+      if (multiple.current) {
+        if (Array.isArray(input)) input.forEach(addEdge)
+      } else {
+        addEdge(input)
+      }
+      this._edges.push({from, to})
+    }
+    if (min[0] <= max[0] && min[1] <= max[1]) {
+      dim2.set(into, max[0] - min[0], max[1] - min[1])
+      this.config.constraints = {position: [min[0], min[1]]}
+    } else {
+      dim2.set(into, 0, 0)
+    }
+  }
+
+  private _requireValidatedNode (nodeId :string) :Element {
+    const viewer = this.requireParent as GraphViewer
+    const node = viewer.elements.get(nodeId)!.node
+    const position = (node.config.constraints as AbsConstraints).position!
+    const size = node.preferredSize(-1, -1)
+    node.setBounds(rect.fromValues(position[0], position[1], size[0], size[1]))
+    node.validate()
+    return node
+  }
+
+  protected relayout () {}
+
+  protected rerender (canvas :CanvasRenderingContext2D) {
+    if (this._edges.length === 0) return
+    canvas.beginPath()
+    for (const edge of this._edges) {
+      for (const to of edge.to) {
+        canvas.moveTo(edge.from[0], edge.from[1])
+        canvas.bezierCurveTo(to[0], edge.from[1], edge.from[0], to[1], to[0], to[1])
+      }
+    }
+    this._paint.current.prepStroke(canvas)
+    canvas.lineWidth = this._lineWidth
+    canvas.stroke()
+    canvas.lineWidth = 1
   }
 }

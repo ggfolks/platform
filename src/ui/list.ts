@@ -40,4 +40,9 @@ export class List extends VGroup {
       this.invalidate()
     }))
   }
+
+  /** Returns the element associated with the given key, if any. */
+  getElement (key :ModelKey) {
+    return this.elements.get(key)
+  }
 }

@@ -109,6 +109,7 @@ export class UI {
     case        "list": return new L.List(ctx, parent, rconfig as L.ListConfig)
     case  "scrollview": return new S.ScrollView(ctx, parent, rconfig as S.ScrollViewConfig)
     case "graphviewer": return new GR.GraphViewer(ctx, parent, rconfig as GR.GraphViewerConfig)
+    case    "edgeview": return new GR.EdgeView(ctx, parent, rconfig as GR.EdgeViewConfig)
     default: throw new Error(`Unknown element type '${config.type}'.`)
     }
   }
