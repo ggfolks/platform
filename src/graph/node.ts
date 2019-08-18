@@ -2,7 +2,7 @@ import {refEquals} from "../core/data"
 import {Value} from "../core/react"
 import {Disposable, Disposer, PMap} from "../core/util"
 import {Graph} from "./graph"
-import {EdgeMeta, InputEdgeMeta, getNodeMeta} from "./meta"
+import {InputEdgeMeta, OutputEdgeMeta, getNodeMeta} from "./meta"
 import {Subgraph} from "./util"
 
 /** Configuration shared by all [[Node]]s. */
@@ -45,7 +45,7 @@ export abstract class Node implements Disposable {
   }
 
   /** The metadata for the node's outputs. */
-  get outputsMeta () :PMap<EdgeMeta> {
+  get outputsMeta () :PMap<OutputEdgeMeta> {
     return getNodeMeta(this.config.type).outputs
   }
 

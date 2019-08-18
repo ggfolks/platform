@@ -239,8 +239,10 @@ export interface EdgeViewStyle {
 export class EdgeView extends Element {
   private _nodeId :Value<string>
   private _inputKeys :Value<string[]>
+  private _outputKeys :Value<string[]>
   private _input :ModelProvider
   private _inputs :Value<InputValue[]>
+  private _output :ModelProvider
   private _edges :{from :vec2, to :vec2[]}[] = []
   private _paint = this.observe(DefaultPaint)
   private _lineWidth = 1
@@ -249,7 +251,9 @@ export class EdgeView extends Element {
     super(ctx, parent, config)
     this._nodeId = ctx.model.resolve("id" as Spec<Value<string>>)
     this._inputKeys = ctx.model.resolve("inputKeys" as Spec<Value<string[]>>)
+    this._outputKeys = ctx.model.resolve("outputKeys" as Spec<Value<string[]>>)
     this._input = ctx.model.resolve("input" as Spec<ModelProvider>)
+    this._output = ctx.model.resolve("output" as Spec<ModelProvider>)
     this.invalidateOnChange(this._inputs = this._inputKeys.switchMap(inputKeys => {
       return Value.join(...inputKeys.map(inputKey => {
         return this._input.resolve(inputKey).resolve("value" as Spec<Value<InputValue>>)
@@ -258,6 +262,15 @@ export class EdgeView extends Element {
     const style = this.getStyle(this.config.style, "normal") as EdgeViewStyle
     if (style.stroke) this._paint.observe(ctx.style.resolvePaint(style.stroke))
     if (style.lineWidth) this._lineWidth = style.lineWidth
+  }
+
+  getDefaultOutputKey () {
+    for (const outputKey of this._outputKeys.current) {
+      const outputModel = this._output.resolve(outputKey)
+      const isDefault = outputModel.resolve("isDefault" as Spec<Value<boolean>>)
+      if (isDefault.current) return outputKey
+    }
+    return this._outputKeys.current[0]
   }
 
   protected computePreferredSize (hintX :number, hintY :number, into :dim2) {
@@ -293,7 +306,13 @@ export class EdgeView extends Element {
         const targetNode = this._requireValidatedNode(targetId)
         const row = targetNode.findChild("row") as Row
         const outputList = row.contents[1].findChild("list") as List
-        const target = outputId ? outputList.getElement(outputId) : outputList.contents[0]
+        let target :Element|undefined
+        if (outputId) {
+          target = outputList.getElement(outputId)
+        } else {
+          const targetEdges = this._requireEdges(targetId) as EdgeView
+          target = outputList.getElement(targetEdges.getDefaultOutputKey())
+        }
         if (target) {
           const toPos = vec2.fromValues(target.x + target.width, target.y + target.height / 2)
           to.push(toPos)
@@ -326,6 +345,11 @@ export class EdgeView extends Element {
     node.setBounds(rect.fromValues(position[0], position[1], size[0], size[1]))
     node.validate()
     return node
+  }
+
+  private _requireEdges (nodeId :string) :Element {
+    const viewer = this.requireParent as GraphViewer
+    return viewer.elements.get(nodeId)!.edges
   }
 
   protected relayout () {}

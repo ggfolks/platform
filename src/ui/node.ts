@@ -70,7 +70,12 @@ class UINode extends Node {
                       value: Value.constant(value.current.config[key]),
                     }),
                   },
-                  output: {resolve: (key :ModelKey) => new Model({name: Value.constant(key)})},
+                  output: {
+                    resolve: (key :ModelKey) => new Model({
+                      name: Value.constant(key),
+                      isDefault: Value.constant(value.current.outputsMeta[key].isDefault),
+                    }),
+                  },
                 }
               }) as any
             }

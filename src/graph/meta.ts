@@ -15,6 +15,13 @@ export interface InputEdgeMeta extends EdgeMeta {
   multiple? :boolean
 }
 
+/** The metadata associated with an output edge. */
+export interface OutputEdgeMeta extends EdgeMeta {
+
+  /** Whether or not this is the default output. */
+  isDefault? :boolean
+}
+
 /** The edge metadata for a node type. */
 export interface NodeMeta {
 
@@ -22,7 +29,7 @@ export interface NodeMeta {
   inputs :PMap<InputEdgeMeta>
 
   /** Maps output edge names to metadata. */
-  outputs :PMap<EdgeMeta>
+  outputs :PMap<OutputEdgeMeta>
 }
 
 /** Marks the decorated field as an input edge of the specified type. */
@@ -42,10 +49,10 @@ export function inputEdges (type :string) {
 }
 
 /** Marks the decorated field as an output edge of the specified type. */
-export function outputEdge (type :string) {
+export function outputEdge (type :string, isDefault :boolean = false) {
   return (prototype :NodeConfig, name :string) => {
     let instance = new (prototype as any).constructor()
-    getNodeMeta(instance.type).outputs[name] = {type}
+    getNodeMeta(instance.type).outputs[name] = {type, isDefault}
   }
 }
 

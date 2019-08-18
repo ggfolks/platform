@@ -22,7 +22,7 @@ abstract class HoverConfig implements EntityComponentConfig, PointerConfig {
   @outputEdge("Vector3") viewPosition = undefined
   @outputEdge("Vector3") viewMovement = undefined
   @outputEdge("boolean") pressed = undefined
-  @outputEdge("boolean") hovered = undefined
+  @outputEdge("boolean", true) hovered = undefined
 }
 
 const zeroVector = new Vector3()
