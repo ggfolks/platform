@@ -1,6 +1,6 @@
 import {Value} from "../core/react"
 import {Graph} from "../graph/graph"
-import {inputEdge, outputEdge} from "../graph/meta"
+import {inputEdge, outputEdge, property} from "../graph/meta"
 import {Node, NodeConfig, NodeContext, NodeTypeRegistry} from "../graph/node"
 import {Component, Domain, EntityConfig, ID} from "./entity"
 
@@ -119,7 +119,7 @@ class EntityId extends EntityNode {
 /** Provides the value of a component as an output. */
 abstract class ReadComponentConfig implements EntityComponentConfig {
   type = "readComponent"
-  component = ""
+  @property() component = ""
   @outputEdge("any") output = undefined
 }
 
@@ -137,7 +137,7 @@ class ReadComponent extends EntityComponentNode<Component<any>> {
 /** Updates the value of a component according to the input. */
 abstract class UpdateComponentConfig implements EntityComponentConfig {
   type = "updateComponent"
-  component = ""
+  @property() component = ""
   @inputEdge("any") input = undefined
 }
 
@@ -159,7 +159,7 @@ class UpdateComponent extends EntityComponentNode<Component<any>> {
 /** Checks whether the input entity has a given tag. */
 abstract class TaggedConfig implements NodeConfig {
   type = "tagged"
-  tag = ""
+  @property() tag = ""
   @inputEdge("ID | undefined") input = undefined
   @outputEdge("boolean") output = undefined
 }

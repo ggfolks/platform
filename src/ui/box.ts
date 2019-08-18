@@ -97,6 +97,11 @@ export class Box extends Element {
     return super.findChild(type) || this.contents.findChild(type)
   }
 
+  /** Finds the first child with the specified `tag`. */
+  findTaggedChild (tag :string) :Element|undefined {
+    return super.findTaggedChild(tag) || this.contents.findTaggedChild(tag)
+  }
+
   handleMouseDown (event :MouseEvent, pos :vec2) {
     return rect.contains(this.contents.bounds, pos) ?
       this.contents.handleMouseDown(event, pos) : undefined
@@ -104,7 +109,7 @@ export class Box extends Element {
   handleWheel (event :WheelEvent, pos :vec2) {
     return rect.contains(this.contents.bounds, pos) && this.contents.handleWheel(event, pos)
   }
-  
+
   dispose () {
     super.dispose()
     this.contents.dispose()

@@ -3,13 +3,13 @@ import {refEquals} from "../core/data"
 import {Mutable, Value} from "../core/react"
 import {PMap} from "../core/util"
 import {Graph, GraphConfig} from "./graph"
-import {EdgeMeta, InputEdgeMeta, inputEdge, outputEdge} from "./meta"
+import {EdgeMeta, InputEdgeMeta, inputEdge, outputEdge, property} from "./meta"
 import {InputEdge, Node, NodeConfig, NodeTypeRegistry} from "./node"
 
 /** Switches to true after a number of seconds have passed. */
 abstract class TimeoutConfig implements NodeConfig {
   type = "timeout"
-  seconds = 0
+  @property() seconds = 0
   @outputEdge("boolean") output = undefined
 }
 
@@ -34,7 +34,7 @@ class TimeoutNode extends Node {
 /** Pulses true at regular intervals. */
 abstract class IntervalConfig implements NodeConfig {
   type = "interval"
-  seconds = 0
+  @property() seconds = 0
   @outputEdge("boolean") output = undefined
 }
 
@@ -167,7 +167,7 @@ export class Subgraph extends Node {
 /** An input to a subgraph. */
 abstract class InputConfig implements NodeConfig {
   type = "input"
-  name = ""
+  @property() name = ""
   @outputEdge("any") output = undefined
 }
 
@@ -187,7 +187,7 @@ class Input extends Node {
 /** An output from a subgraph. */
 abstract class OutputConfig implements NodeConfig {
   type = "output"
-  name = ""
+  @property() name = ""
   @inputEdge("any") input = undefined
 }
 

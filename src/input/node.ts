@@ -1,6 +1,6 @@
 import {Mutable, Value} from "../core/react"
 import {Graph} from "../graph/graph"
-import {outputEdge} from "../graph/meta"
+import {outputEdge, property} from "../graph/meta"
 import {Node, NodeConfig, NodeContext, NodeTypeRegistry} from "../graph/node"
 import {Hand} from "./hand"
 import {Keyboard} from "./keyboard"
@@ -13,7 +13,7 @@ export interface InputNodeContext extends NodeContext {
 /** Provides an output of false or true depending on whether a key is pressed. */
 abstract class KeyConfig implements NodeConfig {
   type = "key"
-  code = 0
+  @property() code = 0
   @outputEdge("boolean") output = undefined
 }
 
@@ -29,7 +29,7 @@ class Key extends Node {
 /** Provides an output of false or true depending on whether a mouse button is pressed. */
 abstract class MouseButtonConfig implements NodeConfig {
   type = "mouseButton"
-  button? = 0
+  @property() button = 0
   @outputEdge("boolean") output = undefined
 }
 
@@ -105,8 +105,8 @@ export interface PointerConfig extends NodeConfig {
 /** Provides outputs of x and y describing pointer movement in pixels. */
 abstract class PointerMovementConfig implements PointerConfig {
   type = "pointerMovement"
-  index = undefined
-  count = undefined
+  @property() index = 0
+  @property() count = 1
   @outputEdge("number") x = undefined
   @outputEdge("number") y = undefined
 }

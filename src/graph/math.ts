@@ -1,6 +1,6 @@
 import {Value} from "../core/react"
 import {Graph} from "./graph"
-import {inputEdge, inputEdges, outputEdge} from "./meta"
+import {inputEdge, inputEdges, outputEdge, property} from "./meta"
 import {
   Node,
   NodeConfig,
@@ -12,7 +12,7 @@ import {
 /** Outputs a single constant. */
 abstract class ConstantConfig implements NodeConfig {
   type = "constant"
-  value = 0
+  @property() value = 0
   @outputEdge("number") output = undefined
 }
 
@@ -114,8 +114,8 @@ class Multiply extends Operator<number> {
 /** Emits a random number. */
 abstract class RandomConfig implements NodeConfig {
   type = "random"
-  min? :number
-  max? :number
+  @property() min = 0
+  @property() max = 1
   @outputEdge("number") output = undefined
 }
 
@@ -142,8 +142,8 @@ class Random extends Node {
 /** Tracks the sum of its input over time, subject to optional min and max constraints. */
 abstract class AccumulateConfig implements NodeConfig {
   type = "accumulate"
-  min? :number
-  max? :number
+  @property() min = -Infinity
+  @property() max = Infinity
   @inputEdge("number") input = undefined
   @outputEdge("number") output = undefined
 }
@@ -168,7 +168,7 @@ class Accumulate extends Node {
 /** Outputs the sign of the input (-1, 0, or +1). */
 abstract class SignConfig implements NodeConfig {
   type = "sign"
-  epsilon? :number
+  @property() epsilon = 0.0001
   @inputEdge("number") input = undefined
   @outputEdge("number") output = undefined
 }

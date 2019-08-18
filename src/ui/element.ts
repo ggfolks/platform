@@ -62,6 +62,7 @@ export type ElementContext = {
 /** Configuration shared by all [[Element]]s. */
 export interface ElementConfig {
   type :string
+  tags? :Set<string>
   visible? :Spec<Value<boolean>>
   constraints? :Record
   scopeId? :string
@@ -178,6 +179,11 @@ export abstract class Element implements Disposable {
   /** Finds the first child with the specified `type`. */
   findChild (type :string) :Element|undefined {
     return (this.config.type === type) ? this : undefined
+  }
+
+  /** Finds the first child with the specified `tag`. */
+  findTaggedChild (tag :string) :Element|undefined {
+    return (this.config.tags && this.config.tags.has(tag)) ? this : undefined
   }
 
   dispose () {
@@ -418,7 +424,10 @@ export class Control extends Element {
   findChild (type :string) :Element|undefined {
     return super.findChild(type) || this.contents.findChild(type)
   }
-
+  findTaggedChild (tag :string) :Element|undefined {
+    return super.findTaggedChild(tag) || this.contents.findTaggedChild(tag)
+  }
+  
   dispose () {
     super.dispose()
     this.contents.dispose()

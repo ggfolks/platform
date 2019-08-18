@@ -61,8 +61,22 @@ class UINode extends Node {
                 return {
                   id: Value.constant(value.current.id),
                   type: Value.constant(type),
+                  propertyKeys: Value.constant(Object.keys(value.current.propertiesMeta)),
                   inputKeys: Value.constant(Object.keys(value.current.inputsMeta)),
                   outputKeys: Value.constant(Object.keys(value.current.outputsMeta)),
+                  property: {
+                    resolve: (key :ModelKey) => {
+                      const propertiesMeta = value.current.propertiesMeta[key]
+                      const configValue = value.current.config[key]
+                      return new Model({
+                        name: Value.constant(key),
+                        constraints: Value.constant(propertiesMeta.constraints),
+                        value: Value.constant(
+                          configValue === undefined ? propertiesMeta.defaultValue : configValue,
+                        ),
+                      })
+                    },
+                  },
                   input: {
                     resolve: (key :ModelKey) => new Model({
                       name: Value.constant(key),

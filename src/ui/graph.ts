@@ -3,7 +3,7 @@ import {Source, Value} from "../core/react"
 import {getConstantNodeId} from "../graph/graph"
 import {InputEdge, InputEdges} from "../graph/node"
 import {Element, ElementConfig, ElementContext} from "./element"
-import {AbsConstraints, AbsGroup, Row} from "./group"
+import {AbsConstraints, AbsGroup, AxisConfig, VGroup} from "./group"
 import {List} from "./list"
 import {Model, ModelKey, ModelProvider, Spec} from "./model"
 import {DefaultPaint, PaintConfig} from "./style"
@@ -51,7 +51,7 @@ export class GraphViewer extends AbsGroup {
             scopeId: "node",
             contents: {
               type: "column",
-              offPolicy: "equalize",
+              offPolicy: "stretch",
               contents: [
                 {
                   type: "box",
@@ -63,45 +63,58 @@ export class GraphViewer extends AbsGroup {
                   scopeId: "nodeBody",
                   style: {halign: "stretch"},
                   contents: {
-                    type: "row",
-                    gap: 5,
+                    type: "column",
+                    offPolicy: "stretch",
                     contents: [
                       {
-                        type: "box",
-                        scopeId: "nodeEdges",
-                        constraints: {stretch: hasInputs},
-                        style: {halign: "left"},
-                        contents: {
-                          type: "list",
-                          gap: 1,
-                          offPolicy: "stretch",
-                          element: {
-                            type: "box",
-                            contents: {type: "label", text: "name"},
-                            style: {halign: "left"},
-                          },
-                          data: "input",
-                          keys: "inputKeys",
-                        },
+                        type: "propertyview",
+                        scopeId: "nodeProperties",
+                        offPolicy: "stretch",
                       },
                       {
-                        type: "box",
-                        scopeId: "nodeEdges",
-                        constraints: {stretch: hasOutputs},
-                        style: {halign: "right"},
-                        contents: {
-                          type: "list",
-                          gap: 1,
-                          offPolicy: "stretch",
-                          element: {
+                        type: "row",
+                        gap: 5,
+                        contents: [
+                          {
                             type: "box",
-                            contents: {type: "label", text: "name"},
-                            style: {halign: "right"},
+                            scopeId: "nodeEdges",
+                            constraints: {stretch: hasInputs},
+                            style: {halign: "left"},
+                            contents: {
+                              type: "list",
+                              tags: new Set(["inputs"]),
+                              gap: 1,
+                              offPolicy: "stretch",
+                              element: {
+                                type: "box",
+                                contents: {type: "label", text: "name"},
+                                style: {halign: "left"},
+                              },
+                              data: "input",
+                              keys: "inputKeys",
+                            },
                           },
-                          data: "output",
-                          keys: "outputKeys",
-                        },
-                      }
+                          {
+                            type: "box",
+                            scopeId: "nodeEdges",
+                            constraints: {stretch: hasOutputs},
+                            style: {halign: "right"},
+                            contents: {
+                              type: "list",
+                              tags: new Set(["outputs"]),
+                              gap: 1,
+                              offPolicy: "stretch",
+                              element: {
+                                type: "box",
+                                contents: {type: "label", text: "name"},
+                                style: {halign: "right"},
+                              },
+                              data: "output",
+                              keys: "outputKeys",
+                            },
+                          }
+                        ],
+                      },
                     ],
                   },
                 },
@@ -228,6 +241,58 @@ export class GraphViewer extends AbsGroup {
   }
 }
 
+/** Depicts a node's editable/viewable properties. */
+export interface PropertyViewConfig extends AxisConfig {
+  type :"propertyview"
+}
+
+export class PropertyView extends VGroup {
+  readonly elements = new Map<string, Element>()
+  readonly contents :Element[] = []
+
+  constructor (ctx :ElementContext, parent :Element, readonly config :PropertyViewConfig) {
+    super(ctx, parent, config)
+    const property = ctx.model.resolve("property" as Spec<ModelProvider>)
+    this.disposer.add(ctx.model.resolve("propertyKeys" as Spec<Value<string[]>>).onValue(keys => {
+      const {contents, elements} = this
+      // first dispose no longer used elements
+      const kset = new Set(keys)
+      for (const [ekey, elem] of elements.entries()) {
+        if (!kset.has(ekey)) {
+          elements.delete(ekey)
+          elem.dispose()
+        }
+      }
+      // now create/reuse elements for the new keys
+      contents.length = 0
+      for (const key of kset) {
+        let elem = this.elements.get(key)
+        if (!elem) {
+          const model = property.resolve(key)
+          elem = ctx.elem.create({...ctx, model}, this, {
+            type: "row",
+            contents: [
+              {
+                type: "label",
+                constraints: {stretch: true},
+                text: model.resolve("name" as Spec<Value<string>>).map(name => name + ":"),
+              },
+              {
+                type: "label",
+                constraints: {stretch: true},
+                text: model.resolve("value" as Spec<Value<any>>).map(String),
+              },
+            ],
+          })
+          this.elements.set(key, elem)
+        }
+        contents.push(elem)
+      }
+      this.invalidate()
+    }))
+  }
+}
+
 /** Visualizes a node's input edges. */
 export interface EdgeViewConfig extends ElementConfig {
   type :"edgeview"
@@ -279,7 +344,7 @@ export class EdgeView extends Element {
   protected computePreferredSize (hintX :number, hintY :number, into :dim2) {
     // find corresponding node
     const node = this._requireValidatedNode(this._nodeId.current)
-    const inputList = node.findChild("list") as List
+    const inputList = node.findTaggedChild("inputs") as List
 
     this._edges.length = 0
     const min = vec2.fromValues(Infinity, Infinity)
@@ -307,8 +372,7 @@ export class EdgeView extends Element {
           targetId = getConstantNodeId(input)
         }
         const targetNode = this._requireValidatedNode(targetId)
-        const row = targetNode.findChild("row") as Row
-        const outputList = row.contents[1].findChild("list") as List
+        const outputList = targetNode.findTaggedChild("outputs") as List
         let target :Element|undefined
         if (outputId) {
           target = outputList.getElement(outputId)

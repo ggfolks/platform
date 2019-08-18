@@ -2,7 +2,7 @@ import {Euler, Math as ThreeMath, Matrix4, Quaternion, Vector3} from "three"
 
 import {Value} from "../core/react"
 import {Graph} from "../graph/graph"
-import {inputEdge, inputEdges, outputEdge} from "../graph/meta"
+import {inputEdge, inputEdges, outputEdge, property} from "../graph/meta"
 import {
   Operator,
   OperatorConfig,
@@ -14,15 +14,25 @@ import {EntityComponentConfig, EntityComponentNode} from "../entity/node"
 import {TransformComponent} from "./entity"
 
 // patch in toString functions
-Vector3.prototype.toString = function() { return `(${this.x},${this.y},${this.z})` }
+Vector3.prototype.toString = function() { return `(${this.x}, ${this.y}, ${this.z})` }
+Euler.prototype.toString = function() {
+  return `(${radToDegString(this.x)}, ${radToDegString(this.y)}, ${radToDegString(this.z)})`
+}
+
+function radToDegString (radians :number) {
+  return Math.round(ThreeMath.radToDeg(radians) * 10) / 10
+}
 
 /** The different types of coordinate frames available. */
 export type CoordinateFrame = "world" | "local"
 
+/** The different rotation orders available. */
+export type RotationOrder = "XYZ" | "XZY" | "YXZ" | "YZX" | "ZXY" | "ZYX"
+
 /** Creates a set of Euler angles from individual components. */
 abstract class EulerConfig implements NodeConfig {
   type = "Euler"
-  order? = "XYZ"
+  @property("RotationOrder") order = "XYZ"
   @inputEdge("number") x = undefined
   @inputEdge("number") y = undefined
   @inputEdge("number") z = undefined
@@ -145,7 +155,7 @@ class Vector3ApplyEuler extends Node {
 /** Projects a vector onto a plane. */
 abstract class Vector3ProjectOnPlaneConfig implements NodeConfig {
   type = "Vector3.projectOnPlane"
-  planeNormal? = new Vector3()
+  @property() planeNormal = new Vector3(0, 1, 0)
   @inputEdge("Vector3") input = undefined
   @outputEdge("Vector3") output = undefined
 }
@@ -191,7 +201,7 @@ class Vector3MultiplyScalar extends Node {
 /** Computes the signed angle between two vectors about an axis. */
 abstract class Vector3AngleBetweenConfig implements NodeConfig {
   type = "Vector3.angleBetween"
-  axis? = new Vector3()
+  @property() axis = new Vector3(0, 1, 0)
   @inputEdge("Vector3") v1 = undefined
   @inputEdge("Vector3") v2 = undefined
   @outputEdge("number") output = undefined
@@ -251,8 +261,8 @@ function createRandomDirection () {
 /** Rotates by an amount determined by the inputs. */
 abstract class RotateConfig implements EntityComponentConfig {
   type = "rotate"
-  component = ""
-  frame? :CoordinateFrame
+  @property() component = ""
+  @property("CoordinateFrame") frame = "local"
   @inputEdge("Euler") input = undefined
 }
 
@@ -278,8 +288,8 @@ class Rotate extends EntityComponentNode<TransformComponent> {
 /** Translates by an amount determined by the inputs. */
 abstract class TranslateConfig implements EntityComponentConfig {
   type = "translate"
-  component = ""
-  frame? :CoordinateFrame
+  @property() component = ""
+  @property("CoordinateFrame") frame = "local"
   @inputEdge("Vector3") input = undefined
 }
 
@@ -308,7 +318,7 @@ class Translate extends EntityComponentNode<TransformComponent> {
 /** Reads an entity's transform. */
 abstract class ReadTransformConfig implements EntityComponentConfig {
   type = "readTransform"
-  component = ""
+  @property() component = ""
   @outputEdge("Vector3") position = undefined
   @outputEdge("Quaternion") quaternion = undefined
   @outputEdge("Vector3") scale = undefined
@@ -340,7 +350,7 @@ class ReadTransform extends EntityComponentNode<TransformComponent> {
 /** Sets an entity's position. */
 abstract class UpdatePositionConfig implements EntityComponentConfig {
   type = "updatePosition"
-  component = ""
+  @property() component = ""
   @inputEdge("Vector3") input = undefined
 }
 
@@ -362,7 +372,7 @@ class UpdatePosition extends EntityComponentNode<TransformComponent> {
 /** Sets an entity's rotation. */
 abstract class UpdateRotationConfig implements EntityComponentConfig {
   type = "updateRotation"
-  component = ""
+  @property() component = ""
   @inputEdge("Euler") input = undefined
 }
 
@@ -385,7 +395,7 @@ class UpdateRotation extends EntityComponentNode<TransformComponent> {
 /** Sets an entity's scale. */
 abstract class UpdateScaleConfig implements EntityComponentConfig {
   type = "updateScale"
-  component = ""
+  @property() component = ""
   @inputEdge("Vector3") input = undefined
 }
 
@@ -407,7 +417,7 @@ class UpdateScale extends EntityComponentNode<TransformComponent> {
 /** Transforms a point from world space to the local space of the entity. */
 abstract class WorldToLocalConfig implements EntityComponentConfig {
   type = "updateScale"
-  component = ""
+  @property() component = ""
   @inputEdge("Vector3") input = undefined
   @outputEdge("Vector3") output = undefined
 }
