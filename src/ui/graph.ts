@@ -1,5 +1,6 @@
 import {dim2, rect, vec2} from "../core/math"
 import {Source, Value} from "../core/react"
+import {getConstantNodeId} from "../graph/graph"
 import {InputEdge, InputEdges} from "../graph/node"
 import {Element, ElementConfig, ElementContext} from "./element"
 import {AbsConstraints, AbsGroup, Row} from "./group"
@@ -196,7 +197,9 @@ export class GraphViewer extends AbsGroup {
           inputs.push(edge)
           roots.delete(edge)
         } else {
-          // TODO: create nodes for constants
+          const nodeId = getConstantNodeId(edge)
+          inputs.push(nodeId)
+          roots.delete(nodeId)
         }
       }
       for (const inputKey of inputKeys.current) {
@@ -301,7 +304,7 @@ export class EdgeView extends Element {
         } else if (typeof input === "string") {
           targetId = input
         } else {
-          return // TODO: constants
+          targetId = getConstantNodeId(input)
         }
         const targetNode = this._requireValidatedNode(targetId)
         const row = targetNode.findChild("row") as Row

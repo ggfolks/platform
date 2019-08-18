@@ -105,8 +105,9 @@ class LessThan extends Node {
 abstract class ConditionalConfig implements NodeConfig {
   type = "conditional"
   @inputEdge("boolean") condition = undefined
-  @outputEdge("any") ifTrue = undefined
-  @outputEdge("any") ifFalse = undefined
+  @inputEdge("any") ifTrue = undefined
+  @inputEdge("any") ifFalse = undefined
+  @outputEdge("any") output = undefined
 }
 
 class Conditional extends Node {

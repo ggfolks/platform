@@ -9,6 +9,11 @@ export interface GraphConfig {
   [id :string] :NodeConfig
 }
 
+/** Returns the node id used for a fixed constant value. */
+export function getConstantNodeId (value :any) {
+  return `__${value}`
+}
+
 /** An execution graph. */
 export class Graph implements Disposable {
   private _clock = new Emitter<Clock>()
@@ -57,7 +62,15 @@ export class Graph implements Disposable {
     if (typeof input === "string") {
       return this._nodes.require(input).getOutput(undefined, defaultValue)
     }
-    return Value.constant(input)
+    const id = getConstantNodeId(input)
+    let node = this._nodes.get(id)
+    if (!node) {
+      this._nodes.set(id, node = this.ctx.types.createNode(this, id, {
+        type: "constant",
+        value: input,
+      }))
+    }
+    return node.getOutput(undefined, defaultValue)
   }
 
   /** Updates the state of the graph.  Should be called once per frame. */

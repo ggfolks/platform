@@ -13,6 +13,9 @@ import {
 import {EntityComponentConfig, EntityComponentNode} from "../entity/node"
 import {TransformComponent} from "./entity"
 
+// patch in toString functions
+Vector3.prototype.toString = function() { return `(${this.x},${this.y},${this.z})` }
+
 /** The different types of coordinate frames available. */
 export type CoordinateFrame = "world" | "local"
 

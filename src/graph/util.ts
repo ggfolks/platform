@@ -92,7 +92,7 @@ abstract class ClockConfig implements NodeConfig {
   type = "clock"
   @outputEdge("number") time = undefined
   @outputEdge("number") elapsed = undefined
-  @outputEdge("number") dt = undefined
+  @outputEdge("number", true) dt = undefined
 }
 
 class ClockNode extends Node {
