@@ -1,12 +1,14 @@
 import {Remover, NoopRemover, log} from "../core/util"
 import {UUID, UUID0, uuidv1} from "../core/uuid"
 import {Record} from "../core/data"
-import {Subject} from "../core/react"
+import {Mutable, Subject, Value} from "../core/react"
 import {Encoder, Decoder} from "../core/codec"
 import {CollectionMeta, getPropMetas} from "./meta"
-import {Auth, AutoKey, DataSource, DKey, DObject, DObjectType, DQueueAddr, MetaMsg, Path, Subscriber,
-        findObjectType, pathToKey} from "./data"
+import {Auth, AutoKey, DataSource, DKey, DObject, DObjectType, DQueueAddr, MetaMsg, Path,
+        Subscriber, findObjectType, pathToKey} from "./data"
 import {DownType, DownMsg, UpType, SyncMsg, decodeUp, encodeDown} from "./protocol"
+
+import WebSocket from "ws"
 
 const sysAuth :Auth = {id: UUID0, isSystem: true}
 
@@ -152,6 +154,7 @@ export abstract class Session {
 
   readonly auth :Auth
 
+  // TODO: maybe the session should handle auth?
   constructor (readonly store :DataStore, readonly id :UUID) {
     this.auth = {id, isSystem: false}
   }
@@ -218,6 +221,93 @@ export abstract class Session {
   abstract sendMsg (msg :Uint8Array) :void
 
   dispose () {
-    // TODO: unsub from all objects
+    for (const sub of this.subscrips.values()) sub.unsub()
+    this.subscrips.clear()
+  }
+}
+
+type ServerConfig = {
+  port? :number
+}
+
+type SessionState = "connecting" | "open" | "closed"
+
+class WSSession extends Session {
+  private readonly _state = Mutable.local("connecting" as SessionState)
+
+  constructor (store :DataStore, readonly addr :string, readonly ws :WebSocket) {
+    super(store, uuidv1()) // TODO: auth
+
+    ws.on("open", () => this._state.update("open"))
+    ws.on("message", msg => {
+      // TODO: do we need to check readyState === CLOSING and drop late messages?
+      if (msg instanceof ArrayBuffer) this.handleMsg(new Uint8Array(msg))
+      else log.warn("Got non-binary message", "sess", this, "msg", msg)
+    })
+    ws.on("close", (code, reason) => {
+      log.info("Session closed", "code", code, "reason", reason)
+      this._state.update("closed")
+    })
+    ws.on("error", error => {
+      log.info("Session failed", "error", error)
+      this._state.update("closed")
+    })
+    // TODO: ping/pong & session timeout
+
+    log.info("Session started", "addr", addr, "id", this.id)
+  }
+
+  get state () :Value<SessionState> { return this._state }
+
+  sendMsg (msg :Uint8Array) {
+    this.ws.send(msg, err => {
+      if (err) log.warn("Message send failed", "sess", this, err) // TODO: terminate?
+    })
+  }
+
+  close () {
+    this.dispose()
+    this.ws.terminate()
+  }
+
+  toString () {
+    return `${this.id}/${this.addr}`
+  }
+}
+
+export type ServerState = "initializing" | "listening" | "terminating" | "terminated"
+
+export class Server {
+  private readonly wss :WebSocket.Server
+  private readonly sessions = new Set<WSSession>()
+  private readonly _state = Mutable.local("initializing" as ServerState)
+
+  constructor (readonly store :DataStore, config :ServerConfig = {}) {
+    // TODO: eventually we'll piggy back on a separate web server
+    const port = config.port || 8080
+    const wss = this.wss = new WebSocket.Server({port})
+    wss.on("listening", () => {
+      this._state.update("listening")
+      log.info("Listening for connections", "port", port)
+    })
+    wss.on("connection", (ws, req) => {
+      ws.binaryType = "arraybuffer"
+      // if we have an x-forwarded-for header, use that to get the client's IP
+      const xffs = req.headers["x-forwarded-for"], xff = Array.isArray(xffs) ? xffs[0] : xffs
+      // parsing "X-Forwarded-For: <client>, <proxy1>, <proxy2>, ..."
+      const addr = (xff ? xff.split(/\s*,\s*/)[0] : req.connection.remoteAddress) || "<unknown>"
+      const sess = new WSSession(this.store, addr, ws)
+      this.sessions.add(sess)
+      sess.state.when(ss => ss === "closed", () => this.sessions.delete(sess))
+    })
+    wss.on("error", error => log.warn("Server error", error)) // TODO: ?
+  }
+
+  get state () :Value<ServerState> { return this._state }
+
+  shutdown () {
+    this._state.update("terminating")
+    for (const sess of this.sessions) sess.close()
+    this.wss.close(() => this._state.update("terminated"))
   }
 }

@@ -1,7 +1,8 @@
-import {Disposable, Remover} from "../core/util"
+import {Disposable, Remover, NoopRemover} from "../core/util"
 import {UUID} from "../core/uuid"
 import {Data, Record, dataEquals, refEquals} from "../core/data"
-import {ChangeFn, Eq, Mutable, Subject, ValueFn, addListener, dispatchChange} from "../core/react"
+import {ChangeFn, Emitter, Eq, Mutable, Stream, Subject, Value, ValueFn, addListener,
+        dispatchChange} from "../core/react"
 import {MutableSet, MutableMap} from "../core/rcollect"
 import {KeyType, ValueType} from "../core/codec"
 import {PropMeta, getPropMetas} from "./meta"
@@ -294,5 +295,43 @@ export abstract class DObject implements Disposable {
   protected queue<M extends Record> () {
     const index = this.metaIdx++, meta = this.metas[index]
     return (meta.type === "queue") ? new DQueue(this, index) : metaMismatch(meta, "queue")
+  }
+}
+
+interface Resolver {
+  resolve<T extends DObject> (path :Path, otype :DObjectType<T>) :Subject<T|Error>
+}
+
+export class Subscription<T extends DObject> implements Disposable {
+  private rem = NoopRemover
+  private obj = Mutable.local<T|undefined>(undefined, refEquals)
+  private err = new Emitter<Error>()
+
+  constructor (readonly otype :DObjectType<T>) {}
+
+  get current () :T {
+    const obj = this.obj.current
+    if (obj !== undefined) return obj
+    throw new Error(`No object for subscription [otype=${this.otype}]`)
+  }
+  get object () :Value<T|undefined> { return this.obj }
+  get errors () :Stream<Error> { return this.err }
+
+  subscribe (source :Resolver, path :Path) {
+    this.rem()
+    this.rem = source.resolve(path, this.otype).onValue(res => {
+      if (res instanceof Error) this.err.emit(res)
+      else this.obj.update(res)
+    })
+  }
+
+  clear () {
+    this.rem()
+    this.rem = NoopRemover
+    this.obj.update(undefined)
+  }
+
+  dispose () {
+    this.clear()
   }
 }

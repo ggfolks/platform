@@ -1,6 +1,6 @@
-import {Disposable, NoopRemover, log} from "../core/util"
-import {Record, refEquals} from "../core/data"
-import {DispatchFn, Emitter, Mutable, Stream, Subject, Value} from "../core/react"
+import {Disposable, log} from "../core/util"
+import {Record} from "../core/data"
+import {DispatchFn, Subject} from "../core/react"
 import {Encoder, Decoder} from "../core/codec"
 import {DataSource, DKey, DObject, DObjectType, DQueueAddr, Path, pathToKey} from "./data"
 import {DownMsg, DownType, UpMsg, UpType, encodeUp, decodeDown} from "./protocol"
@@ -147,42 +147,4 @@ export abstract class Connection implements Disposable {
   abstract dispose () :void
   abstract sendMsg (msg :Uint8Array) :void
   protected abstract connect (addr :Address) :void
-}
-
-interface Resolver {
-  resolve<T extends DObject> (path :Path, otype :DObjectType<T>) :Subject<T|Error>
-}
-
-export class Subscription<T extends DObject> implements Disposable {
-  private rem = NoopRemover
-  private obj = Mutable.local<T|undefined>(undefined, refEquals)
-  private err = new Emitter<Error>()
-
-  constructor (readonly otype :DObjectType<T>) {}
-
-  get current () :T {
-    const obj = this.obj.current
-    if (obj !== undefined) return obj
-    throw new Error(`No object for subscription [otype=${this.otype}]`)
-  }
-  get object () :Value<T|undefined> { return this.obj }
-  get errors () :Stream<Error> { return this.err }
-
-  subscribe (source :Resolver, path :Path) {
-    this.rem()
-    this.rem = source.resolve(path, this.otype).onValue(res => {
-      if (res instanceof Error) this.err.emit(res)
-      else this.obj.update(res)
-    })
-  }
-
-  clear () {
-    this.rem()
-    this.rem = NoopRemover
-    this.obj.update(undefined)
-  }
-
-  dispose () {
-    this.clear()
-  }
 }

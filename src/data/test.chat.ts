@@ -3,9 +3,10 @@ import {Disposer, Timestamp, log} from "../core/util"
 import {Mutable, Source, Subject} from "../core/react"
 import {Encoder, Decoder, setTextCodec} from "../core/codec"
 import {getPropMetas, dconst, dobject, dmap, dvalue, dcollection, dqueue} from "./meta"
-import {Auth, AutoKey, DataSource, DKey, DObject, MetaMsg, Path, findObjectType} from "./data"
+import {Auth, AutoKey, DataSource, DKey, DObject, MetaMsg, Path, Subscription,
+        findObjectType} from "./data"
 import {addObject, getObject} from "./protocol"
-import {Address, Client, Connection, Subscription} from "./client"
+import {Address, Client, Connection} from "./client"
 import {DataStore, Session} from "./server"
 
 import {TextEncoder, TextDecoder} from "util"
