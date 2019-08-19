@@ -1,12 +1,12 @@
 import {UUID, UUID0, uuidv1} from "../core/uuid"
 import {Disposer, Timestamp, log} from "../core/util"
-import {Mutable, Source, Subject} from "../core/react"
+import {Mutable, Source, Subject, Value} from "../core/react"
 import {Encoder, Decoder, setTextCodec} from "../core/codec"
 import {getPropMetas, dconst, dobject, dmap, dvalue, dcollection, dqueue} from "./meta"
 import {Auth, AutoKey, DataSource, DKey, DObject, MetaMsg, Path, Subscription,
         findObjectType} from "./data"
 import {addObject, getObject} from "./protocol"
-import {Address, Client, Connection} from "./client"
+import {Address, Client, Connection, CState} from "./client"
 import {DataStore, Session} from "./server"
 
 import {TextEncoder, TextDecoder} from "util"
@@ -368,15 +368,16 @@ test("findObjectType", () => {
 })
 
 type RunQueue = Array<() => void>
+
 function process (queue :RunQueue) {
-  while (queue.length > 0) {
-    queue.shift()!()
-  }
+  while (queue.length > 0) queue.shift()!()
 }
 
 class ClientHandler extends Session {
-  constructor (store :DataStore, id :UUID, readonly conn :Connection, readonly queue :RunQueue) {
-    super(store, id) }
+  constructor (
+    store :DataStore, id :UUID, readonly conn :TestConnection, readonly queue :RunQueue
+  ) { super(store, id) }
+
   sendMsg (data :Uint8Array) {
     const cdata = data.slice()
     this.queue.push(() => this.conn.client.recvMsg(cdata))
@@ -385,19 +386,20 @@ class ClientHandler extends Session {
 
 class TestConnection extends Connection {
   private readonly handler :ClientHandler
+  readonly state = Value.constant("connected" as CState)
 
-  constructor (client :Client, addr :Address, store :DataStore, id :UUID, readonly queue :RunQueue) {
-    super(client, addr)
-    this.handler = new ClientHandler(store, id, this, queue)
+  constructor (readonly client :Client, addr :Address, store :DataStore, id :UUID,
+               readonly runq :RunQueue) {
+    super()
+    this.handler = new ClientHandler(store, id, this, runq)
   }
 
   sendMsg (data :Uint8Array) {
     const cdata = data.slice()
-    this.queue.push(() => this.handler.handleMsg(cdata))
+    this.runq.push(() => this.handler.handleMsg(cdata))
   }
 
-  dispose () { this.handler.dispose() }
-  protected connect (addr :Address) {} // nothing
+  close () { this.handler.dispose() }
 }
 
 test("subscribe-auth", () => {
@@ -459,7 +461,8 @@ test("subscribe-post", done => {
     readonly room = new Subscription(RoomObject)
 
     constructor (id :UUID) {
-      this.client = new Client(testLocator, (c, a) => new TestConnection(c, a, testStore, id, queue))
+      this.client = new Client(
+        testLocator, (c, a) => new TestConnection(c, a, testStore, id, queue))
       this.root.subscribe(this.client, [])
       this.user.subscribe(this.client, ["users", id])
 

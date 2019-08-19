@@ -1,6 +1,6 @@
-import {Disposable, log} from "../core/util"
+import {log} from "../core/util"
 import {Record} from "../core/data"
-import {DispatchFn, Subject} from "../core/react"
+import {DispatchFn, Mutable, Subject, Value} from "../core/react"
 import {Encoder, Decoder} from "../core/codec"
 import {DataSource, DKey, DObject, DObjectType, DQueueAddr, Path, pathToKey} from "./data"
 import {DownMsg, DownType, UpMsg, UpType, encodeUp, decodeDown} from "./protocol"
@@ -9,6 +9,9 @@ const DebugLog = false
 
 /** Uniquely identifies a data server; provides the info needed to establish a connection to it. */
 export type Address = {host :string, port :number, path :string}
+
+/** Converts `addr` to a URL. */
+export const addrToURL = (addr :Address) => `wss:${addr.host}:${addr.port}/${addr.path}`
 
 /** Resolves the address of the server that hosts the object at `path`. */
 export type Locator = (path :Path) => Subject<Address>
@@ -108,14 +111,25 @@ export class Client {
     }
   }
 
+  reportError (msg :string) {
+    console.warn(msg)
+  }
+
+  shutdown () {
+    for (const conn of this.conns.values()) conn.close()
+  }
+
   // TODO: when do we dispose connections?
 
   protected connFor (path :Path) :Subject<Connection> {
     const {locator, conns, connector} = this
     return locator(path).map(addr => {
-      let conn = conns.get(addr)
-      if (!conn) conns.set(addr, conn = connector(this, addr))
-      return conn
+      const conn = conns.get(addr)
+      if (conn) return conn
+      const nconn = connector(this, addr)
+      nconn.state.when(cs => cs === "closed", _ => conns.delete(addr))
+      conns.set(addr, nconn)
+      return nconn
     })
   }
 
@@ -132,19 +146,42 @@ export class Client {
       }
     })
   }
-
-  protected reportError (msg :string) {
-    console.warn(msg)
-  }
 }
 
-export abstract class Connection implements Disposable {
+export type CState = "connecting" | "connected" | "closed"
 
-  constructor (readonly client :Client, readonly addr :Address) {
-    this.connect(addr)
-  }
-
-  abstract dispose () :void
+export abstract class Connection {
+  abstract state :Value<CState>
   abstract sendMsg (msg :Uint8Array) :void
-  protected abstract connect (addr :Address) :void
+  abstract close () :void
 }
+
+class WSConnection extends Connection {
+  private readonly ws :WebSocket
+  readonly state = Mutable.local("connecting" as CState)
+
+  constructor (client :Client, addr :Address) {
+    super()
+    const ws = this.ws = new WebSocket(addrToURL(addr))
+    ws.binaryType = "arraybuffer"
+    ws.addEventListener("open", ev => {
+      this.state.update("connected")
+    })
+    ws.addEventListener("message", ev => {
+      client.recvMsg(new Uint8Array(ev.data))
+    })
+    ws.addEventListener("error", ev => {
+      client.reportError(`WebSocket error [url=${this.ws.url}, ev=${ev}]`)
+      this.state.update("closed")
+    })
+    ws.addEventListener("close", ev => {
+      this.state.update("closed")
+    })
+  }
+
+  sendMsg (msg :Uint8Array) { this.ws.send(msg) }
+  close () { this.ws.close() }
+}
+
+/** Creates websocket connections to the supplied `addr`, for `client`. */
+export const wsConnector :Connector = (client, addr) => new WSConnection(client, addr)
