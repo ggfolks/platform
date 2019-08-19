@@ -1,5 +1,6 @@
 import {dim2, rect, vec2} from "../core/math"
 import {Source, Value} from "../core/react"
+import {PMap} from "../core/util"
 import {getConstantNodeId} from "../graph/graph"
 import {InputEdge, InputEdges} from "../graph/node"
 import {Element, ElementConfig, ElementContext} from "./element"
@@ -43,6 +44,7 @@ export class GraphViewer extends AbsGroup {
         if (!elem) {
           const model = data.resolve(key)
           if (models) models.push(model)
+          const hasProperties = model.resolve<Value<ModelKey[]>>("propertyKeys").current.length > 0
           const hasInputs = model.resolve<Value<ModelKey[]>>("inputKeys").current.length > 0
           const hasOutputs = model.resolve<Value<ModelKey[]>>("outputKeys").current.length > 0
           const config = {
@@ -65,6 +67,7 @@ export class GraphViewer extends AbsGroup {
                   contents: {
                     type: "column",
                     offPolicy: "stretch",
+                    gap: hasProperties ? 5 : 0,
                     contents: [
                       {
                         type: "propertyview",
@@ -273,14 +276,18 @@ export class PropertyView extends VGroup {
             type: "row",
             contents: [
               {
-                type: "label",
+                type: "box",
                 constraints: {stretch: true},
-                text: model.resolve("name" as Spec<Value<string>>).map(name => name + ":"),
+                style: {halign: "left"},
+                contents: {
+                  type: "label",
+                  text: model.resolve("name" as Spec<Value<string>>).map(name => name + ":"),
+                },
               },
               {
                 type: "label",
                 constraints: {stretch: true},
-                text: model.resolve("value" as Spec<Value<any>>).map(String),
+                text: model.resolve("value" as Spec<Value<any>>).map(toLimitedString),
               },
             ],
           })
@@ -293,9 +300,17 @@ export class PropertyView extends VGroup {
   }
 }
 
+function toLimitedString (value :any) {
+  // round numbers to six digits after decimal
+  if (typeof value === "number") return String(Math.round(value * 1000000) / 1000000)
+  const string = String(value)
+  return string.length > 30 ? string.substring(0, 27) + "..." : string
+}
+
 /** Visualizes a node's input edges. */
 export interface EdgeViewConfig extends ElementConfig {
   type :"edgeview"
+  style :PMap<EdgeViewStyle>
 }
 
 /** Defines the styles that apply to [[EdgeView]]. */
