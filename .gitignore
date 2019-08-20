@@ -6,6 +6,7 @@ lib/data
 lib/entity
 lib/graph
 lib/input
+lib/node_modules
 lib/physics3
 lib/scene2
 lib/scene3
