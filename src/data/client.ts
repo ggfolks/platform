@@ -1,6 +1,7 @@
 import {log} from "../core/util"
+import {UUID} from "../core/uuid"
 import {Record} from "../core/data"
-import {DispatchFn, Mutable, Subject, Value} from "../core/react"
+import {DispatchFn, Emitter, Mutable, Stream, Subject, Value} from "../core/react"
 import {Encoder, Decoder} from "../core/codec"
 import {DataSource, DKey, DObject, DObjectType, DQueueAddr, Path, pathToKey} from "./data"
 import {DownMsg, DownType, UpMsg, UpType, encodeUp, decodeDown} from "./protocol"
@@ -10,8 +11,11 @@ const DebugLog = false
 /** Uniquely identifies a data server; provides the info needed to establish a connection to it. */
 export type Address = {host :string, port :number, path :string}
 
-/** Converts `addr` to a URL. */
-export const addrToURL = (addr :Address) => `wss:${addr.host}:${addr.port}/${addr.path}`
+/** Converts `addr` to a WebSocket URL. */
+export function addrToURL (addr :Address) :string {
+  const pcol = addr.host === "localhost" ? "ws" : "wss"
+  return `${pcol}:${addr.host}:${addr.port}/${addr.path}`
+}
 
 /** Resolves the address of the server that hosts the object at `path`. */
 export type Locator = (path :Path) => Subject<Address>
@@ -30,6 +34,8 @@ export class Client {
   private readonly resolved = new Map<string,Subject<DObject|Error>>()
   private readonly completers = new Map<number,DObjectCompleter>()
   private readonly encoder = new Encoder()
+  private readonly _errors = new Emitter<string>()
+  private readonly _id = Mutable.localOpt<UUID>()
   private nextOid = 1
 
   private readonly resolver = {
@@ -54,7 +60,10 @@ export class Client {
     }
   }
 
-  constructor (readonly locator :Locator, readonly connector :Connector) {}
+  constructor (readonly locator :Locator, readonly connector :Connector = wsConnector) {}
+
+  get id () :Value<UUID|undefined> { return this._id }
+  get errors () :Stream<string> { return this._errors }
 
   create<T extends DObject> (
     path :Path, cprop :string, key :DKey, otype :DObjectType<T>, ...args :any[]
@@ -75,6 +84,7 @@ export class Client {
           if (DebugLog) log.debug("Got SUB rsp", "oid", oid, "res", res);
           if (res instanceof DObject) this.objects.set(oid, res)
           disp(res as T|Error)
+          if (res instanceof Error) this.reportError(String(res))
         }
       })
       this.sendUp(path, {type: UpType.SUB, path, oid})
@@ -96,23 +106,27 @@ export class Client {
   }
 
   handleDown (msg :DownMsg) {
-    if (msg.type === DownType.SUBOBJ) {
+    if (msg.type === DownType.AUTHED) {
+      this._id.update(msg.id)
+    } else if (msg.type === DownType.SUBOBJ) {
       const comp = this.completers.get(msg.oid)
       if (comp) comp.complete(msg.obj)
-      else this.reportError(`Unexpected SUBOBJ response [oid=${msg.oid}]`)
+      else this.reportError(log.format("Unexpected SUBOBJ response", "oid", msg.oid))
     } else if (msg.type === DownType.SUBERR) {
       const comp = this.completers.get(msg.oid)
       if (comp) comp.complete(new Error(msg.cause))
-      else this.reportError(`Unexpected SUBERR response [oid=${msg.oid}, cause=${msg.cause}]`)
+      else this.reportError(
+        log.format("Unexpected SUBERR response", "oid", msg.oid, "cause", msg.cause))
     } else {
       const obj = this.objects.get(msg.oid)
       if (obj) obj.applySync(msg)
-      else throw new Error(`Unexpected SYNC msg [oid=${msg.oid}, type=${msg.type}]`)
+      else throw new Error(log.format("Unexpected SYNC msg", "oid", msg.oid, "type", msg.type))
     }
   }
 
   reportError (msg :string) {
     console.warn(msg)
+    this._errors.emit(msg)
   }
 
   shutdown () {
@@ -171,7 +185,7 @@ class WSConnection extends Connection {
       client.recvMsg(new Uint8Array(ev.data))
     })
     ws.addEventListener("error", ev => {
-      client.reportError(`WebSocket error [url=${this.ws.url}, ev=${ev}]`)
+      client.reportError(log.format("WebSocket error", "url", ws.url, "ev", ev))
       this.state.update("closed")
     })
     ws.addEventListener("close", ev => {
@@ -179,7 +193,15 @@ class WSConnection extends Connection {
     })
   }
 
-  sendMsg (msg :Uint8Array) { this.ws.send(msg) }
+  sendMsg (msg :Uint8Array) {
+    const {state, ws} = this
+    switch (state.current) {
+    case "connecting": state.whenOnce(st => st === "connected", _ => ws.send(msg)) ; break
+    case "connected": ws.send(msg) ; break
+    case "closed": log.warn(`Can't send message on closed connection [url=${ws.url}]`) ; break
+    }
+  }
+
   close () { this.ws.close() }
 }
 

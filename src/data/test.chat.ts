@@ -206,7 +206,7 @@ export class RootObject extends DObject {
   @dmap("size32", "record")
   publicRooms = this.map<number, RoomInfo>()
 
-  @dcollection("string", UserObject, "uuid")
+  @dcollection("uuid", UserObject, "uuid")
   users = this.collection<UUID, UserObject>()
 
   @dcollection("size32", RoomObject, "sequential")
@@ -396,7 +396,7 @@ class TestConnection extends Connection {
 
   sendMsg (data :Uint8Array) {
     const cdata = data.slice()
-    this.runq.push(() => this.handler.handleMsg(cdata))
+    this.runq.push(() => this.handler.recvMsg(cdata))
   }
 
   close () { this.handler.dispose() }

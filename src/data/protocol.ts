@@ -1,4 +1,5 @@
 import {log} from "../core/util"
+import {UUID} from "../core/uuid"
 import {Record} from "../core/data"
 import {Encoder, Decoder, KeyType, ValueType} from "../core/codec"
 import {Mutable} from "../core/react"
@@ -22,8 +23,9 @@ export type UpMsg = {type :UpType.SUB, path :Path, oid :number}
                   | {type :UpType.POST, queue :DQueueAddr, msg :Record}
                   | OidSyncMsg
 
-export const enum DownType { /* SyncType is 0-4 */ SUBOBJ = 5, SUBERR }
-export type DownMsg = {type :DownType.SUBOBJ, oid :number, obj :DObject}
+export const enum DownType { /* SyncType is 0-4 */ AUTHED = 5, SUBOBJ, SUBERR }
+export type DownMsg = {type :DownType.AUTHED, id :UUID}
+                    | {type :DownType.SUBOBJ, oid :number, obj :DObject}
                     | {type :DownType.SUBERR, oid :number, cause :string}
                     | OidSyncMsg
 
@@ -67,6 +69,9 @@ export function encodeDown (rcpt :Auth, dnm :DownMsg, enc :Encoder) {
   if (DebugLog) log.debug("encodeDown", "msg", dnm)
   enc.addValue(dnm.type, "int8")
   switch (dnm.type) {
+  case DownType.AUTHED:
+    enc.addValue(dnm.id, "uuid")
+    break
   case DownType.SUBOBJ:
     enc.addValue(dnm.oid, "size32")
     addObject(rcpt, dnm.obj, enc)
@@ -138,6 +143,8 @@ export function decodeDown (resolver :DownResolver, dec :Decoder) :DownMsg {
   const type = dec.getValue("int8")
   if (DebugLog) log.debug("decodeDown", "type", type)
   switch (type) {
+  case DownType.AUTHED:
+    return {type, id: dec.getValue("uuid")}
   case DownType.SUBOBJ:
     const oid = dec.getValue("size32")
     return {type, oid, obj: getObject(dec, oid, resolver)}

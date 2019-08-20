@@ -2,15 +2,16 @@ import {Remover, NoopRemover, log} from "../core/util"
 import {UUID, UUID0, uuidv1} from "../core/uuid"
 import {Record} from "../core/data"
 import {Mutable, Subject, Value} from "../core/react"
+import {RSet, MutableSet} from "../core/rcollect"
 import {Encoder, Decoder} from "../core/codec"
 import {CollectionMeta, getPropMetas} from "./meta"
 import {Auth, AutoKey, DataSource, DKey, DObject, DObjectType, DQueueAddr, MetaMsg, Path,
         Subscriber, findObjectType, pathToKey} from "./data"
-import {DownType, DownMsg, UpType, SyncMsg, decodeUp, encodeDown} from "./protocol"
+import {DownType, DownMsg, UpMsg, UpType, SyncMsg, decodeUp, encodeDown} from "./protocol"
 
 import WebSocket from "ws"
 
-const sysAuth :Auth = {id: UUID0, isSystem: true}
+export const sysAuth :Auth = {id: UUID0, isSystem: true}
 
 const DebugLog = false
 
@@ -159,8 +160,37 @@ export abstract class Session {
     this.auth = {id, isSystem: false}
   }
 
-  handleMsg (msgData :Uint8Array) {
-    const msg = decodeUp(this.resolver, new Decoder(msgData))
+  recvMsg (msgData :Uint8Array) {
+    let msg :UpMsg
+    try {
+      msg = decodeUp(this.resolver, new Decoder(msgData))
+    } catch (err) {
+      log.warn("Failed to decode message", "data", msgData, err)
+      return
+    }
+    try {
+      this.handleMsg(msg)
+    } catch (err) {
+      log.warn("Failed to handle message", "msg", msg, err)
+    }
+  }
+
+  sendDown (msg :DownMsg) {
+    try {
+      encodeDown(this.auth, msg, this.encoder)
+    } catch (err) {
+      this.encoder.reset()
+      log.warn("Failed to encode", "msg", msg, err)
+      return
+    }
+    this.sendMsg(this.encoder.finish())
+  }
+
+  dispose () {
+    for (const sub of this.subscrips.values()) sub.unsub()
+  }
+
+  protected handleMsg (msg :UpMsg) {
     if (DebugLog) log.debug("handleMsg", "msg", msg)
     switch (msg.type) {
     case UpType.SUB:
@@ -176,8 +206,8 @@ export abstract class Session {
           if (!unsub) sendErr(new Error("Access denied."))
           else {
             sub.unsub = () => {
-              this.store.postMeta(res, {type: "unsubscribed", id: this.id})
               unsub()
+              this.store.postMeta(res, {type: "unsubscribed", id: this.id})
             }
             this.subscrips.set(oid, sub)
             this.sendDown({type: DownType.SUBOBJ, oid, obj: res})
@@ -207,23 +237,7 @@ export abstract class Session {
     }
   }
 
-  sendDown (msg :DownMsg) {
-    try {
-      encodeDown(this.auth, msg, this.encoder)
-    } catch (err) {
-      this.encoder.reset()
-      log.warn("Failed to encode", "msg", msg, err)
-      return
-    }
-    this.sendMsg(this.encoder.finish())
-  }
-
-  abstract sendMsg (msg :Uint8Array) :void
-
-  dispose () {
-    for (const sub of this.subscrips.values()) sub.unsub()
-    this.subscrips.clear()
-  }
+  protected abstract sendMsg (msg :Uint8Array) :void
 }
 
 type ServerConfig = {
@@ -238,19 +252,26 @@ class WSSession extends Session {
   constructor (store :DataStore, readonly addr :string, readonly ws :WebSocket) {
     super(store, uuidv1()) // TODO: auth
 
-    ws.on("open", () => this._state.update("open"))
+    const onOpen = () => {
+      this._state.update("open")
+      console.log(`Authed ${this.auth.id}`)
+      this.sendDown({type: DownType.AUTHED, id: this.auth.id})
+    }
+    if (ws.readyState === WebSocket.OPEN) onOpen()
+    else ws.on("open", onOpen)
+
     ws.on("message", msg => {
       // TODO: do we need to check readyState === CLOSING and drop late messages?
-      if (msg instanceof ArrayBuffer) this.handleMsg(new Uint8Array(msg))
+      if (msg instanceof ArrayBuffer) this.recvMsg(new Uint8Array(msg))
       else log.warn("Got non-binary message", "sess", this, "msg", msg)
     })
     ws.on("close", (code, reason) => {
-      log.info("Session closed", "code", code, "reason", reason)
-      this._state.update("closed")
+      log.info("Session closed", "sess", this, "code", code, "reason", reason)
+      this.didClose()
     })
     ws.on("error", error => {
       log.info("Session failed", "error", error)
-      this._state.update("closed")
+      this.didClose()
     })
     // TODO: ping/pong & session timeout
 
@@ -259,19 +280,25 @@ class WSSession extends Session {
 
   get state () :Value<SessionState> { return this._state }
 
-  sendMsg (msg :Uint8Array) {
-    this.ws.send(msg, err => {
-      if (err) log.warn("Message send failed", "sess", this, err) // TODO: terminate?
-    })
-  }
-
   close () {
-    this.dispose()
     this.ws.terminate()
+    this.didClose()
   }
 
   toString () {
     return `${this.id}/${this.addr}`
+  }
+
+  protected sendMsg (msg :Uint8Array) {
+    if (this.ws.readyState === WebSocket.OPEN) this.ws.send(msg, err => {
+      if (err) log.warn("Message send failed", "sess", this, err) // TODO: terminate?
+    })
+    else log.warn("Dropping message for unconnected session", "sess", this)
+  }
+
+  protected didClose () {
+    this._state.update("closed")
+    this.dispose()
   }
 }
 
@@ -279,7 +306,7 @@ export type ServerState = "initializing" | "listening" | "terminating" | "termin
 
 export class Server {
   private readonly wss :WebSocket.Server
-  private readonly sessions = new Set<WSSession>()
+  private readonly _sessions = MutableSet.local<WSSession>()
   private readonly _state = Mutable.local("initializing" as ServerState)
 
   constructor (readonly store :DataStore, config :ServerConfig = {}) {
@@ -297,17 +324,19 @@ export class Server {
       // parsing "X-Forwarded-For: <client>, <proxy1>, <proxy2>, ..."
       const addr = (xff ? xff.split(/\s*,\s*/)[0] : req.connection.remoteAddress) || "<unknown>"
       const sess = new WSSession(this.store, addr, ws)
-      this.sessions.add(sess)
-      sess.state.when(ss => ss === "closed", () => this.sessions.delete(sess))
+      this._sessions.add(sess)
+      sess.state.when(ss => ss === "closed", () => this._sessions.delete(sess))
     })
     wss.on("error", error => log.warn("Server error", error)) // TODO: ?
   }
+
+  get sessions () :RSet<Session> { return this._sessions }
 
   get state () :Value<ServerState> { return this._state }
 
   shutdown () {
     this._state.update("terminating")
-    for (const sess of this.sessions) sess.close()
+    for (const sess of this._sessions) sess.close()
     this.wss.close(() => this._state.update("terminated"))
   }
 }
