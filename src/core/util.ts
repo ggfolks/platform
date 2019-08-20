@@ -128,11 +128,21 @@ export const Timestamp = {
 
 export type Level = "debug" | "info" | "warn" | "error"
 
+function hasToString (obj :any) {
+  return typeof obj === "object" && Object.getPrototypeOf(obj).toString !== Object.prototype.toString
+}
+
 export function formatArgs (...args :any[]) :string {
   let str = ""
   for (let ii = 0, ll = args.length - (args.length%2); ii < ll; ii += 2) {
     if (str.length > 0) str += ", "
-    str += `${args[ii]}=${JSON.stringify(args[ii+1])}`
+    const val = args[ii+1]
+    try {
+      if (hasToString(val)) str += `${args[ii]}=${val}`
+      else str += `${args[ii]}=${JSON.stringify(val)}`
+    } catch (err) {
+      str += `${args[ii]}=${val}`
+    }
   }
   return str
 }
@@ -145,6 +155,7 @@ export function logAt (level :Level, msg :string, ...args :any[]) {
 }
 
 export const log = {
+  format: (msg :string, ...args :any[]) => `${msg} [${formatArgs(...args)}]`,
   debug: (msg :string, ...args :any[]) => logAt("debug", msg, ...args),
   info : (msg :string, ...args :any[]) => logAt("info" , msg, ...args),
   warn : (msg :string, ...args :any[]) => logAt("warn" , msg, ...args),
