@@ -54,6 +54,7 @@ function addString (enc :Encoder, text :string) {
       return false
     }
     enc.data.setUint16(pos, result.written)
+    enc.pos = tpos + result.written
     return true
   }
   // leave space for the length
