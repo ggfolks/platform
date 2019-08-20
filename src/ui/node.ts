@@ -42,7 +42,8 @@ class UINode extends Node {
         while (graph.ctx.subgraph) graph = graph.ctx.subgraph.graph
         const ctx = this.graph.ctx as UINodeContext
         let root :Root | undefined
-        const ui = new UI(ctx.theme, ctx.styles, ctx.image, new Model({
+        const ui = new UI(ctx.theme, ctx.styles, ctx.image)
+        root = ui.createRoot(this.config.root, new Model({
           ...this.config.model,
           remove: () => {
             if (root) {
@@ -88,7 +89,6 @@ class UINode extends Node {
             }
           }),
         }))
-        root = ui.createRoot(this.config.root)
         if (this.config.size) {
           root.pack(this.config.size[0], this.config.size[1])
         } // TODO: else pack to preferred size

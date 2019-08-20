@@ -7,6 +7,7 @@ import {
   Element,
   ElementConfig,
   ElementContext,
+  ElementFactory,
   StyleScope,
   Root,
   RootConfig,
@@ -73,19 +74,17 @@ class StyleResolver {
 
 export class UI {
   private resolvers = new Map<string,StyleResolver>()
-
-  readonly ctx :ElementContext
-
-  constructor (private theme :Theme, defs :StyleDefs, image :ImageResolver, model :Model) {
-    this.ctx = {
-      model,
-      style: new StyleContext(defs, image),
-      elem: {create: (ctx, parent, config) => this.createElement(ctx, parent, config)},
-    }
+  private readonly style :StyleContext
+  private readonly elem :ElementFactory = {
+    create: (ctx, parent, config) => this.createElement(ctx, parent, config)
   }
 
-  createRoot (config :RootConfig) :Root {
-    return new Root(this.ctx, config)
+  constructor (private theme :Theme, defs :StyleDefs, image :ImageResolver) {
+    this.style = new StyleContext(defs, image)
+  }
+
+  createRoot (config :RootConfig, model :Model) :Root {
+    return new Root({model, style: this.style, elem: this.elem}, config)
   }
 
   createElement (ctx :ElementContext, parent :Element, config :ElementConfig) :Element {

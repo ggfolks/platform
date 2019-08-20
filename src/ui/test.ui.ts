@@ -1,6 +1,5 @@
 import {Subject} from "../core/react"
 import {StyleDefs} from "./style"
-import {Model} from "./model"
 import {UI, Theme} from "./ui"
 
 const styles :StyleDefs = {
@@ -52,7 +51,7 @@ const noopResolver = {
 }
 
 test("style resolution", () => {
-  const ui = new UI(theme, styles, noopResolver, new Model({}))
+  const ui = new UI(theme, styles, noopResolver)
 
   const lstyles = {stroke: "$lightGray", disabled: {font: "$italic"}}
   const scope = {id: "button", states: ["normal", "disabled", "pressed"]}
