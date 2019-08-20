@@ -140,11 +140,22 @@ export class SceneSystem extends System {
                readonly hovers? :Component<HoverMap>,
                readonly pointers? :RMap<number, Pointer>) {
     super(domain, Matcher.hasAllC(trans.id, obj.id))
+    this.scene.autoUpdate = false
+  }
+
+  /** Updates the scene. */
+  update () {
+    this.onEntities(id => {
+      const obj = this.obj.read(id)
+      this.trans.readPosition(id, obj.position)
+      this.trans.readQuaternion(id, obj.quaternion)
+      this.trans.readScale(id, obj.scale)
+    })
+    this.scene.updateMatrixWorld()
   }
 
   /** Renders the scene. */
   render (renderer :WebGLRenderer) {
-    this.update()
     renderer.getSize(rendererSize)
     const aspect = rendererSize.x / rendererSize.y
     if (this.hovers && this.pointers) {
@@ -294,16 +305,6 @@ export class SceneSystem extends System {
     }
     if (pointer.pressed) this._pressedObjects.set(identifier, object)
     return true
-  }
-
-  /** Updates the transforms of the scene.  Called automatically by [[render]]. */
-  update () {
-    this.onEntities(id => {
-      const obj = this.obj.read(id)
-      this.trans.readPosition(id, obj.position)
-      this.trans.readQuaternion(id, obj.quaternion)
-      this.trans.readScale(id, obj.scale)
-    })
   }
 
   protected added (id :ID, config :EntityConfig) {
