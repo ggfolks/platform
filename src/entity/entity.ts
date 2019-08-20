@@ -1,8 +1,8 @@
 import {Clock} from "../core/clock"
 import {refEquals} from "../core/data"
-import {BitSet, PMap} from "../core/util"
+import {BitSet, Disposable, PMap, Remover} from "../core/util"
 import {vec2} from "../core/math"
-import {ChangeFn, Eq, Stream, Emitter, Value} from "../core/react"
+import {ChangeFn, Eq, Subject, Stream, Emitter, Value} from "../core/react"
 import {Graph} from "../graph/graph"
 import {NodeContext} from "../graph/node"
 import {EntityNodeContext} from "./node"
@@ -196,6 +196,53 @@ export abstract class Component<T> {
 
 export interface ValueComponentConfig<T> extends ComponentConfig<T> {
   initial? :T
+}
+
+/** Provides a constant value for all entities. */
+export class ConstantComponent<T> extends Component<T> {
+
+  constructor (readonly id :string, readonly value :T) { super() }
+
+  read (index :number) { return this.value }
+  update (index :number, value :T) {
+    throw new Error(`Cannot update constant component [id=${this.id}]`)
+  }
+
+  added (id :ID, config? :ValueComponentConfig<T>) {}
+  removed (id :ID) {}
+}
+
+/** Provides a constant value for all entities, which is obtained from a [[Subject]]. The component
+  * must not be used (i.e. entities must not be created which contain it) until the subject is known
+  * to have completed. This component must also be disposed when it is no longer in use, this will
+  * cause it to cease observing its subject so that it too may be disposed. */
+export class DeferredComponent<T> extends Component<T> implements Disposable {
+  private release :Remover
+  private value! :T
+  private gotValue = false
+
+  constructor (readonly id :string, source :Subject<T>) {
+    super()
+    this.release = source.onValue(value => {
+      this.value = value
+      this.gotValue = true
+    })
+  }
+
+  read (index :number) {
+    if (this.gotValue) return this.value
+    throw new Error(`Deferred component not ready [id=${this.id}]`)
+  }
+  update (index :number, value :T) {
+    throw new Error(`Cannot update constant component [id=${this.id}]`)
+  }
+
+  added (id :ID, config? :ValueComponentConfig<T>) {}
+  removed (id :ID) {}
+
+  dispose () {
+    this.release()
+  }
 }
 
 /** Maintains simple JavaScript values in a single flat array.
