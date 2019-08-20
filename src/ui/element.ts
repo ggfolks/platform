@@ -427,7 +427,7 @@ export class Control extends Element {
   findTaggedChild (tag :string) :Element|undefined {
     return super.findTaggedChild(tag) || this.contents.findTaggedChild(tag)
   }
-  
+
   dispose () {
     super.dispose()
     this.contents.dispose()

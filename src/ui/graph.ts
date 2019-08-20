@@ -1,5 +1,5 @@
 import {dim2, rect, vec2} from "../core/math"
-import {Source, Value} from "../core/react"
+import {Mutable, Value} from "../core/react"
 import {PMap} from "../core/util"
 import {getConstantNodeId} from "../graph/graph"
 import {InputEdge, InputEdges} from "../graph/node"
@@ -9,24 +9,90 @@ import {List} from "./list"
 import {Model, ModelKey, ModelProvider, Spec} from "./model"
 import {DefaultPaint, PaintConfig} from "./style"
 
-/** Visualizes a graph. */
+/** A navigable graph viewer. */
 export interface GraphViewerConfig extends ElementConfig {
   type :"graphviewer"
-  data :Spec<ModelProvider>
-  keys :Spec<Source<IterableIterator<string>>>
+}
+
+export class GraphViewer extends AbsGroup {
+  readonly contents :Element[] = []
+
+  private _stack :Element[] = []
+  private _poppable = Mutable.local(false)
+
+  constructor (readonly ctx :ElementContext, parent :Element, readonly config :GraphViewerConfig) {
+    super(ctx, parent, config)
+    this.contents.push(
+      ctx.elem.create(ctx, this, {
+        type: "scrollview",
+        contents: {type: "graphview"},
+        constraints: {stretch: true},
+      }),
+      ctx.elem.create(ctx, this, {
+        type: "box",
+        visible: this._poppable,
+        contents: {
+          type: "button",
+          onClick: () => this.pop(),
+          contents: {
+            type: "box",
+            contents: {type: "label", text: "backButton.text"},
+          },
+        },
+        constraints: {stretch: true},
+        style: {halign: "left", valign: "top"},
+      }),
+      ctx.elem.create(ctx, this, {
+        type: "box",
+        contents: {
+          type: "button",
+          onClick: "remove",
+          contents: {
+            type: "box",
+            contents: {type: "label", text: "closeButton.text"},
+          },
+        },
+        constraints: {stretch: true},
+        style: {halign: "right", valign: "top"},
+      }),
+    )
+    this._stack.push(this.contents[0])
+  }
+
+  push (model :Model) {
+    this._stack.push(this.contents[0] = this.ctx.elem.create({...this.ctx, model}, this, {
+      type: "scrollview",
+      contents: {type: "graphview"},
+      constraints: {stretch: true},
+    }))
+    this._poppable.update(true)
+    this.invalidate()
+  }
+
+  pop () {
+    this._stack.pop()
+    this.contents[0] = this._stack[this._stack.length - 1]
+    this._poppable.update(this._stack.length > 1)
+    this.invalidate()
+  }
+}
+
+/** Visualizes a graph. */
+export interface GraphViewConfig extends ElementConfig {
+  type :"graphview"
 }
 
 type InputValue = InputEdge<any> | InputEdges<any>
 
-export class GraphViewer extends AbsGroup {
+export class GraphView extends AbsGroup {
   readonly elements = new Map<string, {node :Element, edges :Element}>()
   readonly contents :Element[] = []
 
-  constructor (ctx :ElementContext, parent :Element, readonly config :GraphViewerConfig) {
+  constructor (ctx :ElementContext, parent :Element, readonly config :GraphViewConfig) {
     super(ctx, parent, config)
-    const data = ctx.model.resolve(config.data)
+    const data = ctx.model.resolve("nodeData" as Spec<ModelProvider>)
     let models :Model[] | null = []
-    this.disposer.add(ctx.model.resolve(config.keys).onValue(keys => {
+    this.disposer.add(ctx.model.resolve("nodeKeys" as Spec<Value<string[]>>).onValue(keys => {
       const {contents, elements} = this
       // first dispose no longer used elements
       const kset = new Set(keys)
@@ -47,6 +113,24 @@ export class GraphViewer extends AbsGroup {
           const hasProperties = model.resolve<Value<ModelKey[]>>("propertyKeys").current.length > 0
           const hasInputs = model.resolve<Value<ModelKey[]>>("inputKeys").current.length > 0
           const hasOutputs = model.resolve<Value<ModelKey[]>>("outputKeys").current.length > 0
+
+          // special handling for subgraphs
+          const subgraphButton :ElementConfig[] = []
+          if (model.resolve<Value<string>>("type").current === "subgraph") {
+            subgraphButton.push({
+              type: "button",
+              onClick: () => {
+                const graphViewer = parent.parent as GraphViewer
+                const subgraph = ctx.model.resolve("subgraph" as Spec<ModelProvider>)
+                graphViewer.push(subgraph.resolve(key))
+              },
+              contents: {
+                type: "box",
+                scopeId: "nodeButton",
+                contents: {type: "label", text: Value.constant("Open")},
+              },
+            })
+          }
           const config = {
             type: "box",
             constraints: {position: [0, 0]},
@@ -67,8 +151,9 @@ export class GraphViewer extends AbsGroup {
                   contents: {
                     type: "column",
                     offPolicy: "stretch",
-                    gap: hasProperties ? 5 : 0,
+                    gap: hasProperties || subgraphButton.length ? 5 : 0,
                     contents: [
+                      ...subgraphButton,
                       {
                         type: "propertyview",
                         scopeId: "nodeProperties",
@@ -145,7 +230,7 @@ export class GraphViewer extends AbsGroup {
   }
 
   private _layoutGraph (keys :string[], models :Model[]) {
-    const graphViewer = this
+    const graphView = this
     const horizontalGap = 20
     class LayoutNode {
       constructor (readonly inputs :string[]) {}
@@ -167,7 +252,7 @@ export class GraphViewer extends AbsGroup {
               continue
             }
             layoutNodes.delete(key)
-            const element = graphViewer.elements.get(key)!.node
+            const element = graphView.elements.get(key)!.node
             column.elements.push(element)
             const size = element.preferredSize(-1, -1)
             column.width = Math.max(column.width, size[0])
@@ -420,8 +505,8 @@ export class EdgeView extends Element {
   }
 
   private _requireValidatedNode (nodeId :string) :Element {
-    const viewer = this.requireParent as GraphViewer
-    const node = viewer.elements.get(nodeId)!.node
+    const view = this.requireParent as GraphView
+    const node = view.elements.get(nodeId)!.node
     const position = (node.config.constraints as AbsConstraints).position!
     const size = node.preferredSize(-1, -1)
     node.setBounds(rect.fromValues(position[0], position[1], size[0], size[1]))
@@ -430,8 +515,8 @@ export class EdgeView extends Element {
   }
 
   private _requireEdges (nodeId :string) :Element {
-    const viewer = this.requireParent as GraphViewer
-    return viewer.elements.get(nodeId)!.edges
+    const view = this.requireParent as GraphView
+    return view.elements.get(nodeId)!.edges
   }
 
   protected relayout () {}

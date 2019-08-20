@@ -115,10 +115,11 @@ abstract class SubgraphConfig implements NodeConfig {
 }
 
 export class Subgraph extends Node {
-  _containedGraph :Graph
-  _containedOutputs :Map<string, InputEdge<any>> = new Map()
-  _inputsMeta :PMap<InputEdgeMeta> = {}
-  _outputsMeta :PMap<EdgeMeta> = {}
+  readonly containedGraph :Graph
+
+  private _containedOutputs :Map<string, InputEdge<any>> = new Map()
+  private _inputsMeta :PMap<InputEdgeMeta> = {}
+  private _outputsMeta :PMap<EdgeMeta> = {}
 
   get inputsMeta () {
     return this._inputsMeta
@@ -143,12 +144,12 @@ export class Subgraph extends Node {
         this._outputsMeta[value.name] = {type: "any"} // TODO: infer
       }
     }
-    this._disposer.add(this._containedGraph = new Graph(subctx, config.graph))
-    this._disposer.add(graph.clock.onValue(clock => this._containedGraph.update(clock)))
+    this._disposer.add(this.containedGraph = new Graph(subctx, config.graph))
+    this._disposer.add(graph.clock.onValue(clock => this.containedGraph.update(clock)))
   }
 
   connect () {
-    this._containedGraph.connect()
+    this.containedGraph.connect()
   }
 
   protected _createOutput (name :string | undefined, defaultValue :any) {
@@ -160,7 +161,7 @@ export class Subgraph extends Node {
       if (!this._containedOutputs.has(name)) throw new Error("Unknown output: " + name)
       edge = this._containedOutputs.get(name)
     }
-    return this._containedGraph.getValue(edge, defaultValue)
+    return this.containedGraph.getValue(edge, defaultValue)
   }
 }
 

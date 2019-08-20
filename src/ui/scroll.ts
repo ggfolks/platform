@@ -7,6 +7,8 @@ export interface ScrollViewConfig extends ControlConfig {
   type :"scrollview"
 }
 
+const transformedPos = vec2.create()
+
 export class ScrollView extends Control {
   private _offset = Mutable.local(vec2.create())
   private _scale = Mutable.local(1)
@@ -19,6 +21,15 @@ export class ScrollView extends Control {
   }
 
   handleMouseDown (event :MouseEvent, pos :vec2) :MouseInteraction|undefined {
+    vec2.set(
+      transformedPos,
+      (pos[0] + this._offset.current[0]) / this._scale.current,
+      (pos[1] + this._offset.current[1]) / this._scale.current,
+    )
+    if (rect.contains(this.contents.bounds, transformedPos)) {
+      const interaction = this.contents.handleMouseDown(event, transformedPos)
+      if (interaction) return interaction
+    }
     if (event.button !== 0) return undefined
     const basePos = vec2.clone(pos)
     const baseOffset = this._offset.current
