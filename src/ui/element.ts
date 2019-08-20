@@ -480,11 +480,12 @@ export class Host implements Disposable {
     this.rootAdded(root, origin, ii)
   }
 
-  removeRoot (root :Root) {
+  removeRoot (root :Root, dispose = true) {
     const idx = this.roots.findIndex(ro => ro[0] === root)
     if (idx >= 0) {
       const ro = this.roots.splice(idx, 1)[0]
       this.rootRemoved(root, ro[1], idx)
+      if (dispose) root.dispose()
     }
   }
 
