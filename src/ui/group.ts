@@ -60,7 +60,8 @@ abstract class Group extends Element {
 export type AbsConstraints = {
   position? :number[],
   size? :number[],
-  stretch? :boolean,
+  stretchX? :boolean,
+  stretchY? :boolean,
 }
 
 function absConstraints (elem :Element) :AbsConstraints {
@@ -97,27 +98,25 @@ export abstract class AbsGroup extends Group {
     dim2.set(into, 0, 0)
     for (const element of this.contents) {
       const constraints = absConstraints(element)
-      if (constraints.stretch) {
-        dim2.set(into, hintX, hintY)
-        return
-      }
       const position = absPosition(constraints)
       const size = constraints.size || element.preferredSize(hintX, hintY)
-      into[0] = Math.max(into[0], position[0] + size[0])
-      into[1] = Math.max(into[1], position[1] + size[1])
+      into[0] = Math.max(into[0], constraints.stretchX ? hintX : position[0] + size[0])
+      into[1] = Math.max(into[1], constraints.stretchY ? hintY : position[1] + size[1])
     }
   }
 
   protected relayout () {
     for (const element of this.contents) {
       const constraints = absConstraints(element)
-      if (constraints.stretch) {
-        element.setBounds(rect.set(tmpr, 0, 0, this.width, this.height))
-        continue
-      }
       const position = absPosition(constraints)
       const size = constraints.size || element.preferredSize(this.width, this.height)
-      element.setBounds(rect.set(tmpr, position[0], position[1], size[0], size[1]))
+      element.setBounds(rect.set(
+        tmpr,
+        this.x + position[0],
+        this.y + position[1],
+        constraints.stretchX ? this.width : size[0],
+        constraints.stretchY ? this.height : size[1],
+      ))
     }
   }
 }

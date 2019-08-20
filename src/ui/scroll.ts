@@ -1,4 +1,4 @@
-import {clamp, rect, vec2} from "../core/math"
+import {clamp, dim2, rect, vec2} from "../core/math"
 import {Mutable} from "../core/react"
 import {Control, ControlConfig, Element, ElementContext, MouseInteraction} from "./element"
 
@@ -23,8 +23,8 @@ export class ScrollView extends Control {
   handleMouseDown (event :MouseEvent, pos :vec2) :MouseInteraction|undefined {
     vec2.set(
       transformedPos,
-      (pos[0] + this._offset.current[0]) / this._scale.current,
-      (pos[1] + this._offset.current[1]) / this._scale.current,
+      (pos[0] - this.x + this._offset.current[0]) / this._scale.current + this.x,
+      (pos[1] - this.y + this._offset.current[1]) / this._scale.current + this.y,
     )
     if (rect.contains(this.contents.bounds, transformedPos)) {
       const interaction = this.contents.handleMouseDown(event, transformedPos)
@@ -65,6 +65,10 @@ export class ScrollView extends Control {
     ))
   }
 
+  protected computePreferredSize (hintX :number, hintY :number, into :dim2) {
+    dim2.set(into, hintX, hintY)
+  }
+
   protected relayout () {
     const size = this.contents.preferredSize(this.width, this.height)
     this.contents.setBounds(rect.fromValues(this.x, this.y, size[0], size[1]))
@@ -81,7 +85,10 @@ export class ScrollView extends Control {
     canvas.beginPath()
     canvas.rect(this.x, this.y, this.width, this.height)
     canvas.clip()
-    canvas.translate(-this._offset.current[0], -this._offset.current[1])
+    canvas.translate(
+      this.x - this.x * this._scale.current - this._offset.current[0],
+      this.y - this.y * this._scale.current - this._offset.current[1],
+    )
     canvas.scale(this._scale.current, this._scale.current)
     this.contents.render(canvas)
     canvas.restore()

@@ -14,53 +14,64 @@ export interface GraphViewerConfig extends ElementConfig {
   type :"graphviewer"
 }
 
-export class GraphViewer extends AbsGroup {
+export class GraphViewer extends VGroup {
   readonly contents :Element[] = []
 
   private _stack :Element[] = []
   private _poppable = Mutable.local(false)
 
   constructor (readonly ctx :ElementContext, parent :Element, readonly config :GraphViewerConfig) {
-    super(ctx, parent, config)
+    super(ctx, parent, {...config, offPolicy: "stretch"})
     this.contents.push(
+      ctx.elem.create(ctx, this, {
+        type: "box",
+        scopeId: "graphViewerHeader",
+        contents: {
+          type: "abslayout",
+          scopeId: "default",
+          contents: [
+            {
+              type: "box",
+              visible: this._poppable,
+              contents: {
+                type: "button",
+                onClick: () => this.pop(),
+                contents: {
+                  type: "box",
+                  contents: {type: "label", text: "backButton.text"},
+                },
+              },
+              constraints: {stretchX: true},
+              style: {halign: "left"},
+            },
+            {
+              type: "box",
+              contents: {
+                type: "button",
+                onClick: "remove",
+                contents: {
+                  type: "box",
+                  contents: {type: "label", text: "closeButton.text"},
+                },
+              },
+              constraints: {stretchX: true},
+              style: {halign: "right"},
+            },
+          ],
+        },
+        style: {halign: "stretch"},
+      }),
       ctx.elem.create(ctx, this, {
         type: "scrollview",
         contents: {type: "graphview"},
         constraints: {stretch: true},
       }),
-      ctx.elem.create(ctx, this, {
-        type: "box",
-        visible: this._poppable,
-        contents: {
-          type: "button",
-          onClick: () => this.pop(),
-          contents: {
-            type: "box",
-            contents: {type: "label", text: "backButton.text"},
-          },
-        },
-        constraints: {stretch: true},
-        style: {halign: "left", valign: "top"},
-      }),
-      ctx.elem.create(ctx, this, {
-        type: "box",
-        contents: {
-          type: "button",
-          onClick: "remove",
-          contents: {
-            type: "box",
-            contents: {type: "label", text: "closeButton.text"},
-          },
-        },
-        constraints: {stretch: true},
-        style: {halign: "right", valign: "top"},
-      }),
     )
-    this._stack.push(this.contents[0])
+    this._stack.push(this.contents[1])
   }
 
   push (model :Model) {
-    this._stack.push(this.contents[0] = this.ctx.elem.create({...this.ctx, model}, this, {
+    this._stack.push(this.contents[1] = this.ctx.elem.create({...this.ctx, model}, this, {
       type: "scrollview",
       contents: {type: "graphview"},
       constraints: {stretch: true},
@@ -71,7 +82,7 @@ export class GraphViewer extends AbsGroup {
 
   pop () {
     this._stack.pop()
-    this.contents[0] = this._stack[this._stack.length - 1]
+    this.contents[1] = this._stack[this._stack.length - 1]
     this._poppable.update(this._stack.length > 1)
     this.invalidate()
   }
@@ -115,9 +126,9 @@ export class GraphView extends AbsGroup {
           const hasOutputs = model.resolve<Value<ModelKey[]>>("outputKeys").current.length > 0
 
           // special handling for subgraphs
-          const subgraphButton :ElementConfig[] = []
+          const bodyContents :ElementConfig[] = []
           if (model.resolve<Value<string>>("type").current === "subgraph") {
-            subgraphButton.push({
+            bodyContents.push({
               type: "button",
               onClick: () => {
                 const graphViewer = parent.parent as GraphViewer
@@ -129,6 +140,59 @@ export class GraphView extends AbsGroup {
                 scopeId: "nodeButton",
                 contents: {type: "label", text: Value.constant("Open")},
               },
+            })
+          }
+          if (hasProperties) {
+            bodyContents.push({
+              type: "propertyview",
+              scopeId: "nodeProperties",
+              offPolicy: "stretch",
+            })
+          }
+          if (hasInputs || hasOutputs) {
+            bodyContents.push({
+              type: "row",
+              gap: 5,
+              contents: [
+                {
+                  type: "box",
+                  scopeId: "nodeEdges",
+                  constraints: {stretch: hasInputs},
+                  style: {halign: "left"},
+                  contents: {
+                    type: "list",
+                    tags: new Set(["inputs"]),
+                    gap: 1,
+                    offPolicy: "stretch",
+                    element: {
+                      type: "box",
+                      contents: {type: "label", text: "name"},
+                      style: {halign: "left"},
+                    },
+                    data: "input",
+                    keys: "inputKeys",
+                  },
+                },
+                {
+                  type: "box",
+                  scopeId: "nodeEdges",
+                  constraints: {stretch: hasOutputs},
+                  style: {halign: "right"},
+                  contents: {
+                    type: "list",
+                    tags: new Set(["outputs"]),
+                    gap: 1,
+                    offPolicy: "stretch",
+                    element: {
+                      type: "box",
+                      contents: {type: "label", text: "name"},
+                      style: {halign: "right"},
+                    },
+                    data: "output",
+                    keys: "outputKeys",
+                  },
+                }
+              ],
             })
           }
           const config = {
@@ -151,59 +215,8 @@ export class GraphView extends AbsGroup {
                   contents: {
                     type: "column",
                     offPolicy: "stretch",
-                    gap: hasProperties || subgraphButton.length ? 5 : 0,
-                    contents: [
-                      ...subgraphButton,
-                      {
-                        type: "propertyview",
-                        scopeId: "nodeProperties",
-                        offPolicy: "stretch",
-                      },
-                      {
-                        type: "row",
-                        gap: 5,
-                        contents: [
-                          {
-                            type: "box",
-                            scopeId: "nodeEdges",
-                            constraints: {stretch: hasInputs},
-                            style: {halign: "left"},
-                            contents: {
-                              type: "list",
-                              tags: new Set(["inputs"]),
-                              gap: 1,
-                              offPolicy: "stretch",
-                              element: {
-                                type: "box",
-                                contents: {type: "label", text: "name"},
-                                style: {halign: "left"},
-                              },
-                              data: "input",
-                              keys: "inputKeys",
-                            },
-                          },
-                          {
-                            type: "box",
-                            scopeId: "nodeEdges",
-                            constraints: {stretch: hasOutputs},
-                            style: {halign: "right"},
-                            contents: {
-                              type: "list",
-                              tags: new Set(["outputs"]),
-                              gap: 1,
-                              offPolicy: "stretch",
-                              element: {
-                                type: "box",
-                                contents: {type: "label", text: "name"},
-                                style: {halign: "right"},
-                              },
-                              data: "output",
-                              keys: "outputKeys",
-                            },
-                          }
-                        ],
-                      },
-                    ],
+                    gap: 5,
+                    contents: bodyContents,
                   },
                 },
               ],
@@ -452,12 +465,13 @@ export class EdgeView extends Element {
 
     const inputKeys = this._inputKeys.current
     const inputs = this._inputs.current
+    const view = this.requireParent as GraphView
     for (let ii = 0; ii < inputKeys.length; ii++) {
       const input = inputs[ii]
       if (input === undefined) continue
       const inputKey = inputKeys[ii]
       const source = inputList.contents[ii]
-      const from = vec2.fromValues(source.x, source.y + source.height / 2)
+      const from = vec2.fromValues(source.x - view.x, source.y + source.height / 2 - view.y)
       vec2.min(min, min, from)
       vec2.max(max, max, from)
       const to :vec2[] = []
@@ -481,7 +495,10 @@ export class EdgeView extends Element {
           target = outputList.getElement(targetEdges.getDefaultOutputKey())
         }
         if (target) {
-          const toPos = vec2.fromValues(target.x + target.width, target.y + target.height / 2)
+          const toPos = vec2.fromValues(
+            target.x + target.width - view.x,
+            target.y + target.height / 2 - view.y,
+          )
           to.push(toPos)
           vec2.min(min, min, toPos)
           vec2.max(max, max, toPos)
@@ -509,7 +526,7 @@ export class EdgeView extends Element {
     const node = view.elements.get(nodeId)!.node
     const position = (node.config.constraints as AbsConstraints).position!
     const size = node.preferredSize(-1, -1)
-    node.setBounds(rect.fromValues(position[0], position[1], size[0], size[1]))
+    node.setBounds(rect.fromValues(view.x + position[0], view.y + position[1], size[0], size[1]))
     node.validate()
     return node
   }
@@ -523,16 +540,19 @@ export class EdgeView extends Element {
 
   protected rerender (canvas :CanvasRenderingContext2D) {
     if (this._edges.length === 0) return
+    const view = this.requireParent as GraphView
+    canvas.translate(view.x, view.y)
     canvas.beginPath()
     for (const edge of this._edges) {
       for (const to of edge.to) {
         canvas.moveTo(edge.from[0], edge.from[1])
-        canvas.bezierCurveTo(to[0], edge.from[1], edge.from[0], to[1], to[0], to[1])
+        canvas.bezierCurveTo(edge.from[0] - 40, edge.from[1], to[0] + 40, to[1], to[0], to[1])
       }
     }
     this._paint.current.prepStroke(canvas)
     canvas.lineWidth = this._lineWidth
     canvas.stroke()
     canvas.lineWidth = 1
+    canvas.translate(-view.x, -view.y)
   }
 }

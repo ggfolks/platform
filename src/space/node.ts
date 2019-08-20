@@ -416,7 +416,7 @@ class UpdateScale extends EntityComponentNode<TransformComponent> {
 
 /** Transforms a point from world space to the local space of the entity. */
 abstract class WorldToLocalConfig implements EntityComponentConfig {
-  type = "updateScale"
+  type = "worldToLocal"
   @property() component = ""
   @inputEdge("Vector3") input = undefined
   @outputEdge("Vector3") output = undefined
