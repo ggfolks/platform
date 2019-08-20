@@ -19,11 +19,16 @@ export function isUUIDB (value :any) :boolean {
   return (value instanceof Uint8Array) && (value.length == 16)
 }
 
+// if we're running on Node, load the crypto module
+const isJest = typeof navigator !== "undefined" && navigator.userAgent.includes("jsdom")
+const isNode = isJest || typeof global !== "undefined"
+let ncrypto :any = isNode ? require("crypto") : undefined
+
 function fillRandom (array :Uint8Array) :Uint8Array {
   // if we're on a browser with WebCrypto, use that
-  if (crypto.getRandomValues) crypto.getRandomValues(array)
-  // @ts-ignore: if we're on Node, use their crypto stuff
-  else if (crypto.randomFillSync) crypto.randomFillSync(Buffer.from(array.buffer))
+  if (typeof crypto !== "undefined" && crypto.getRandomValues) crypto.getRandomValues(array)
+  // if we're on Node, use their crypto stuff
+  else if (typeof ncrypto !== "undefined") ncrypto.randomFillSync(Buffer.from(array.buffer))
   // otherwise make do with Math.random()
   else for (let ii = 0, r = 0, ll = array.length; ii < ll; ii += 1) {
     if ((ii & 0x03) === 0) r = Math.random() * 0x100000000
