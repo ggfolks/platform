@@ -3,7 +3,7 @@ import {UUID} from "../core/uuid"
 import {Record} from "../core/data"
 import {DispatchFn, Emitter, Mutable, Stream, Subject, Value} from "../core/react"
 import {Encoder, Decoder} from "../core/codec"
-import {DataSource, DKey, DObject, DObjectType, DQueueAddr, Path, pathToKey} from "./data"
+import {DataSource, DKey, DObject, DObjectType, DState, DQueueAddr, Path, pathToKey} from "./data"
 import {DownMsg, DownType, UpMsg, UpType, encodeUp, decodeDown} from "./protocol"
 
 const DebugLog = false
@@ -51,8 +51,9 @@ export class Client {
     }
   }
 
-  private dataSource (oid :number) :DataSource {
+  private dataSource (conn :Connection, oid :number) :DataSource {
     return {
+      state: conn.state.map(cstateToDState),
       create: (path, cprop, key, otype, ...args) => this.create(path, cprop, key, otype, ...args),
       resolve: (path, otype) => this.resolve(path, otype),
       post: (queue, msg) => this.post(queue, msg),
@@ -77,17 +78,19 @@ export class Client {
     const nsub = Subject.deriveSubject<T|Error>(disp => {
       const oid = this.nextOid
       this.nextOid = oid+1
-      this.completers.set(oid, {
-        info: {otype, source: this.dataSource(oid), path},
-        complete: res => {
-          this.completers.delete(oid)
-          if (DebugLog) log.debug("Got SUB rsp", "oid", oid, "res", res);
-          if (res instanceof DObject) this.objects.set(oid, res)
-          disp(res as T|Error)
-          if (res instanceof Error) this.reportError(String(res))
-        }
+      this.connFor(path).once(conn => {
+        this.completers.set(oid, {
+          info: {otype, source: this.dataSource(conn, oid), path},
+          complete: res => {
+            this.completers.delete(oid)
+            if (DebugLog) log.debug("Got SUB rsp", "oid", oid, "res", res);
+            if (res instanceof DObject) this.objects.set(oid, res)
+            disp(res as T|Error)
+            if (res instanceof Error) this.reportError(String(res))
+          }
+        })
+        this.sendUpVia(conn, path, {type: UpType.SUB, path, oid})
       })
-      this.sendUp(path, {type: UpType.SUB, path, oid})
       return () => {
         this.sendUp(path, {type: UpType.UNSUB, oid})
         this.objects.delete(oid)
@@ -148,21 +151,31 @@ export class Client {
   }
 
   protected sendUp (path :Path, msg :UpMsg) {
+    this.connFor(path).once(conn => this.sendUpVia(conn, path, msg))
+  }
+
+  protected sendUpVia (conn :Connection, path :Path, msg :UpMsg) {
     if (DebugLog) log.debug("sendUp", "path", path, "msg", msg);
-    this.connFor(path).once(conn => {
-      try {
-        encodeUp(msg, this.encoder)
-        conn.sendMsg(this.encoder.finish())
-      } catch (err) {
-        this.encoder.reset()
-        // TODO: maybe just log this?
-        throw err
-      }
-    })
+    try {
+      encodeUp(msg, this.encoder)
+      conn.sendMsg(this.encoder.finish())
+    } catch (err) {
+      this.encoder.reset()
+      // TODO: maybe just log this?
+      throw err
+    }
   }
 }
 
 export type CState = "connecting" | "connected" | "closed"
+
+function cstateToDState (cstate :CState) :DState {
+  switch (cstate) {
+  case "connecting": return "active"
+  case "connected": return "active"
+  case "closed": return "disconnected"
+  }
+}
 
 export abstract class Connection {
   abstract state :Value<CState>

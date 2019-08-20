@@ -167,7 +167,12 @@ export function findObjectType (rtype :DObjectType<any>, path :Path) :DObjectTyp
   return curtype
 }
 
+export type DState = "active" | "disconnected" | "disposed"
+
 export interface DataSource {
+
+  /** The connectedness state of this data source. */
+  state :Value<DState>
 
   create<T extends DObject> (
     path :Path, cprop :string, key :DKey, ...args :any[]
@@ -198,8 +203,9 @@ function metaMismatch (meta :PropMeta, expect :string) :never {
 
 export abstract class DObject implements Disposable {
   readonly metas = getPropMetas(Object.getPrototypeOf(this))
-  private readonly subscribers :Subscriber[] = []
   private metaIdx = firstNonConst(this.metas)
+  private readonly subscribers :Subscriber[] = []
+  private readonly disposed = Mutable.local(false)
 
   /** Returns the address of the queue named `name` on this object. Note: this must be called via
     * the concrete DObject subtype that declares the queue. */
@@ -214,6 +220,11 @@ export abstract class DObject implements Disposable {
 
   /** This object's key in its owning collection. */
   get key () { return this.path[this.path.length-1] }
+
+  /** This object's connectedness state. */
+  get state () :Value<DState> {
+    return Value.join2(this.source.state, this.disposed).map(([ss, d]) => d ? "disposed" : ss)
+  }
 
   /** Whether or not the client represented by `auth` can subscribe to this object. */
   canSubscribe (auth :Auth) :boolean { return auth.isSystem }
@@ -260,7 +271,9 @@ export abstract class DObject implements Disposable {
     }
   }
 
-  dispose () :void {} // TODO
+  dispose () {
+    this.disposed.update(true)
+  }
 
   toString () { return `${this.constructor.name}@${this.path}` }
 

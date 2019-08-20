@@ -5,7 +5,7 @@ import {Mutable, Subject, Value} from "../core/react"
 import {RSet, MutableSet} from "../core/rcollect"
 import {Encoder, Decoder} from "../core/codec"
 import {CollectionMeta, getPropMetas} from "./meta"
-import {Auth, AutoKey, DataSource, DKey, DObject, DObjectType, DQueueAddr, MetaMsg, Path,
+import {Auth, AutoKey, DataSource, DKey, DObject, DObjectType, DState, DQueueAddr, MetaMsg, Path,
         Subscriber, findObjectType, pathToKey} from "./data"
 import {DownType, DownMsg, UpMsg, UpType, SyncMsg, decodeUp, encodeDown} from "./protocol"
 
@@ -20,6 +20,7 @@ export class DataStore {
   private readonly counters = new Map<string, number>()
 
   readonly source :DataSource = {
+    state: Value.constant("active" as DState),
     create: (path, cprop, key, otype, ...args) => this.create(sysAuth, path, cprop, key, ...args),
     resolve: (path, otype) => this.resolve(path),
     post: (queue, msg) => this.post(sysAuth, queue, msg),
