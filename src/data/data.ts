@@ -205,7 +205,7 @@ export abstract class DObject implements Disposable {
   readonly metas = getPropMetas(Object.getPrototypeOf(this))
   private metaIdx = firstNonConst(this.metas)
   private readonly subscribers :Subscriber[] = []
-  private readonly disposed = Mutable.local(false)
+  private readonly _disposed = Mutable.local(false)
 
   /** Returns the address of the queue named `name` on this object. Note: this must be called via
     * the concrete DObject subtype that declares the queue. */
@@ -223,8 +223,11 @@ export abstract class DObject implements Disposable {
 
   /** This object's connectedness state. */
   get state () :Value<DState> {
-    return Value.join2(this.source.state, this.disposed).map(([ss, d]) => d ? "disposed" : ss)
+    return Value.join2(this.source.state, this._disposed).map(([ss, d]) => d ? "disposed" : ss)
   }
+
+  /** This object's disposedness state. */
+  get disposed () :Value<boolean> { return this._disposed }
 
   /** Whether or not the client represented by `auth` can subscribe to this object. */
   canSubscribe (auth :Auth) :boolean { return auth.isSystem }
@@ -272,7 +275,8 @@ export abstract class DObject implements Disposable {
   }
 
   dispose () {
-    this.disposed.update(true)
+    // TODO: clear subscribers?
+    this._disposed.update(true)
   }
 
   toString () { return `${this.constructor.name}@${this.path}` }
@@ -334,7 +338,12 @@ export class Subscription<T extends DObject> implements Disposable {
     this.rem()
     this.rem = source.resolve(path, this.otype).onValue(res => {
       if (res instanceof Error) this.err.emit(res)
-      else this.obj.update(res)
+      else {
+        this.obj.update(res)
+        res.disposed.onValue(isdisp => {
+          if (isdisp && this.obj.current === res) this.obj.update(undefined)
+        })
+      }
     })
   }
 
