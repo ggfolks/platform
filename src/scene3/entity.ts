@@ -145,12 +145,7 @@ export class SceneSystem extends System {
 
   /** Updates the scene. */
   update () {
-    this.onEntities(id => {
-      const obj = this.obj.read(id)
-      this.trans.readPosition(id, obj.position)
-      this.trans.readQuaternion(id, obj.quaternion)
-      this.trans.readScale(id, obj.scale)
-    })
+    this.onEntities(id => this._updateObject(id, this.obj.read(id)))
     this.scene.updateMatrixWorld()
   }
 
@@ -314,6 +309,8 @@ export class SceneSystem extends System {
     obj.userData.id = id
     this.obj.update(id, obj)
     this.scene.add(obj)
+    this._updateObject(id, obj)
+    obj.updateMatrixWorld()
     createObject3D(config.components[this.obj.id]).onValue(obj => {
       // if this is the initial, default Object3D, it won't actually be in the scene;
       // otherwise, we're replacing the model with another
@@ -324,7 +321,15 @@ export class SceneSystem extends System {
       this.obj.update(id, obj)
       this.scene.add(obj)
       if (obj instanceof Camera) this._cameras.add(obj)
+      this._updateObject(id, obj)
+      obj.updateMatrixWorld()
     })
+  }
+
+  private _updateObject (id :ID, obj :Object3D) {
+    this.trans.readPosition(id, obj.position)
+    this.trans.readQuaternion(id, obj.quaternion)
+    this.trans.readScale(id, obj.scale)
   }
 
   protected deleted (id :ID) {
