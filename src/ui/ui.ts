@@ -108,6 +108,7 @@ export class UI {
     case   "scrollview": return new S.ScrollView(ctx, parent, rconfig as S.ScrollViewConfig)
     case  "graphviewer": return new GR.GraphViewer(ctx, parent, rconfig as GR.GraphViewerConfig)
     case    "graphview": return new GR.GraphView(ctx, parent, rconfig as GR.GraphViewConfig)
+    case     "nodeview": return new GR.NodeView(ctx, parent, rconfig as GR.NodeViewConfig)
     case "propertyview": return new GR.PropertyView(ctx, parent, rconfig as GR.PropertyViewConfig)
     case     "edgeview": return new GR.EdgeView(ctx, parent, rconfig as GR.EdgeViewConfig)
     default: throw new Error(`Unknown element type '${config.type}'.`)

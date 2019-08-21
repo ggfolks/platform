@@ -68,9 +68,15 @@ function createGraphModelData (graph :Graph) :ModelData {
     nodeKeys: graph.nodes.keysSource(),
     nodeData: mapProvider(graph.nodes, value => {
       const type = value.current.config.type
+      const subgraphElement :ModelData = {}
+      if (type === "subgraph") {
+        const subgraph = value.current as Subgraph
+        subgraphElement.subgraph = createGraphModelData(subgraph.containedGraph)
+      }
       return {
         id: Value.constant(value.current.id),
         type: Value.constant(type),
+        ...subgraphElement,
         propertyKeys: Value.constant(Object.keys(value.current.propertiesMeta)),
         inputKeys: Value.constant(Object.keys(value.current.inputsMeta)),
         outputKeys: Value.constant(Object.keys(value.current.outputsMeta)),

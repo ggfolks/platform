@@ -1,12 +1,12 @@
 import {dim2, rect, vec2} from "../core/math"
 import {Mutable, Value} from "../core/react"
-import {PMap} from "../core/util"
+import {PMap, Remover} from "../core/util"
 import {getConstantNodeId} from "../graph/graph"
 import {InputEdge, InputEdges} from "../graph/node"
-import {Element, ElementConfig, ElementContext} from "./element"
+import {Element, ElementConfig, ElementContext, MouseInteraction} from "./element"
 import {AbsConstraints, AbsGroup, AxisConfig, VGroup} from "./group"
 import {List} from "./list"
-import {Model, ModelKey, ModelProvider, Spec} from "./model"
+import {Model, ModelData, ModelKey, ModelProvider, Spec} from "./model"
 import {DefaultPaint, PaintConfig} from "./style"
 
 /** A navigable graph viewer. */
@@ -121,110 +121,14 @@ export class GraphView extends AbsGroup {
         if (!elem) {
           const model = data.resolve(key)
           if (models) models.push(model)
-          const hasProperties = model.resolve<Value<ModelKey[]>>("propertyKeys").current.length > 0
-          const hasInputs = model.resolve<Value<ModelKey[]>>("inputKeys").current.length > 0
-          const hasOutputs = model.resolve<Value<ModelKey[]>>("outputKeys").current.length > 0
-
-          // special handling for subgraphs
-          const bodyContents :ElementConfig[] = []
-          if (model.resolve<Value<string>>("type").current === "subgraph") {
-            bodyContents.push({
-              type: "button",
-              onClick: () => {
-                const graphViewer = parent.parent as GraphViewer
-                const subgraph = ctx.model.resolve("subgraph" as Spec<ModelProvider>)
-                graphViewer.push(subgraph.resolve(key))
-              },
-              contents: {
-                type: "box",
-                scopeId: "nodeButton",
-                contents: {type: "label", text: Value.constant("Open")},
-              },
-            })
-          }
-          if (hasProperties) {
-            bodyContents.push({
-              type: "propertyview",
-              scopeId: "nodeProperties",
-              offPolicy: "stretch",
-            })
-          }
-          if (hasInputs || hasOutputs) {
-            bodyContents.push({
-              type: "row",
-              gap: 5,
-              contents: [
-                {
-                  type: "box",
-                  scopeId: "nodeEdges",
-                  constraints: {stretch: hasInputs},
-                  style: {halign: "left"},
-                  contents: {
-                    type: "list",
-                    tags: new Set(["inputs"]),
-                    gap: 1,
-                    offPolicy: "stretch",
-                    element: {
-                      type: "box",
-                      contents: {type: "label", text: "name"},
-                      style: {halign: "left"},
-                    },
-                    data: "input",
-                    keys: "inputKeys",
-                  },
-                },
-                {
-                  type: "box",
-                  scopeId: "nodeEdges",
-                  constraints: {stretch: hasOutputs},
-                  style: {halign: "right"},
-                  contents: {
-                    type: "list",
-                    tags: new Set(["outputs"]),
-                    gap: 1,
-                    offPolicy: "stretch",
-                    element: {
-                      type: "box",
-                      contents: {type: "label", text: "name"},
-                      style: {halign: "right"},
-                    },
-                    data: "output",
-                    keys: "outputKeys",
-                  },
-                }
-              ],
-            })
-          }
-          const config = {
-            type: "box",
-            constraints: {position: [0, 0]},
-            scopeId: "node",
-            contents: {
-              type: "column",
-              offPolicy: "stretch",
-              contents: [
-                {
-                  type: "box",
-                  scopeId: "nodeHeader",
-                  contents: {type: "label", text: "type"},
-                },
-                {
-                  type: "box",
-                  scopeId: "nodeBody",
-                  style: {halign: "stretch"},
-                  contents: {
-                    type: "column",
-                    offPolicy: "stretch",
-                    gap: 5,
-                    contents: bodyContents,
-                  },
-                },
-              ],
-            },
-          }
           const subctx = {...ctx, model}
           elem = {
-            node: ctx.elem.create(subctx, this, config),
+            node: ctx.elem.create(subctx, this, {
+              type: "box",
+              constraints: {position: [0, 0]},
+              scopeId: "node",
+              contents: {type: "nodeview", offPolicy: "stretch"},
+            }),
             edges: ctx.elem.create(subctx, this, {type: "edgeview"}),
           }
           this.elements.set(key, elem)
@@ -355,6 +259,127 @@ export class GraphView extends AbsGroup {
   }
 }
 
+/** Depicts a single node. */
+export interface NodeViewConfig extends AxisConfig {
+  type :"nodeview"
+}
+
+export class NodeView extends VGroup {
+  readonly contents :Element[] = []
+
+  constructor (ctx :ElementContext, parent :Element, readonly config :NodeViewConfig) {
+    super(ctx, parent, config)
+    const hasProperties = ctx.model.resolve<Value<ModelKey[]>>("propertyKeys").current.length > 0
+    const hasInputs = ctx.model.resolve<Value<ModelKey[]>>("inputKeys").current.length > 0
+    const hasOutputs = ctx.model.resolve<Value<ModelKey[]>>("outputKeys").current.length > 0
+
+    const bodyContents :ElementConfig[] = []
+    if (ctx.model.resolve<Value<string>>("type").current === "subgraph") {
+      bodyContents.push({
+        type: "button",
+        onClick: () => {
+          const graphViewer = parent.parent!.parent!.parent as GraphViewer
+          graphViewer.push(new Model(ctx.model.data.subgraph as ModelData))
+        },
+        contents: {
+          type: "box",
+          scopeId: "nodeButton",
+          contents: {type: "label", text: Value.constant("Open")},
+        },
+      })
+    }
+    if (hasProperties) {
+      bodyContents.push({
+        type: "propertyview",
+        scopeId: "nodeProperties",
+        offPolicy: "stretch",
+      })
+    }
+    if (hasInputs || hasOutputs) {
+      bodyContents.push({
+        type: "row",
+        gap: 5,
+        contents: [
+          {
+            type: "box",
+            scopeId: "nodeEdges",
+            constraints: {stretch: hasInputs},
+            style: {halign: "left"},
+            contents: {
+              type: "list",
+              tags: new Set(["inputs"]),
+              gap: 1,
+              offPolicy: "stretch",
+              element: {
+                type: "box",
+                contents: {type: "label", text: "name"},
+                style: {halign: "left"},
+              },
+              data: "input",
+              keys: "inputKeys",
+            },
+          },
+          {
+            type: "box",
+            scopeId: "nodeEdges",
+            constraints: {stretch: hasOutputs},
+            style: {halign: "right"},
+            contents: {
+              type: "list",
+              tags: new Set(["outputs"]),
+              gap: 1,
+              offPolicy: "stretch",
+              element: {
+                type: "box",
+                contents: {type: "label", text: "name"},
+                style: {halign: "right"},
+              },
+              data: "output",
+              keys: "outputKeys",
+            },
+          }
+        ],
+      })
+    }
+    this.contents.push(
+      ctx.elem.create(ctx, this, {
+        type: "box",
+        scopeId: "nodeHeader",
+        contents: {type: "label", text: "type"},
+      }),
+      ctx.elem.create(ctx, this, {
+        type: "box",
+        scopeId: "nodeBody",
+        style: {halign: "stretch"},
+        contents: {
+          type: "column",
+          offPolicy: "stretch",
+          gap: 5,
+          contents: bodyContents,
+        },
+      }),
+    )
+  }
+
+  handleMouseDown (event :MouseEvent, pos :vec2) :MouseInteraction|undefined {
+    const interaction = super.handleMouseDown(event, pos)
+    if (interaction) return interaction
+    const basePos = vec2.clone(pos)
+    const constraints = this.requireParent.config.constraints as AbsConstraints
+    const position = constraints.position!
+    const origin = position.slice()
+    return {
+      move: (event, pos) => {
+        position[0] = origin[0] + pos[0] - basePos[0]
+        position[1] = origin[1] + pos[1] - basePos[1]
+        this.requireParent.parent!.invalidate()
+      },
+      release: () => {},
+      cancel: () => {},
+    }
+  }
+}
+
 /** Depicts a node's editable/viewable properties. */
 export interface PropertyViewConfig extends AxisConfig {
   type :"propertyview"
@@ -440,6 +465,7 @@ export class EdgeView extends Element {
   private _edges :{from :vec2, to :vec2[]}[] = []
   private _paint = this.observe(DefaultPaint)
   private _lineWidth = 1
+  private _nodeRemovers :Map<Element, Remover> = new Map()
 
   constructor (ctx :ElementContext, parent :Element, readonly config :EdgeViewConfig) {
     super(ctx, parent, config)
@@ -543,6 +569,15 @@ export class EdgeView extends Element {
     const size = node.preferredSize(-1, -1)
     node.setBounds(rect.fromValues(view.x + position[0], view.y + position[1], size[0], size[1]))
     node.validate()
+
+    // when the node is invalidated, we also need to invalidate
+    if (!this._nodeRemovers.has(node)) {
+      const remover = node.valid.onValue(value => {
+        if (!value) this.invalidate()
+      })
+      this.disposer.add(remover)
+      this._nodeRemovers.set(node, remover)
+    }
     return node
   }
 
