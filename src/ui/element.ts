@@ -472,6 +472,8 @@ export class Host implements Disposable {
   private readonly onMouse = (event :MouseEvent) => this.handleMouseEvent(event)
   private readonly onKey = (event :KeyboardEvent) => this.handleKeyEvent(event)
   private readonly onWheel = (event :WheelEvent) => this.handleWheelEvent(event)
+  private readonly onPointerDown = (event :PointerEvent) => this.handlePointerDown(event)
+  private readonly onPointerUp = (event :PointerEvent) => this.handlePointerUp(event)
   protected readonly roots :[Root, vec2][] = []
 
   addRoot (root :Root, origin :vec2) {
@@ -492,15 +494,19 @@ export class Host implements Disposable {
   bind (canvas :HTMLCanvasElement) :Remover {
     canvas.addEventListener("mousedown", this.onMouse)
     canvas.addEventListener("mousemove", this.onMouse)
-    canvas.addEventListener("mouseup", this.onMouse)
+    document.addEventListener("mouseup", this.onMouse)
     canvas.addEventListener("wheel", this.onWheel)
+    canvas.addEventListener("pointerdown", this.onPointerDown)
+    canvas.addEventListener("pointerup", this.onPointerUp)
     document.addEventListener("keydown", this.onKey)
     document.addEventListener("keyup", this.onKey)
     return () => {
       canvas.removeEventListener("mousedown", this.onMouse)
       canvas.removeEventListener("mousemove", this.onMouse)
-      canvas.removeEventListener("mouseup", this.onMouse)
+      document.removeEventListener("mouseup", this.onMouse)
       canvas.removeEventListener("wheel", this.onWheel)
+      canvas.removeEventListener("pointerdown", this.onPointerDown)
+      canvas.removeEventListener("pointerup", this.onPointerUp)
       document.removeEventListener("keydown", this.onKey)
       document.removeEventListener("keyup", this.onKey)
     }
@@ -515,6 +521,14 @@ export class Host implements Disposable {
   }
   handleWheelEvent (event :WheelEvent) {
     for (const ro of this.roots) ro[0].dispatchWheelEvent(event, ro[1])
+  }
+  handlePointerDown (event :PointerEvent) {
+    const canvas = event.target as HTMLElement
+    canvas.setPointerCapture(event.pointerId)
+  }
+  handlePointerUp (event :PointerEvent) {
+    const canvas = event.target as HTMLElement
+    canvas.releasePointerCapture(event.pointerId)
   }
 
   update (clock :Clock) {
