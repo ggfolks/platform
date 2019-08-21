@@ -435,11 +435,7 @@ export class Subject<T> extends Source<T> {
     const {_connect} = this
     return Subject.deriveSubject<R>(disp => {
       let disconnect = NoopRemover
-      const onSwitch = (v:T) => {
-        disconnect()
-        disconnect = fn(v).onValue(disp)
-      }
-      return _connect(onSwitch, true)
+      return _connect(v => { disconnect() ; disconnect = fn(v).onValue(disp) }, true)
     })
   }
 }
@@ -540,6 +536,26 @@ export class Value<T> extends Source<T> {
     return this.join<any>(a, b, c) as any as Value<[A,B,C]>
   }
 
+  /** Returns a value which "switches" between successive underlying values. The switched value will
+    * always reflect the contents and events of the "latest" value from `values`. When `values`
+    * changes, the switched value will only emit a change if the current (inner) value of the old
+    * (outer) value differs from the current (inner) value of the new (outer) value. Note: this
+    * equality test is performed using the equality testing function of the new value. To avoid
+    * unexpected behavior, all values emitted by `values` should use the same equality testing
+    * semantics. */
+  static switch<T> (values :Value<Value<T>>) :Value<T> {
+    return Value.deriveValue(values.current.eq, disp => {
+      let disconnect = values.current.onChange(disp)
+      let unlisten = values.onChange((value, ovalue) => {
+        disconnect()
+        disconnect = value.onChange(disp)
+        let previous = ovalue.current, current = value.current
+        if (!value.eq(current, previous)) disp(current, previous)
+      })
+      return () => { disconnect() ; unlisten() }
+    }, () => values.current.current)
+  }
+
   constructor (
     /** The function used to test new values for equality with old values. */
     readonly eq :Eq<T>,
@@ -604,47 +620,7 @@ export class Value<T> extends Source<T> {
     * avoid unexpected behavior, all values returned by `fn` should use the same equality testing
     * semantics. */
   switchMap<R> (fn :(v:T) => Value<R>) :Value<R> {
-    const {_current, _onChange, eq} = this
-    let savedSourceValue = _current()
-    let mappedValue = fn(savedSourceValue)
-    let latest = mappedValue.current
-    function onSourceValue (value :T) :R {
-      savedSourceValue = value
-      mappedValue = fn(value)
-      return latest = mappedValue.current
-    }
-    return Value.deriveValue(refEquals, disp => {
-      const current = _current()
-      if (!eq(current, savedSourceValue)) onSourceValue(current)
-      const dispatcher = (value :R, ovalue :R) => {
-        const previous = latest
-        latest = value
-        disp(value, previous)
-      }
-      let disconnect = mappedValue.onChange(dispatcher)
-      let unlisten = _onChange((value, ovalue) => {
-        disconnect()
-        let previous = latest, current = onSourceValue(value)
-        disconnect = mappedValue.onChange(dispatcher)
-        if (!mappedValue.eq(current, previous)) {
-          disp(current, previous)
-        }
-      })
-      return () => {
-        disconnect()
-        unlisten()
-      }
-    }, () => {
-      // rather than recreate a mapped reactive value every time our value is requested, we cache
-      // the source value from which we most recently created our mapped value if it has not
-      // changed, we reuse the mapped value; this assumes referential transparency for fn
-      let sourceValue = _current()
-      if (!eq(sourceValue, savedSourceValue)) {
-        savedSourceValue = sourceValue
-        mappedValue = fn(sourceValue)
-      }
-      return mappedValue.current
-    })
+    return Value.switch(this.map(fn))
   }
 
   /** Returns a `Stream` that emits values whenever this value changes. */
