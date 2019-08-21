@@ -1,12 +1,12 @@
-import {Remover, NoopRemover, log} from "../core/util"
-import {UUID0, uuidv1} from "../core/uuid"
+import {Remover, log} from "../core/util"
+import {UUID0} from "../core/uuid"
 import {Record} from "../core/data"
 import {Mutable, Subject, Value} from "../core/react"
 import {RSet, MutableSet} from "../core/rcollect"
 import {Encoder, Decoder} from "../core/codec"
-import {CollectionMeta, getPropMetas} from "./meta"
-import {Auth, AutoKey, DataSource, DKey, DObject, DObjectType, DState, DQueueAddr, MetaMsg, Path,
-        Subscriber, findObjectType, pathToKey} from "./data"
+import {getPropMetas} from "./meta"
+import {Auth, DObject, DObjectType, DState, DQueueAddr, MetaMsg, Path,
+        findObjectType, pathToKey} from "./data"
 import {DownType, DownMsg, UpMsg, UpType, SyncMsg, decodeUp, encodeDown} from "./protocol"
 
 import WebSocket from "ws"
@@ -15,96 +15,71 @@ export const sysAuth :Auth = {id: UUID0, isSystem: true}
 
 const DebugLog = false
 
+interface Subscriber {
+  auth :Auth
+  sendSync (msg :SyncMsg) :void
+}
+interface Resolved {
+  object :DObject,
+  subscribe: (sub :Subscriber) => Subject<DObject|Error>
+}
+
 export class DataStore {
-  private readonly objects = new Map<string, DObject>()
-  private readonly counters = new Map<string, number>()
+  // TODO: flush and unload objects with no subscribers after some idle timeout
+  private readonly resolved = new Map<string,Resolved>()
 
-  readonly source :DataSource = {
-    state: Value.constant("active" as DState),
-    create: (path, cprop, key, otype, ...args) => this.create(sysAuth, path, cprop, key, ...args),
-    resolve: (path, otype) => this.resolve(path),
-    post: (queue, msg) => this.post(sysAuth, queue, msg),
-    // nothing to do here, this would only be used if we were proxying the object from some other
-    // server, but we're the source of truth for `obj`
-    sendSync: (obj, msg) => {}
-  }
+  constructor (readonly rtype :DObjectType<any>) {}
 
-  constructor (readonly rtype :DObjectType<any>) {
-    // create the root object
-    this.objects.set("", new rtype(this.source, [], 0))
-  }
+  resolve (path :Path) :Resolved {
+    const key = pathToKey(path), res = this.resolved.get(key)
+    if (res) return res
 
-  create (auth :Auth, path :Path, cprop :string, key :DKey, ...args :any[]) :Subject<DKey|Error> {
-    return this.resolve(path).switchMap(res => {
-      try {
-        if (res instanceof Error) throw new Error(
-          `Unable to resolve parent object for create ${JSON.stringify({path, cprop, key, res})}`)
-        if (!res.canSubscribe(auth) || !res.canCreate(cprop, auth)) this.authFail(
-          `Create check failed [auth=${auth}, obj=${res}, prop=${cprop}]`)
-        const cmeta = res.metas.find(m => m.name === cprop)
-        if (!cmeta) throw new Error(
-          `Cannot create object in unknown collection [path=${path}, cprop=${cprop}]`)
-        if (cmeta.type !== "collection") throw new Error(
-          `Cannot create object in non-collection property [path=${path}, cprop=${cprop}]`)
-        const gkey = key === AutoKey ? this._generateKey(path, cmeta, cprop) : key
-        const opath = path.concat([cprop, gkey]), okey = pathToKey(opath)
-        if (this.objects.has(okey)) throw new Error(`Object already exists at path '${opath}'`)
-        return Subject.deriveSubject<DKey|Error>(disp => {
-          const obj = this.objects.get(okey)
-          if (obj) disp(gkey)
-          else {
-            const otype = findObjectType(this.rtype, opath)
-            const nobj = new otype(this.source, opath, ...args)
-            this.objects.set(okey, nobj)
-            this.postMeta(nobj, {type: "created"})
-            disp(gkey)
-          }
-          return NoopRemover
-        })
-      } catch (err) {
-        return Subject.constant(err)
+    if (DebugLog) log.debug("Creating object", "path", path)
+    const subscribers :Subscriber[] = []
+    const state = Mutable.local<DState>("resolving")
+    const otype = findObjectType(this.rtype, path)
+    const object = new otype({
+      state: Value.constant<DState>("active"),
+      post: (queue, msg) => this.post(sysAuth, queue, msg),
+      sendSync: (obj, msg) => {
+        const name = obj.metas[msg.idx].name
+        for (const sub of subscribers) if (obj.canRead(name, sub.auth)) sub.sendSync(msg)
       }
-    })
-  }
+    }, path, state)
 
-  _generateKey (path :Path, meta :CollectionMeta, cprop :string) :DKey {
-    switch (meta.autoPolicy) {
-    case "noauto":
-      throw new Error(
-        `Cannot auto generate key for 'noauto' collection [path=${path}, cprop=${cprop}]`)
-    case "sequential":
-      const ckey = pathToKey(path.concat([cprop]))
-      const next = this.counters.get(ckey) || 1
-      this.counters.set(ckey, next+1)
-      return next
-    case "uuid":
-      return uuidv1()
-    default:
-      throw new Error(
-        `Unknown auto-gen policy [path=${path}, cprop=${cprop}, policy='${meta.autoPolicy}']`)
-    }
-  }
+    // TODO: if we need to create a non-existent object, potentially check with the parent object
+    // that the resolver (will need to pass auth into this method) is allowed to create
 
-  resolve<T extends DObject> (path :Path) :Subject<T|Error> {
-    const key = pathToKey(path)
-    return Subject.deriveSubject<T|Error>(disp => {
-      const obj = this.objects.get(key)
-      if (obj) disp(obj as T)
-      else disp(new Error(`No object at path '${path}'`))
-      return NoopRemover
-    })
+    // TODO: load data from persistent storage, populate object, then transition to active
+    state.update("active")
+    this.postMeta(object, {type: "created"})
+
+    const nres :Resolved = {object, subscribe: sub => Subject.deriveSubject(disp => {
+      // wait for object to be active before we do canSubscribe check
+      object.state.whenOnce(s => s === "active", _ => {
+        if (!object.canSubscribe(sub.auth)) disp(new Error("Access denied."))
+        else {
+          subscribers.push(sub)
+          disp(object)
+        }
+      })
+      return () => {
+        const idx = subscribers.indexOf(sub)
+        if (idx >= 0) subscribers.splice(idx, 1)
+      }
+    })}
+    this.resolved.set(key, nres)
+    return nres
   }
 
   post (auth :Auth, queue :DQueueAddr, msg :Record) {
-    // TODO: keep the object around for a bit instead of letting it immediately get unresolved after
-    // our queue message is processed...
-    this.resolve<DObject>(queue.path).once(res => {
+    const object = this.resolve(queue.path).object
+    object.state.whenOnce(s => s === "active", s => {
       try {
-        if (res instanceof Error) throw res
-        const meta = res.metas[queue.index]
+        const meta = object.metas[queue.index]
         if (meta.type !== "queue") throw new Error(`Not a queue prop at path [type=${meta.type}]`)
         // TODO: check canSubscribe permission?
-        meta.handler(res, msg, auth)
+        meta.handler(object, msg, auth)
       } catch (err) {
         log.warn("Failed to post", "auth", auth, "queue", queue, "msg", msg, err)
       }
@@ -112,6 +87,7 @@ export class DataStore {
   }
 
   postMeta (obj :DObject, msg :MetaMsg) {
+    if (DebugLog) log.debug("postMeta", "obj", obj, "msg", msg)
     const metas = getPropMetas(Object.getPrototypeOf(obj))
     const meta = metas.find(m => m.name === "metaq")
     if (!meta) return
@@ -126,7 +102,7 @@ export class DataStore {
     }
   }
 
-  sync (auth :Auth, obj :DObject, msg :SyncMsg) {
+  upSync (auth :Auth, obj :DObject, msg :SyncMsg) {
     const name = obj.metas[msg.idx].name
     if (obj.canRead(name, auth) || !obj.canWrite(name, auth)) obj.applySync(msg, false)
     else this.authFail(`Write rejected [auth=${auth}, obj=${obj}, prop=${name}]`)
@@ -138,20 +114,15 @@ export class DataStore {
   }
 }
 
-interface Subscription extends Subscriber {
-  obj :DObject
-  unsub :Remover
-}
-
 export abstract class Session {
-  private readonly subscrips = new Map<number, Subscription>()
+  private readonly subscrips = new Map<number, {object :DObject, release :Remover}>()
   private readonly encoder = new Encoder()
   private readonly resolver = {
     get: (oid :number) => {
       const sub = this.subscrips.get(oid)
-      if (sub) return sub.obj
+      if (sub) return sub.object
       else throw new Error(`Unknown object ${oid}`)
-    },
+    }
   }
   private _auth :Auth|undefined = undefined
 
@@ -168,13 +139,13 @@ export abstract class Session {
     try {
       msg = decodeUp(this.resolver, new Decoder(msgData))
     } catch (err) {
-      log.warn("Failed to decode message", "data", msgData, err)
+      log.warn("Failed to decode message", "sess", this, "data", msgData, err)
       return
     }
     try {
       this.handleMsg(msg)
     } catch (err) {
-      log.warn("Failed to handle message", "msg", msg, err)
+      log.warn("Failed to handle message", "sess", this, "msg", msg, err)
     }
   }
 
@@ -183,53 +154,44 @@ export abstract class Session {
       encodeDown(this.auth, msg, this.encoder)
     } catch (err) {
       this.encoder.reset()
-      log.warn("Failed to encode", "msg", msg, err)
+      log.warn("Failed to encode", "sess", this, "msg", msg, err)
       return
     }
     this.sendMsg(this.encoder.finish())
   }
 
   dispose () {
-    for (const sub of this.subscrips.values()) sub.unsub()
+    for (const sub of this.subscrips.values()) sub.release()
   }
 
   protected handleMsg (msg :UpMsg) {
-    if (DebugLog) log.debug("handleMsg", "msg", msg)
+    if (DebugLog) log.debug("handleMsg", "sess", this, "msg", msg)
     switch (msg.type) {
     case UpType.AUTH:
       // TODO: validate auth token
       this._auth = {id: msg.id, isSystem: false}
+      log.info("Session authed", "sess", this)
       break
     case UpType.SUB:
-      const sendErr = (err :Error) => this.sendDown({
-        type: DownType.SUBERR, oid: msg.oid, cause: err.message})
-      this.store.resolve(msg.path).onValue(res => {
-        if (res instanceof Error) sendErr(res)
+      const res = this.store.resolve(msg.path), oid = msg.oid
+      const rsub = res.subscribe({auth: this.auth, sendSync: msg => this.sendDown({...msg, oid})})
+      const unsub = rsub.onValue(res => {
+        if (res instanceof Error) this.sendDown({type: DownType.SUBERR, oid, cause: res.message})
         else {
-          const oid = msg.oid
-          const sendSync = (msg :SyncMsg) => this.sendDown({...msg, oid})
-          const sub = {obj: res, unsub: NoopRemover, auth: this.auth, sendSync}
-          const unsub = res.subscribe(sub)
-          if (!unsub) sendErr(new Error("Access denied."))
-          else {
-            sub.unsub = () => {
-              unsub()
-              this.store.postMeta(res, {type: "unsubscribed", id: this.auth.id})
-            }
-            this.subscrips.set(oid, sub)
-            this.sendDown({type: DownType.SUBOBJ, oid, obj: res})
-            this.store.postMeta(res, {type: "subscribed", id: this.auth.id})
-          }
+          this.subscrips.set(oid, {object: res, release: () => {
+            unsub()
+            this.store.postMeta(res, {type: "unsubscribed", id: this.auth.id})
+            this.subscrips.delete(oid)
+          }})
+          this.sendDown({type: DownType.SUBOBJ, oid, obj: res})
+          this.store.postMeta(res, {type: "subscribed", id: this.auth.id})
         }
       })
       break
 
     case UpType.UNSUB:
       const sub = this.subscrips.get(msg.oid)
-      if (sub) {
-        sub.unsub()
-        this.subscrips.delete(msg.oid)
-      }
+      if (sub) sub.release()
       break
 
     case UpType.POST:
@@ -237,10 +199,9 @@ export abstract class Session {
       break
 
     default:
-      const oid = msg.oid
-      const ssub = this.subscrips.get(oid)
-      if (ssub) this.store.sync(this.auth, ssub.obj, msg)
-      else log.warn("Dropping sync message, no subscription", "msg", msg)
+      const ssub = this.subscrips.get(msg.oid)
+      if (ssub) this.store.upSync(this.auth, ssub.object, msg)
+      else log.warn("Dropping sync message, no subscription", "sess", this, "msg", msg)
     }
   }
 
@@ -282,7 +243,7 @@ class WSSession extends Session {
     })
     // TODO: ping/pong & session timeout
 
-    log.info("Session started", "addr", addr, "id", this.auth.id)
+    log.info("Session started", "sess", this)
   }
 
   get state () :Value<SessionState> { return this._state }

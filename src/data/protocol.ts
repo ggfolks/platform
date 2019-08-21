@@ -3,8 +3,7 @@ import {UUID} from "../core/uuid"
 import {Record} from "../core/data"
 import {Encoder, Decoder, KeyType, ValueType} from "../core/codec"
 import {Mutable} from "../core/react"
-import {getPropMetas} from "./meta"
-import {Auth, DataSource, DMutable, DObjectType, DObject, DQueueAddr, Path} from "./data"
+import {Auth, DMutable, DObject, DQueueAddr, Path} from "./data"
 
 export const enum SyncType { VALSET, SETADD, SETDEL, MAPSET, MAPDEL }
 type ValSetMsg = {type :SyncType.VALSET, idx :number, value :any, vtype: ValueType}
@@ -87,18 +86,14 @@ export function encodeDown (rcpt :Auth, dnm :DownMsg, enc :Encoder) {
   }
 }
 
-export interface UpResolver {
+export interface Objects {
   get (oid :number) :DObject
 }
 
-export interface DownResolver extends UpResolver {
-  info (oid :number) :{otype :DObjectType<any>, source :DataSource, path :Path}
-}
-
-function decodeSync (resolver :UpResolver, type :SyncType, dec :Decoder) :OidSyncMsg {
+function decodeSync (objects :Objects, type :SyncType, dec :Decoder) :OidSyncMsg {
   const idx :number = dec.getValue("size8"), oid :number = dec.getValue("size32")
   if (DebugLog) log.debug("decodeSync", "idx", idx, "oid", oid)
-  const obj = resolver.get(oid), meta = obj.metas[idx]
+  const obj = objects.get(oid), meta = obj.metas[idx]
   if (!meta) throw new Error(
     `Got sync for unknown object property [type=${type}, oid=${oid}, name=${name}]`)
   const typeMismatch = () => new Error(`Expected 'value' property for valset, got '${meta.type}`)
@@ -124,7 +119,7 @@ function decodeSync (resolver :UpResolver, type :SyncType, dec :Decoder) :OidSyn
   }
 }
 
-export function decodeUp (resolver :UpResolver, dec :Decoder) :UpMsg {
+export function decodeUp (objects :Objects, dec :Decoder) :UpMsg {
   const type = dec.getValue("int8")
   if (DebugLog) log.debug("decodeUp", "type", type)
   switch (type) {
@@ -138,37 +133,44 @@ export function decodeUp (resolver :UpResolver, dec :Decoder) :UpMsg {
     const queue = {path: getPath(dec), index: dec.getValue("size8")}
     return {type, queue, msg: dec.getValue("record")}
   default:
-    return decodeSync(resolver, type, dec)
+    return decodeSync(objects, type, dec)
   }
 }
 
-export function decodeDown (resolver :DownResolver, dec :Decoder) :DownMsg {
+export function decodeDown (objects :Objects, dec :Decoder) :DownMsg {
   const type = dec.getValue("int8")
   if (DebugLog) log.debug("decodeDown", "type", type)
   switch (type) {
   case DownType.SUBOBJ:
     const oid = dec.getValue("size32")
-    return {type, oid, obj: getObject(dec, oid, resolver)}
+    return {type, oid, obj: getObject(dec, oid, objects)}
   case DownType.SUBERR:
     return {type, oid: dec.getValue("size32"), cause :dec.getValue("string")}
   default:
-    return decodeSync(resolver, type, dec)
+    return decodeSync(objects, type, dec)
   }
 }
 
-// TODO: paths can be numbers in addition to strings, need to handle specially
-function addPath (path :Path, enc :Encoder) { enc.addArray(path, "string") }
-function getPath (dec :Decoder) :string[] { return dec.getArray("string") }
+function addPath (path :Path, enc :Encoder) {
+  if (path.length > 255) throw new Error(`Path too long: ${path}`)
+  enc.addValue(path.length, "size8")
+  for (let ii = 0, ll = path.length; ii < ll; ii += 1) {
+    enc.addValue(path[ii], ii % 2 == 0 ? "string" : "uuid")
+  }
+}
+function getPath (dec :Decoder) :string[] {
+  const path :Path = [], length = dec.getValue("size8")
+  for (let ii = 0, ll = length; ii < ll; ii += 1) {
+    path.push(dec.getValue(ii % 2 == 0 ? "string" : "uuid"))
+  }
+  return path
+}
 
 export function addObject (rcpt :Auth, obj :DObject, enc :Encoder) {
   for (const meta of obj.metas) {
-    // we write all leading const properties; they must be readable
-    if (!(meta.type === "const" || obj.canRead(meta.name, rcpt))) continue
+    if (!obj.canRead(meta.name, rcpt)) continue
     const prop = obj[meta.name]
     switch (meta.type) {
-    case "const":
-      enc.addValue(prop, meta.vtype)
-      break
     case "value":
       enc.addValue(meta.index, "size8")
       enc.addValue((prop as Mutable<any>).current, meta.vtype)
@@ -188,21 +190,13 @@ export function addObject (rcpt :Auth, obj :DObject, enc :Encoder) {
   enc.addValue(255, "size8") // terminator
 }
 
-export function getObject (dec :Decoder, oid :number, resolver :DownResolver) :DObject {
-  const {otype, source, path} = resolver.info(oid)
-  const metas = getPropMetas(otype.prototype)
-  const args = []
-  for (const meta of metas) {
-    if (meta.type === "const") args.push(dec.getValue(meta.vtype))
-    else break
-  }
-  const into = new otype(source, path, ...args)
+export function getObject (dec :Decoder, oid :number, objects :Objects) :DObject {
+  const into = objects.get(oid)
   while (true) {
     const idx = dec.getValue("size8")
     if (idx === 255) break
     const meta = into.metas[idx], prop = into[meta.name]
     switch (meta.type) {
-    case "const": throw new Error(`Invalid const property: ${JSON.stringify(meta)}`)
     case "value": (prop as DMutable<any>).update(dec.getValue(meta.vtype), true) ; break
     case "set": dec.syncSet(meta.etype, (prop as Set<any>)) ; break
     case "map": dec.syncMap(meta.ktype, meta.vtype, (prop as Map<any, any>)) ; break
