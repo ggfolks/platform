@@ -1,5 +1,5 @@
 import {Remover, NoopRemover, log} from "../core/util"
-import {UUID, UUID0, uuidv1} from "../core/uuid"
+import {UUID0, uuidv1} from "../core/uuid"
 import {Record} from "../core/data"
 import {Mutable, Subject, Value} from "../core/react"
 import {RSet, MutableSet} from "../core/rcollect"
@@ -153,12 +153,14 @@ export abstract class Session {
       else throw new Error(`Unknown object ${oid}`)
     },
   }
-
-  readonly auth :Auth
+  private _auth :Auth|undefined = undefined
 
   // TODO: maybe the session should handle auth?
-  constructor (readonly store :DataStore, readonly id :UUID) {
-    this.auth = {id, isSystem: false}
+  constructor (readonly store :DataStore) {}
+
+  get auth () :Auth {
+    if (this._auth) return this._auth
+    throw new Error(`Session not yet authed [sess=${this}]`)
   }
 
   recvMsg (msgData :Uint8Array) {
@@ -194,6 +196,10 @@ export abstract class Session {
   protected handleMsg (msg :UpMsg) {
     if (DebugLog) log.debug("handleMsg", "msg", msg)
     switch (msg.type) {
+    case UpType.AUTH:
+      // TODO: validate auth token
+      this._auth = {id: msg.id, isSystem: false}
+      break
     case UpType.SUB:
       const sendErr = (err :Error) => this.sendDown({
         type: DownType.SUBERR, oid: msg.oid, cause: err.message})
@@ -208,11 +214,11 @@ export abstract class Session {
           else {
             sub.unsub = () => {
               unsub()
-              this.store.postMeta(res, {type: "unsubscribed", id: this.id})
+              this.store.postMeta(res, {type: "unsubscribed", id: this.auth.id})
             }
             this.subscrips.set(oid, sub)
             this.sendDown({type: DownType.SUBOBJ, oid, obj: res})
-            this.store.postMeta(res, {type: "subscribed", id: this.id})
+            this.store.postMeta(res, {type: "subscribed", id: this.auth.id})
           }
         }
       })
@@ -238,6 +244,10 @@ export abstract class Session {
     }
   }
 
+  toString () {
+    return `${this._auth ? this._auth.id : "<unauthed>"}`
+  }
+
   protected abstract sendMsg (msg :Uint8Array) :void
 }
 
@@ -251,13 +261,9 @@ class WSSession extends Session {
   private readonly _state = Mutable.local("connecting" as SessionState)
 
   constructor (store :DataStore, readonly addr :string, readonly ws :WebSocket) {
-    super(store, uuidv1()) // TODO: auth
+    super(store)
 
-    const onOpen = () => {
-      this._state.update("open")
-      console.log(`Authed ${this.auth.id}`)
-      this.sendDown({type: DownType.AUTHED, id: this.auth.id})
-    }
+    const onOpen = () => this._state.update("open")
     if (ws.readyState === WebSocket.OPEN) onOpen()
     else ws.on("open", onOpen)
 
@@ -276,7 +282,7 @@ class WSSession extends Session {
     })
     // TODO: ping/pong & session timeout
 
-    log.info("Session started", "addr", addr, "id", this.id)
+    log.info("Session started", "addr", addr, "id", this.auth.id)
   }
 
   get state () :Value<SessionState> { return this._state }
@@ -287,7 +293,7 @@ class WSSession extends Session {
   }
 
   toString () {
-    return `${this.id}/${this.addr}`
+    return `${super.toString()}/${this.addr}`
   }
 
   protected sendMsg (msg :Uint8Array) {

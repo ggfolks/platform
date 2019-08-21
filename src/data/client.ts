@@ -20,6 +20,9 @@ export function addrToURL (addr :Address) :string {
 /** Resolves the address of the server that hosts the object at `path`. */
 export type Locator = (path :Path) => Subject<Address>
 
+/** Provides authentication information when connecting to a server. */
+export type AuthInfo = {id :UUID, token :string}
+
 /** Creates `Connection` instances for clients. */
 export type Connector = (client :Client, addr :Address) => Connection
 
@@ -35,7 +38,6 @@ export class Client {
   private readonly completers = new Map<number,DObjectCompleter>()
   private readonly encoder = new Encoder()
   private readonly _errors = new Emitter<string>()
-  private readonly _id = Mutable.localOpt<UUID>()
   private nextOid = 1
 
   private readonly resolver = {
@@ -61,9 +63,11 @@ export class Client {
     }
   }
 
-  constructor (readonly locator :Locator, readonly connector :Connector = wsConnector) {}
+  constructor (
+    readonly locator :Locator,
+    readonly auth :AuthInfo,
+    readonly connector :Connector = wsConnector) {}
 
-  get id () :Value<UUID|undefined> { return this._id }
   get errors () :Stream<string> { return this._errors }
 
   create<T extends DObject> (
@@ -109,9 +113,7 @@ export class Client {
   }
 
   handleDown (msg :DownMsg) {
-    if (msg.type === DownType.AUTHED) {
-      this._id.update(msg.id)
-    } else if (msg.type === DownType.SUBOBJ) {
+    if (msg.type === DownType.SUBOBJ) {
       const comp = this.completers.get(msg.oid)
       if (comp) comp.complete(msg.obj)
       else this.reportError(log.format("Unexpected SUBOBJ response", "oid", msg.oid))
@@ -146,6 +148,8 @@ export class Client {
       const nconn = connector(this, addr)
       nconn.state.when(cs => cs === "closed", _ => conns.delete(addr))
       conns.set(addr, nconn)
+      // send our auth info as the first message to this connection
+      this.sendUpVia(nconn, [], {type: UpType.AUTH, ...this.auth})
       return nconn
     })
   }

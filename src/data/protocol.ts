@@ -17,15 +17,15 @@ export type SyncMsg = ValSetMsg | SetAddMsg | SetDelMsg | MapSetMsg | MapDelMsg
 
 type OidSyncMsg = SyncMsg & {oid: number}
 
-export const enum UpType   { /* SyncType is 0-4 */ SUB = 5, UNSUB, POST }
-export type UpMsg = {type :UpType.SUB, path :Path, oid :number}
+export const enum UpType   { /* SyncType is 0-4 */ AUTH = 5, SUB, UNSUB, POST }
+export type UpMsg = {type :UpType.AUTH, id :UUID, token :string}
+                  | {type :UpType.SUB, path :Path, oid :number}
                   | {type :UpType.UNSUB, oid :number}
                   | {type :UpType.POST, queue :DQueueAddr, msg :Record}
                   | OidSyncMsg
 
-export const enum DownType { /* SyncType is 0-4 */ AUTHED = 5, SUBOBJ, SUBERR }
-export type DownMsg = {type :DownType.AUTHED, id :UUID}
-                    | {type :DownType.SUBOBJ, oid :number, obj :DObject}
+export const enum DownType { /* SyncType is 0-4 */ SUBOBJ = 5, SUBERR }
+export type DownMsg = {type :DownType.SUBOBJ, oid :number, obj :DObject}
                     | {type :DownType.SUBERR, oid :number, cause :string}
                     | OidSyncMsg
 
@@ -47,6 +47,10 @@ export function encodeUp (upm :UpMsg, enc :Encoder) {
   if (DebugLog) log.debug("encodeUp", "msg", upm)
   enc.addValue(upm.type, "int8")
   switch (upm.type) {
+  case UpType.AUTH:
+    enc.addValue(upm.id, "uuid")
+    enc.addValue(upm.token, "string")
+    break
   case UpType.SUB:
     enc.addValue(upm.oid, "size32")
     addPath(upm.path, enc)
@@ -69,9 +73,6 @@ export function encodeDown (rcpt :Auth, dnm :DownMsg, enc :Encoder) {
   if (DebugLog) log.debug("encodeDown", "msg", dnm)
   enc.addValue(dnm.type, "int8")
   switch (dnm.type) {
-  case DownType.AUTHED:
-    enc.addValue(dnm.id, "uuid")
-    break
   case DownType.SUBOBJ:
     enc.addValue(dnm.oid, "size32")
     addObject(rcpt, dnm.obj, enc)
@@ -127,6 +128,8 @@ export function decodeUp (resolver :UpResolver, dec :Decoder) :UpMsg {
   const type = dec.getValue("int8")
   if (DebugLog) log.debug("decodeUp", "type", type)
   switch (type) {
+  case UpType.AUTH:
+    return {type, id: dec.getValue("uuid"), token: dec.getValue("string")}
   case UpType.SUB:
     return {type, oid: dec.getValue("size32"), path: getPath(dec)}
   case UpType.UNSUB:
@@ -143,8 +146,6 @@ export function decodeDown (resolver :DownResolver, dec :Decoder) :DownMsg {
   const type = dec.getValue("int8")
   if (DebugLog) log.debug("decodeDown", "type", type)
   switch (type) {
-  case DownType.AUTHED:
-    return {type, id: dec.getValue("uuid")}
   case DownType.SUBOBJ:
     const oid = dec.getValue("size32")
     return {type, oid, obj: getObject(dec, oid, resolver)}

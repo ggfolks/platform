@@ -374,9 +374,8 @@ function process (queue :RunQueue) {
 }
 
 class ClientHandler extends Session {
-  constructor (
-    store :DataStore, id :UUID, readonly conn :TestConnection, readonly queue :RunQueue
-  ) { super(store, id) }
+  constructor (store :DataStore, readonly conn :TestConnection,
+               readonly queue :RunQueue) { super(store) }
 
   sendMsg (data :Uint8Array) {
     const cdata = data.slice()
@@ -388,10 +387,9 @@ class TestConnection extends Connection {
   private readonly handler :ClientHandler
   readonly state = Value.constant("connected" as CState)
 
-  constructor (readonly client :Client, addr :Address, store :DataStore, id :UUID,
-               readonly runq :RunQueue) {
+  constructor (readonly client :Client, addr :Address, store :DataStore, readonly runq :RunQueue) {
     super()
-    this.handler = new ClientHandler(store, id, this, runq)
+    this.handler = new ClientHandler(store, this, runq)
   }
 
   sendMsg (data :Uint8Array) {
@@ -417,7 +415,9 @@ test("subscribe-auth", () => {
 
   const queue :RunQueue = []
 
-  const clientA = new Client(testLocator, (c, a) => new TestConnection(c, a, testStore, ida, queue))
+  const authA = {id: ida, token: "test"}
+  const clientA = new Client(
+    testLocator, authA, (c, a) => new TestConnection(c, a, testStore, queue))
   clientA.resolve(["users", ida], UserObject).once(resAA => {
     if (resAA instanceof Error) throw resAA
     expect(resAA.key).toBe(ida)
@@ -462,7 +462,7 @@ test("subscribe-post", done => {
 
     constructor (id :UUID) {
       this.client = new Client(
-        testLocator, (c, a) => new TestConnection(c, a, testStore, id, queue))
+        testLocator, {id, token: "test"}, (c, a) => new TestConnection(c, a, testStore, queue))
       this.root.subscribe(this.client, [])
       this.user.subscribe(this.client, ["users", id])
 
