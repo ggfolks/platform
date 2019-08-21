@@ -108,10 +108,6 @@ function createGraphModelData (graph :Graph) :ModelData {
         },
       }
     }),
-    subgraph: mapProvider(graph.nodes, value => {
-      const subgraph = value.current as Subgraph
-      return createGraphModelData(subgraph.containedGraph)
-    }),
   }
 }
 

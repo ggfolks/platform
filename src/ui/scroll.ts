@@ -21,14 +21,14 @@ export class ScrollView extends Control {
   }
 
   handleMouseDown (event :MouseEvent, pos :vec2) :MouseInteraction|undefined {
-    vec2.set(
-      transformedPos,
-      (pos[0] - this.x + this._offset.current[0]) / this._scale.current + this.x,
-      (pos[1] - this.y + this._offset.current[1]) / this._scale.current + this.y,
-    )
+    const transformedPos = this._transformPos(pos)
     if (rect.contains(this.contents.bounds, transformedPos)) {
       const interaction = this.contents.handleMouseDown(event, transformedPos)
-      if (interaction) return interaction
+      if (interaction) return {
+        move: (event, pos) => interaction.move(event, this._transformPos(pos)),
+        release: interaction.release,
+        cancel: interaction.cancel,
+      }
     }
     if (event.button !== 0) return undefined
     const basePos = vec2.clone(pos)
@@ -41,6 +41,14 @@ export class ScrollView extends Control {
       release: () => {},
       cancel: () => {},
     }
+  }
+
+  private _transformPos (pos :vec2) {
+    return vec2.set(
+      transformedPos,
+      (pos[0] - this.x + this._offset.current[0]) / this._scale.current + this.x,
+      (pos[1] - this.y + this._offset.current[1]) / this._scale.current + this.y,
+    )
   }
 
   handleWheel (event :WheelEvent, pos :vec2) {
