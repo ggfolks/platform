@@ -257,27 +257,38 @@ export class GraphView extends AbsGroup {
         }
         const columns :Column[] = []
         let column = new Column([rootKey])
+        let x = 0
         do {
           const nextColumn = new Column()
           for (const key of column.keys) {
+            const element = graphView.elements.get(key)!.node
             const layoutNode = layoutNodes.get(key)
             if (!layoutNode) {
+              if (!placed.has(element)) {
+                continue // laid out in same row
+              }
+              // the node has already been laid out; move this column over
+              const constraints = element.config.constraints as AbsConstraints
+              const position = constraints.position as number[]
+              const size = element.preferredSize(-1, -1)
+              x = Math.max(x, position[0] + size[0] + horizontalGap)
               continue
             }
             layoutNodes.delete(key)
-            const element = graphView.elements.get(key)!.node
             column.elements.push(element)
             const size = element.preferredSize(-1, -1)
             column.width = Math.max(column.width, size[0])
             column.height += size[1]
             nextColumn.keys.push(...layoutNode.inputs)
           }
-          if (column.elements.length > 0) columns.unshift(column)
+          if (column.elements.length > 0) {
+            x = Math.max(0, x - column.width - horizontalGap)
+            columns.unshift(column)
+          }
           maxHeight = Math.max(maxHeight, column.height)
           column = nextColumn
         } while (column.keys.length > 0)
 
-        let x = 0
         for (const column of columns) {
           let y = top + (maxHeight - column.height) / 2
           for (const element of column.elements) {
@@ -287,6 +298,7 @@ export class GraphView extends AbsGroup {
             position[0] = x + (column.width - size[0])
             position[1] = y
             y += size[1]
+            placed.add(element)
           }
           x += column.width + horizontalGap
         }
@@ -295,6 +307,7 @@ export class GraphView extends AbsGroup {
     }
     const roots = new Set(keys)
     const layoutNodes = new Map<string, LayoutNode>()
+    const placed = new Set<Element>()
 
     // create layout nodes, note roots
     for (let ii = 0; ii < keys.length; ii++) {
@@ -310,7 +323,7 @@ export class GraphView extends AbsGroup {
         } else if (typeof edge === "string") {
           inputs.push(edge)
           roots.delete(edge)
-        } else {
+        } else if (edge !== undefined) {
           const nodeId = getConstantNodeId(edge)
           inputs.push(nodeId)
           roots.delete(nodeId)
@@ -482,8 +495,10 @@ export class EdgeView extends Element {
           [targetId, outputId] = input
         } else if (typeof input === "string") {
           targetId = input
-        } else {
+        } else if (input !== undefined) {
           targetId = getConstantNodeId(input)
+        } else {
+          return
         }
         const targetNode = this._requireValidatedNode(targetId)
         const outputList = targetNode.findTaggedChild("outputs") as List
