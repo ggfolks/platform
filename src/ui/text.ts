@@ -73,7 +73,7 @@ export class Label extends Element {
     } else this.selWid = 0
   }
 
-  protected rerender (canvas :CanvasRenderingContext2D) {
+  protected rerender (canvas :CanvasRenderingContext2D, region :rect) {
     const {x, y, width, height, xoffset} = this
     const span = this.span.current, rx = x + xoffset.current
     const needClip = rx < 0 || span.size[0] > width
@@ -238,7 +238,7 @@ export class Cursor extends Element {
   protected computePreferredSize (hintX :number, hintY :number, into :dim2) {} // not used
   protected relayout () {} // not used
 
-  protected rerender (canvas :CanvasRenderingContext2D) {
+  protected rerender (canvas :CanvasRenderingContext2D, region :rect) {
     const x = this.x, y = this.y, h = this.height
     this.stroke.current.prepStroke(canvas)
     canvas.beginPath()
@@ -425,8 +425,8 @@ export class Text extends Control {
     this.cursor.validate()
   }
 
-  protected rerender (canvas :CanvasRenderingContext2D) {
-    super.rerender(canvas)
-    this.cursor.render(canvas)
+  protected rerender (canvas :CanvasRenderingContext2D, region :rect) {
+    super.rerender(canvas, region)
+    this.cursor.render(canvas, region)
   }
 }

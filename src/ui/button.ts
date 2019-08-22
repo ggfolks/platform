@@ -121,8 +121,8 @@ export class Toggle extends Control {
     if (this.checkedContents) this.checkedContents.validate()
   }
 
-  protected rerender (canvas :CanvasRenderingContext2D) {
-    if (this.checked.current && this.checkedContents) this.checkedContents.render(canvas)
-    else this.contents.render(canvas)
+  protected rerender (canvas :CanvasRenderingContext2D, region :rect) {
+    if (this.checked.current && this.checkedContents) this.checkedContents.render(canvas, region)
+    else this.contents.render(canvas, region)
   }
 }

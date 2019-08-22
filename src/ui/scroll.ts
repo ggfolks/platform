@@ -8,6 +8,7 @@ export interface ScrollViewConfig extends ControlConfig {
 }
 
 const transformedPos = vec2.create()
+const transformedRegion = rect.create()
 
 export class ScrollView extends Control {
   private _offset = Mutable.local(vec2.create())
@@ -43,6 +44,7 @@ export class ScrollView extends Control {
     }
   }
 
+  /** Transforms the supplied position into the space of the contents. */
   private _transformPos (pos :vec2) {
     return vec2.set(
       transformedPos,
@@ -73,6 +75,20 @@ export class ScrollView extends Control {
     ))
   }
 
+  dirty (region :rect = this.expandBounds(this._bounds), fromChild :boolean = false) {
+    if (!fromChild) {
+      super.dirty(region, false)
+      return
+    }
+    const offset = this._offset.current
+    const scale = this._scale.current
+    transformedRegion[0] = Math.floor(this.x + scale * (region[0] - this.x) - offset[0])
+    transformedRegion[1] = Math.floor(this.y + scale * (region[1] - this.y) - offset[1])
+    transformedRegion[2] = Math.ceil(scale * region[2])
+    transformedRegion[3] = Math.ceil(scale * region[3])
+    super.dirty(transformedRegion, true)
+  }
+
   protected computePreferredSize (hintX :number, hintY :number, into :dim2) {
     dim2.set(into, hintX, hintY)
   }
@@ -88,17 +104,23 @@ export class ScrollView extends Control {
     this._scale.update(Math.min(this.width / size[0], this.height / size[1]))
   }
 
-  protected rerender (canvas :CanvasRenderingContext2D) {
+  protected rerender (canvas :CanvasRenderingContext2D, region :rect) {
     canvas.save()
     canvas.beginPath()
     canvas.rect(this.x, this.y, this.width, this.height)
     canvas.clip()
+    const offset = this._offset.current
+    const scale = this._scale.current
     canvas.translate(
-      this.x - this.x * this._scale.current - this._offset.current[0],
-      this.y - this.y * this._scale.current - this._offset.current[1],
+      this.x - this.x * scale - offset[0],
+      this.y - this.y * scale - offset[1],
     )
     canvas.scale(this._scale.current, this._scale.current)
-    this.contents.render(canvas)
+    transformedRegion[0] = (region[0] - this.x + offset[0]) / scale + this.x
+    transformedRegion[1] = (region[1] - this.y + offset[1]) / scale + this.y
+    transformedRegion[2] = region[2] / scale
+    transformedRegion[3] = region[3] / scale
+    this.contents.render(canvas, transformedRegion)
     canvas.restore()
   }
 }

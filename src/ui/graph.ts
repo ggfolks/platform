@@ -372,7 +372,7 @@ export class NodeView extends VGroup {
       move: (event, pos) => {
         position[0] = origin[0] + pos[0] - basePos[0]
         position[1] = origin[1] + pos[1] - basePos[1]
-        this.requireParent.parent!.invalidate()
+        this.invalidate()
       },
       release: () => {},
       cancel: () => {},
@@ -555,8 +555,9 @@ export class EdgeView extends Element {
       this._edges.push({from, to})
     }
     if (min[0] <= max[0] && min[1] <= max[1]) {
-      dim2.set(into, max[0] - min[0], max[1] - min[1])
-      this.config.constraints = {position: [min[0], min[1]]}
+      const expand = Math.ceil(this._lineWidth / 2)
+      dim2.set(into, max[0] - min[0] + expand * 2, max[1] - min[1] + expand * 2)
+      this.config.constraints = {position: [min[0] - expand, min[1] - expand]}
     } else {
       dim2.set(into, 0, 0)
     }
@@ -588,7 +589,7 @@ export class EdgeView extends Element {
 
   protected relayout () {}
 
-  protected rerender (canvas :CanvasRenderingContext2D) {
+  protected rerender (canvas :CanvasRenderingContext2D, region :rect) {
     if (this._edges.length === 0) return
     const view = this.requireParent as GraphView
     canvas.translate(view.x, view.y)

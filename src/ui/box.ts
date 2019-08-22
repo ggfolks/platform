@@ -72,6 +72,8 @@ export interface BoxConfig extends ElementConfig {
   style :PMap<BoxStyle>
 }
 
+const expandedBounds = rect.create()
+
 /** Displays a single child with an optional background, padding, margin, and alignment. */
 export class Box extends Element {
   private background = this.observe(NoopDecor)
@@ -115,6 +117,22 @@ export class Box extends Element {
     this.contents.dispose()
   }
 
+  protected expandBounds (bounds :rect) :rect {
+    const backgroundSize = this.background.current.size
+    const borderSize = this.border.current.size
+    const top = Math.max(backgroundSize[0], borderSize[0])
+    const right = Math.max(backgroundSize[1], borderSize[1])
+    const bottom = Math.max(backgroundSize[2], borderSize[2])
+    const left = Math.max(backgroundSize[3], borderSize[3])
+    return rect.set(
+      expandedBounds,
+      bounds[0] - left,
+      bounds[1] - top,
+      bounds[2] + left + right,
+      bounds[3] + top + bottom,
+    )
+  }
+
   protected computePreferredSize (hintX :number, hintY :number, into :dim2) {
     const {padding, margin} = this.style
     const edgeWidth = insetWidth(padding || 0) - insetWidth(margin || 0)
@@ -146,15 +164,15 @@ export class Box extends Element {
     this.contents.validate()
   }
 
-  protected rerender (canvas :CanvasRenderingContext2D) {
+  protected rerender (canvas :CanvasRenderingContext2D, region :rect) {
     const {margin} = this.style
     const inbounds = margin ? insetRect(margin, this._bounds, tmpr) : this._bounds
     // TODO: should we just do all element rendering translated to the element's origin
     canvas.translate(inbounds[0], inbounds[1])
-    this.background.current(canvas, dim2.set(tmpd, inbounds[2], inbounds[3]))
+    this.background.current.render(canvas, dim2.set(tmpd, inbounds[2], inbounds[3]))
     // TODO: should the border render over the contents?
-    this.border.current(canvas, dim2.set(tmpd, inbounds[2], inbounds[3]))
+    this.border.current.render(canvas, dim2.set(tmpd, inbounds[2], inbounds[3]))
     canvas.translate(-inbounds[0], -inbounds[1])
-    this.contents.render(canvas)
+    this.contents.render(canvas, region)
   }
 }

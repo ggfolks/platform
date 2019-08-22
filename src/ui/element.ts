@@ -32,6 +32,8 @@ export class Observer<T> implements Disposable {
   observe (value :Source<T>) {
     this.remover()
     this.remover = value.onValue(v => {
+      // dirty first, in case changing the value changes the bounds expansion
+      this.owner.dirty()
       this.current = v
       this.owner.invalidate()
     })
@@ -79,6 +81,8 @@ export type StyleScope = {
   states :string[]
 }
 
+const mergedBounds = rect.create()
+
 /** The basic building block of UIs. Elements have a bounds, are part of a UI hierarchy (have a
   * parent, except for the root element), and participate in the cycle of invalidation, validation
   * and rendering. */
@@ -86,6 +90,7 @@ export abstract class Element implements Disposable {
   protected readonly _bounds :rect = rect.create()
   protected readonly _psize :dim2 = dim2.fromValues(-1, -1)
   protected readonly _valid = Mutable.local(false)
+  protected readonly _dirtyRegion = rect.create()
   protected readonly _configScope? :StyleScope
   protected readonly disposer = new Disposer()
 
@@ -135,17 +140,26 @@ export abstract class Element implements Disposable {
   }
 
   setBounds (bounds :rect) {
-    const obounds = this._bounds, changed = !rect.eq(bounds, obounds)
-    rect.copy(obounds, bounds)
-    if (changed) this.invalidate()
+    if (rect.eq(this._bounds, bounds)) return
+    rect.union(mergedBounds, this._bounds, bounds)
+    rect.copy(this._bounds, bounds)
+    this.dirty(this.expandBounds(mergedBounds))
+    this.invalidate()
   }
 
-  invalidate () {
+  invalidate (dirty :boolean = true) {
     if (this._valid.current) {
       this._valid.update(false)
       this._psize[0] = -1 // force psize recompute
-      this.parent && this.parent.invalidate()
+      this.parent && this.parent.invalidate(false)
     }
+    if (dirty) this.dirty()
+  }
+
+  dirty (region :rect = this.expandBounds(this._bounds), fromChild :boolean = false) {
+    if (rect.containsRect(this._dirtyRegion, region)) return
+    rect.union(this._dirtyRegion, this._dirtyRegion, region)
+    if (this.parent) this.parent.dirty(region, true)
   }
 
   validate () :boolean {
@@ -155,8 +169,10 @@ export abstract class Element implements Disposable {
     return true
   }
 
-  render (canvas :CanvasRenderingContext2D) {
-    if (this.visible.current) this.rerender(canvas)
+  render (canvas :CanvasRenderingContext2D, region :rect) {
+    if (!rect.intersects(this._bounds, region)) return
+    if (this.visible.current) this.rerender(canvas, region)
+    rect.zero(this._dirtyRegion)
   }
 
   /** Requests that this element handle the supplied mouse down event.
@@ -213,9 +229,14 @@ export abstract class Element implements Disposable {
     if (this.visible.current) this.relayout()
   }
 
+  /** Expands the supplied bounds to include space for extra details such as shadows. */
+  protected expandBounds (bounds :rect) :rect {
+    return bounds
+  }
+
   protected abstract computePreferredSize (hintX :number, hintY :number, into :dim2) :void
   protected abstract relayout () :void
-  protected abstract rerender (canvas :CanvasRenderingContext2D) :void
+  protected abstract rerender (canvas :CanvasRenderingContext2D, region :rect) :void
 }
 
 /** Encapsulates a mouse interaction with an element. When the mouse button is pressed over an
@@ -238,7 +259,6 @@ const RootState = Value.constant(RootStates[0])
 export interface RootConfig extends ElementConfig {
   type :"root"
   scale :Scale
-  transparent? :boolean
   contents :ElementConfig
 }
 
@@ -267,14 +287,14 @@ export class Root extends Element {
   pack (width :number, height :number) :HTMLCanvasElement {
     this.setBounds(rect.set(tmpr, 0, 0, width, height))
     this.validate()
-    this.render(this.canvas)
+    this.render(this.canvas, this._bounds)
     return this.canvasElem
   }
 
   update (clock :Clock) :boolean {
     this._clock.emit(clock)
-    const changed = this.validate()
-    changed && this.render(this.canvas)
+    const changed = this.validate() || !rect.isEmpty(this._dirtyRegion)
+    changed && this.render(this.canvas, this._dirtyRegion)
     return changed
   }
 
@@ -350,22 +370,39 @@ export class Root extends Element {
   protected revalidate () {
     super.revalidate()
     const canvas = this.canvasElem, toPixel = this.config.scale
-    canvas.width = Math.ceil(toPixel.scaled(this.width))
-    canvas.height = Math.ceil(toPixel.scaled(this.height))
-    canvas.style.width = `${this.width}px`
-    canvas.style.height = `${this.height}px`
+    const scaledWidth = Math.ceil(toPixel.scaled(this.width))
+    const scaledHeight = Math.ceil(toPixel.scaled(this.height))
+    if (canvas.width !== scaledWidth || canvas.height !== scaledHeight) {
+      canvas.width = scaledWidth
+      canvas.height = scaledHeight
+      canvas.style.width = `${this.width}px`
+      canvas.style.height = `${this.height}px`
+    }
     this.contents.validate()
   }
 
-  protected rerender (canvas :CanvasRenderingContext2D) {
+  protected rerender (canvas :CanvasRenderingContext2D, region :rect) {
     const sf = this.config.scale.factor
-    if (this.config.transparent) {
-      canvas.clearRect(0, 0, this.canvasElem.width, this.canvasElem.height)
-    }
+    canvas.save()
     canvas.scale(sf, sf)
-    this.contents.render(canvas)
+    if (debugDirty) {
+      canvas.strokeStyle = DebugColors[debugColorIndex]
+      debugColorIndex = (debugColorIndex + 1) % DebugColors.length
+      canvas.strokeRect(region[0] - 2, region[1] - 2, region[2] + 4, region[3] + 4)
+    }
+    // expand the region by one pixel to allow for subpixel positioning
+    canvas.clearRect(region[0] - 1, region[1] - 1, region[2] + 2, region[3] + 2)
+    canvas.beginPath()
+    canvas.rect(region[0] - 1, region[1] - 1, region[2] + 2, region[3] + 2)
+    canvas.clip()
+    this.contents.render(canvas, region)
+    canvas.restore()
   }
 }
+
+const debugDirty = false
+const DebugColors = ["#FF0000", "#00FF00", "#0000FF", "#00FFFF", "#FF00FF", "#FFFF00"]
+let debugColorIndex = 0
 
 export const ControlStates = [...RootStates, "disabled", "focused"]
 
@@ -454,8 +491,8 @@ export class Control extends Element {
     this.contents.validate()
   }
 
-  protected rerender (canvas :CanvasRenderingContext2D) {
-    this.contents.render(canvas)
+  protected rerender (canvas :CanvasRenderingContext2D, region :rect) {
+    this.contents.render(canvas, region)
   }
 }
 

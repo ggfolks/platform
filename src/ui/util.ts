@@ -2,11 +2,7 @@
 export function makeRectPath (canvas :CanvasRenderingContext2D,
                               x :number, y :number, w :number, h :number) {
   canvas.beginPath()
-  canvas.moveTo(x, y)
-  canvas.lineTo(x+w, y)
-  canvas.lineTo(x+w, y+h)
-  canvas.lineTo(x, y+h)
-  canvas.closePath()
+  canvas.rect(x, y, w, h)
 }
 
 /** Creates a rounded rectangle path in `canvas` given the supplied config. */

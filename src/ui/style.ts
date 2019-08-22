@@ -1,4 +1,4 @@
-import {PMap} from "../core/util"
+import {Noop, PMap} from "../core/util"
 import {dim2} from "../core/math"
 import {Color} from "../core/color"
 import {Subject} from "../core/react"
@@ -310,13 +310,16 @@ function toCanvasFont (config :FontConfig) :string {
 //
 // Backgrounds and borders
 
-/** A decoration (border or background) is simply a rendering function. The canvas will be
-  * translated such that `0, 0` is the upper left of the region into which the decoration should be
-  * rendered, and `size` indicates its size. */
-export type Decoration = (canvas :CanvasRenderingContext2D, size :dim2) => void
+/** A decoration (border or background) contains a size ([top, right, bottom, left]) and a rendering
+  * function. The canvas will be translated such that `0, 0` is the upper left of the region into
+  * which the decoration should be rendered, and `size` indicates its size. */
+export interface Decoration {
+  size :[number, number, number, number]
+  render (canvas :CanvasRenderingContext2D, size :dim2) :void
+}
 
 /** A decoration that renders nothing. */
-export const NoopDecor :Decoration = (canvas, size) => {}
+export const NoopDecor :Decoration = {size: [0, 0, 0, 0], render: Noop}
 
 export type FitConfig = "start"| "center"  | "end" | "stretch"
 
@@ -348,17 +351,25 @@ export function makeBackground (ctx :StyleContext, config :BackgroundConfig) :Su
   if (config.fill) return ctx.resolvePaint(config.fill).map(fill => {
     const cornerRadius = config.cornerRadius
     const shadow = ctx.resolveShadowOpt(config.shadow)
-    return (canvas, size) => {
-      fill.prepFill(canvas)
-      const w = size[0], h = size[1]
-      shadow.prep(canvas)
-      if (cornerRadius) {
-        makeRoundRectPath(canvas, 0, 0, w, h, cornerRadius)
-        canvas.fill()
-      } else {
-        canvas.fillRect(0, 0, w, h)
+    return {
+      size: [
+        Math.max(-shadow.oy, 0) + shadow.blur,
+        Math.max(shadow.ox, 0) + shadow.blur,
+        Math.max(shadow.oy, 0) + shadow.blur,
+        Math.max(-shadow.ox, 0) + shadow.blur,
+      ],
+      render: (canvas, size) => {
+        fill.prepFill(canvas)
+        const w = size[0], h = size[1]
+        shadow.prep(canvas)
+        if (cornerRadius) {
+          makeRoundRectPath(canvas, 0, 0, w, h, cornerRadius)
+          canvas.fill()
+        } else {
+          canvas.fillRect(0, 0, w, h)
+        }
+        shadow.reset(canvas)
       }
-      shadow.reset(canvas)
     }
   })
   // TODO
@@ -382,17 +393,20 @@ export function makeBorder (ctx :StyleContext, config :BorderConfig) :Subject<De
   return ctx.resolvePaint(config.stroke).map(stroke => {
     const cornerRadius = config.cornerRadius
     const shadow = ctx.resolveShadowOpt(config.shadow)
-    return (canvas, size) => {
-      stroke.prepStroke(canvas)
-      const w = size[0], h = size[1]
-      shadow.prep(canvas)
-      if (cornerRadius) {
-        makeRoundRectPath(canvas, 0, 0, w, h, cornerRadius)
-        canvas.stroke()
-      } else {
-        canvas.strokeRect(0, 0, w, h)
+    return {
+      size: [0, 0, 0, 0],
+      render: (canvas, size) => {
+        stroke.prepStroke(canvas)
+        const w = size[0], h = size[1]
+        shadow.prep(canvas)
+        if (cornerRadius) {
+          makeRoundRectPath(canvas, 0, 0, w, h, cornerRadius)
+          canvas.stroke()
+        } else {
+          canvas.strokeRect(0, 0, w, h)
+        }
+        shadow.reset(canvas)
       }
-      shadow.reset(canvas)
     }
   })
 }

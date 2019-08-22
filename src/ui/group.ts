@@ -51,8 +51,8 @@ abstract class Group extends Element {
     for (const elem of this.contents) elem.validate()
   }
 
-  protected rerender (canvas :CanvasRenderingContext2D) {
-    for (const child of this.contents) child.render(canvas)
+  protected rerender (canvas :CanvasRenderingContext2D, region :rect) {
+    for (const child of this.contents) child.render(canvas, region)
   }
 }
 

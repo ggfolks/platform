@@ -103,6 +103,11 @@ export class rect extends Float32Array {
     return (px >= rx && px <= rx+rw && py >= ry && py <= ry+rh)
   }
 
+  static containsRect (a :rect, b :rect) :boolean {
+    const ax = a[0], ay = a[1], bx = b[0], by = b[1]
+    return bx >= ax && by >= ay && bx + b[2] <= ax + a[2] && by + b[3] <= ay + a[3]
+  }
+
   static intersects (r1 :rect, r2 :rect) :boolean {
     const x2 = r2[0], y2 = r2[1], w2 = r2[2], h2 = r2[3]
     return rect.intersectsXYWH(r1, x2, y2, w2, h2)
@@ -117,6 +122,21 @@ export class rect extends Float32Array {
     if (rect.isEmpty(r)) return false
     const x1 = r[0], y1 = r[1], w1 = r[2], h1 = r[3], x2 = x1+w1, y2 = y1+h1
     return (x+w > x1) && (x < x2) && (y+h > y1) && (y < y2)
+  }
+
+  static union (out :rect, a :rect, b :rect) :rect {
+    if (rect.isEmpty(a)) return rect.copy(out, b)
+    else if (rect.isEmpty(b)) return rect.copy(out, a)
+    const ax = a[0], ay = a[1], bx = b[0], by = b[1]
+    const x1 = Math.min(ax, bx)
+    const y1 = Math.min(ay, by)
+    const x2 = Math.max(ax + a[2], bx + b[2])
+    const y2 = Math.max(ay + a[3], by + b[3])
+    return rect.set(out, x1, y1, x2 - x1, y2 - y1)
+  }
+
+  static zero (out :rect) :rect {
+    return rect.set(out, 0, 0, 0, 0)
   }
 
   static right (r :rect) :number {
