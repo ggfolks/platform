@@ -101,7 +101,7 @@ export interface OperatorConfig<T> extends NodeConfig {
   output :OutputEdge<T>
 }
 
-export class Operator<T> extends Node {
+export abstract class Operator<T> extends Node {
 
   constructor (graph :Graph, id :string, readonly config :OperatorConfig<T>) {
     super(graph, id, config)
@@ -117,13 +117,9 @@ export class Operator<T> extends Node {
     return this._defaultInputValue
   }
 
-  protected get _defaultInputValue () :T {
-    throw new Error("Not implemented")
-  }
+  protected abstract get _defaultInputValue () :T
 
-  protected _apply (values :T[]) :T {
-    throw new Error("Not implemented")
-  }
+  protected abstract _apply (values :T[]) :T
 }
 
 interface NodeConstructor<T extends NodeConfig> {
