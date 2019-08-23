@@ -310,8 +310,8 @@ export abstract class HGroup extends Group {
       const eheight = computeOffSize(offPolicy, psize[1], m.maxHeight, height)
       // if the element is constrained (rather than stretched or equalized), it might be slimmer
       // than the row height, so we center it; this is a more useful default I think, and if you
-      // really want top-aligned elements, you can equalize or stretch and put your sub-elements in a
-      // top-aligned box
+      // really want top-aligned elements, you can equalize or stretch and put your sub-elements in
+      // a top-aligned box
       elem.setBounds(rect.set(tmpr, x, top+(height-eheight)/2, ewidth, eheight))
       x += (ewidth + gap)
     }

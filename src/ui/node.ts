@@ -1,6 +1,5 @@
 import {vec2} from "gl-matrix"
 
-import {vec2zero} from "../core/math"
 import {Scale} from "../core/ui"
 import {Value} from "../core/react"
 import {Graph} from "../graph/graph"
@@ -54,10 +53,10 @@ class UINode extends Node {
           },
           ...createGraphModelData(graph),
         }))
-        if (this.config.size) {
-          root.pack(this.config.size[0], this.config.size[1])
-        } // TODO: else pack to preferred size
-        ctx.host.addRoot(root, this.config.origin || vec2zero)
+        if (this.config.size) root.setSize(this.config.size[0], this.config.size[1])
+        else root.sizeToFit()
+        if (this.config.origin) root.setOrigin(this.config.origin)
+        ctx.host.addRoot(root)
       }
     }))
   }

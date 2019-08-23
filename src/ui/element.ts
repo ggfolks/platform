@@ -7,9 +7,9 @@ import {Scale} from "../core/ui"
 import {Model} from "./model"
 import {Spec, StyleContext} from "./style"
 
-const tmpr = rect.create()
-const tmpv = vec2.create()
+const tmpr = rect.create(), tmpv = vec2.create(), tmpd = dim2.create()
 const trueValue = Value.constant(true)
+const defHintSize = Value.constant(dim2.fromValues(64000, 32000))
 
 /** Used by elements to observe reactive values. Takes care of invalidating the element when the
   * value changes, clearing old listeners when switching sources, and cleaning up when the element
@@ -259,13 +259,29 @@ const RootState = Value.constant(RootStates[0])
 export interface RootConfig extends ElementConfig {
   type :"root"
   scale :Scale
+  autoSize? :boolean
+  hintSize? :Spec<Value<dim2>>
   contents :ElementConfig
+}
+
+/** The horizontal anchor point on an anchored root. */
+export type HAnchor = "left" | "center" | "right"
+/** The vertical anchor point on an anchored root. */
+export type VAnchor = "top" | "center" | "bottom"
+
+function pos (align :HAnchor|VAnchor, min :number, max :number) {
+  if (align === "left" || align === "top") return min
+  else if (align == "right" || align === "bottom") return max
+  else return min+(max-min)/2
 }
 
 /** The top-level of the UI hierarchy. Manages the canvas into which the UI is rendered. */
 export class Root extends Element {
   private readonly interacts :Array<MouseInteraction|undefined> = []
   private readonly _clock = new Emitter<Clock>()
+  private readonly _sizeChange = new Emitter<Root>()
+  private readonly _hintSize :Value<dim2>
+  private readonly _origin = vec2.create()
   readonly canvasElem :HTMLCanvasElement = document.createElement("canvas")
   readonly canvas :CanvasRenderingContext2D
   readonly contents :Element
@@ -276,6 +292,7 @@ export class Root extends Element {
     const canvas = this.canvasElem.getContext("2d")
     if (canvas) this.canvas = canvas
     else throw new Error(`Canvas rendering context not supported?`)
+    this._hintSize = config.hintSize ? ctx.model.resolve(config.hintSize) : defHintSize
     this.contents = ctx.elem.create(ctx, this, config.contents)
   }
 
@@ -283,16 +300,53 @@ export class Root extends Element {
   get styleScope () :StyleScope { return {id: "default", states: RootStates} }
   get root () :Root { return this }
   get state () :Value<string> { return RootState }
+  get origin ()  :vec2 { return this._origin }
 
-  pack (width :number, height :number) :HTMLCanvasElement {
+  /** A stream that emits `this` when this root's size changes. */
+  get sizeChange () :Stream<Root> { return this._sizeChange }
+
+  /** Informs the root of the position at which it is displayed on the screen. This value is used to interpret
+    * mouse and touch events. */
+  setOrigin (pos :vec2) {
+    vec2.copy(this._origin, pos)
+  }
+
+  /** Binds the origin of this root by matching a point of this root (specified by `rootH` & `rootV`) to a point
+    * on the screen (specified by `screenH` & `screenV`), given a reactive view of the screen `size`.
+    * @return a remover that can be used to cancel the binding. The binding will also be cleared when the root
+    * is disposed. */
+  bindOrigin (screen :Value<dim2>, screenH :HAnchor, screenV :VAnchor, rootH :HAnchor, rootV :VAnchor) :Remover {
+    const rsize = this.sizeChange.fold(dim2.fromValues(this.width, this.height),
+                                       (sz, r) => dim2.fromValues(r.width, r.height), dim2.eq)
+    const remover = Value.join2(screen, rsize).onValue(([ss, rs]) => {
+      const sh = pos(screenH, 0, ss[0]), sv = pos(screenV, 0, ss[1])
+      const rh = pos(rootH, 0, rs[0]), rv = pos(rootV, 0, rs[1])
+      this._origin[0] = sh-rh
+      this._origin[1] = sv-rv
+    })
+    this.disposer.add(remover)
+    return remover
+  }
+
+  setSize (width :number, height :number) :HTMLCanvasElement {
     this.setBounds(rect.set(tmpr, 0, 0, width, height))
     this.validate()
     this.render(this.canvas, this._bounds)
     return this.canvasElem
   }
 
+  sizeToFit (maxX :number = 64000, maxY :number = 32000) :HTMLCanvasElement {
+    this.computePreferredSize(maxX, maxY, tmpd)
+    return this.setSize(tmpd[0], tmpd[1])
+  }
+
   update (clock :Clock) :boolean {
     this._clock.emit(clock)
+    if (!this.valid.current && this.config.autoSize) {
+      const hint = this._hintSize.current
+      this.computePreferredSize(hint[0], hint[1], tmpd)
+      this.setBounds(rect.set(tmpr, 0, 0, tmpd[0], tmpd[1]))
+    }
     const changed = this.validate() || !rect.isEmpty(this._dirtyRegion)
     changed && this.render(this.canvas, this._dirtyRegion)
     return changed
@@ -306,12 +360,12 @@ export class Root extends Element {
   /** Dispatches a browser mouse event to this root.
     * @param event the browser event to dispatch.
     * @param origin the origin of the root in screen coordinates. */
-  dispatchMouseEvent (event :MouseEvent, origin :vec2) {
+  dispatchMouseEvent (event :MouseEvent) {
     // TODO: we're assuming the root/renderer scale is the same as the browser display unit to pixel
     // ratio (mouse events come in display units), so everything "just lines up"; if we want to
     // support other weird ratios between browser display units and backing buffers, we have to be
     // more explicit about all this...
-    const pos = vec2.set(tmpv, event.offsetX-origin[0], event.offsetY-origin[1])
+    const pos = vec2.set(tmpv, event.offsetX-this.origin[0], event.offsetY-this.origin[1])
     const button = event.button
     const iact = this.interacts[button]
     switch (event.type) {
@@ -343,7 +397,7 @@ export class Root extends Element {
       }
     }
   }
-  // TODO: dispatchMouseWheelEvent, dispatchTouchEvent, handlePointerDown (called by mouse & touch)?
+  // TODO: dispatchTouchEvent, handlePointerDown (called by mouse & touch)?
 
   /** Dispatches a browser keyboard event to this root. */
   dispatchKeyEvent (event :KeyboardEvent) {
@@ -352,8 +406,8 @@ export class Root extends Element {
     focus && focus.handleKeyEvent(event)
   }
 
-  dispatchWheelEvent (event :WheelEvent, origin :vec2) {
-    const pos = vec2.set(tmpv, event.offsetX-origin[0], event.offsetY-origin[1])
+  dispatchWheelEvent (event :WheelEvent) {
+    const pos = vec2.set(tmpv, event.offsetX-this.x, event.offsetY-this.y)
     if (rect.contains(this.contents.bounds, pos) && this.contents.handleWheel(event, pos)) {
       event.cancelBubble = true
     }
@@ -377,6 +431,7 @@ export class Root extends Element {
       canvas.height = scaledHeight
       canvas.style.width = `${this.width}px`
       canvas.style.height = `${this.height}px`
+      this._sizeChange.emit(this)
     }
     this.contents.validate()
   }
@@ -501,7 +556,8 @@ export class Control extends Element {
   * - [[bind]] to the canvas element in which the roots are rendered
   * - call [[update]] on every animation frame
   * - add manually created roots via [[addRoot]]
-  * - keep the root origins up to date with the locations at which the roots are rendered.
+  * - keep the root's positions up to date with the positions at which the roots are rendered (either via
+  *   [[Root.setPosition]] or [[Root.bindPosition]]).
   *
   * Clients will generally not use this class directly but rather use the `Host2` or `Host3`
   * subclasses which integrate more tightly with the `scene2` and `scene3` libraries. */
@@ -511,19 +567,19 @@ export class Host implements Disposable {
   private readonly onWheel = (event :WheelEvent) => this.handleWheelEvent(event)
   private readonly onPointerDown = (event :PointerEvent) => this.handlePointerDown(event)
   private readonly onPointerUp = (event :PointerEvent) => this.handlePointerUp(event)
-  protected readonly roots :[Root, vec2][] = []
+  protected readonly roots :Root[] = []
 
-  addRoot (root :Root, origin :vec2) {
+  addRoot (root :Root) {
     const ii = this.roots.length
-    this.roots.push([root, origin])
-    this.rootAdded(root, origin, ii)
+    this.roots.push(root)
+    this.rootAdded(root, ii)
   }
 
   removeRoot (root :Root, dispose = true) {
-    const idx = this.roots.findIndex(ro => ro[0] === root)
+    const idx = this.roots.indexOf(root)
     if (idx >= 0) {
-      const ro = this.roots.splice(idx, 1)[0]
-      this.rootRemoved(root, ro[1], idx)
+      this.roots.splice(idx, 1)
+      this.rootRemoved(root, idx)
       if (dispose) root.dispose()
     }
   }
@@ -550,14 +606,14 @@ export class Host implements Disposable {
   }
 
   handleMouseEvent (event :MouseEvent) {
-    for (const ro of this.roots) ro[0].dispatchMouseEvent(event, ro[1])
+    for (const root of this.roots) root.dispatchMouseEvent(event)
   }
   handleKeyEvent (event :KeyboardEvent) {
     // TODO: maintain a notion of which root currently has focus (if any)
-    for (const ro of this.roots) ro[0].dispatchKeyEvent(event)
+    for (const root of this.roots) root.dispatchKeyEvent(event)
   }
   handleWheelEvent (event :WheelEvent) {
-    for (const ro of this.roots) ro[0].dispatchWheelEvent(event, ro[1])
+    for (const root of this.roots) root.dispatchWheelEvent(event)
   }
   handlePointerDown (event :PointerEvent) {
     const canvas = event.target as HTMLElement
@@ -570,20 +626,19 @@ export class Host implements Disposable {
 
   update (clock :Clock) {
     let ii = 0
-    for (const ro of this.roots) {
-      const root = ro[0]
-      if (root.update(clock)) this.rootUpdated(root, ro[1], ii)
+    for (const root of this.roots) {
+      if (root.update(clock)) this.rootUpdated(root, ii)
       ii += 1
     }
   }
 
   dispose () {
-    for (const ro of this.roots) ro[0].dispose()
+    for (const root of this.roots) root.dispose()
   }
 
-  protected rootAdded (root :Root, origin :vec2, index :number) {}
-  protected rootUpdated (root :Root, origin :vec2, index :number) {}
-  protected rootRemoved (root :Root, origin :vec2, index :number) {}
+  protected rootAdded (root :Root, index :number) {}
+  protected rootUpdated (root :Root, index :number) {}
+  protected rootRemoved (root :Root, index :number) {}
 }
 
 /** A host that simply appends canvases to an HTML element (which should be positioned). */
@@ -596,33 +651,33 @@ export class HTMLHost extends Host {
 
   update (clock :Clock) {
     let ii = 0
-    for (const [root, origin] of this.roots) {
-      if (root.update(clock)) this.rootUpdated(root, origin, ii)
+    for (const root of this.roots) {
+      if (root.update(clock)) this.rootUpdated(root, ii)
       const lastOrigin = this._lastOrigins[ii]
-      if (!vec2.exactEquals(lastOrigin, origin)) {
-        this._updatePosition(root, origin)
-        vec2.copy(lastOrigin, origin)
+      if (!vec2.exactEquals(lastOrigin, root.origin)) {
+        this._updatePosition(root)
+        vec2.copy(lastOrigin, root.origin)
       }
       ii += 1
     }
   }
 
-  protected rootAdded (root :Root, origin :vec2, index :number) {
+  protected rootAdded (root :Root, index :number) {
     this._container.appendChild(root.canvasElem)
     const style = root.canvasElem.style
     style.position = "absolute"
     style.pointerEvents = "none"
-    this._updatePosition(root, origin)
-    this._lastOrigins[index] = vec2.clone(origin)
+    this._updatePosition(root)
+    this._lastOrigins[index] = vec2.fromValues(root.x, root.y)
   }
 
-  protected _updatePosition (root :Root, origin :vec2) {
+  protected _updatePosition (root :Root) {
     const style = root.canvasElem.style
-    style.left = `${origin[0]}px`
-    style.top = `${origin[1]}px`
+    style.left = `${root.origin[0]}px`
+    style.top = `${root.origin[1]}px`
   }
 
-  protected rootRemoved (root :Root, origin :vec2, index :number) {
+  protected rootRemoved (root :Root, index :number) {
     this._container.removeChild(root.canvasElem)
     this._lastOrigins.splice(index, 1)
   }

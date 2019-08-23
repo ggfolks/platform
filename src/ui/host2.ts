@@ -1,4 +1,3 @@
-import {vec2} from "../core/math"
 import {Root, Host} from "./element"
 import {Renderer, Texture, createTexture, imageToTexture} from "../scene2/gl"
 import {Surface} from "../scene2/surface"
@@ -13,9 +12,9 @@ export class Host2 extends Host {
 
   render (surf :Surface) {
     for (let ii = 0, ll = this.roots.length; ii < ll; ii += 1) {
-      const ro = this.roots[ii], origin = ro[1]
+      const root = this.roots[ii]
       const tex = this.textures[ii]
-      surf.draw(tex, origin, tex.size)
+      surf.draw(tex, root.origin, tex.size)
     }
   }
 
@@ -24,7 +23,7 @@ export class Host2 extends Host {
     for (const tex of this.textures) this.renderer.glc.deleteTexture(tex.tex)
   }
 
-  protected rootAdded (root :Root, origin :vec2, index :number) {
+  protected rootAdded (root :Root, index :number) {
     const {glc, scale} = this.renderer
     const texcfg = {...Texture.DefaultConfig, scale: scale}
     const gltex = createTexture(glc, texcfg)
@@ -32,7 +31,7 @@ export class Host2 extends Host {
     console.log(`Root added ${this.textures[index]}`)
   }
 
-  protected rootUpdated (root :Root, origin :vec2, index :number) {
+  protected rootUpdated (root :Root, index :number) {
     const otex = this.textures[index]
     this.textures[index] = imageToTexture(this.renderer.glc, root.canvasElem, otex.config, otex.tex)
   }

@@ -1,5 +1,3 @@
-import {vec2} from "gl-matrix"
-
 import {
   Camera,
   CanvasTexture,
@@ -24,7 +22,7 @@ export class Host3 extends Host {
 
   private _meshes :Mesh[] = []
 
-  protected rootAdded (root :Root, origin :vec2, index :number) {
+  protected rootAdded (root :Root, index :number) {
     const texture = new CanvasTexture(root.canvasElem)
     texture.minFilter = LinearFilter
     const mesh = this._meshes[index] = new Mesh(DefaultPlaneBufferGeometry, new MeshBasicMaterial({
@@ -43,8 +41,8 @@ export class Host3 extends Host {
         mesh.matrixWorld
           .makeScale(root.width * width / rendererSize.x, root.height * height / rendererSize.y, 1)
           .setPosition(
-            (origin[0] + root.width / 2) * width / rendererSize.x - width / 2,
-            height / 2 - (origin[1] + root.height / 2) * height / rendererSize.y,
+            (root.origin[0] + root.width / 2) * width / rendererSize.x - width / 2,
+            height / 2 - (root.origin[1] + root.height / 2) * height / rendererSize.y,
             -distance,
           )
           .premultiply(camera.matrixWorld)
@@ -53,12 +51,12 @@ export class Host3 extends Host {
     this.group.add(mesh)
   }
 
-  protected rootUpdated (root :Root, origin :vec2, index :number) {
+  protected rootUpdated (root :Root, index :number) {
     const material = this._meshes[index].material as MeshBasicMaterial
     (material.map as CanvasTexture).needsUpdate = true
   }
 
-  protected rootRemoved (root :Root, origin :vec2, index :number) {
+  protected rootRemoved (root :Root, index :number) {
     const mesh = this._meshes[index]
     this._meshes.splice(index, 1)
     this.group.remove(mesh)
