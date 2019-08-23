@@ -407,7 +407,7 @@ export class Root extends Element {
   }
 
   dispatchWheelEvent (event :WheelEvent) {
-    const pos = vec2.set(tmpv, event.offsetX-this.x, event.offsetY-this.y)
+    const pos = vec2.set(tmpv, event.offsetX-this.origin[0], event.offsetY-this.origin[0])
     if (rect.contains(this.contents.bounds, pos) && this.contents.handleWheel(event, pos)) {
       event.cancelBubble = true
     }
