@@ -13,7 +13,7 @@ export interface NodeConfig {
 }
 
 /** Describes the input of a node: a node ID, a node/output pair, or a static value. */
-export type NodeInput<T> = string | [string, string] | T
+export type NodeInput<T> = string | [string, string] | T | Value<T>
 
 /** Describes the connection state of a single node input. */
 export type InputEdge<T> = undefined | NodeInput<T>

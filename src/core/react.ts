@@ -443,9 +443,12 @@ export class Subject<T> extends Source<T> {
 //
 // Reactive values
 
+let lastValueId = 0
+
 /** A reactive primitive that contains a value, which may subsequently change. The current value may
   * be observed by listening via [[Value.onValue]], or by calling [[Value.current]]. */
 export class Value<T> extends Source<T> {
+  private _id? :number
 
   /** Creates a constant value which always contains `value`. */
   static constant<T> (value :T) :Value<T> {
@@ -564,6 +567,12 @@ export class Value<T> extends Source<T> {
 
   /** The current value contained by this value. */
   get current () :T { return this._current() }
+
+  /** A lazily-created unique id for this value. */
+  get id () :number {
+    if (!this._id) this._id = ++lastValueId
+    return this._id
+  }
 
   /** Registers `fn` to be called with the new value whenever this subject changes.
     * @return a remover thunk (invoke with no args to unregister `fn`). */

@@ -27,6 +27,24 @@ class Constant extends Node {
   }
 }
 
+/** Outputs a reactive value. */
+abstract class ValueConfig implements NodeConfig {
+  type = "value"
+  @property("Value<number>") value = Value.constant(0)
+  @outputEdge("number") output = undefined
+}
+
+class ValueNode extends Node {
+
+  constructor (graph :Graph, id :string, readonly config :ValueConfig) {
+    super(graph, id, config)
+  }
+
+  protected _createOutput () {
+    return this.config.value
+  }
+}
+
 /** Addition operator. */
 abstract class AddConfig implements OperatorConfig<number> {
   type = "add"
@@ -276,6 +294,7 @@ class Step extends Node {
 /** Registers the nodes in this module with the supplied registry. */
 export function registerMathNodes (registry :NodeTypeRegistry) {
   registry.registerNodeType("constant", Constant)
+  registry.registerNodeType("value", ValueNode)
   registry.registerNodeType("add", Add)
   registry.registerNodeType("subtract", Subtract)
   registry.registerNodeType("multiply", Multiply)

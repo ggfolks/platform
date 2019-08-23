@@ -9,8 +9,18 @@ export interface GraphConfig {
   [id :string] :NodeConfig
 }
 
+/** Returns the node id used for a fixed constant or reactive value. */
+export function getConstantOrValueNodeId (value :any) {
+  return (value instanceof Value) ? getValueNodeId(value) : getConstantNodeId(value)
+}
+
+/** Returns the node id used for a reactive value. */
+function getValueNodeId (value :Value<any>) {
+  return `$${value.id}`
+}
+
 /** Returns the node id used for a fixed constant value. */
-export function getConstantNodeId (value :any) {
+function getConstantNodeId (value :any) {
   return `__${value}`
 }
 
@@ -61,6 +71,17 @@ export class Graph implements Disposable {
     }
     if (typeof input === "string") {
       return this._nodes.require(input).getOutput(undefined, defaultValue)
+    }
+    if (input instanceof Value) {
+      const id = getValueNodeId(input)
+      let node = this._nodes.get(id)
+      if (!node) {
+        this._nodes.set(id, node = this.ctx.types.createNode(this, id, {
+          type: "value",
+          value: input,
+        }))
+      }
+      return node.getOutput(undefined, defaultValue)
     }
     const id = getConstantNodeId(input)
     let node = this._nodes.get(id)

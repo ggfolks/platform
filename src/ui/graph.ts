@@ -1,7 +1,7 @@
 import {dim2, rect, vec2} from "../core/math"
 import {Mutable, Value} from "../core/react"
 import {PMap, Remover} from "../core/util"
-import {getConstantNodeId} from "../graph/graph"
+import {getConstantOrValueNodeId} from "../graph/graph"
 import {InputEdge, InputEdges} from "../graph/node"
 import {Element, ElementConfig, ElementContext, MouseInteraction} from "./element"
 import {AbsConstraints, AbsGroup, AxisConfig, VGroup} from "./group"
@@ -228,7 +228,7 @@ export class GraphView extends AbsGroup {
           inputs.push(edge)
           roots.delete(edge)
         } else if (edge !== undefined) {
-          const nodeId = getConstantNodeId(edge)
+          const nodeId = getConstantOrValueNodeId(edge)
           inputs.push(nodeId)
           roots.delete(nodeId)
         }
@@ -522,7 +522,7 @@ export class EdgeView extends Element {
         } else if (typeof input === "string") {
           targetId = input
         } else if (input !== undefined) {
-          targetId = getConstantNodeId(input)
+          targetId = getConstantOrValueNodeId(input)
         } else {
           return
         }
