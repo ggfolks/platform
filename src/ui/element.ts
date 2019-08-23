@@ -585,3 +585,45 @@ export class Host implements Disposable {
   protected rootUpdated (root :Root, origin :vec2, index :number) {}
   protected rootRemoved (root :Root, origin :vec2, index :number) {}
 }
+
+/** A host that simply appends canvases to an HTML element (which should be positioned). */
+export class HTMLHost extends Host {
+  private readonly _lastOrigins :vec2[] = []
+
+  constructor (private readonly _container :HTMLElement) {
+    super()
+  }
+
+  update (clock :Clock) {
+    let ii = 0
+    for (const [root, origin] of this.roots) {
+      if (root.update(clock)) this.rootUpdated(root, origin, ii)
+      const lastOrigin = this._lastOrigins[ii]
+      if (!vec2.exactEquals(lastOrigin, origin)) {
+        this._updatePosition(root, origin)
+        vec2.copy(lastOrigin, origin)
+      }
+      ii += 1
+    }
+  }
+
+  protected rootAdded (root :Root, origin :vec2, index :number) {
+    this._container.appendChild(root.canvasElem)
+    const style = root.canvasElem.style
+    style.position = "absolute"
+    style.pointerEvents = "none"
+    this._updatePosition(root, origin)
+    this._lastOrigins[index] = vec2.clone(origin)
+  }
+
+  protected _updatePosition (root :Root, origin :vec2) {
+    const style = root.canvasElem.style
+    style.left = `${origin[0]}px`
+    style.top = `${origin[1]}px`
+  }
+
+  protected rootRemoved (root :Root, origin :vec2, index :number) {
+    this._container.removeChild(root.canvasElem)
+    this._lastOrigins.splice(index, 1)
+  }
+}
