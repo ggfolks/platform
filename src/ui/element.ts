@@ -557,7 +557,7 @@ export class Control extends Element {
   * - call [[update]] on every animation frame
   * - add manually created roots via [[addRoot]]
   * - keep the root's positions up to date with the positions at which the roots are rendered (either via
-  *   [[Root.setPosition]] or [[Root.bindPosition]]).
+  *   [[Root.setOrigin]] or [[Root.bindOrigin]]).
   *
   * Clients will generally not use this class directly but rather use the `Host2` or `Host3`
   * subclasses which integrate more tightly with the `scene2` and `scene3` libraries. */
