@@ -668,7 +668,7 @@ export class HTMLHost extends Host {
     style.position = "absolute"
     style.pointerEvents = "none"
     this._updatePosition(root)
-    this._lastOrigins[index] = vec2.fromValues(root.x, root.y)
+    this._lastOrigins[index] = vec2.clone(root.origin)
   }
 
   protected _updatePosition (root :Root) {
