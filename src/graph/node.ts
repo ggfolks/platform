@@ -35,7 +35,8 @@ export interface NodeContext {
 /** Parent class for all nodes. */
 export abstract class Node implements Disposable {
   protected _disposer = new Disposer()
-  private _outputs :Map<string | undefined, Value<any>> = new Map()
+  private _outputs :Map<string, Value<any>> = new Map()
+  private _defaultOutputKey? :string
 
   constructor (readonly graph :Graph, readonly id :string, readonly config :NodeConfig) {}
 
@@ -54,25 +55,43 @@ export abstract class Node implements Disposable {
     return getNodeMeta(this.config.type).outputs
   }
 
+  /** The key of the default output, or the empty string if none. */
+  get defaultOutputKey () :string {
+    if (this._defaultOutputKey === undefined) {
+      this._defaultOutputKey = ""
+      const outputs = this.outputsMeta
+      for (const outputKey in outputs) {
+        if (outputs[outputKey].isDefault) {
+          this._defaultOutputKey = outputKey
+          break
+        }
+        // first output key is default if not otherwise specified
+        if (!this._defaultOutputKey) this._defaultOutputKey = outputKey
+      }
+    }
+    return this._defaultOutputKey
+  }
+
   /** Returns the value corresponding to the identified output, or the default if none. */
   getOutput<T> (name :string | undefined, defaultValue :T) :Value<T> {
     // create outputs lazily
-    let output = this._outputs.get(name)
+    const outputKey = name || this.defaultOutputKey
+    let output = this._outputs.get(outputKey)
     if (!output) {
       // it may be that our call to _createOutput ends up triggering a recursive call to getOutput
       // on this node.  in that case, we have a cycle.  when that happens, we use the value from
       // the previous frame
-      let current = this._maybeOverrideDefaultValue(name, defaultValue)
-      this._outputs.set(name, Value.deriveValue(
+      let current = this._maybeOverrideDefaultValue(outputKey, defaultValue)
+      this._outputs.set(outputKey, Value.deriveValue(
         refEquals,
         dispatch => this.graph.clock.onEmit(() => {
           const previous = current
-          current = (this._outputs.get(name) as Value<T>).current
+          current = (this._outputs.get(outputKey) as Value<T>).current
           if (current !== previous) dispatch(current, previous)
         }),
         () => current
       ))
-      this._outputs.set(name, output = this._createOutput(name, defaultValue))
+      this._outputs.set(outputKey, output = this._createOutput(outputKey, defaultValue))
     }
     return output
   }
@@ -86,11 +105,11 @@ export abstract class Node implements Disposable {
 
   /** Gives subclasses a chance to overrule the default value provided by the output consumer.  For
    * example, in a multiply node, 1 makes a better default than zero. */
-  protected _maybeOverrideDefaultValue (name :string | undefined, defaultValue :any) {
+  protected _maybeOverrideDefaultValue (name :string, defaultValue :any) {
     return defaultValue
   }
 
-  protected _createOutput (name :string | undefined, defaultValue :any) :Value<any> {
+  protected _createOutput (name :string, defaultValue :any) :Value<any> {
     throw new Error("Unknown output " + name)
   }
 }
@@ -113,7 +132,7 @@ export abstract class Operator<T> extends Node {
       .map(values => this._apply(values))
   }
 
-  protected _maybeOverrideDefaultValue (name :string | undefined, defaultValue :any) {
+  protected _maybeOverrideDefaultValue (name :string, defaultValue :any) {
     return this._defaultInputValue
   }
 

@@ -86,7 +86,7 @@ class MouseMovement extends Node {
     super(graph, id, config)
   }
 
-  protected _createOutput (name? :string) {
+  protected _createOutput (name :string) {
     const hand = (this.graph.ctx as InputNodeContext).hand
     if (!hand) {
       return Value.constant(0)
@@ -117,7 +117,7 @@ class PointerMovement extends Node {
     super(graph, id, config)
   }
 
-  protected _createOutput (name? :string) {
+  protected _createOutput (name :string) {
     const hand = (this.graph.ctx as InputNodeContext).hand
     if (!hand) {
       return Value.constant(0)

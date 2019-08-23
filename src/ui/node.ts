@@ -80,6 +80,7 @@ function createGraphModelData (graph :Graph) :ModelData {
         propertyKeys: Value.constant(Object.keys(value.current.propertiesMeta)),
         inputKeys: Value.constant(Object.keys(value.current.inputsMeta)),
         outputKeys: Value.constant(Object.keys(value.current.outputsMeta)),
+        defaultOutputKey: Value.constant(value.current.defaultOutputKey),
         property: {
           resolve: (key :ModelKey) => {
             const propertiesMeta = value.current.propertiesMeta[key]
@@ -104,6 +105,7 @@ function createGraphModelData (graph :Graph) :ModelData {
           resolve: (key :ModelKey) => new Model({
             name: Value.constant(key),
             isDefault: Value.constant(value.current.outputsMeta[key].isDefault),
+            value: value.current.getOutput(key as string, undefined),
           }),
         },
       }

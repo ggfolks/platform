@@ -1,6 +1,7 @@
 import {Euler, Math as ThreeMath, Matrix4, Quaternion, Vector3} from "three"
 
 import {Value} from "../core/react"
+import {getValueStyleComponent} from "../core/ui"
 import {Graph} from "../graph/graph"
 import {inputEdge, inputEdges, outputEdge, property} from "../graph/meta"
 import {
@@ -17,6 +18,32 @@ import {TransformComponent} from "./entity"
 Vector3.prototype.toString = function() { return `(${this.x}, ${this.y}, ${this.z})` }
 Euler.prototype.toString = function() {
   return `(${radToDegString(this.x)}, ${radToDegString(this.y)}, ${radToDegString(this.z)})`
+}
+
+// path in getStyle functions
+const Vector3Prototype = Vector3.prototype as any
+Vector3Prototype.getStyle = function() {
+  const self = this as Vector3
+  const r = getValueStyleComponent(self.x)
+  const g = getValueStyleComponent(self.y)
+  const b = getValueStyleComponent(self.z)
+  return `rgb(${r}, ${g}, ${b})`
+}
+const EulerPrototype = Euler.prototype as any
+const angleScale = 127 / Math.PI
+EulerPrototype.getStyle = function() {
+  const self = this as Euler
+  const r = Math.round(128 + normalizeAngle(self.x) * angleScale)
+  const g = Math.round(128 + normalizeAngle(self.y) * angleScale)
+  const b = Math.round(128 + normalizeAngle(self.z) * angleScale)
+  return `rgb(${r}, ${g}, ${b})`
+}
+
+const TWO_PI = 2 * Math.PI
+function normalizeAngle (angle :number) {
+  while (angle < -Math.PI) angle += TWO_PI
+  while (angle > Math.PI) angle -= TWO_PI
+  return angle
 }
 
 function radToDegString (radians :number) {
@@ -97,7 +124,7 @@ class Vector3Split extends Node {
     super(graph, id, config)
   }
 
-  protected _createOutput (name :string = "x") {
+  protected _createOutput (name :string) {
     return this.graph.getValue(this.config.input, new Vector3()).map(value => value[name])
   }
 }
@@ -330,7 +357,7 @@ class ReadTransform extends EntityComponentNode<TransformComponent> {
     super(graph, id, config)
   }
 
-  protected _createOutput (name :string | undefined, defaultValue :any) {
+  protected _createOutput (name :string, defaultValue :any) {
     let getter :() => any
     switch (name) {
       case "quaternion":

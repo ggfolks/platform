@@ -35,3 +35,30 @@ export class Scale {
 
   toString() { return `x${this.factor}` }
 }
+
+/** Returns a CSS style that represents the specified value. */
+export function getValueStyle (value :any) :string {
+  switch (typeof value) {
+    case "boolean":
+      return value ? "#C0C0C0" : "#808080"
+
+    case "number":
+      const str = getValueStyleComponent(value)
+      return `rgb(${str}, ${str}, ${str})`
+
+    case "object":
+      // we look for a getStyle function, as used in Three.js Color instances
+      if (value.getStyle) return value.getStyle()
+  }
+  return "#808080"
+}
+
+/** Maps a numeric value to a CSS color component string (0-255). */
+export function getValueStyleComponent (value :number) :string {
+  // mapping is linear between -1 and 1, asymptotic outside that range
+  return String(Math.round(
+    Math.abs(value) <= 1
+      ? 128 + value * 64
+      : (value > 0 ? 255 - 64 / value : 0 - 64 / value)
+  ))
+}

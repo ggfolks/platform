@@ -73,7 +73,7 @@ class Latch extends Node {
     super(graph, id, config)
   }
 
-  protected _createOutput (name :string | undefined, defaultValue :any) {
+  protected _createOutput (name :string, defaultValue :any) {
     let stored :any = defaultValue
     return Value
       .join2(
@@ -101,7 +101,7 @@ class ClockNode extends Node {
     super(graph, id, config)
   }
 
-  protected _createOutput (name? :string) {
+  protected _createOutput (name :string) {
     const field :(clock :Clock) => number =
       (name === "time" || name === "elapsed") ? clock => clock[name] : clock => clock.dt
     return this.graph.clock.map(field).toValue(0, refEquals)
@@ -152,7 +152,7 @@ export class Subgraph extends Node {
     this.containedGraph.connect()
   }
 
-  protected _createOutput (name :string | undefined, defaultValue :any) {
+  protected _createOutput (name :string, defaultValue :any) {
     let edge :InputEdge<any>
     if (name === undefined) {
       if (this._containedOutputs.size !== 1) throw new Error("No default output")
@@ -178,7 +178,7 @@ class Input extends Node {
     super(graph, id, config)
   }
 
-  protected _createOutput (name :string | undefined, defaultValue :any) {
+  protected _createOutput (name :string, defaultValue :any) {
     const subgraph = this.graph.ctx.subgraph
     if (!subgraph) throw new Error("Input node used outside subgraph")
     return subgraph.graph.getValue(subgraph.config[this.config.name], defaultValue)

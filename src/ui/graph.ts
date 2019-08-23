@@ -1,5 +1,6 @@
 import {dim2, rect, vec2} from "../core/math"
 import {Mutable, Value} from "../core/react"
+import {getValueStyle} from "../core/ui"
 import {PMap, Remover} from "../core/util"
 import {getConstantOrValueNodeId} from "../graph/graph"
 import {InputEdge, InputEdges} from "../graph/node"
@@ -7,7 +8,6 @@ import {Element, ElementConfig, ElementContext, MouseInteraction} from "./elemen
 import {AbsConstraints, AbsGroup, AxisConfig, VGroup} from "./group"
 import {List} from "./list"
 import {Model, ModelData, ModelKey, ModelProvider, Spec} from "./model"
-import {DefaultPaint, PaintConfig} from "./style"
 
 /** A navigable graph viewer. */
 export interface GraphViewerConfig extends ElementConfig {
@@ -451,27 +451,26 @@ export interface EdgeViewConfig extends ElementConfig {
 
 /** Defines the styles that apply to [[EdgeView]]. */
 export interface EdgeViewStyle {
-  stroke? :Spec<PaintConfig>
   lineWidth? :number
 }
 
 export class EdgeView extends Element {
   private _nodeId :Value<string>
   private _inputKeys :Value<string[]>
-  private _outputKeys :Value<string[]>
+  private _defaultOutputKey :Value<string>
   private _input :ModelProvider
   private _inputs :Value<InputValue[]>
   private _output :ModelProvider
-  private _edges :{from :vec2, to :vec2[]}[] = []
-  private _paint = this.observe(DefaultPaint)
+  private _edges :{from :vec2, to :[vec2, Value<string>][]}[] = []
   private _lineWidth = 1
   private _nodeRemovers :Map<Element, Remover> = new Map()
+  private _valueRemovers :Map<Value<any>, Remover> = new Map()
 
   constructor (ctx :ElementContext, parent :Element, readonly config :EdgeViewConfig) {
     super(ctx, parent, config)
     this._nodeId = ctx.model.resolve("id" as Spec<Value<string>>)
     this._inputKeys = ctx.model.resolve("inputKeys" as Spec<Value<string[]>>)
-    this._outputKeys = ctx.model.resolve("outputKeys" as Spec<Value<string[]>>)
+    this._defaultOutputKey = ctx.model.resolve("defaultOutputKey" as Spec<Value<string>>)
     this._input = ctx.model.resolve("input" as Spec<ModelProvider>)
     this._output = ctx.model.resolve("output" as Spec<ModelProvider>)
     this.invalidateOnChange(this._inputs = this._inputKeys.switchMap(inputKeys => {
@@ -480,17 +479,15 @@ export class EdgeView extends Element {
       }))
     }))
     const style = this.getStyle(this.config.style, "normal") as EdgeViewStyle
-    if (style.stroke) this._paint.observe(ctx.style.resolvePaint(style.stroke))
     if (style.lineWidth) this._lineWidth = style.lineWidth
   }
 
   getDefaultOutputKey () {
-    for (const outputKey of this._outputKeys.current) {
-      const outputModel = this._output.resolve(outputKey)
-      const isDefault = outputModel.resolve("isDefault" as Spec<Value<boolean>>)
-      if (isDefault.current) return outputKey
-    }
-    return this._outputKeys.current[0]
+    return this._defaultOutputKey.current
+  }
+
+  getOutputValue (key :string) {
+    return this._output.resolve(key).resolve("value" as Spec<Value<any>>)
   }
 
   protected computePreferredSize (hintX :number, hintY :number, into :dim2) {
@@ -513,7 +510,7 @@ export class EdgeView extends Element {
       const from = vec2.fromValues(source.x - view.x, source.y + source.height / 2 - view.y)
       vec2.min(min, min, from)
       vec2.max(max, max, from)
-      const to :vec2[] = []
+      const to :[vec2, Value<string>][] = []
       const addEdge = (input :InputEdge<any>) => {
         let targetId :string
         let outputId :string|undefined
@@ -528,19 +525,21 @@ export class EdgeView extends Element {
         }
         const targetNode = this._requireValidatedNode(targetId)
         const outputList = targetNode.findTaggedChild("outputs") as List
-        let target :Element|undefined
-        if (outputId) {
-          target = outputList.getElement(outputId)
-        } else {
-          const targetEdges = this._requireEdges(targetId) as EdgeView
-          target = outputList.getElement(targetEdges.getDefaultOutputKey())
-        }
+        const targetEdges = this._requireEdges(targetId) as EdgeView
+        if (!outputId) outputId = targetEdges.getDefaultOutputKey()
+        const target = outputList.getElement(outputId)
         if (target) {
           const toPos = vec2.fromValues(
             target.x + target.width - view.x,
             target.y + target.height / 2 - view.y,
           )
-          to.push(toPos)
+          const value = targetEdges.getOutputValue(outputId)
+          if (!this._valueRemovers.has(value)) {
+            const remover = value.onValue(value => this.dirty())
+            this._valueRemovers.set(value, remover)
+            this.disposer.add(remover)
+          }
+          to.push([toPos, value.map(getValueStyle)])
           vec2.min(min, min, toPos)
           vec2.max(max, max, toPos)
         }
@@ -593,16 +592,16 @@ export class EdgeView extends Element {
     if (this._edges.length === 0) return
     const view = this.requireParent as GraphView
     canvas.translate(view.x, view.y)
-    canvas.beginPath()
+    canvas.lineWidth = this._lineWidth
     for (const edge of this._edges) {
-      for (const to of edge.to) {
+      for (const [to, value] of edge.to) {
+        canvas.strokeStyle = value.current
+        canvas.beginPath()
         canvas.moveTo(edge.from[0], edge.from[1])
         canvas.bezierCurveTo(edge.from[0] - 40, edge.from[1], to[0] + 40, to[1], to[0], to[1])
+        canvas.stroke()
       }
     }
-    this._paint.current.prepStroke(canvas)
-    canvas.lineWidth = this._lineWidth
-    canvas.stroke()
     canvas.lineWidth = 1
     canvas.translate(-view.x, -view.y)
   }

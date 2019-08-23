@@ -140,7 +140,7 @@ class Conditional extends Node {
     super(graph, id, config)
   }
 
-  protected _createOutput (name :string | undefined, defaultValue :any) {
+  protected _createOutput (name :string, defaultValue :any) {
     return Value
       .join3(
         this.graph.getValue(this.config.condition, false),
