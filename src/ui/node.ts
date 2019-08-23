@@ -1,12 +1,12 @@
-import {vec2} from "gl-matrix"
-
+import {dim2, vec2} from "../core/math"
 import {Scale} from "../core/ui"
 import {Value} from "../core/react"
+import {Disposer} from "../core/util"
 import {Graph} from "../graph/graph"
 import {inputEdge} from "../graph/meta"
 import {Subgraph} from "../graph/util"
 import {Node, NodeConfig, NodeContext, NodeTypeRegistry} from "../graph/node"
-import {Host, Root, RootConfig} from "./element"
+import {HAnchor, Host, Root, RootConfig, VAnchor} from "./element"
 import {Model, ModelData, ModelKey, mapProvider} from "./model"
 import {Theme, UI} from "./ui"
 import {ImageResolver, StyleDefs} from "./style"
@@ -17,6 +17,7 @@ export interface UINodeContext extends NodeContext {
   theme :Theme
   styles :StyleDefs
   image :ImageResolver
+  screen: Value<dim2>
 }
 
 /** Creates a UI element when the input becomes true. */
@@ -26,6 +27,10 @@ abstract class UINodeConfig implements NodeConfig {
   root :RootConfig = {type: "root", scale: Scale.ONE, contents: {type: ""}}
   origin? :vec2
   size? :vec2
+  screenH? :HAnchor
+  screenV? :VAnchor
+  rootH? :HAnchor
+  rootV? :VAnchor
   @inputEdge("boolean") input = undefined
 }
 
@@ -41,21 +46,28 @@ class UINode extends Node {
         let graph = this.graph
         while (graph.ctx.subgraph) graph = graph.ctx.subgraph.graph
         const ctx = this.graph.ctx as UINodeContext
-        let root :Root | undefined
+        let root :Root
         const ui = new UI(ctx.theme, ctx.styles, ctx.image)
+        const disposer = new Disposer()
         root = ui.createRoot(this.config.root, new Model({
           ...this.config.model,
           remove: () => {
-            if (root) {
-              ctx.host.removeRoot(root)
-              root.dispose()
-            }
+            ctx.host.removeRoot(root)
+            root.dispose()
+            disposer.dispose()
           },
           ...createGraphModelData(graph),
         }))
         if (this.config.size) root.setSize(this.config.size)
         else root.sizeToFit()
         if (this.config.origin) root.setOrigin(this.config.origin)
+        else disposer.add(root.bindOrigin(
+          ctx.screen,
+          this.config.screenH || "center",
+          this.config.screenV || "center",
+          this.config.rootH || "center",
+          this.config.rootV || "center",
+        ))
         ctx.host.addRoot(root)
       }
     }))
