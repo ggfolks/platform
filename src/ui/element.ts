@@ -321,8 +321,8 @@ export class Root extends Element {
     const remover = Value.join2(screen, rsize).onValue(([ss, rs]) => {
       const sh = pos(screenH, 0, ss[0]), sv = pos(screenV, 0, ss[1])
       const rh = pos(rootH, 0, rs[0]), rv = pos(rootV, 0, rs[1])
-      this._origin[0] = sh-rh
-      this._origin[1] = sv-rv
+      this._origin[0] = Math.round(sh-rh)
+      this._origin[1] = Math.round(sv-rv)
     })
     this.disposer.add(remover)
     return remover
