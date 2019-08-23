@@ -77,6 +77,30 @@ class Not extends Node {
   }
 }
 
+/** Outputs x === y. */
+abstract class EqualsConfig implements NodeConfig {
+  type = "equals"
+  @inputEdge("any") x = undefined
+  @inputEdge("any") y = undefined
+  @outputEdge("boolean") output = undefined
+}
+
+class Equals extends Node {
+
+  constructor (graph :Graph, id :string, readonly config :EqualsConfig) {
+    super(graph, id, config)
+  }
+
+  protected _createOutput () {
+    return Value
+      .join(
+        this.graph.getValue(this.config.x, 0),
+        this.graph.getValue(this.config.y, 0),
+      )
+      .map(([x, y]) => x === y)
+  }
+}
+
 /** Outputs x < y. */
 abstract class LessThanConfig implements NodeConfig {
   type = "lessThan"
@@ -132,6 +156,7 @@ export function registerLogicNodes (registry :NodeTypeRegistry) {
   registry.registerNodeType("and", And)
   registry.registerNodeType("or", Or)
   registry.registerNodeType("not", Not)
+  registry.registerNodeType("equals", Equals)
   registry.registerNodeType("lessThan", LessThan)
   registry.registerNodeType("conditional", Conditional)
 }
