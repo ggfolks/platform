@@ -328,8 +328,8 @@ export class Root extends Element {
     return remover
   }
 
-  setSize (width :number, height :number) :HTMLCanvasElement {
-    this.setBounds(rect.set(tmpr, 0, 0, width, height))
+  setSize (size :dim2) :HTMLCanvasElement {
+    this.setBounds(rect.set(tmpr, 0, 0, size[0], size[1]))
     this.validate()
     this.render(this.canvas, this._bounds)
     return this.canvasElem
@@ -337,7 +337,7 @@ export class Root extends Element {
 
   sizeToFit (maxX :number = 64000, maxY :number = 32000) :HTMLCanvasElement {
     this.computePreferredSize(maxX, maxY, tmpd)
-    return this.setSize(tmpd[0], tmpd[1])
+    return this.setSize(tmpd)
   }
 
   update (clock :Clock) :boolean {

@@ -53,7 +53,7 @@ class UINode extends Node {
           },
           ...createGraphModelData(graph),
         }))
-        if (this.config.size) root.setSize(this.config.size[0], this.config.size[1])
+        if (this.config.size) root.setSize(this.config.size)
         else root.sizeToFit()
         if (this.config.origin) root.setOrigin(this.config.origin)
         ctx.host.addRoot(root)
