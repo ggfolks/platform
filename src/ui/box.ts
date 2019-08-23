@@ -46,7 +46,7 @@ export function alignOffset (align :HAlign|VAlign, size :number, extent :number)
   case    "left":
   case     "top": return 0
   case "stretch": return 0
-  case  "center": return (extent - size)/2
+  case  "center": return Math.round((extent - size)/2)
   case   "right":
   case  "bottom": return (extent - size)
   }
