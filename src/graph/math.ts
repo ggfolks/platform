@@ -198,9 +198,8 @@ class Sign extends Node {
   }
 
   protected _createOutput () {
-    const epsilon = this.config.epsilon === undefined ? 0.0001 : this.config.epsilon
     return this.graph.getValue(this.config.input, 0).map(
-      value => value < -epsilon ? -1 : value > epsilon ? 1 : 0,
+      value => value < -this.config.epsilon ? -1 : value > this.config.epsilon ? 1 : 0,
     )
   }
 }
