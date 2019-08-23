@@ -94,8 +94,8 @@ class Equals extends Node {
   protected _createOutput () {
     return Value
       .join(
-        this.graph.getValue(this.config.x, 0),
-        this.graph.getValue(this.config.y, 0),
+        this.graph.getValue<any>(this.config.x, undefined),
+        this.graph.getValue<any>(this.config.y, undefined),
       )
       .map(([x, y]) => x === y)
   }
