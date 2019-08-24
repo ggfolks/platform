@@ -429,7 +429,7 @@ export class Span {
     const canvas = requireScratch2D()
     this.prepCanvas(canvas)
     const metrics = canvas.measureText(this.text)
-    dim2.set(this.size, metrics.width, this.font.size)
+    dim2.round(this.size, dim2.set(this.size, metrics.width, this.font.size))
     this.resetCanvas(canvas)
   }
 
@@ -452,7 +452,7 @@ export class Span {
     this.prepCanvas(canvas)
     const metrics = canvas.measureText(this.text.substring(0, offset))
     this.resetCanvas(canvas)
-    return metrics.width
+    return Math.round(metrics.width)
   }
 
 
@@ -469,11 +469,11 @@ export class Span {
     let minO = 0, minA = 0, maxO = this.size[0]
     while (maxO - minO > 1) {
       const testO = minO + Math.round((maxO-minO)/2)
-      const testA = canvas.measureText(this.text.substring(0, testO)).width
+      const testA = Math.round(canvas.measureText(this.text.substring(0, testO)).width)
       if (testA > advance) { maxO = testO }
       else { minO = testO ; minA = testA }
     }
-    const maxA = canvas.measureText(this.text.substring(0, maxO)).width
+    const maxA = Math.round(canvas.measureText(this.text.substring(0, maxO)).width)
     this.resetCanvas(canvas)
     return (maxA-advance < advance-minA) ? maxO : minO
   }

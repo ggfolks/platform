@@ -51,6 +51,12 @@ export class dim2 extends Float32Array {
     return out
   }
 
+  static round (out :dim2, src :dim2) :dim2 {
+    out[0] = Math.round(src[0])
+    out[1] = Math.round(src[1])
+    return out
+  }
+
   static toString (d :dim2) :string {
     return `${d[0]}x${d[1]}`
   }
