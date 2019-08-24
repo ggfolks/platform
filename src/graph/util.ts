@@ -218,6 +218,25 @@ class Log extends Node {
   }
 }
 
+/** Extracts a property of the (object) input. */
+abstract class PropertyConfig implements NodeConfig {
+  type = "property"
+  @property() name = ""
+  @inputEdge("object") input = undefined
+  @outputEdge("any") output = undefined
+}
+
+class Property extends Node {
+
+  constructor (graph :Graph, id :string, readonly config :PropertyConfig) {
+    super(graph, id, config)
+  }
+
+  protected _createOutput (name :string, defaultValue :any) {
+    return this.graph.getValue(this.config.input, {}).map(value => value[this.config.name])
+  }
+}
+
 /** Registers the nodes in this module with the supplied registry. */
 export function registerUtilNodes (registry :NodeTypeRegistry) {
   registry.registerNodeType("timeout", TimeoutNode)
@@ -228,4 +247,5 @@ export function registerUtilNodes (registry :NodeTypeRegistry) {
   registry.registerNodeType("input", Input)
   registry.registerNodeType("output", Output)
   registry.registerNodeType("log", Log)
+  registry.registerNodeType("property", Property)
 }
