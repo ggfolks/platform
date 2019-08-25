@@ -2,7 +2,6 @@ import {dim2, vec2, rect} from "../core/math"
 import {refEquals} from "../core/data"
 import {PMap} from "../core/util"
 import {Mutable, Subject, Value} from "../core/react"
-import {makeRectPath} from "./util"
 import {Control, ControlConfig, ControlStates, Element, ElementConfig, ElementContext,
         MouseInteraction} from "./element"
 import {Spec, FontConfig, Paint, PaintConfig, DefaultPaint, ShadowConfig,
@@ -79,7 +78,8 @@ export class Label extends Element {
     const needClip = rx < 0 || span.size[0] > width
     if (needClip) {
       canvas.save()
-      makeRectPath(canvas, x, y, width, height)
+      canvas.beginPath()
+      canvas.rect(x, y, width, height)
       canvas.clip()
     }
     // if we have a selection fill and a selection, render it

@@ -1,10 +1,3 @@
-/** Creates a rectangle path in `canvas` given the supplied config. */
-export function makeRectPath (canvas :CanvasRenderingContext2D,
-                              x :number, y :number, w :number, h :number) {
-  canvas.beginPath()
-  canvas.rect(x, y, w, h)
-}
-
 /** Creates a rounded rectangle path in `canvas` given the supplied config. */
 export function makeRoundRectPath (canvas :CanvasRenderingContext2D,
                                    x :number, y :number, w :number, h :number,
