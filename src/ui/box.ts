@@ -63,6 +63,7 @@ export interface BoxStyle {
   padding? :Insets
   halign? :HAlign
   valign? :VAlign
+  cursor? :string
 }
 
 /** Defines configuration for [[Box]] elements. */
@@ -88,6 +89,8 @@ export class Box extends Element {
       else this.background.update(NoopDecor)
       if (style.border) this.border.observe(ctx.style.resolveBorder(style.border))
       else this.border.update(NoopDecor)
+      if (style.cursor) this.setCursor(this, style.cursor)
+      else this.clearCursor(this)
     })
   }
 

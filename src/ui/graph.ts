@@ -637,6 +637,7 @@ export interface TerminalStyle {
   radius? :number
   outlineWidth? :number
   outlineAlpha? :number
+  cursor? :string
 }
 
 /** Visualizes a single node terminal. */
@@ -673,6 +674,8 @@ export class Terminal extends Element {
       this._outlineAlpha.observe(Value.constant(
         style.outlineAlpha === undefined ? 1 : style.outlineAlpha,
       ))
+      if (style.cursor) this.setCursor(this, style.cursor)
+      else this.clearCursor(this)
     }))
   }
 

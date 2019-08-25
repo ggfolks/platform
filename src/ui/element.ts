@@ -116,6 +116,13 @@ export abstract class Element implements Disposable {
   get valid () :Value<boolean> { return this._valid }
   get state () :Value<string> { return this.requireParent.state }
 
+  setCursor (owner :Element, cursor :string) {
+    this.requireParent.setCursor(owner, cursor)
+  }
+  clearCursor (owner :Element) {
+    this.requireParent.clearCursor(owner)
+  }
+
   protected get requireParent () :Element {
     const parent = this.parent
     if (!parent) throw new Error(`Element missing parent?`)
@@ -307,10 +314,12 @@ export class Root extends Element {
   private readonly _sizeChange = new Emitter<Root>()
   private readonly _hintSize :Value<dim2>
   private readonly _origin = vec2.create()
+  private _cursorOwner? :Element
   readonly canvasElem :HTMLCanvasElement = document.createElement("canvas")
   readonly canvas :CanvasRenderingContext2D
   readonly contents :Element
   readonly focus = Mutable.local<Control|undefined>(undefined)
+  readonly cursor = Mutable.local("auto")
 
   constructor (readonly ctx :ElementContext, readonly config :RootConfig) {
     super(ctx, undefined, config)
@@ -329,6 +338,14 @@ export class Root extends Element {
 
   /** A stream that emits `this` when this root's size changes. */
   get sizeChange () :Stream<Root> { return this._sizeChange }
+
+  setCursor (owner :Element, cursor :string) {
+    this.cursor.update(cursor)
+    this._cursorOwner = owner
+  }
+  clearCursor (owner :Element) {
+    if (this._cursorOwner === owner) this.cursor.update("auto")
+  }
 
   /** Informs the root of the position at which it is displayed on the screen. This value is used to interpret
     * mouse and touch events. */
@@ -621,12 +638,16 @@ export class Host implements Disposable {
   private readonly onWheel = (event :WheelEvent) => this.handleWheelEvent(event)
   private readonly onPointerDown = (event :PointerEvent) => this.handlePointerDown(event)
   private readonly onPointerUp = (event :PointerEvent) => this.handlePointerUp(event)
+  private _canvas? :HTMLCanvasElement
   protected readonly roots :Root[] = []
 
   addRoot (root :Root) {
     const ii = this.roots.length
     this.roots.push(root)
     this.rootAdded(root, ii)
+    root.cursor.onValue(cursor => {
+      if (this._canvas) this._canvas.style.cursor = cursor
+    })
   }
 
   removeRoot (root :Root, dispose = true) {
@@ -639,6 +660,7 @@ export class Host implements Disposable {
   }
 
   bind (canvas :HTMLCanvasElement) :Remover {
+    this._canvas = canvas
     canvas.addEventListener("mousedown", this.onMouse)
     canvas.addEventListener("mousemove", this.onMouse)
     document.addEventListener("mouseup", this.onMouse)
@@ -656,6 +678,7 @@ export class Host implements Disposable {
       canvas.removeEventListener("pointerup", this.onPointerUp)
       document.removeEventListener("keydown", this.onKey)
       document.removeEventListener("keyup", this.onKey)
+      this._canvas = undefined
     }
   }
 
