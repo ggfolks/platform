@@ -84,6 +84,8 @@ function createGraphModelData (graph :Graph) :ModelData {
         const subgraph = value.current as Subgraph
         subgraphElement.subgraph = createGraphModelData(subgraph.containedGraph)
       }
+      const inputModels :Map<ModelKey, Model> = new Map()
+      const outputModels :Map<ModelKey, Model> = new Map()
       return {
         id: Value.constant(value.current.id),
         type: Value.constant(type),
@@ -106,28 +108,41 @@ function createGraphModelData (graph :Graph) :ModelData {
           },
         },
         input: {
-          resolve: (key :ModelKey) => new Model({
-            name: Value.constant(key),
-            multiple: Value.constant(value.current.inputsMeta[key].multiple),
-            value: Value.constant(value.current.config[key]),
-            style: Value.constant("#808080"),
-          }),
-        },
-        output: (() => {
-          const models :Map<ModelKey, Model> = new Map()
-          return {
-            resolve: (key :ModelKey) => {
-              let model = models.get(key)
-              if (!model) {
-                models.set(key, model = new Model({
-                  name: Value.constant(key),
-                  style: value.current.getOutput(key as string, undefined).map(getValueStyle),
-                }))
+          resolve: (key :ModelKey) => {
+            let model = inputModels.get(key)
+            if (!model) {
+              const multiple = value.current.inputsMeta[key].multiple
+              const input = value.current.config[key]
+              let style :Value<string>
+              if (multiple) {
+                style = value.current.graph.getValues(input, 0).map(
+                  values => getValueStyle(values[values.length - 1]),
+                )
+              } else {
+                style = value.current.graph.getValue(input, 0).map(getValueStyle)
               }
-              return model
-            },
-          }
-        })(),
+              inputModels.set(key, model = new Model({
+                name: Value.constant(key),
+                multiple: Value.constant(multiple),
+                value: Value.constant(input),
+                style,
+              }))
+            }
+            return model
+          },
+        },
+        output: {
+          resolve: (key :ModelKey) => {
+            let model = outputModels.get(key)
+            if (!model) {
+              outputModels.set(key, model = new Model({
+                name: Value.constant(key),
+                style: value.current.getOutput(key as string, undefined).map(getValueStyle),
+              }))
+            }
+            return model
+          },
+        },
       }
     }),
   }
