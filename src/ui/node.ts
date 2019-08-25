@@ -17,7 +17,7 @@ export interface UINodeContext extends NodeContext {
   theme :Theme
   styles :StyleDefs
   image :ImageResolver
-  screen: Value<dim2>
+  screen :Value<dim2>
 }
 
 /** Creates a UI element when the input becomes true. */
