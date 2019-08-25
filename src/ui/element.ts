@@ -180,6 +180,27 @@ export abstract class Element implements Disposable {
     return bounds
   }
 
+  /** Applies the provided operation to all elements containing the specified position.
+   * @param canvas the canvas context.
+   * @param pos the position relative to the root origin.
+   * @param op the operation to apply.
+   */
+  applyToContaining (canvas :CanvasRenderingContext2D, pos :vec2, op :(element :Element) => void) {
+    if (rect.contains(this.bounds, pos) && this.visible.current) op(this)
+  }
+
+  /** Requests that this element handle the supplied mouse enter event.
+   * @param event the event forwarded from the browser.
+   * @param pos the position of the event relative to the root origin.
+   */
+  handleMouseEnter (event :MouseEvent, pos :vec2) {}
+
+  /** Requests that this element handle the supplied mouse leave event.
+   * @param event the event forwarded from the browser.
+   * @param pos the position of the event relative to the root origin.
+   */
+  handleMouseLeave (event :MouseEvent, pos :vec2) {}
+
   /** Requests that this element handle the supplied mouse down event.
     * @param event the event forwarded from the browser.
     * @param pos the position of the event relative to the root origin.
@@ -274,6 +295,10 @@ function pos (align :HAnchor|VAnchor, min :number, max :number) {
   else if (align == "right" || align === "bottom") return max
   else return min+(max-min)/2
 }
+
+let elementsOver :Set<Element> = new Set()
+let lastElementsOver :Set<Element> = new Set()
+const addToElementsOver = (element :Element) => elementsOver.add(element)
 
 /** The top-level of the UI hierarchy. Manages the canvas into which the UI is rendered. */
 export class Root extends Element {
@@ -383,6 +408,21 @@ export class Root extends Element {
       break
     case "mousemove":
       if (iact) iact.move(event, pos)
+      else {
+        const sf = this.config.scale.factor
+        this.canvas.save()
+        this.canvas.scale(sf, sf)
+        this.contents.applyToContaining(this.canvas, pos, addToElementsOver)
+        this.canvas.restore()
+        for (const element of lastElementsOver) {
+          if (!elementsOver.has(element)) element.handleMouseLeave(event, pos)
+        }
+        for (const element of elementsOver) {
+          if (!lastElementsOver.has(element)) element.handleMouseEnter(event, pos)
+        }
+        [elementsOver, lastElementsOver] = [lastElementsOver, elementsOver]
+        elementsOver.clear()
+      }
       break
     case "mouseup":
       if (iact) {
@@ -459,7 +499,7 @@ const debugDirty = false
 const DebugColors = ["#FF0000", "#00FF00", "#0000FF", "#00FFFF", "#FF00FF", "#FFFF00"]
 let debugColorIndex = 0
 
-export const ControlStates = [...RootStates, "disabled", "focused"]
+export const ControlStates = [...RootStates, "disabled", "focused", "hovered"]
 
 /** Configuration shared by all [[Control]]s. */
 export interface ControlConfig extends ElementConfig {
@@ -474,22 +514,26 @@ export interface ControlConfig extends ElementConfig {
   * used) to visualize the button, and `Button` handles interactions. */
 export class Control extends Element {
   protected readonly _state = Mutable.local(ControlStates[0])
+  protected readonly _hovered = Mutable.local(false)
   protected readonly enabled :Value<boolean>
   protected readonly contents :Element
 
   constructor (ctx :ElementContext, parent :Element|undefined, readonly config :ControlConfig) {
     super(ctx, parent, config)
+    const updateState = () => this._state.update(this.computeState)
     if (!config.enabled) this.enabled = trueValue
     else {
       this.enabled = ctx.model.resolve(config.enabled)
-      this.disposer.add(this.enabled.onValue(_ => this._state.update(this.computeState)))
+      this.disposer.add(this.enabled.onValue(updateState))
     }
+    this.disposer.add(this._hovered.onValue(updateState))
     this.contents = this.createContents(ctx)
   }
 
   get styleScope () :StyleScope { return {id: "control", states: ControlStates} }
   get state () :Value<string> { return this._state }
   get isFocused () :boolean { return this.root.focus.current === this }
+  get isHovered () :boolean { return this._hovered.current }
 
   /** Requests that this control receive input focus. */
   focus () {
@@ -509,6 +553,9 @@ export class Control extends Element {
     })
   }
 
+  handleMouseEnter (event :MouseEvent, pos :vec2) { this._hovered.update(true) }
+  handleMouseLeave (event :MouseEvent, pos :vec2) { this._hovered.update(false) }
+
   /** Requests that this control handle the supplied keyboard event.
     * This will only be called on controls that have the keyboard focus. */
   handleKeyEvent (event :KeyboardEvent) {}
@@ -518,6 +565,11 @@ export class Control extends Element {
   }
   findTaggedChild (tag :string) :Element|undefined {
     return super.findTaggedChild(tag) || this.contents.findTaggedChild(tag)
+  }
+
+  applyToContaining (canvas :CanvasRenderingContext2D, pos :vec2, op :(element :Element) => void) {
+    super.applyToContaining(canvas, pos, op)
+    this.contents.applyToContaining(canvas, pos, op)
   }
 
   dispose () {
@@ -530,7 +582,9 @@ export class Control extends Element {
   }
 
   protected get computeState () :string {
-    return this.enabled.current ? (this.isFocused ? "focused" : "normal") : "disabled"
+    return this.enabled.current
+      ? (this.isHovered ? "hovered" : this.isFocused ? "focused" : "normal")
+      : "disabled"
   }
 
   protected computePreferredSize (hintX :number, hintY :number, into :dim2) {

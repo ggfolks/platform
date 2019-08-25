@@ -672,6 +672,10 @@ export class Terminal extends Element {
     return this.config.direction === "input" ? -1 : 1
   }
 
+  applyToContaining (canvas :CanvasRenderingContext2D, pos :vec2, op :(element :Element) => void) {
+    if (rect.contains(this.expandBounds(this.bounds), pos) && this.visible.current) op(this)
+  }
+
   expandBounds (bounds :rect) :rect {
     const radius = this.radius
     return rect.set(
@@ -682,7 +686,7 @@ export class Terminal extends Element {
       2 * radius,
     )
   }
-  
+
   protected get computeState () :string {
     return "normal"
   }

@@ -9,7 +9,10 @@ export interface ButtonConfig extends ControlConfig {
   onClick? :Spec<Action>
 }
 
-const ButtonStyleScope = {id: "button", states: ["normal", "disabled", "focused", "pressed"]}
+const ButtonStyleScope = {
+  id: "button",
+  states: ["normal", "disabled", "focused", "hovered", "pressed"],
+}
 
 export class Button extends Control {
   protected readonly _pressed = Mutable.local(false)
@@ -71,10 +74,16 @@ export class Toggle extends Control {
   }
 
   findChild (type :string) :Element|undefined {
-    return super.findChild(type) || this.contents.findChild(type)
+    return super.findChild(type) || (this.checkedContents && this.checkedContents.findChild(type))
   }
   findTaggedChild (tag :string) :Element|undefined {
-    return super.findTaggedChild(tag) || this.contents.findTaggedChild(tag)
+    return super.findTaggedChild(tag) ||
+      (this.checkedContents && this.checkedContents.findTaggedChild(tag))
+  }
+
+  applyToContaining (canvas :CanvasRenderingContext2D, pos :vec2, op :(element :Element) => void) {
+    super.applyToContaining(canvas, pos, op)
+    this.checkedContents && this.checkedContents.applyToContaining(canvas, pos, op)
   }
 
   dispose () {

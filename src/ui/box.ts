@@ -103,6 +103,11 @@ export class Box extends Element {
     return super.findTaggedChild(tag) || this.contents.findTaggedChild(tag)
   }
 
+  applyToContaining (canvas :CanvasRenderingContext2D, pos :vec2, op :(element :Element) => void) {
+    super.applyToContaining(canvas, pos, op)
+    this.contents.applyToContaining(canvas, pos, op)
+  }
+
   handleMouseDown (event :MouseEvent, pos :vec2) {
     return rect.contains(this.contents.bounds, pos) ?
       this.contents.handleMouseDown(event, pos) : undefined

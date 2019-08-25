@@ -42,6 +42,11 @@ abstract class Group extends Element {
     return undefined
   }
 
+  applyToContaining (canvas :CanvasRenderingContext2D, pos :vec2, op :(element :Element) => void) {
+    super.applyToContaining(canvas, pos, op)
+    for (const cc of this.contents) cc.applyToContaining(canvas, pos, op)
+  }
+
   dispose () {
     super.dispose()
     for (const child of this.contents) child.dispose()
