@@ -332,9 +332,9 @@ export class Text extends Control {
     const hasSel = this.label.selection.map(([ss, se]) => se > ss)
     // we include jiggle here so that we can reset the clock fold on demand when the user clicks the
     // mouse even when we're already focused
-    const blinking = Value.join3(this.state, hasSel, this.jiggle).switchMap(
-      ([state, hasSel, jiggle]) => {
-        if (state !== "focused" || hasSel) return Value.constant(false)
+    const blinking = Value.join3(this.root.focus, hasSel, this.jiggle).switchMap(
+      ([focus, hasSel, jiggle]) => {
+        if (focus !== this || hasSel) return Value.constant(false)
         else {
           const blinkPeriod = this.cursor.config.blinkPeriod || DefaultBlinkPeriod
           return this.root.clock.fold(0, (acc, c) => acc+c.dt, refEquals).
