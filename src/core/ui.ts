@@ -55,10 +55,8 @@ export function getValueStyle (value :any) :string {
 
 /** Maps a numeric value to a CSS color component string (0-255). */
 export function getValueStyleComponent (value :number) :string {
-  // mapping is linear between -1 and 1, asymptotic outside that range
-  const base = Math.abs(value) <= 1
-    ? 128 + value * 64
-    : (value > 0 ? 255 - 64 / value : 0 - 64 / value)
+  // atan maps entire number range asymptotically to [-pi/2, pi/2]
+  const base = 255 * (Math.atan(value) / Math.PI + 0.5)
   // quantize to six bits to avoid excess redraw
   return String(base & 0xFC)
 }
