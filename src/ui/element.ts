@@ -425,36 +425,40 @@ export class Root extends Element {
       break
     case "mousemove":
       if (iact) iact.move(event, pos)
-      else {
-        const sf = this.config.scale.factor
-        this.canvas.save()
-        this.canvas.scale(sf, sf)
-        this.contents.applyToContaining(this.canvas, pos, addToElementsOver)
-        this.canvas.restore()
-        for (const element of lastElementsOver) {
-          if (!elementsOver.has(element)) element.handleMouseLeave(event, pos)
-        }
-        for (const element of elementsOver) {
-          if (!lastElementsOver.has(element)) element.handleMouseEnter(event, pos)
-        }
-        [elementsOver, lastElementsOver] = [lastElementsOver, elementsOver]
-        elementsOver.clear()
-      }
+      else this._updateElementsOver(event, pos)
       break
     case "mouseup":
       if (iact) {
         iact.release(event, pos)
         this.interacts[button] = undefined
+        this._updateElementsOver(event, pos)
       }
       break
     case "mousecancel":
       if (iact) {
         iact.cancel()
         this.interacts[button] = undefined
+        this._updateElementsOver(event, pos)
       }
     }
   }
   // TODO: dispatchTouchEvent, handlePointerDown (called by mouse & touch)?
+
+  private _updateElementsOver (event :MouseEvent, pos :vec2) {
+    const sf = this.config.scale.factor
+    this.canvas.save()
+    this.canvas.scale(sf, sf)
+    this.contents.applyToContaining(this.canvas, pos, addToElementsOver)
+    this.canvas.restore()
+    for (const element of lastElementsOver) {
+      if (!elementsOver.has(element)) element.handleMouseLeave(event, pos)
+    }
+    for (const element of elementsOver) {
+      if (!lastElementsOver.has(element)) element.handleMouseEnter(event, pos)
+    }
+    [elementsOver, lastElementsOver] = [lastElementsOver, elementsOver]
+    elementsOver.clear()
+  }
 
   /** Dispatches a browser keyboard event to this root. */
   dispatchKeyEvent (event :KeyboardEvent) {
