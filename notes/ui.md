@@ -16,9 +16,6 @@
   - invalid implies dirty
   - animated style transitions will often dirty but not invalidate
 
-- Manage dirty regions on invalidation/dirtying so that we don't repaint everything every time
-  anything changes
-
 - Do we want hover? (Doesn't really work on touch, so maybe not worth it for mouse/desktop?)
 
 - Unfocus all roots if we click outside any root?
