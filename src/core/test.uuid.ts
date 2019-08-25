@@ -1,4 +1,7 @@
-import {UUID0, uuidv1b, uuidv4b, uuidToString, uuidFromString} from "./uuid"
+import {UUID0, uuidv1b, uuidv4b, uuidToString, uuidFromString, setRandomSource} from "./uuid"
+import * as crypto from "crypto"
+
+setRandomSource(array => crypto.randomFillSync(Buffer.from(array.buffer)))
 
 test("toFromString", () => {
   expect(uuidToString(uuidFromString(UUID0))).toEqual(UUID0)

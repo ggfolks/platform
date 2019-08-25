@@ -1,5 +1,5 @@
 import {Remover, log} from "../core/util"
-import {UUID0} from "../core/uuid"
+import {UUID0, setRandomSource} from "../core/uuid"
 import {Record} from "../core/data"
 import {Mutable, Subject, Value} from "../core/react"
 import {RSet, MutableSet} from "../core/rcollect"
@@ -10,6 +10,9 @@ import {Auth, DObject, DObjectType, DState, DQueueAddr, MetaMsg, Path,
 import {DownType, DownMsg, UpMsg, UpType, SyncMsg, decodeUp, encodeDown} from "./protocol"
 
 import WebSocket from "ws"
+import * as crypto from "crypto"
+
+setRandomSource(array => crypto.randomFillSync(Buffer.from(array.buffer)))
 
 export const sysAuth :Auth = {id: UUID0, isSystem: true}
 
