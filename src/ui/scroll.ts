@@ -76,7 +76,8 @@ export class ScrollView extends Control {
   }
 
   dirty (region :rect = this.expandBounds(this._bounds), fromChild :boolean = false) {
-    if (!fromChild) {
+    // can be called before properties are initialized
+    if (!(fromChild && this._offset)) {
       super.dirty(region, false)
       return
     }

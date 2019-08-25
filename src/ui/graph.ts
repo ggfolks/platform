@@ -8,6 +8,7 @@ import {Element, ElementConfig, ElementContext, MouseInteraction} from "./elemen
 import {AbsConstraints, AbsGroup, AxisConfig, VGroup} from "./group"
 import {List} from "./list"
 import {Model, ModelData, ModelKey, ModelProvider, Spec} from "./model"
+import {DefaultPaint, PaintConfig} from "./style"
 
 /** A navigable graph viewer. */
 export interface GraphViewerConfig extends ElementConfig {
@@ -311,9 +312,21 @@ export class NodeView extends VGroup {
               gap: 1,
               offPolicy: "stretch",
               element: {
-                type: "box",
-                contents: {type: "label", text: "name"},
-                style: {halign: "left"},
+                type: "row",
+                contents: [
+                  {
+                    type: "terminal",
+                    direction: "input",
+                    contents: {type: "row", contents: []},
+                  },
+                  {
+                    type: "box",
+                    scopeId: "nodeInput",
+                    contents: {type: "label", text: "name"},
+                    style: {halign: "left"},
+                    constraints: {stretch: true},
+                  },
+                ],
               },
               data: "input",
               keys: "inputKeys",
@@ -330,9 +343,21 @@ export class NodeView extends VGroup {
               gap: 1,
               offPolicy: "stretch",
               element: {
-                type: "box",
-                contents: {type: "label", text: "name"},
-                style: {halign: "right"},
+                type: "row",
+                contents: [
+                  {
+                    type: "box",
+                    scopeId: "nodeOutput",
+                    contents: {type: "label", text: "name"},
+                    style: {halign: "right"},
+                    constraints: {stretch: true},
+                  },
+                  {
+                    type: "terminal",
+                    direction: "output",
+                    contents: {type: "row", contents: []},
+                  },
+                ],
               },
               data: "output",
               keys: "outputKeys",
@@ -604,5 +629,89 @@ export class EdgeView extends Element {
     }
     canvas.lineWidth = 1
     canvas.translate(-view.x, -view.y)
+  }
+}
+
+/** Defines the styles that apply to [[Terminal]]. */
+export interface TerminalStyle {
+  stroke? :Spec<PaintConfig>
+  fill? :Spec<PaintConfig>
+  radius? :number
+}
+
+/** Visualizes a single node terminal. */
+export interface TerminalConfig extends ElementConfig {
+  type :"terminal"
+  direction :"input" | "output"
+  style :PMap<TerminalStyle>
+}
+
+const TerminalStyleScope = {id: "terminal", states: ["normal"]}
+
+const expandedBounds = rect.create()
+
+export class Terminal extends Element {
+  protected readonly _state = Mutable.local("normal")
+  private stroke = this.observe(DefaultPaint)
+  private fill = this.observe(DefaultPaint)
+
+  constructor (ctx :ElementContext, parent :Element, readonly config :TerminalConfig) {
+    super(ctx, parent, config)
+    this.state.onValue(state => {
+      const style = this.style
+      if (style.stroke) this.stroke.observe(ctx.style.resolvePaint(style.stroke))
+      else this.stroke.update(DefaultPaint)
+      if (style.fill) this.fill.observe(ctx.style.resolvePaint(style.fill))
+      else this.fill.update(DefaultPaint)
+    })
+  }
+
+  get style () :TerminalStyle { return this.getStyle(this.config.style, this.state.current) }
+  get styleScope () { return TerminalStyleScope }
+  get state () :Value<string> { return this._state }
+
+  get radius () {
+    const style = this.style
+    return (style.radius === undefined) ? 5 : style.radius
+  }
+
+  get sign () {
+    return this.config.direction === "input" ? -1 : 1
+  }
+
+  protected get computeState () :string {
+    return "normal"
+  }
+
+  protected computePreferredSize (hintX :number, hintY :number, into :dim2) {
+    dim2.set(into, 0, 0)
+  }
+
+  protected expandBounds (bounds :rect) :rect {
+    const style = this.style
+    const radius = (style.radius === undefined) ? 5 : style.radius
+    return rect.set(
+      expandedBounds,
+      bounds[0] + radius * (this.sign - 1),
+      bounds[1] - radius,
+      2 * radius,
+      2 * radius,
+    )
+  }
+
+  protected relayout () {}
+
+  render (canvas :CanvasRenderingContext2D, region :rect) {
+    this.rerender(canvas, region)
+  }
+
+  protected rerender (canvas :CanvasRenderingContext2D, region :rect) {
+    this.stroke.current.prepStroke(canvas)
+    this.fill.current.prepFill(canvas)
+    canvas.beginPath()
+    const radius = this.radius
+    canvas.arc(this.x + radius * this.sign, this.y, radius, 0, 2 * Math.PI)
+    canvas.fill()
+    canvas.stroke()
   }
 }

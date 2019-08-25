@@ -111,6 +111,7 @@ export class UI {
     case     "nodeview": return new GR.NodeView(ctx, parent, rconfig as GR.NodeViewConfig)
     case "propertyview": return new GR.PropertyView(ctx, parent, rconfig as GR.PropertyViewConfig)
     case     "edgeview": return new GR.EdgeView(ctx, parent, rconfig as GR.EdgeViewConfig)
+    case     "terminal": return new GR.Terminal(ctx, parent, rconfig as GR.TerminalConfig)
     default: throw new Error(`Unknown element type '${config.type}'.`)
     }
   }
