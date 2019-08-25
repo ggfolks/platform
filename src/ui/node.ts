@@ -1,5 +1,5 @@
 import {dim2, vec2} from "../core/math"
-import {Scale} from "../core/ui"
+import {Scale, getValueStyle} from "../core/ui"
 import {Value} from "../core/react"
 import {Disposer} from "../core/util"
 import {Graph} from "../graph/graph"
@@ -112,13 +112,21 @@ function createGraphModelData (graph :Graph) :ModelData {
             value: Value.constant(value.current.config[key]),
           }),
         },
-        output: {
-          resolve: (key :ModelKey) => new Model({
-            name: Value.constant(key),
-            isDefault: Value.constant(value.current.outputsMeta[key].isDefault),
-            value: value.current.getOutput(key as string, undefined),
-          }),
-        },
+        output: (() => {
+          const models :Map<ModelKey, Model> = new Map()
+          return {
+            resolve: (key :ModelKey) => {
+              let model = models.get(key)
+              if (!model) {
+                models.set(key, model = new Model({
+                  name: Value.constant(key),
+                  style: value.current.getOutput(key as string, undefined).map(getValueStyle),
+                }))
+              }
+              return model
+            },
+          }
+        })(),
       }
     }),
   }

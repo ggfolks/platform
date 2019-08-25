@@ -56,9 +56,9 @@ export function getValueStyle (value :any) :string {
 /** Maps a numeric value to a CSS color component string (0-255). */
 export function getValueStyleComponent (value :number) :string {
   // mapping is linear between -1 and 1, asymptotic outside that range
-  return String(Math.round(
-    Math.abs(value) <= 1
-      ? 128 + value * 64
-      : (value > 0 ? 255 - 64 / value : 0 - 64 / value)
-  ))
+  const base = Math.abs(value) <= 1
+    ? 128 + value * 64
+    : (value > 0 ? 255 - 64 / value : 0 - 64 / value)
+  // quantize to six bits to avoid excess redraw
+  return String(base & 0xFC)
 }
