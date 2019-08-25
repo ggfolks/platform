@@ -743,6 +743,11 @@ export class HTMLHost extends Host {
     }
   }
 
+  dispose () {
+    super.dispose()
+    for (const root of this.roots) this._container.removeChild(root.canvasElem)
+  }
+
   protected rootAdded (root :Root, index :number) {
     this._container.appendChild(root.canvasElem)
     const style = root.canvasElem.style
