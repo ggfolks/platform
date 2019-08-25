@@ -635,6 +635,8 @@ export class EdgeView extends Element {
 /** Defines the styles that apply to [[Terminal]]. */
 export interface TerminalStyle {
   radius? :number
+  outlineWidth? :number
+  outlineAlpha? :number
 }
 
 /** Visualizes a single node terminal. */
@@ -645,50 +647,64 @@ export interface TerminalConfig extends ElementConfig {
   style :PMap<TerminalStyle>
 }
 
-const TerminalStyleScope = {id: "terminal", states: ["normal"]}
+export const TerminalStyleScope = {id: "terminal", states: ["normal", "hovered"]}
 
 const expandedBounds = rect.create()
 
 export class Terminal extends Element {
   private readonly _state = Mutable.local("normal")
+  private readonly _hovered = Mutable.local(false)
   private readonly _value :Value<string>
+  private readonly _radius = this.observe(5)
+  private readonly _outlineWidth = this.observe(0)
+  private readonly _outlineAlpha = this.observe(1)
 
   constructor (ctx :ElementContext, parent :Element, readonly config :TerminalConfig) {
     super(ctx, parent, config)
     this._value = ctx.model.resolve(config.value)
     this.disposer.add(this._value.onValue(() => this.dirty()))
+    this.disposer.add(this._hovered.onValue(() => this._state.update(this.computeState)))
+    this.disposer.add(this.state.onValue(state => {
+      const style = this.getStyle(this.config.style, state)
+      this._radius.observe(Value.constant(style.radius === undefined ? 5 : style.radius))
+      this._outlineWidth.observe(Value.constant(
+        style.outlineWidth === undefined ? 0 : style.outlineWidth,
+      ))
+      this._outlineAlpha.observe(Value.constant(
+        style.outlineAlpha === undefined ? 1 : style.outlineAlpha,
+      ))
+    }))
   }
 
   get style () :TerminalStyle { return this.getStyle(this.config.style, this.state.current) }
   get styleScope () { return TerminalStyleScope }
   get state () :Value<string> { return this._state }
 
-  get radius () {
-    const style = this.style
-    return (style.radius === undefined) ? 5 : style.radius
-  }
-
   get sign () {
     return this.config.direction === "input" ? -1 : 1
   }
+
+  handleMouseEnter (event :MouseEvent, pos :vec2) { this._hovered.update(true) }
+  handleMouseLeave (event :MouseEvent, pos :vec2) { this._hovered.update(false) }
 
   applyToContaining (canvas :CanvasRenderingContext2D, pos :vec2, op :(element :Element) => void) {
     if (rect.contains(this.expandBounds(this.bounds), pos) && this.visible.current) op(this)
   }
 
   expandBounds (bounds :rect) :rect {
-    const radius = this.radius
+    const radius = this._radius.current
+    const outlineWidth = this._outlineWidth.current
     return rect.set(
       expandedBounds,
-      bounds[0] + radius * (this.sign - 1),
-      bounds[1] - radius,
-      2 * radius,
-      2 * radius,
+      bounds[0] + radius * (this.sign - 1) - Math.round(outlineWidth/2),
+      bounds[1] - radius - Math.round(outlineWidth/2),
+      2 * radius + outlineWidth,
+      2 * radius + outlineWidth,
     )
   }
 
   protected get computeState () :string {
-    return "normal"
+    return this._hovered.current ? "hovered" : "normal"
   }
 
   protected computePreferredSize (hintX :number, hintY :number, into :dim2) {
@@ -702,9 +718,17 @@ export class Terminal extends Element {
     canvas.strokeStyle = style
     canvas.fillStyle = style
     canvas.beginPath()
-    const radius = this.radius
+    const radius = this._radius.current
+    const outlineWidth = this._outlineWidth.current
+    const outlineAlpha = this._outlineAlpha.current
     canvas.arc(this.x + radius * this.sign, this.y, radius, 0, 2 * Math.PI)
     canvas.fill()
-    canvas.stroke()
+    if (outlineWidth) {
+      canvas.lineWidth = outlineWidth
+      canvas.globalAlpha = outlineAlpha
+      canvas.stroke()
+      canvas.lineWidth = 1
+      canvas.globalAlpha = 1
+    }
   }
 }

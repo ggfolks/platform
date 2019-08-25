@@ -88,7 +88,7 @@ export class UI {
 
   createElement (ctx :ElementContext, parent :Element, config :ElementConfig) :Element {
     const rstyles = this.resolveStyles(
-      config.scopeId ? {id: config.scopeId, states: parent.styleScope.states} : parent.styleScope,
+      this.getElementScope(parent, config),
       config.type,
       config.style as Record,
     )
@@ -113,6 +113,16 @@ export class UI {
     case     "edgeview": return new GR.EdgeView(ctx, parent, rconfig as GR.EdgeViewConfig)
     case     "terminal": return new GR.Terminal(ctx, parent, rconfig as GR.TerminalConfig)
     default: throw new Error(`Unknown element type '${config.type}'.`)
+    }
+  }
+
+  getElementScope (parent :Element, config :ElementConfig) :StyleScope {
+    switch (config.type) {
+      case "terminal": return GR.TerminalStyleScope
+      default:
+        return config.scopeId
+          ? {id: config.scopeId, states: parent.styleScope.states}
+          : parent.styleScope
     }
   }
 
