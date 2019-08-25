@@ -7,7 +7,6 @@ import {Element, ElementConfig, ElementContext, MouseInteraction} from "./elemen
 import {AbsConstraints, AbsGroup, AxisConfig, VGroup} from "./group"
 import {List} from "./list"
 import {Model, ModelData, ModelKey, ModelProvider, Spec} from "./model"
-import {DefaultPaint, PaintConfig} from "./style"
 
 /** A navigable graph viewer. */
 export interface GraphViewerConfig extends ElementConfig {
@@ -316,6 +315,7 @@ export class NodeView extends VGroup {
                   {
                     type: "terminal",
                     direction: "input",
+                    value: "style",
                     contents: {type: "row", contents: []},
                   },
                   {
@@ -354,6 +354,7 @@ export class NodeView extends VGroup {
                   {
                     type: "terminal",
                     direction: "output",
+                    value: "style",
                     contents: {type: "row", contents: []},
                   },
                 ],
@@ -633,8 +634,6 @@ export class EdgeView extends Element {
 
 /** Defines the styles that apply to [[Terminal]]. */
 export interface TerminalStyle {
-  stroke? :Spec<PaintConfig>
-  fill? :Spec<PaintConfig>
   radius? :number
 }
 
@@ -642,6 +641,7 @@ export interface TerminalStyle {
 export interface TerminalConfig extends ElementConfig {
   type :"terminal"
   direction :"input" | "output"
+  value :Spec<Value<string>>
   style :PMap<TerminalStyle>
 }
 
@@ -650,19 +650,13 @@ const TerminalStyleScope = {id: "terminal", states: ["normal"]}
 const expandedBounds = rect.create()
 
 export class Terminal extends Element {
-  protected readonly _state = Mutable.local("normal")
-  private stroke = this.observe(DefaultPaint)
-  private fill = this.observe(DefaultPaint)
+  private readonly _state = Mutable.local("normal")
+  private readonly _value :Value<string>
 
   constructor (ctx :ElementContext, parent :Element, readonly config :TerminalConfig) {
     super(ctx, parent, config)
-    this.state.onValue(state => {
-      const style = this.style
-      if (style.stroke) this.stroke.observe(ctx.style.resolvePaint(style.stroke))
-      else this.stroke.update(DefaultPaint)
-      if (style.fill) this.fill.observe(ctx.style.resolvePaint(style.fill))
-      else this.fill.update(DefaultPaint)
-    })
+    this._value = ctx.model.resolve(config.value)
+    this.disposer.add(this._value.onValue(() => this.dirty()))
   }
 
   get style () :TerminalStyle { return this.getStyle(this.config.style, this.state.current) }
@@ -678,17 +672,8 @@ export class Terminal extends Element {
     return this.config.direction === "input" ? -1 : 1
   }
 
-  protected get computeState () :string {
-    return "normal"
-  }
-
-  protected computePreferredSize (hintX :number, hintY :number, into :dim2) {
-    dim2.set(into, 0, 0)
-  }
-
-  protected expandBounds (bounds :rect) :rect {
-    const style = this.style
-    const radius = (style.radius === undefined) ? 5 : style.radius
+  expandBounds (bounds :rect) :rect {
+    const radius = this.radius
     return rect.set(
       expandedBounds,
       bounds[0] + radius * (this.sign - 1),
@@ -697,16 +682,21 @@ export class Terminal extends Element {
       2 * radius,
     )
   }
+  
+  protected get computeState () :string {
+    return "normal"
+  }
+
+  protected computePreferredSize (hintX :number, hintY :number, into :dim2) {
+    dim2.set(into, 0, 0)
+  }
 
   protected relayout () {}
 
-  render (canvas :CanvasRenderingContext2D, region :rect) {
-    this.rerender(canvas, region)
-  }
-
   protected rerender (canvas :CanvasRenderingContext2D, region :rect) {
-    this.stroke.current.prepStroke(canvas)
-    this.fill.current.prepFill(canvas)
+    const style = this._value.current
+    canvas.strokeStyle = style
+    canvas.fillStyle = style
     canvas.beginPath()
     const radius = this.radius
     canvas.arc(this.x + radius * this.sign, this.y, radius, 0, 2 * Math.PI)

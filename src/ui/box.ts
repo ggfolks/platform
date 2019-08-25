@@ -72,13 +72,12 @@ export interface BoxConfig extends ElementConfig {
   style :PMap<BoxStyle>
 }
 
-const expandedBounds = rect.create()
-
 /** Displays a single child with an optional background, padding, margin, and alignment. */
 export class Box extends Element {
   private background = this.observe(NoopDecor)
   private border = this.observe(NoopDecor)
   private readonly contents :Element
+  private readonly _expandedBounds = rect.create()
 
   constructor (ctx :ElementContext, parent :Element, readonly config :BoxConfig) {
     super(ctx, parent, config)
@@ -117,19 +116,24 @@ export class Box extends Element {
     this.contents.dispose()
   }
 
-  protected expandBounds (bounds :rect) :rect {
+  expandBounds (bounds :rect) :rect {
     const backgroundSize = this.background.current.size
     const borderSize = this.border.current.size
     const top = Math.max(backgroundSize[0], borderSize[0])
     const right = Math.max(backgroundSize[1], borderSize[1])
     const bottom = Math.max(backgroundSize[2], borderSize[2])
     const left = Math.max(backgroundSize[3], borderSize[3])
-    return rect.set(
-      expandedBounds,
+    rect.set(
+      this._expandedBounds,
       bounds[0] - left,
       bounds[1] - top,
       bounds[2] + left + right,
       bounds[3] + top + bottom,
+    )
+    return rect.union(
+      this._expandedBounds,
+      this._expandedBounds,
+      this.contents.expandBounds(this.contents.bounds),
     )
   }
 

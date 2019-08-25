@@ -170,9 +170,14 @@ export abstract class Element implements Disposable {
   }
 
   render (canvas :CanvasRenderingContext2D, region :rect) {
-    if (!rect.intersects(this._bounds, region)) return
+    if (!rect.intersects(this.expandBounds(this._bounds), region)) return
     if (this.visible.current) this.rerender(canvas, region)
     rect.zero(this._dirtyRegion)
+  }
+
+  /** Expands the supplied bounds to include space for extra details such as shadows. */
+  expandBounds (bounds :rect) :rect {
+    return bounds
   }
 
   /** Requests that this element handle the supplied mouse down event.
@@ -227,11 +232,6 @@ export abstract class Element implements Disposable {
 
   protected revalidate () {
     if (this.visible.current) this.relayout()
-  }
-
-  /** Expands the supplied bounds to include space for extra details such as shadows. */
-  protected expandBounds (bounds :rect) :rect {
-    return bounds
   }
 
   protected abstract computePreferredSize (hintX :number, hintY :number, into :dim2) :void

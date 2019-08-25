@@ -1,4 +1,4 @@
-import {clamp, dim2, rect, vec2} from "../core/math"
+import {clamp, dim2, rect, vec2, vec2zero} from "../core/math"
 import {Mutable} from "../core/react"
 import {Control, ControlConfig, Element, ElementContext, MouseInteraction} from "./element"
 
@@ -76,13 +76,13 @@ export class ScrollView extends Control {
   }
 
   dirty (region :rect = this.expandBounds(this._bounds), fromChild :boolean = false) {
-    // can be called before properties are initialized
-    if (!(fromChild && this._offset)) {
+    if (!fromChild) {
       super.dirty(region, false)
       return
     }
-    const offset = this._offset.current
-    const scale = this._scale.current
+    // can be called before properties are initialized
+    const offset = this._offset ? this._offset.current : vec2zero
+    const scale = this._scale ? this._scale.current : 1
     transformedRegion[0] = Math.floor(this.x + scale * (region[0] - this.x) - offset[0])
     transformedRegion[1] = Math.floor(this.y + scale * (region[1] - this.y) - offset[1])
     transformedRegion[2] = Math.ceil(scale * region[2])

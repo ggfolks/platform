@@ -110,6 +110,7 @@ function createGraphModelData (graph :Graph) :ModelData {
             name: Value.constant(key),
             multiple: Value.constant(value.current.inputsMeta[key].multiple),
             value: Value.constant(value.current.config[key]),
+            style: Value.constant("#808080"),
           }),
         },
         output: (() => {

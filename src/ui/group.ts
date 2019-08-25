@@ -6,6 +6,7 @@ const tmpr = rect.create()
 /** Groups contain multiple child elements.
   * Different subclasses of group implement different layout policies. */
 abstract class Group extends Element {
+  private readonly _expandedBounds = rect.create()
 
   abstract get contents () :Element[]
 
@@ -44,6 +45,14 @@ abstract class Group extends Element {
   dispose () {
     super.dispose()
     for (const child of this.contents) child.dispose()
+  }
+
+  expandBounds (bounds :rect) :rect {
+    rect.copy(this._expandedBounds, bounds)
+    for (const elem of this.contents) {
+      rect.union(this._expandedBounds, this._expandedBounds, elem.expandBounds(elem.bounds))
+    }
+    return this._expandedBounds
   }
 
   protected revalidate () {
