@@ -122,7 +122,7 @@ export class ScrollView extends Control {
   protected get computeState () :string {
     return this.enabled.current ? "normal" : "disabled"
   }
-  
+
   protected rerender (canvas :CanvasRenderingContext2D, region :rect) {
     canvas.save()
     canvas.beginPath()
