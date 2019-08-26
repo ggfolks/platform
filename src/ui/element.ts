@@ -660,6 +660,7 @@ export class Host implements Disposable {
       this.roots.splice(idx, 1)
       this.rootRemoved(root, idx)
       if (dispose) root.dispose()
+      if (this._canvas) this._canvas.style.cursor = "auto"
     }
   }
 

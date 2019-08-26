@@ -28,7 +28,7 @@ export class Button extends Control {
   get pressed () :Value<boolean> { return this._pressed }
 
   handleMouseDown (event :MouseEvent, pos :vec2) :MouseInteraction|undefined {
-    if (event.button !== 0) return undefined
+    if (!(event.button === 0 && this.visible.current && this.enabled.current)) return undefined
     this._pressed.update(true)
     this.focus()
     return {

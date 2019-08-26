@@ -31,10 +31,10 @@ export class GraphViewer extends VGroup {
           contents: [
             {
               type: "box",
-              visible: this._poppable,
               contents: {
                 type: "button",
                 onClick: () => this.pop(),
+                visible: this._poppable,
                 contents: {
                   type: "box",
                   contents: {type: "label", text: "backButton.text"},
