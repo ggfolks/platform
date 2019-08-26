@@ -1,7 +1,7 @@
 import {Clock} from "../core/clock"
 import {refEquals} from "../core/data"
 import {Mutable, Value} from "../core/react"
-import {PMap} from "../core/util"
+import {log, PMap} from "../core/util"
 import {Graph, GraphConfig} from "./graph"
 import {EdgeMeta, InputEdgeMeta, inputEdge, outputEdge, property} from "./meta"
 import {InputEdge, Node, NodeConfig, NodeTypeRegistry} from "./node"
@@ -202,6 +202,7 @@ class Output extends Node {
 /** Logs its input to the console. */
 abstract class LogConfig implements NodeConfig {
   type = "log"
+  @property() message = ""
   @inputEdge("any") input = undefined
 }
 
@@ -213,7 +214,7 @@ class Log extends Node {
 
   connect () {
     this._disposer.add(this.graph.getValue(this.config.input, undefined).onValue(
-      value => console.log(value),
+      value => log.info(this.config.message || "", "value", value),
     ))
   }
 }
