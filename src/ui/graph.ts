@@ -605,7 +605,7 @@ export class EdgeView extends Element {
       const from = vec2.fromValues(source.x - view.x, source.y + source.height / 2 - view.y)
       vec2.set(offsetFrom, from[0] - offset, from[1])
       vec2.min(min, min, offsetFrom)
-      vec2.max(max, max, offsetFrom)
+      vec2.max(max, max, from)
       const to :[vec2, Value<string>][] = []
       const addEdge = (input :InputEdge<any>) => {
         let targetId :string
@@ -637,7 +637,7 @@ export class EdgeView extends Element {
           }
           to.push([toPos, style])
           vec2.set(offsetTo, toPos[0] + offset, toPos[1])
-          vec2.min(min, min, offsetTo)
+          vec2.min(min, min, toPos)
           vec2.max(max, max, offsetTo)
         }
       }
