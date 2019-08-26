@@ -314,7 +314,7 @@ export class SceneSystem extends System {
     this._updateObject(id, obj)
     obj.updateMatrixWorld()
     createObject3D(config.components[this.obj.id]).onValue(obj => {
-      // if this is the initial, default Object3D, it won't actually be in the scene
+      // if this is the initial, default Object3D, it won't actually be in the scene;
       // otherwise, we're replacing the model with another
       const oldObj = this.obj.read(id)
       this.scene.remove(oldObj)
