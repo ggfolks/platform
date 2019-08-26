@@ -520,7 +520,7 @@ const debugDirty = false
 const DebugColors = ["#FF0000", "#00FF00", "#0000FF", "#00FFFF", "#FF00FF", "#FFFF00"]
 let debugColorIndex = 0
 
-export const ControlStates = [...RootStates, "disabled", "focused", "hovered"]
+export const ControlStates = [...RootStates, "disabled", "focused", "hovered", "hoverFocused"]
 
 /** Configuration shared by all [[Control]]s. */
 export interface ControlConfig extends ElementConfig {
@@ -604,7 +604,10 @@ export class Control extends Element {
 
   protected get computeState () :string {
     return this.enabled.current
-      ? (this.isHovered ? "hovered" : this.isFocused ? "focused" : "normal")
+      ? (this.isHovered
+          ? this.isFocused ? "hoverFocused" : "hovered"
+          : this.isFocused ? "focused" : "normal"
+        )
       : "disabled"
   }
 

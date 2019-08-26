@@ -1,7 +1,7 @@
 import {dim2, rect, vec2} from "../core/math"
 import {Mutable, Value} from "../core/react"
 import {Action, NoopAction, Spec} from "./model"
-import {Control, ControlConfig, Element, ElementConfig, ElementContext,
+import {Control, ControlConfig, ControlStates, Element, ElementConfig, ElementContext,
         MouseInteraction} from "./element"
 
 export interface ButtonConfig extends ControlConfig {
@@ -9,10 +9,7 @@ export interface ButtonConfig extends ControlConfig {
   onClick? :Spec<Action>
 }
 
-const ButtonStyleScope = {
-  id: "button",
-  states: ["normal", "disabled", "focused", "hovered", "pressed"],
-}
+const ButtonStyleScope = {id: "button", states: [...ControlStates, "pressed"]}
 
 export class Button extends Control {
   protected readonly _pressed = Mutable.local(false)
