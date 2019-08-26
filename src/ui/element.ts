@@ -23,6 +23,9 @@ export class Observer<T> implements Disposable {
     * element. */
   update (value :T) {
     this.remover()
+    this.remover = NoopRemover
+    // dirty first, in case changing the value changes the bounds expansion
+    this.owner.dirty()
     this.current = value
     this.owner.invalidate()
   }

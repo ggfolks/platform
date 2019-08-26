@@ -3,7 +3,7 @@ import {Mutable, Value} from "../core/react"
 import {PMap, Remover} from "../core/util"
 import {getConstantOrValueNodeId} from "../graph/graph"
 import {InputEdge, InputEdges} from "../graph/node"
-import {Element, ElementConfig, ElementContext, MouseInteraction} from "./element"
+import {Element, ElementConfig, ElementContext, MouseInteraction, Observer} from "./element"
 import {AbsConstraints, AbsGroup, AxisConfig, VGroup} from "./group"
 import {List} from "./list"
 import {Model, ModelData, ModelKey, ModelProvider, Spec} from "./model"
@@ -477,7 +477,16 @@ export interface EdgeViewConfig extends ElementConfig {
 /** Defines the styles that apply to [[EdgeView]]. */
 export interface EdgeViewStyle {
   lineWidth? :number
+  controlPointOffset? :number
+  outlineWidth? :number
+  outlineAlpha? :number
+  cursor? :string
 }
+
+export const EdgeViewStyleScope = {id: "edgeview", states: ["normal", "hovered"]}
+
+const offsetFrom = vec2.create()
+const offsetTo = vec2.create()
 
 export class EdgeView extends Element {
   private _nodeId :Value<string>
@@ -487,7 +496,12 @@ export class EdgeView extends Element {
   private _inputs :Value<InputValue[]>
   private _output :ModelProvider
   private _edges :{from :vec2, to :[vec2, Value<string>][]}[] = []
-  private _lineWidth = 1
+  private readonly _state = Mutable.local("normal")
+  private readonly _lineWidth = this.observe(1)
+  private readonly _controlPointOffset = this.observe(40)
+  private readonly _outlineWidth = this.observe(0)
+  private readonly _outlineAlpha = this.observe(1)
+  private _hoverIndex :Observer<number|undefined> = this.observe(undefined)
   private _nodeRemovers :Map<Element, Remover> = new Map()
   private _styleRemovers :Map<Value<string>, Remover> = new Map()
 
@@ -503,9 +517,22 @@ export class EdgeView extends Element {
         return this._input.resolve(inputKey).resolve("value" as Spec<Value<InputValue>>)
       }))
     }))
-    const style = this.getStyle(this.config.style, "normal") as EdgeViewStyle
-    if (style.lineWidth) this._lineWidth = style.lineWidth
+    this.disposer.add(this.state.onValue(state => {
+      const style = this.style
+      this._lineWidth.update(style.lineWidth === undefined ? 1 : style.lineWidth)
+      this._controlPointOffset.update(
+        style.controlPointOffset === undefined ? 40 : style.controlPointOffset,
+      )
+      this._outlineWidth.update(style.outlineWidth === undefined ? 0 : style.outlineWidth)
+      this._outlineAlpha.update(style.outlineAlpha === undefined ? 1 : style.outlineAlpha)
+      if (style.cursor) this.setCursor(this, style.cursor)
+      else this.clearCursor(this)
+    }))
   }
+
+  get style () :EdgeViewStyle { return this.getStyle(this.config.style, this.state.current) }
+  get styleScope () { return EdgeViewStyleScope }
+  get state () :Value<string> { return this._state }
 
   getDefaultOutputKey () {
     return this._defaultOutputKey.current
@@ -513,6 +540,48 @@ export class EdgeView extends Element {
 
   getOutputStyle (key :string) {
     return this._output.resolve(key).resolve("style" as Spec<Value<string>>)
+  }
+
+  applyToContaining (canvas :CanvasRenderingContext2D, pos :vec2, op :(element :Element) => void) {
+    if (!(rect.contains(this.bounds, pos) && this.visible.current && this._edges.length)) return
+    const view = this.requireParent as GraphView
+    canvas.translate(view.x, view.y)
+    canvas.lineWidth = this._lineWidth.current
+    canvas.globalAlpha = 0
+    const outlineWidth = this._outlineWidth.current
+    const off = this._controlPointOffset.current
+    let hoverIndex :number|undefined
+    let index = 0
+    outerLoop: for (const edge of this._edges) {
+      for (const [to] of edge.to) {
+        canvas.beginPath()
+        canvas.moveTo(edge.from[0], edge.from[1])
+        canvas.bezierCurveTo(edge.from[0] - off, edge.from[1], to[0] + off, to[1], to[0], to[1])
+        if (outlineWidth && index === this._hoverIndex.current) {
+          canvas.lineWidth = outlineWidth
+          canvas.stroke()
+          canvas.lineWidth = this._lineWidth.current
+        } else {
+          canvas.stroke()
+        }
+        if (canvas.isPointInStroke(pos[0], pos[1])) {
+          op(this)
+          hoverIndex = index
+          break outerLoop
+        }
+        index++
+      }
+    }
+    if (hoverIndex !== this._hoverIndex.current) this._hoverIndex.update(hoverIndex)
+    canvas.lineWidth = 1
+    canvas.globalAlpha = 1
+    canvas.translate(-view.x, -view.y)
+  }
+
+  handleMouseLeave (event :MouseEvent, pos :vec2) { this._hoverIndex.update(undefined) }
+
+  protected get computeState () :string {
+    return this._hoverIndex.current === undefined ? "normal" : "hovered"
   }
 
   protected computePreferredSize (hintX :number, hintY :number, into :dim2) {
@@ -527,14 +596,16 @@ export class EdgeView extends Element {
     const inputKeys = this._inputKeys.current
     const inputs = this._inputs.current
     const view = this.requireParent as GraphView
+    const offset = this._controlPointOffset.current
     for (let ii = 0; ii < inputKeys.length; ii++) {
       const input = inputs[ii]
       if (input === undefined) continue
       const inputKey = inputKeys[ii]
       const source = inputList.contents[ii]
       const from = vec2.fromValues(source.x - view.x, source.y + source.height / 2 - view.y)
-      vec2.min(min, min, from)
-      vec2.max(max, max, from)
+      vec2.set(offsetFrom, from[0] - offset, from[1])
+      vec2.min(min, min, offsetFrom)
+      vec2.max(max, max, offsetFrom)
       const to :[vec2, Value<string>][] = []
       const addEdge = (input :InputEdge<any>) => {
         let targetId :string
@@ -565,8 +636,9 @@ export class EdgeView extends Element {
             this.disposer.add(remover)
           }
           to.push([toPos, style])
-          vec2.min(min, min, toPos)
-          vec2.max(max, max, toPos)
+          vec2.set(offsetTo, toPos[0] + offset, toPos[1])
+          vec2.min(min, min, offsetTo)
+          vec2.max(max, max, offsetTo)
         }
       }
       const inputModel = this._input.resolve(inputKey)
@@ -579,7 +651,7 @@ export class EdgeView extends Element {
       this._edges.push({from, to})
     }
     if (min[0] <= max[0] && min[1] <= max[1]) {
-      const expand = Math.ceil(this._lineWidth / 2)
+      const expand = Math.ceil(Math.max(this._lineWidth.current, this._outlineWidth.current) / 2)
       dim2.set(into, max[0] - min[0] + expand * 2, max[1] - min[1] + expand * 2)
       this.config.constraints = {position: [min[0] - expand, min[1] - expand]}
     } else {
@@ -611,20 +683,33 @@ export class EdgeView extends Element {
     return view.elements.get(nodeId)!.edges
   }
 
-  protected relayout () {}
+  protected relayout () {
+    this._state.update(this.computeState)
+  }
 
   protected rerender (canvas :CanvasRenderingContext2D, region :rect) {
     if (this._edges.length === 0) return
     const view = this.requireParent as GraphView
     canvas.translate(view.x, view.y)
-    canvas.lineWidth = this._lineWidth
+    canvas.lineWidth = this._lineWidth.current
+    const outlineWidth = this._outlineWidth.current
+    const off = this._controlPointOffset.current
+    let index = 0
     for (const edge of this._edges) {
       for (const [to, style] of edge.to) {
         canvas.strokeStyle = style.current
         canvas.beginPath()
         canvas.moveTo(edge.from[0], edge.from[1])
-        canvas.bezierCurveTo(edge.from[0] - 40, edge.from[1], to[0] + 40, to[1], to[0], to[1])
+        canvas.bezierCurveTo(edge.from[0] - off, edge.from[1], to[0] + off, to[1], to[0], to[1])
+        if (outlineWidth && index === this._hoverIndex.current) {
+          canvas.lineWidth = outlineWidth
+          canvas.globalAlpha = this._outlineAlpha.current
+          canvas.stroke()
+          canvas.lineWidth = this._lineWidth.current
+          canvas.globalAlpha = 1
+        }
         canvas.stroke()
+        index++
       }
     }
     canvas.lineWidth = 1
@@ -667,13 +752,9 @@ export class Terminal extends Element {
     this.disposer.add(this._hovered.onValue(() => this._state.update(this.computeState)))
     this.disposer.add(this.state.onValue(state => {
       const style = this.getStyle(this.config.style, state)
-      this._radius.observe(Value.constant(style.radius === undefined ? 5 : style.radius))
-      this._outlineWidth.observe(Value.constant(
-        style.outlineWidth === undefined ? 0 : style.outlineWidth,
-      ))
-      this._outlineAlpha.observe(Value.constant(
-        style.outlineAlpha === undefined ? 1 : style.outlineAlpha,
-      ))
+      this._radius.update(style.radius === undefined ? 5 : style.radius)
+      this._outlineWidth.update(style.outlineWidth === undefined ? 0 : style.outlineWidth)
+      this._outlineAlpha.update(style.outlineAlpha === undefined ? 1 : style.outlineAlpha)
       if (style.cursor) this.setCursor(this, style.cursor)
       else this.clearCursor(this)
     }))

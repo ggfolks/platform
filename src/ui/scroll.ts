@@ -23,16 +23,7 @@ export class ScrollView extends Control {
 
   applyToContaining (canvas :CanvasRenderingContext2D, pos :vec2, op :(element :Element) => void) {
     if (rect.contains(this.bounds, pos) && this.visible.current) op(this)
-    canvas.save()
-    const offset = this._offset.current
-    const scale = this._scale.current
-    canvas.translate(
-      this.x - this.x * scale - offset[0],
-      this.y - this.y * scale - offset[1],
-    )
-    canvas.scale(this._scale.current, this._scale.current)
     this.contents.applyToContaining(canvas, this._transformPos(pos), op)
-    canvas.restore()
   }
 
   handleMouseDown (event :MouseEvent, pos :vec2) :MouseInteraction|undefined {
@@ -134,7 +125,7 @@ export class ScrollView extends Control {
       this.x - this.x * scale - offset[0],
       this.y - this.y * scale - offset[1],
     )
-    canvas.scale(this._scale.current, this._scale.current)
+    canvas.scale(scale, scale)
     transformedRegion[0] = (region[0] - this.x + offset[0]) / scale + this.x
     transformedRegion[1] = (region[1] - this.y + offset[1]) / scale + this.y
     transformedRegion[2] = region[2] / scale
