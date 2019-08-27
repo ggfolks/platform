@@ -211,6 +211,15 @@ export abstract class Element implements Disposable {
    */
   handleMouseLeave (event :MouseEvent, pos :vec2) {}
 
+  /** Requests that this element handle the supplied mouse down event if it contains the position.
+    * @param event the event forwarded from the browser.
+    * @param pos the position of the event relative to the root origin.
+    * @return an interaction if an element started an interaction with the mouse, `undefined`
+    * otherwise. */
+  maybeHandleMouseDown (event :MouseEvent, pos :vec2) :MouseInteraction|undefined {
+    return rect.contains(this.bounds, pos) ? this.handleMouseDown(event, pos) : undefined
+  }
+
   /** Requests that this element handle the supplied mouse down event.
     * @param event the event forwarded from the browser.
     * @param pos the position of the event relative to the root origin.
@@ -218,6 +227,14 @@ export abstract class Element implements Disposable {
     * otherwise. */
   handleMouseDown (event :MouseEvent, pos :vec2) :MouseInteraction|undefined {
     return undefined
+  }
+
+  /** Requests that this element handle the supplied wheel event if it contains the position.
+    * @param event the event forwarded from the browser.
+    * @param pos the position of the event relative to the root origin.
+    * @return whether or not the wheel was handled, and thus should not be further propagated. */
+  maybeHandleWheel (event :WheelEvent, pos :vec2) :boolean {
+    return rect.contains(this.bounds, pos) && this.handleWheel(event, pos)
   }
 
   /** Requests that this element handle the supplied wheel event.
@@ -415,16 +432,14 @@ export class Root extends Element {
     const iact = this.interacts[button]
     switch (event.type) {
     case "mousedown":
-      if (rect.contains(this.contents.bounds, pos)) {
-        if (iact) {
-          console.warn(`Got mouse down but have active interaction? [button=${button}]`)
-          iact.cancel()
-        }
-        const niact = this.interacts[button] = this.contents.handleMouseDown(event, pos)
-        // if we click and hit no interactive control, clear the focus
-        if (niact === undefined) this.focus.update(undefined)
-        else event.cancelBubble = true
+      if (iact) {
+        console.warn(`Got mouse down but have active interaction? [button=${button}]`)
+        iact.cancel()
       }
+      const niact = this.interacts[button] = this.contents.maybeHandleMouseDown(event, pos)
+      // if we click and hit no interactive control, clear the focus
+      if (niact === undefined) this.focus.update(undefined)
+      else event.cancelBubble = true
       break
     case "mousemove":
       if (iact) iact.move(event, pos)
@@ -472,7 +487,7 @@ export class Root extends Element {
 
   dispatchWheelEvent (event :WheelEvent) {
     const pos = vec2.set(tmpv, event.offsetX-this.origin[0], event.offsetY-this.origin[1])
-    if (rect.contains(this.contents.bounds, pos) && this.contents.handleWheel(event, pos)) {
+    if (this.contents.maybeHandleWheel(event, pos)) {
       event.cancelBubble = true
     }
   }

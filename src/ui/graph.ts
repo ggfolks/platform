@@ -474,12 +474,15 @@ export interface EdgeViewConfig extends ElementConfig {
   style :PMap<EdgeViewStyle>
 }
 
-/** Defines the styles that apply to [[EdgeView]]. */
-export interface EdgeViewStyle {
+export interface EdgeStyle {
   lineWidth? :number
   controlPointOffset? :number
   outlineWidth? :number
   outlineAlpha? :number
+}
+
+/** Defines the styles that apply to [[EdgeView]]. */
+export interface EdgeViewStyle extends EdgeStyle {
   cursor? :string
 }
 
@@ -720,6 +723,7 @@ export class EdgeView extends Element {
 /** Defines the styles that apply to [[Terminal]]. */
 export interface TerminalStyle {
   radius? :number
+  edge? :EdgeStyle
   outlineWidth? :number
   outlineAlpha? :number
   cursor? :string
@@ -736,6 +740,7 @@ export interface TerminalConfig extends ElementConfig {
 export const TerminalStyleScope = {id: "terminal", states: ["normal", "hovered"]}
 
 const expandedBounds = rect.create()
+const endpointBounds = rect.create()
 
 export class Terminal extends Element {
   private readonly _state = Mutable.local("normal")
@@ -744,6 +749,7 @@ export class Terminal extends Element {
   private readonly _radius = this.observe(5)
   private readonly _outlineWidth = this.observe(0)
   private readonly _outlineAlpha = this.observe(1)
+  private _endpoint? :vec2
 
   constructor (ctx :ElementContext, parent :Element, readonly config :TerminalConfig) {
     super(ctx, parent, config)
@@ -767,9 +773,50 @@ export class Terminal extends Element {
   get sign () {
     return this.config.direction === "input" ? -1 : 1
   }
+  get edgeControlPointOffset () {
+    const style = this.style
+    return style.edge && style.edge.controlPointOffset !== undefined
+      ? style.edge.controlPointOffset
+      : 40
+  }
+  get edgeLineWidth () {
+    const style = this.style
+    return style.edge && style.edge.lineWidth !== undefined ? style.edge.lineWidth : 1
+  }
+  get edgeOutlineWidth () {
+    const style = this.style
+    return style.edge && style.edge.outlineWidth !== undefined ? style.edge.outlineWidth : 0
+  }
+  get edgeOutlineAlpha () {
+    const style = this.style
+    return style.edge && style.edge.outlineAlpha !== undefined ? style.edge.outlineAlpha : 1
+  }
 
   handleMouseEnter (event :MouseEvent, pos :vec2) { this._hovered.update(true) }
   handleMouseLeave (event :MouseEvent, pos :vec2) { this._hovered.update(false) }
+
+  maybeHandleMouseDown (event :MouseEvent, pos :vec2) {
+    return rect.contains(this.expandBounds(this.bounds), pos)
+      ? this.handleMouseDown(event, pos)
+      : undefined
+  }
+  handleMouseDown (event :MouseEvent, pos :vec2) {
+    const endpoint = this._endpoint = vec2.clone(pos)
+    this.dirty()
+    const cancel = () => {
+      this.dirty()
+      this._endpoint = undefined
+    }
+    return {
+      move: (event :MouseEvent, pos :vec2) => {
+        this.dirty()
+        vec2.copy(endpoint, pos)
+        this.dirty()
+      },
+      release: cancel,
+      cancel,
+    }
+  }
 
   applyToContaining (canvas :CanvasRenderingContext2D, pos :vec2, op :(element :Element) => void) {
     if (rect.contains(this.expandBounds(this.bounds), pos) && this.visible.current) op(this)
@@ -778,12 +825,52 @@ export class Terminal extends Element {
   expandBounds (bounds :rect) :rect {
     const radius = this._radius.current
     const outlineWidth = this._outlineWidth.current
-    return rect.set(
+    const halfOutlineWidth = Math.round(outlineWidth/2)
+    const radiusWidth = 2 * radius + outlineWidth
+    const halfRadiusWidth = radius + halfOutlineWidth
+    rect.set(
       expandedBounds,
-      bounds[0] + radius * (this.sign - 1) - Math.round(outlineWidth/2),
-      bounds[1] - radius - Math.round(outlineWidth/2),
-      2 * radius + outlineWidth,
-      2 * radius + outlineWidth,
+      bounds[0] + radius * (this.sign - 1) - halfOutlineWidth,
+      bounds[1] - halfRadiusWidth,
+      radiusWidth,
+      radiusWidth,
+    )
+    if (!this._endpoint) return expandedBounds
+    const controlPointOffset = this.edgeControlPointOffset
+    const lineWidth = Math.max(this.edgeLineWidth, this.edgeOutlineWidth)
+    const halfLineWidth = Math.round(lineWidth/2)
+    rect.union(
+      expandedBounds,
+      expandedBounds,
+      rect.set(
+        endpointBounds,
+        this.x + controlPointOffset * this.sign - halfLineWidth,
+        this.y - halfLineWidth,
+        radiusWidth,
+        radiusWidth,
+      ),
+    )
+    rect.union(
+      expandedBounds,
+      expandedBounds,
+      rect.set(
+        endpointBounds,
+        this._endpoint[0] - controlPointOffset * this.sign - halfLineWidth,
+        this._endpoint[1] - halfLineWidth,
+        radiusWidth,
+        radiusWidth,
+      ),
+    )
+    return rect.union(
+      expandedBounds,
+      expandedBounds,
+      rect.set(
+        endpointBounds,
+        this._endpoint[0] - halfRadiusWidth,
+        this._endpoint[1] - halfRadiusWidth,
+        radiusWidth,
+        radiusWidth,
+      ),
     )
   }
 
@@ -801,11 +888,41 @@ export class Terminal extends Element {
     const style = this._value.current
     canvas.strokeStyle = style
     canvas.fillStyle = style
+    if (this._endpoint) {
+      const controlPointOffset = this.edgeControlPointOffset
+      canvas.beginPath()
+      canvas.moveTo(this.x, this.y)
+      canvas.bezierCurveTo(
+        this.x + controlPointOffset * this.sign,
+        this.y,
+        this._endpoint[0] - controlPointOffset * this.sign,
+        this._endpoint[1],
+        this._endpoint[0],
+        this._endpoint[1],
+      )
+      const outlineWidth = this.edgeOutlineWidth
+      if (outlineWidth) {
+        canvas.lineWidth = outlineWidth
+        canvas.globalAlpha = this.edgeOutlineAlpha
+        canvas.stroke()
+        canvas.globalAlpha = 1
+      }
+      canvas.lineWidth = this.edgeLineWidth
+      canvas.stroke()
+      canvas.lineWidth = 1
+    }
+    this._drawTerminal(canvas, this.x + this._radius.current * this.sign, this.y)
+    if (this._endpoint) {
+      this._drawTerminal(canvas, this._endpoint[0], this._endpoint[1])
+    }
+  }
+
+  _drawTerminal (canvas :CanvasRenderingContext2D, x :number, y :number) {
     canvas.beginPath()
     const radius = this._radius.current
     const outlineWidth = this._outlineWidth.current
     const outlineAlpha = this._outlineAlpha.current
-    canvas.arc(this.x + radius * this.sign, this.y, radius, 0, 2 * Math.PI)
+    canvas.arc(x, y, radius, 0, 2 * Math.PI)
     canvas.fill()
     if (outlineWidth) {
       canvas.lineWidth = outlineWidth

@@ -10,15 +10,24 @@ abstract class Group extends Element {
 
   abstract get contents () :Element[]
 
+  maybeHandleMouseDown (event :MouseEvent, pos :vec2) {
+    return rect.contains(this.expandBounds(this.bounds), pos)
+      ? this.handleMouseDown(event, pos)
+      : undefined
+  }
   handleMouseDown (event :MouseEvent, pos :vec2) {
     for (const cc of this.contents) {
-      if (rect.contains(cc.bounds, pos)) return cc.handleMouseDown(event, pos)
+      const interaction = cc.maybeHandleMouseDown(event, pos)
+      if (interaction) return interaction
     }
     return undefined
   }
+  maybeHandleWheel (event :WheelEvent, pos :vec2) {
+    return rect.contains(this.expandBounds(this.bounds), pos) && this.handleWheel(event, pos)
+  }
   handleWheel (event :WheelEvent, pos :vec2) :boolean {
     for (const cc of this.contents) {
-      if (rect.contains(cc.bounds, pos) && cc.handleWheel(event, pos)) return true
+      if (cc.maybeHandleWheel(event, pos)) return true
     }
     return false
   }
@@ -90,20 +99,15 @@ export abstract class AbsGroup extends Group {
   handleMouseDown (event :MouseEvent, pos :vec2) {
     // handle mouse events in reverse order of drawing
     for (let ii = this.contents.length - 1; ii >= 0; ii--) {
-      const cc = this.contents[ii]
-      if (rect.contains(cc.bounds, pos)) {
-        // unlike Group, we assume that components can overlap
-        const interaction = cc.handleMouseDown(event, pos)
-        if (interaction) return interaction
-      }
+      const interaction = this.contents[ii].maybeHandleMouseDown(event, pos)
+      if (interaction) return interaction
     }
     return undefined
   }
 
   handleWheel (event :WheelEvent, pos :vec2) {
     for (let ii = this.contents.length - 1; ii >= 0; ii--) {
-      const cc = this.contents[ii]
-      if (rect.contains(cc.bounds, pos) && cc.handleWheel(event, pos)) return true
+      if (this.contents[ii].maybeHandleWheel(event, pos)) return true
     }
     return false
   }

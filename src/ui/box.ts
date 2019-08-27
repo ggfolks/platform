@@ -111,12 +111,19 @@ export class Box extends Element {
     this.contents.applyToContaining(canvas, pos, op)
   }
 
+  maybeHandleMouseDown (event :MouseEvent, pos :vec2) {
+    return rect.contains(this.expandBounds(this.bounds), pos)
+      ? this.handleMouseDown(event, pos)
+      : undefined
+  }
   handleMouseDown (event :MouseEvent, pos :vec2) {
-    return rect.contains(this.contents.bounds, pos) ?
-      this.contents.handleMouseDown(event, pos) : undefined
+    return this.contents.maybeHandleMouseDown(event, pos)
+  }
+  maybeHandleWheel (event :WheelEvent, pos :vec2) {
+    return rect.contains(this.expandBounds(this.bounds), pos) && this.handleWheel(event, pos)
   }
   handleWheel (event :WheelEvent, pos :vec2) {
-    return rect.contains(this.contents.bounds, pos) && this.contents.handleWheel(event, pos)
+    return this.contents.maybeHandleWheel(event, pos)
   }
 
   dispose () {
