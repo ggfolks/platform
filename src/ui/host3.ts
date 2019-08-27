@@ -38,14 +38,23 @@ export class Host3 extends Host {
         const height = 2 * distance * Math.tan(ThreeMath.degToRad(camera.fov) / 2)
         const width = camera.aspect * height
         renderer.getSize(rendererSize)
-        mesh.matrixWorld
-          .makeScale(root.width * width / rendererSize.x, root.height * height / rendererSize.y, 1)
-          .setPosition(
-            (root.origin[0] + root.width / 2) * width / rendererSize.x - width / 2,
-            height / 2 - (root.origin[1] + root.height / 2) * height / rendererSize.y,
-            -distance,
-          )
-          .premultiply(camera.matrixWorld)
+        if (root.width === 0 || root.height === 0) {
+          // nothing to see; put it behind the camera
+          mesh.matrixWorld.makeScale(1, 1, 1).setPosition(0, 0, 1)
+        } else {
+          mesh.matrixWorld
+            .makeScale(
+              root.width * width / rendererSize.x,
+              root.height * height / rendererSize.y,
+              1,
+            )
+            .setPosition(
+              (root.origin[0] + root.width / 2) * width / rendererSize.x - width / 2,
+              height / 2 - (root.origin[1] + root.height / 2) * height / rendererSize.y,
+              -distance,
+            )
+        }
+        mesh.matrixWorld.premultiply(camera.matrixWorld)
       }
     }
     this.group.add(mesh)
