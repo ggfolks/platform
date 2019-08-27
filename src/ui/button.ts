@@ -82,6 +82,10 @@ export class Toggle extends Control {
     super.applyToContaining(canvas, pos, op)
     this.checkedContents && this.checkedContents.applyToContaining(canvas, pos, op)
   }
+  applyToIntersecting (region :rect, op :(element :Element) => void) {
+    super.applyToIntersecting(region, op)
+    this.checkedContents && this.checkedContents.applyToIntersecting(region, op)
+  }
 
   dispose () {
     super.dispose()

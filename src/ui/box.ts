@@ -110,6 +110,10 @@ export class Box extends Element {
     super.applyToContaining(canvas, pos, op)
     this.contents.applyToContaining(canvas, pos, op)
   }
+  applyToIntersecting (region :rect, op :(element :Element) => void) {
+    super.applyToIntersecting(region, op)
+    this.contents.applyToIntersecting(region, op)
+  }
 
   maybeHandleMouseDown (event :MouseEvent, pos :vec2) {
     return rect.contains(this.expandBounds(this.bounds), pos)

@@ -835,16 +835,42 @@ export class Terminal extends Element {
       tmp.dirty()
     }
     this.setCursor(this, "move")
+    const region = rect.create()
+    const elementPos = vec2.create()
+    let hoverTerminal :Terminal|undefined
+    const visitOver = (pos :vec2) => {
+      const radius = this._radius.current
+      let closestTerminal :Terminal|undefined
+      let closestDistance = Infinity
+      graphView.applyToIntersecting(
+        rect.set(region, pos[0] - radius, pos[1] - radius, radius * 2, radius * 2),
+        (element :Element) => {
+          if (!(element instanceof Terminal && element.sign === -this.sign)) return
+          const distance = vec2.distance(pos, element.pos(elementPos))
+          if (distance < closestDistance) {
+            closestTerminal = element
+            closestDistance = distance
+          }
+        },
+      )
+      if (closestTerminal === hoverTerminal) return
+      if (hoverTerminal) hoverTerminal._hovered.update(false)
+      hoverTerminal = closestTerminal
+      if (hoverTerminal) hoverTerminal._hovered.update(true)
+    }
+    visitOver(pos)
     const cancel = () => {
       this.dirty()
       this._endpoint = undefined
       this.clearCursor(this)
+      if (hoverTerminal) hoverTerminal._hovered.update(false)
     }
     return {
       move: (event :MouseEvent, pos :vec2) => {
         this.dirty()
         vec2.copy(endpoint, pos)
         this.dirty()
+        visitOver(pos)
       },
       release: cancel,
       cancel,
@@ -853,6 +879,9 @@ export class Terminal extends Element {
 
   applyToContaining (canvas :CanvasRenderingContext2D, pos :vec2, op :(element :Element) => void) {
     if (rect.contains(this.expandBounds(this.bounds), pos) && this.visible.current) op(this)
+  }
+  applyToIntersecting (region :rect, op :(element :Element) => void) {
+    if (rect.intersects(this.expandBounds(this.bounds), region) && this.visible.current) op(this)
   }
 
   expandBounds (bounds :rect) :rect {

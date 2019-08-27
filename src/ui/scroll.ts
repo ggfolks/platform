@@ -25,6 +25,10 @@ export class ScrollView extends Control {
     if (rect.contains(this.bounds, pos) && this.visible.current) op(this)
     this.contents.applyToContaining(canvas, this._transformPos(pos), op)
   }
+  applyToIntersecting (region :rect, op :(element :Element) => void) {
+    if (rect.intersects(this.bounds, region) && this.visible.current) op(this)
+    this.contents.applyToIntersecting(this._transformRegion(region), op)
+  }
 
   handleMouseDown (event :MouseEvent, pos :vec2) :MouseInteraction|undefined {
     const transformedPos = this._transformPos(pos)
@@ -49,15 +53,6 @@ export class ScrollView extends Control {
       release: cancel,
       cancel,
     }
-  }
-
-  /** Transforms the supplied position into the space of the contents. */
-  private _transformPos (pos :vec2) {
-    return vec2.set(
-      transformedPos,
-      (pos[0] - this.x + this._offset.current[0]) / this._scale.current + this.x,
-      (pos[1] - this.y + this._offset.current[1]) / this._scale.current + this.y,
-    )
   }
 
   handleWheel (event :WheelEvent, pos :vec2) {
@@ -128,11 +123,29 @@ export class ScrollView extends Control {
       this.y - this.y * scale - offset[1],
     )
     canvas.scale(scale, scale)
-    transformedRegion[0] = (region[0] - this.x + offset[0]) / scale + this.x
-    transformedRegion[1] = (region[1] - this.y + offset[1]) / scale + this.y
-    transformedRegion[2] = region[2] / scale
-    transformedRegion[3] = region[3] / scale
-    this.contents.render(canvas, transformedRegion)
+    this.contents.render(canvas, this._transformRegion(region))
     canvas.restore()
+  }
+
+  /** Transforms the supplied position into the space of the contents. */
+  private _transformPos (pos :vec2) {
+    return vec2.set(
+      transformedPos,
+      (pos[0] - this.x + this._offset.current[0]) / this._scale.current + this.x,
+      (pos[1] - this.y + this._offset.current[1]) / this._scale.current + this.y,
+    )
+  }
+
+  /** Transforms the supplied region into the space of the contents. */
+  private _transformRegion (region :rect) {
+    const offset = this._offset.current
+    const scale = this._scale.current
+    return rect.set(
+      transformedRegion,
+      (region[0] - this.x + offset[0]) / scale + this.x,
+      (region[1] - this.y + offset[1]) / scale + this.y,
+      region[2] / scale,
+      region[3] / scale,
+    )
   }
 }

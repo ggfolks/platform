@@ -199,6 +199,15 @@ export abstract class Element implements Disposable {
     if (rect.contains(this.bounds, pos) && this.visible.current) op(this)
   }
 
+  /**
+   * Applies the provided operation to all elements intersecting the specified region.
+   * @param region the region relative to the root origin.
+   * @param op the operation to apply.
+   */
+  applyToIntersecting (region :rect, op :(element :Element) => void) {
+    if (rect.intersects(this.bounds, region) && this.visible.current) op(this)
+  }
+
   /** Requests that this element handle the supplied mouse enter event.
    * @param event the event forwarded from the browser.
    * @param pos the position of the event relative to the root origin.
@@ -609,6 +618,10 @@ export class Control extends Element {
   applyToContaining (canvas :CanvasRenderingContext2D, pos :vec2, op :(element :Element) => void) {
     super.applyToContaining(canvas, pos, op)
     this.contents.applyToContaining(canvas, pos, op)
+  }
+  applyToIntersecting (region :rect, op :(element :Element) => void) {
+    super.applyToIntersecting(region, op)
+    this.contents.applyToIntersecting(region, op)
   }
 
   dispose () {
