@@ -395,14 +395,16 @@ export class NodeView extends VGroup {
     const constraints = this.requireParent.config.constraints as AbsConstraints
     const position = constraints.position!
     const origin = position.slice()
+    this.setCursor(this, "move")
+    const cancel = () => this.clearCursor(this)
     return {
       move: (event, pos) => {
         position[0] = origin[0] + pos[0] - basePos[0]
         position[1] = origin[1] + pos[1] - basePos[1]
         this.invalidate()
       },
-      release: () => {},
-      cancel: () => {},
+      release: cancel,
+      cancel,
     }
   }
 }
@@ -822,9 +824,11 @@ export class Terminal extends Element {
       graphView.contents[index] = tmp
       tmp.dirty()
     }
+    this.setCursor(this, "move")
     const cancel = () => {
       this.dirty()
       this._endpoint = undefined
+      this.clearCursor(this)
     }
     return {
       move: (event :MouseEvent, pos :vec2) => {
