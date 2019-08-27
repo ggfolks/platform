@@ -264,10 +264,12 @@ export interface NodeViewConfig extends AxisConfig {
 }
 
 export class NodeView extends VGroup {
+  readonly id :string
   readonly contents :Element[] = []
 
   constructor (ctx :ElementContext, parent :Element, readonly config :NodeViewConfig) {
     super(ctx, parent, config)
+    this.id = ctx.model.resolve<Value<string>>("id").current
     const hasProperties = ctx.model.resolve<Value<ModelKey[]>>("propertyKeys").current.length > 0
     const hasInputs = ctx.model.resolve<Value<ModelKey[]>>("inputKeys").current.length > 0
     const hasOutputs = ctx.model.resolve<Value<ModelKey[]>>("outputKeys").current.length > 0
@@ -803,6 +805,23 @@ export class Terminal extends Element {
   handleMouseDown (event :MouseEvent, pos :vec2) {
     const endpoint = this._endpoint = vec2.clone(pos)
     this.dirty()
+    // move node to end of view so that dragged edge is always on top of other nodes
+    let ancestor = this.parent!
+    let id = ""
+    while (!(ancestor instanceof GraphView)) {
+      if (ancestor instanceof NodeView) id = ancestor.id
+      ancestor = ancestor.parent!
+    }
+    const graphView = ancestor as GraphView
+    const elements = graphView.elements.get(id)!
+    const index = graphView.contents.lastIndexOf(elements.node)
+    const lastIndex = graphView.contents.length - 1
+    if (index !== lastIndex) {
+      const tmp = graphView.contents[lastIndex]
+      graphView.contents[lastIndex] = elements.node
+      graphView.contents[index] = tmp
+      tmp.dirty()
+    }
     const cancel = () => {
       this.dirty()
       this._endpoint = undefined
