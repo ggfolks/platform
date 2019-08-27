@@ -1,4 +1,4 @@
-import {AnimationMixer, Intersection, Object3D, Raycaster, Vector3} from "three"
+import {AnimationAction, AnimationMixer, Intersection, Object3D, Raycaster, Vector3} from "three"
 
 import {Mutable, Subject, Value} from "../core/react"
 import {Noop} from "../core/util"
@@ -9,6 +9,7 @@ import {Component} from "../entity/entity"
 import {EntityComponentConfig, EntityComponentNode} from "../entity/node"
 import {PointerConfig} from "../input/node"
 import {HoverMap, loadGLTFAnimationClip} from "./entity"
+import {log} from "../core/util"
 
 /** Emits information about a single hover point. */
 abstract class HoverConfig implements EntityComponentConfig, PointerConfig {
@@ -61,8 +62,10 @@ abstract class AnimationActionConfig implements EntityComponentConfig {
   @property() component = ""
   @property() url = ""
   @property() repetitions = Number.POSITIVE_INFINITY
+  @property() clampWhenFinished = false
   @inputEdge("boolean") play = undefined
   @outputEdge("boolean", true) finished = undefined
+  // YAGNI? @outputEdge("boolean") loop = undefined
 }
 
 class AnimationActionNode extends EntityComponentNode<Component<AnimationMixer>> {
@@ -80,27 +83,18 @@ class AnimationActionNode extends EntityComponentNode<Component<AnimationMixer>>
           this.graph.getValue(this.config.play, false),
         )
         .onValue(([mixer, clip, play]) => {
-          const action = mixer.clipAction(clip)
-          if (this._finished && !this._finishListener) {
-            // The listener is added on the mixer, so use ref equality to make sure we're
-            // reacting to the correct clip. TODO: ensure this works on "later runs" of
-            // the animation.
-            this._finishListener = (e :any) => {
-              if (e.action === action) { // only respond to this action
-                // pulse it!
-                this._finished!.update(true)
-                this._finished!.update(false)
-              }
-            }
-            mixer.addEventListener("finished", this._finishListener)
-            this._disposer.add(() => mixer.removeEventListener("finished", this._finishListener!))
-          }
+          const action = this._action || (this._action = mixer.clipAction(clip))
           if (play !== action.isScheduled()) {
             if (play) {
               if (this.config.repetitions) action.repetitions = this.config.repetitions
+              if (this.config.clampWhenFinished !== undefined) {
+                action.clampWhenFinished = this.config.clampWhenFinished
+              }
               action.play()
+              //log.debug("Playing clip: " + clip.name)
             } else {
               action.stop()
+              //log.debug("Stopping clip: " + clip.name)
             }
           }
         })
@@ -108,11 +102,25 @@ class AnimationActionNode extends EntityComponentNode<Component<AnimationMixer>>
   }
 
   protected _createOutput () {
-    return this._finished = Mutable.local<boolean>(false)
+    const finishedOutput = Mutable.local<boolean>(false)
+    log.info("Creating output for animation action.")
+    this._disposer.add(Value.onceDefined(this._component.getValue(this._entityId), (mixer) => {
+      log.info("Got the mixer: " + mixer)
+      const listener = (e :any) => {
+        log.debug("Listener called", "actions Equal?", (e.action === this._action))
+        if (e.action === this._action) {
+          finishedOutput.update(true)
+          finishedOutput.update(false)
+        }
+      }
+      mixer.addEventListener("finished", listener)
+      this._disposer.add(() => mixer.removeEventListener("finished", listener))
+      log.info("Listener installed")
+    }))
+    return finishedOutput
   }
 
-  protected _finished? :Mutable<boolean>
-  protected _finishListener? :(e :any) => void
+  protected _action? :AnimationAction
 }
 
 /** Casts a ray into the scene. */
