@@ -1,6 +1,6 @@
 import {AnimationMixer, Intersection, Object3D, Raycaster, Vector3} from "three"
 
-import {Subject, Value} from "../core/react"
+import {Mutable, Subject, Value} from "../core/react"
 import {Noop} from "../core/util"
 import {Graph} from "../graph/graph"
 import {inputEdge, outputEdge, property} from "../graph/meta"
@@ -62,6 +62,7 @@ abstract class AnimationActionConfig implements EntityComponentConfig {
   @property() url = ""
   @property() repetitions = Number.POSITIVE_INFINITY
   @inputEdge("boolean") play = undefined
+  @outputEdge("boolean", true) finished = undefined
 }
 
 class AnimationActionNode extends EntityComponentNode<Component<AnimationMixer>> {
@@ -80,6 +81,20 @@ class AnimationActionNode extends EntityComponentNode<Component<AnimationMixer>>
         )
         .onValue(([mixer, clip, play]) => {
           const action = mixer.clipAction(clip)
+          if (this._finished && !this._finishListener) {
+            // The listener is added on the mixer, so use ref equality to make sure we're
+            // reacting to the correct clip. TODO: ensure this works on "later runs" of
+            // the animation.
+            this._finishListener = (e :any) => {
+              if (e.action === action) { // only respond to this action
+                // pulse it!
+                this._finished!.update(true)
+                this._finished!.update(false)
+              }
+            }
+            mixer.addEventListener("finished", this._finishListener)
+            this._disposer.add(() => mixer.removeEventListener("finished", this._finishListener!))
+          }
           if (play !== action.isScheduled()) {
             if (play) {
               if (this.config.repetitions) action.repetitions = this.config.repetitions
@@ -91,6 +106,13 @@ class AnimationActionNode extends EntityComponentNode<Component<AnimationMixer>>
         })
     )
   }
+
+  protected _createOutput () {
+    return this._finished = Mutable.local<boolean>(false)
+  }
+
+  protected _finished? :Mutable<boolean>
+  protected _finishListener? :(e :any) => void
 }
 
 /** Casts a ray into the scene. */
