@@ -60,6 +60,7 @@ abstract class AnimationActionConfig implements EntityComponentConfig {
   type = "AnimationAction"
   @property() component = ""
   @property() url = ""
+  @property() repetitions = Number.POSITIVE_INFINITY
   @inputEdge("boolean") play = undefined
 }
 
@@ -79,12 +80,13 @@ class AnimationActionNode extends EntityComponentNode<Component<AnimationMixer>>
         )
         .onValue(([mixer, clip, play]) => {
           const action = mixer.clipAction(clip)
-          if (play) {
-            if (!action.isScheduled()) {
+          if (play !== action.isScheduled()) {
+            if (play) {
+              if (this.config.repetitions) action.repetitions = this.config.repetitions
               action.play()
+            } else {
+              action.stop()
             }
-          } else if (action.isScheduled()) {
-            action.stop()
           }
         })
     )
