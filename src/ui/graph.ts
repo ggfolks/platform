@@ -1,4 +1,4 @@
-import {dim2, rect, vec2} from "../core/math"
+import {clamp, dim2, rect, vec2} from "../core/math"
 import {Mutable, Value} from "../core/react"
 import {PMap, Remover} from "../core/util"
 import {getConstantOrValueNodeId} from "../graph/graph"
@@ -911,10 +911,12 @@ export class Terminal extends Element {
       const controlPointOffset = this.edgeControlPointOffset
       canvas.beginPath()
       canvas.moveTo(this.x, this.y)
+      const min = Math.min(this.x, this._endpoint[0])
+      const max = Math.max(this.x, this._endpoint[0])
       canvas.bezierCurveTo(
-        this.x + controlPointOffset * this.sign,
+        clamp(this.x + controlPointOffset * this.sign, min, max),
         this.y,
-        this._endpoint[0] - controlPointOffset * this.sign,
+        clamp(this._endpoint[0] - controlPointOffset * this.sign, min, max),
         this._endpoint[1],
         this._endpoint[0],
         this._endpoint[1],
