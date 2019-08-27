@@ -51,7 +51,7 @@ export interface GLTFConfig extends Object3DConfig {
   type :"gltf"
   url :string
   /** An optional callback may be used to modify or replace the loaded resource. */
-  postLoad? :(scene :Object3D) => Object3D|undefined
+  onLoad? :(scene :Object3D) => Object3D|undefined
 }
 
 /** Configures a perspective camera. */
@@ -403,8 +403,8 @@ function createObject3D (objectConfig: Object3DConfig) :Subject<Object3D> {
       const gltfConfig = objectConfig as GLTFConfig
       return loadGLTF(gltfConfig.url).map(gltf => {
         let cloned :Object3D = SkeletonUtils.clone(gltf.scene) as Object3D
-        if (gltfConfig.postLoad) {
-          cloned = gltfConfig.postLoad(cloned) || cloned
+        if (gltfConfig.onLoad) {
+          cloned = gltfConfig.onLoad(cloned) || cloned
         }
         return cloned
       })
