@@ -1,15 +1,18 @@
+import {refEquals} from "../core/data"
 import {dim2, vec2} from "../core/math"
 import {Scale, getValueStyle} from "../core/ui"
-import {Value} from "../core/react"
-import {Disposer} from "../core/util"
+import {ChangeFn, Mutable, Value} from "../core/react"
+import {Disposer, Noop} from "../core/util"
 import {Graph} from "../graph/graph"
 import {inputEdge} from "../graph/meta"
 import {Subgraph} from "../graph/util"
-import {Node, NodeConfig, NodeContext, NodeTypeRegistry} from "../graph/node"
+import {InputEdge, InputEdges, Node, NodeConfig, NodeContext, NodeTypeRegistry} from "../graph/node"
 import {HAnchor, Host, Root, RootConfig, VAnchor} from "./element"
 import {Model, ModelData, ModelKey, mapProvider} from "./model"
 import {Theme, UI} from "./ui"
 import {ImageResolver, StyleDefs} from "./style"
+
+export type InputValue = InputEdge<any> | InputEdges<any>
 
 /** Context for nodes relating to UI. */
 export interface UINodeContext extends NodeContext {
@@ -112,19 +115,34 @@ function createGraphModelData (graph :Graph) :ModelData {
             let model = inputModels.get(key)
             if (!model) {
               const multiple = value.current.inputsMeta[key].multiple
-              const input = value.current.config[key]
+              let onChange :ChangeFn<InputValue> = Noop
+              const input = Mutable.deriveMutable(
+                dispatch => {
+                  onChange = dispatch
+                  return Noop
+                },
+                () => value.current.config[key],
+                input => {
+                  const previous = value.current.config[key]
+                  value.current.config[key] = input
+                  onChange(input, previous)
+                },
+                refEquals,
+              )
               let style :Value<string>
               if (multiple) {
-                style = value.current.graph.getValues(input, 0).map(
+                style = input.switchMap(input => value.current.graph.getValues(input, 0)).map(
                   values => getValueStyle(values[values.length - 1]),
                 )
               } else {
-                style = value.current.graph.getValue(input, 0).map(getValueStyle)
+                style = input.switchMap(input => value.current.graph.getValue(input, 0)).map(
+                  getValueStyle,
+                )
               }
               inputModels.set(key, model = new Model({
                 name: Value.constant(key),
                 multiple: Value.constant(multiple),
-                value: Value.constant(input),
+                value: input,
                 style,
               }))
             }

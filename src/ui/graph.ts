@@ -3,11 +3,12 @@ import {clamp, dim2, rect, vec2} from "../core/math"
 import {Mutable, Value} from "../core/react"
 import {PMap, Remover} from "../core/util"
 import {getConstantOrValueNodeId} from "../graph/graph"
-import {InputEdge, InputEdges} from "../graph/node"
+import {InputEdge} from "../graph/node"
 import {Element, ElementConfig, ElementContext, MouseInteraction, Observer} from "./element"
 import {AbsConstraints, AbsGroup, AxisConfig, VGroup} from "./group"
 import {List} from "./list"
 import {Model, ModelData, ModelKey, ModelProvider, Spec} from "./model"
+import {InputValue} from "./node"
 
 /** A navigable graph viewer. */
 export interface GraphViewerConfig extends ElementConfig {
@@ -92,8 +93,6 @@ export class GraphViewer extends VGroup {
 export interface GraphViewConfig extends ElementConfig {
   type :"graphview"
 }
-
-type InputValue = InputEdge<any> | InputEdges<any>
 
 export class GraphView extends AbsGroup {
   readonly elements = new Map<string, {node :Element, edges :Element}>()
@@ -496,8 +495,8 @@ export const EdgeViewStyleScope = {id: "edgeview", states: ["normal", "hovered"]
 const offsetFrom = vec2.create()
 const offsetTo = vec2.create()
 
-type OutputKeys = [string, string]
-type OutputTo = [OutputKeys, vec2, Value<string>]
+type EdgeKeys = [string, string, string]
+type OutputTo = [EdgeKeys, vec2, Value<string>]
 
 export class EdgeView extends Element {
   private _nodeId :Value<string>
@@ -512,7 +511,7 @@ export class EdgeView extends Element {
   private readonly _controlPointOffset = this.observe(40)
   private readonly _outlineWidth = this.observe(0)
   private readonly _outlineAlpha = this.observe(1)
-  private _hoverKeys :Observer<OutputKeys|undefined> = this.observe(undefined)
+  private _hoverKeys :Observer<EdgeKeys|undefined> = this.observe(undefined)
   private _nodeRemovers :Map<Element, Remover> = new Map()
   private _styleRemovers :Map<Value<string>, Remover> = new Map()
 
@@ -561,7 +560,7 @@ export class EdgeView extends Element {
     canvas.globalAlpha = 0
     const outlineWidth = this._outlineWidth.current
     const off = this._controlPointOffset.current
-    let hoverKeys :OutputKeys|undefined
+    let hoverKeys :EdgeKeys|undefined
     outerLoop: for (const edge of this._edges) {
       for (const [keys, to] of edge.to) {
         canvas.beginPath()
@@ -592,10 +591,34 @@ export class EdgeView extends Element {
   handleMouseDown (event :MouseEvent, pos :vec2) {
     const keys = this._hoverKeys.current
     if (keys === undefined) return undefined
+    const [inputKey, targetId, outputKey] = keys
+    // sever the connection
+    const input = this._input.resolve(inputKey)
+    const multiple = input.resolve("multiple" as Spec<Value<boolean>>)
+    const value = input.resolve("value" as Spec<Mutable<InputValue>>)
+    if (multiple.current) {
+      for (let ii = 0; ii < value.current.length; ii++) {
+        const element = value.current[ii]
+        if (
+          typeof element === "string"
+            ? element === targetId
+            : Array.isArray(element)
+            ? element[0] === targetId && element[1] === outputKey
+            : element !== undefined && getConstantOrValueNodeId(element) === targetId
+        ) {
+          const newValue = value.current.slice()
+          newValue.splice(ii, 1)
+          value.update(newValue)
+          break
+        }
+      }
+    } else value.update(undefined)
+
+    // pass the buck to the output terminal
     const view = this.requireParent as GraphView
-    const node = view.elements.get(keys[0])!.node
+    const node = view.elements.get(targetId)!.node
     const outputs = node.findTaggedChild("outputs") as List
-    const terminal = outputs.getElement(keys[1])!.findChild("terminal") as Terminal
+    const terminal = outputs.getElement(outputKey)!.findChild("terminal") as Terminal
     return terminal.handleMouseDown(event, pos)
   }
 
@@ -628,9 +651,9 @@ export class EdgeView extends Element {
       const to :OutputTo[] = []
       const addEdge = (input :InputEdge<any>) => {
         let targetId :string
-        let outputId :string|undefined
+        let outputKey :string|undefined
         if (Array.isArray(input)) {
-          [targetId, outputId] = input
+          [targetId, outputKey] = input
         } else if (typeof input === "string") {
           targetId = input
         } else if (input !== undefined) {
@@ -641,20 +664,20 @@ export class EdgeView extends Element {
         const targetNode = this._requireValidatedNode(targetId)
         const outputList = targetNode.findTaggedChild("outputs") as List
         const targetEdges = this._requireEdges(targetId) as EdgeView
-        if (!outputId) outputId = targetEdges.getDefaultOutputKey()
-        const target = outputList.getElement(outputId)
+        if (!outputKey) outputKey = targetEdges.getDefaultOutputKey()
+        const target = outputList.getElement(outputKey)
         if (target) {
           const toPos = vec2.fromValues(
             target.x + target.width - view.x,
             target.y + target.height / 2 - view.y,
           )
-          const style = targetEdges.getOutputStyle(outputId)
+          const style = targetEdges.getOutputStyle(outputKey)
           if (!this._styleRemovers.has(style)) {
             const remover = style.onValue(() => this.dirty())
             this._styleRemovers.set(style, remover)
             this.disposer.add(remover)
           }
-          to.push([[targetId, outputId], toPos, style])
+          to.push([[inputKey, targetId, outputKey], toPos, style])
           vec2.set(offsetTo, toPos[0] + offset, toPos[1])
           vec2.min(min, min, toPos)
           vec2.max(max, max, offsetTo)
@@ -751,15 +774,20 @@ export interface TerminalConfig extends ElementConfig {
   style :PMap<TerminalStyle>
 }
 
-export const TerminalStyleScope = {id: "terminal", states: ["normal", "hovered"]}
+export const TerminalStyleScope = {id: "terminal", states: ["normal", "hovered", "targeted"]}
 
 const expandedBounds = rect.create()
 const endpointBounds = rect.create()
 
 export class Terminal extends Element {
+  readonly targeted = Mutable.local(false)
+
   private readonly _state = Mutable.local("normal")
   private readonly _hovered = Mutable.local(false)
+  private readonly _name :Value<string>
   private readonly _value :Value<string>
+  private readonly _multiple? :Value<boolean>
+  private readonly _connections? :Mutable<InputValue>
   private readonly _radius = this.observe(5)
   private readonly _outlineWidth = this.observe(0)
   private readonly _outlineAlpha = this.observe(1)
@@ -767,9 +795,16 @@ export class Terminal extends Element {
 
   constructor (ctx :ElementContext, parent :Element, readonly config :TerminalConfig) {
     super(ctx, parent, config)
+    this._name = ctx.model.resolve("name" as Spec<Value<string>>)
     this._value = ctx.model.resolve(config.value)
+    if (config.direction === "input") {
+      this._multiple = ctx.model.resolve("multiple" as Spec<Value<boolean>>)
+      this._connections = ctx.model.resolve("value" as Spec<Mutable<InputValue>>)
+    }
     this.disposer.add(this._value.onValue(() => this.dirty()))
-    this.disposer.add(this._hovered.onValue(() => this._state.update(this.computeState)))
+    const updateState = () => this._state.update(this.computeState)
+    this.disposer.add(this._hovered.onValue(updateState))
+    this.disposer.add(this.targeted.onValue(updateState))
     this.disposer.add(this.state.onValue(state => {
       const style = this.getStyle(this.config.style, state)
       this._radius.update(style.radius === undefined ? 5 : style.radius)
@@ -837,7 +872,7 @@ export class Terminal extends Element {
     this.setCursor(this, "move")
     const region = rect.create()
     const elementPos = vec2.create()
-    let hoverTerminal :Terminal|undefined
+    let targetTerminal :Terminal|undefined
     const visitOver = (pos :vec2) => {
       const radius = this._radius.current
       let closestTerminal :Terminal|undefined
@@ -853,17 +888,17 @@ export class Terminal extends Element {
           }
         },
       )
-      if (closestTerminal === hoverTerminal) return
-      if (hoverTerminal) hoverTerminal._hovered.update(false)
-      hoverTerminal = closestTerminal
-      if (hoverTerminal) hoverTerminal._hovered.update(true)
+      if (closestTerminal === targetTerminal) return
+      if (targetTerminal) targetTerminal.targeted.update(false)
+      targetTerminal = closestTerminal
+      if (targetTerminal) targetTerminal.targeted.update(true)
     }
     visitOver(pos)
-    const cancel = () => {
+    const cleanup = () => {
       this.dirty()
       this._endpoint = undefined
       this.clearCursor(this)
-      if (hoverTerminal) hoverTerminal._hovered.update(false)
+      if (targetTerminal) targetTerminal.targeted.update(false)
     }
     return {
       move: (event :MouseEvent, pos :vec2) => {
@@ -872,9 +907,33 @@ export class Terminal extends Element {
         this.dirty()
         visitOver(pos)
       },
-      release: cancel,
-      cancel,
+      release: () => {
+        cleanup()
+        if (targetTerminal) targetTerminal._connect(this)
+      },
+      cancel: cleanup,
     }
+  }
+
+  private _connect (terminal :Terminal) {
+    // always process on input
+    if (this.config.direction === "output") {
+      terminal._connect(this)
+      return
+    }
+    if (this._multiple!.current) {
+      const current = this._connections!.current || []
+      this._connections!.update(current.concat([terminal._getInputValue()]))
+    } else {
+      this._connections!.update(terminal._getInputValue())
+    }
+  }
+
+  private _getInputValue () {
+    for (let ancestor = this.parent; ancestor; ancestor = ancestor.parent) {
+      if (ancestor instanceof NodeView) return [ancestor.id, this._name.current]
+    }
+    throw new Error("Missing NodeView ancestor")
   }
 
   applyToContaining (canvas :CanvasRenderingContext2D, pos :vec2, op :(element :Element) => void) {
@@ -937,7 +996,7 @@ export class Terminal extends Element {
   }
 
   protected get computeState () :string {
-    return this._hovered.current ? "hovered" : "normal"
+    return this.targeted.current ? "targeted" : this._hovered.current ? "hovered" : "normal"
   }
 
   protected computePreferredSize (hintX :number, hintY :number, into :dim2) {
