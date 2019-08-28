@@ -180,9 +180,31 @@ class RaycasterNode extends EntityComponentNode<Component<Object3D>> {
   }
 }
 
+/** Update the visibility of an Object3D. */
+abstract class UpdateVisibleConfig implements EntityComponentConfig {
+  type = "updateVisible"
+  @property() component = ""
+  @inputEdge("boolean") input = undefined
+}
+
+class UpdateVisibleNode extends EntityComponentNode<Component<Object3D>> {
+
+  constructor (graph :Graph, id :string, readonly config :UpdateVisibleConfig) {
+    super(graph, id, config)
+  }
+
+  connect () {
+    this._disposer.add(
+      this.graph.getValue(this.config.input, true).onValue(vis => {
+        this._component.read(this._entityId).visible = vis
+      }))
+  }
+}
+
 /** Registers the nodes in this module with the supplied registry. */
 export function registerScene3Nodes (registry :NodeTypeRegistry) {
   registry.registerNodeType("hover", Hover)
   registry.registerNodeType("AnimationAction", AnimationActionNode)
   registry.registerNodeType("Raycaster", RaycasterNode)
+  registry.registerNodeType("updateVisible", UpdateVisibleNode)
 }
