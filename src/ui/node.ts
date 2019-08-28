@@ -125,6 +125,7 @@ function createGraphModelData (graph :Graph) :ModelData {
                 input => {
                   const previous = value.current.config[key]
                   value.current.config[key] = input
+                  value.current.reconnect()
                   onChange(input, previous)
                 },
                 refEquals,

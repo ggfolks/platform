@@ -1,6 +1,6 @@
 import {refEquals} from "../core/data"
-import {Value} from "../core/react"
-import {Disposable, Disposer, PMap} from "../core/util"
+import {ChangeFn, Value, addListener, dispatchChange} from "../core/react"
+import {Disposable, Disposer, NoopRemover, PMap} from "../core/util"
 import {Graph} from "./graph"
 import {InputEdgeMeta, OutputEdgeMeta, PropertyMeta, getNodeMeta} from "./meta"
 import {Subgraph} from "./util"
@@ -36,6 +36,7 @@ export interface NodeContext {
 export abstract class Node implements Disposable {
   protected _disposer = new Disposer()
   private _outputs :Map<string, Value<any>> = new Map()
+  private _wrappedOutputs :Map<string, WrappedValue<any>> = new Map()
   private _defaultOutputKey? :string
 
   constructor (readonly graph :Graph, readonly id :string, readonly config :NodeConfig) {}
@@ -91,9 +92,28 @@ export abstract class Node implements Disposable {
         }),
         () => current
       ))
-      this._outputs.set(outputKey, output = this._createOutput(outputKey, defaultValue))
+      let wrapped = this._wrappedOutputs.get(outputKey)
+      if (!wrapped) {
+        this._wrappedOutputs.set(
+          outputKey,
+          wrapped = new WrappedValue(this._createOutput(outputKey, defaultValue), defaultValue),
+        )
+      }
+      this._outputs.set(outputKey, output = wrapped)
     }
     return output
+  }
+
+  /** Reconnects the node after one of the inputs has changed. */
+  reconnect () {
+    // clear the outputs before recreating the wrapped outputs in case recreating creates a loop,
+    // in which case we need the intermediate value created in getOutput
+    this._disposer.dispose()
+    this._outputs.clear()
+    for (const [name, wrapped] of this._wrappedOutputs) {
+      wrapped.update(this._createOutput(name, wrapped.defaultValue))
+    }
+    this.connect()
   }
 
   /** Connects and initializes the node. */
@@ -111,6 +131,52 @@ export abstract class Node implements Disposable {
 
   protected _createOutput (name :string, defaultValue :any) :Value<any> {
     throw new Error("Unknown output " + name)
+  }
+}
+
+/** Wraps a value so that we can swap it out after creating it. */
+class WrappedValue<T> extends Value<T> {
+  private readonly _listeners :ChangeFn<T>[] = []
+  private _disconnect = NoopRemover
+
+  constructor (private _wrapped :Value<T>, readonly defaultValue :T) {
+    super(
+      refEquals,
+      listener => {
+        const needConnect = this._listeners.length === 0
+        const remover = addListener(this._listeners, listener)
+        if (needConnect) this._connect()
+        return () => { remover() ; this._checkEmpty() }
+      },
+      () => this._wrapped.current,
+    )
+  }
+
+  /** Updates the wrapped value, notifying listeners on change. */
+  update (wrapped :Value<T>) {
+    const oldValue = this._wrapped.current
+    this._disconnect()
+    this._wrapped = wrapped
+    if (this._listeners.length > 0) {
+      this._connect()
+      const value = this._wrapped.current
+      if (value !== oldValue) this._dispatch(value, oldValue)
+    }
+  }
+
+  private _connect () {
+    this._disconnect = this._wrapped.onChange((value, oldValue) => this._dispatch(value, oldValue))
+  }
+
+  private _dispatch (value :T, oldValue :T) {
+    if (dispatchChange(this._listeners, value, oldValue)) this._checkEmpty()
+  }
+
+  private _checkEmpty () {
+    if (this._listeners.length === 0) {
+      this._disconnect()
+      this._disconnect = NoopRemover
+    }
   }
 }
 
