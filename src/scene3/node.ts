@@ -101,7 +101,6 @@ class AnimationActionNode extends EntityComponentNode<Component<AnimationMixer>>
       const listener = (e :any) => {
         if (e.action === action) disp(true)
       }
-      disp(!playing)
       action.getMixer().addEventListener("finished", listener)
       return () => action.getMixer().removeEventListener("finished", listener)
     })).fold(false, (ov, nv) => nv)
