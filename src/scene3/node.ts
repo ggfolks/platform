@@ -9,7 +9,6 @@ import {Component} from "../entity/entity"
 import {EntityComponentConfig, EntityComponentNode} from "../entity/node"
 import {PointerConfig} from "../input/node"
 import {HoverMap, loadGLTFAnimationClip} from "./entity"
-import {log} from "../core/util"
 
 /** Emits information about a single hover point. */
 abstract class HoverConfig implements EntityComponentConfig, PointerConfig {
@@ -103,19 +102,17 @@ class AnimationActionNode extends EntityComponentNode<Component<AnimationMixer>>
 
   protected _createOutput () {
     const finishedOutput = Mutable.local<boolean>(false)
-    log.info("Creating output for animation action.")
-    this._disposer.add(Value.onceDefined(this._component.getValue(this._entityId), (mixer) => {
-      log.info("Got the mixer: " + mixer)
+    this._disposer.add(this._component.getValue(this._entityId).onValue((mixer) => {
       const listener = (e :any) => {
-        log.debug("Listener called", "actions Equal?", (e.action === this._action))
         if (e.action === this._action) {
           finishedOutput.update(true)
           finishedOutput.update(false)
         }
       }
       mixer.addEventListener("finished", listener)
-      this._disposer.add(() => mixer.removeEventListener("finished", listener))
-      log.info("Listener installed")
+      this._disposer.add(() => {
+        mixer.removeEventListener("finished", listener)
+      })
     }))
     return finishedOutput
   }
