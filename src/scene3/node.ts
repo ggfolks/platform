@@ -74,7 +74,8 @@ class AnimationActionNode extends EntityComponentNode<Component<AnimationMixer>>
     super(graph, id, config)
     this._action = Subject.join2(
       this._component.getValue(this._entityId),
-      loadGLTFAnimationClip(this.config.url)).map(([mixer, clip]) => mixer.clipAction(clip))
+      loadGLTFAnimationClip(this.config.url)
+    ).map(([mixer, clip]) => mixer.clipAction(clip))
   }
 
   connect () {
