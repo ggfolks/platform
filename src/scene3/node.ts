@@ -67,6 +67,8 @@ abstract class AnimationActionConfig implements EntityComponentConfig {
   // YAGNI? @outputEdge("boolean") loop = undefined
 }
 
+const isPlaceholder = (obj :Object3D) => obj.children.length == 0
+
 class AnimationActionNode extends EntityComponentNode<Component<AnimationMixer>> {
   private readonly _action :Subject<AnimationAction>
 
@@ -81,7 +83,8 @@ class AnimationActionNode extends EntityComponentNode<Component<AnimationMixer>>
   connect () {
     const actplay = Subject.join2(this._action, this.graph.getValue(this.config.play, false))
     this._disposer.add(actplay.onValue(([action, play]) => {
-      if (play !== action.isScheduled()) {
+      // if the object being animated is still a placeholder, don't try to animate it
+      if (!isPlaceholder(action.getRoot()) && play !== action.isScheduled()) {
         if (play) {
           if (this.config.repetitions) action.repetitions = this.config.repetitions
           if (this.config.clampWhenFinished !== undefined) {
