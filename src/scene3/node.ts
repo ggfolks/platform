@@ -82,7 +82,7 @@ class AnimationActionNode extends EntityComponentNode<Component<AnimationMixer>>
           this.graph.getValue(this.config.play, false),
         )
         .onValue(([mixer, clip, play]) => {
-          const action = this._action || (this._action = mixer.clipAction(clip))
+          const action = this._action = mixer.clipAction(clip)
           if (play !== action.isScheduled()) {
             if (play) {
               if (this.config.repetitions) action.repetitions = this.config.repetitions
@@ -99,18 +99,20 @@ class AnimationActionNode extends EntityComponentNode<Component<AnimationMixer>>
   }
 
   protected _createOutput () {
+    // will be false on any new mixers, but update to true once our animation has finished
     return this._component.getValue(this._entityId).switchMap(
       mixer => Stream.deriveStream<boolean>(disp => {
         const listener = (e :any) => {
-          if (e.action === this._action) {
-            disp(true)
-          }
+          if (e.action === this._action) disp(true)
         }
         mixer.addEventListener("finished", listener)
         return () => mixer.removeEventListener("finished", listener)
       }).toValue(false))
+    // TODO: reset finished to false if clip starts playing again?
   }
 
+  /** Latest action returned by the mixer, used to validate that the mixer event we receive is for
+   * this animation clip and not some other one. */
   protected _action? :AnimationAction
 }
 
