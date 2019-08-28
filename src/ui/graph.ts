@@ -13,16 +13,19 @@ import {InputValue} from "./node"
 /** A navigable graph viewer. */
 export interface GraphViewerConfig extends ElementConfig {
   type :"graphviewer"
+  editable? :Spec<Value<boolean>>
 }
 
 export class GraphViewer extends VGroup {
   readonly contents :Element[] = []
 
+  private _editable = Value.constant(false)
   private _stack :Element[] = []
   private _poppable = Mutable.local(false)
 
   constructor (readonly ctx :ElementContext, parent :Element, readonly config :GraphViewerConfig) {
     super(ctx, parent, {...config, offPolicy: "stretch"})
+    if (this.config.editable) this._editable = ctx.model.resolve(this.config.editable)
     this.contents.push(
       ctx.elem.create(ctx, this, {
         type: "box",
@@ -64,7 +67,7 @@ export class GraphViewer extends VGroup {
       }),
       ctx.elem.create(ctx, this, {
         type: "scrollview",
-        contents: {type: "graphview"},
+        contents: {type: "graphview", editable: this._editable},
         constraints: {stretch: true},
       }),
     )
@@ -74,7 +77,7 @@ export class GraphViewer extends VGroup {
   push (model :Model) {
     this._stack.push(this.contents[1] = this.ctx.elem.create({...this.ctx, model}, this, {
       type: "scrollview",
-      contents: {type: "graphview"},
+      contents: {type: "graphview", editable: this._editable},
       constraints: {stretch: true},
     }))
     this._poppable.update(true)
@@ -92,6 +95,7 @@ export class GraphViewer extends VGroup {
 /** Visualizes a graph. */
 export interface GraphViewConfig extends ElementConfig {
   type :"graphview"
+  editable :Spec<Value<boolean>>
 }
 
 export class GraphView extends AbsGroup {
@@ -102,6 +106,7 @@ export class GraphView extends AbsGroup {
     super(ctx, parent, config)
     const data = ctx.model.resolve("nodeData" as Spec<ModelProvider>)
     let models :Model[] | null = []
+    const editable = ctx.model.resolve(this.config.editable)
     this.disposer.add(ctx.model.resolve("nodeKeys" as Spec<Value<string[]>>).onValue(keys => {
       const {contents, elements} = this
       // first dispose no longer used elements
@@ -126,9 +131,9 @@ export class GraphView extends AbsGroup {
               type: "box",
               constraints: {position: [0, 0]},
               scopeId: "node",
-              contents: {type: "nodeview", offPolicy: "stretch"},
+              contents: {type: "nodeview", offPolicy: "stretch", editable},
             }),
-            edges: ctx.elem.create(subctx, this, {type: "edgeview"}),
+            edges: ctx.elem.create(subctx, this, {type: "edgeview", editable}),
           }
           this.elements.set(key, elem)
         }
@@ -261,15 +266,19 @@ export class GraphView extends AbsGroup {
 /** Depicts a single node. */
 export interface NodeViewConfig extends AxisConfig {
   type :"nodeview"
+  editable :Spec<Value<boolean>>
 }
 
 export class NodeView extends VGroup {
   readonly id :string
   readonly contents :Element[] = []
 
+  private readonly _editable :Value<boolean>
+
   constructor (ctx :ElementContext, parent :Element, readonly config :NodeViewConfig) {
     super(ctx, parent, config)
     this.id = ctx.model.resolve<Value<string>>("id").current
+    this._editable = ctx.model.resolve(this.config.editable)
     const hasProperties = ctx.model.resolve<Value<ModelKey[]>>("propertyKeys").current.length > 0
     const hasInputs = ctx.model.resolve<Value<ModelKey[]>>("inputKeys").current.length > 0
     const hasOutputs = ctx.model.resolve<Value<ModelKey[]>>("outputKeys").current.length > 0
@@ -294,6 +303,7 @@ export class NodeView extends VGroup {
         type: "propertyview",
         scopeId: "nodeProperties",
         offPolicy: "stretch",
+        editable: this._editable,
       })
     }
     if (hasInputs || hasOutputs) {
@@ -318,6 +328,7 @@ export class NodeView extends VGroup {
                     type: "terminal",
                     direction: "input",
                     value: "style",
+                    editable: this._editable,
                     contents: {type: "row", contents: []},
                   },
                   {
@@ -357,6 +368,7 @@ export class NodeView extends VGroup {
                     type: "terminal",
                     direction: "output",
                     value: "style",
+                    editable: this._editable,
                     contents: {type: "row", contents: []},
                   },
                 ],
@@ -390,7 +402,7 @@ export class NodeView extends VGroup {
 
   handleMouseDown (event :MouseEvent, pos :vec2) :MouseInteraction|undefined {
     const interaction = super.handleMouseDown(event, pos)
-    if (interaction) return interaction
+    if (interaction || !this._editable.current) return interaction
     const basePos = vec2.clone(pos)
     const constraints = this.requireParent.config.constraints as AbsConstraints
     const position = constraints.position!
@@ -412,6 +424,7 @@ export class NodeView extends VGroup {
 /** Depicts a node's editable/viewable properties. */
 export interface PropertyViewConfig extends AxisConfig {
   type :"propertyview"
+  editable :Spec<Value<boolean>>
 }
 
 export class PropertyView extends VGroup {
@@ -476,6 +489,7 @@ function toLimitedString (value :any) {
 export interface EdgeViewConfig extends ElementConfig {
   type :"edgeview"
   style :PMap<EdgeViewStyle>
+  editable :Spec<Value<boolean>>
 }
 
 export interface EdgeStyle {
@@ -500,6 +514,7 @@ type OutputTo = [EdgeKeys, vec2, Value<string>]
 
 export class EdgeView extends Element {
   private _nodeId :Value<string>
+  private _editable :Value<boolean>
   private _inputKeys :Value<string[]>
   private _defaultOutputKey :Value<string>
   private _input :ModelProvider
@@ -518,6 +533,7 @@ export class EdgeView extends Element {
   constructor (ctx :ElementContext, parent :Element, readonly config :EdgeViewConfig) {
     super(ctx, parent, config)
     this._nodeId = ctx.model.resolve("id" as Spec<Value<string>>)
+    this._editable = ctx.model.resolve(this.config.editable)
     this._inputKeys = ctx.model.resolve("inputKeys" as Spec<Value<string[]>>)
     this._defaultOutputKey = ctx.model.resolve("defaultOutputKey" as Spec<Value<string>>)
     this._input = ctx.model.resolve("input" as Spec<ModelProvider>)
@@ -590,7 +606,7 @@ export class EdgeView extends Element {
 
   handleMouseDown (event :MouseEvent, pos :vec2) {
     const keys = this._hoverKeys.current
-    if (keys === undefined) return undefined
+    if (keys === undefined || !this._editable.current) return undefined
     const [inputKey, targetId, outputKey] = keys
     // sever the connection
     const input = this._input.resolve(inputKey)
@@ -770,6 +786,7 @@ export interface TerminalStyle {
 export interface TerminalConfig extends ElementConfig {
   type :"terminal"
   direction :"input" | "output"
+  editable :Spec<Value<boolean>>
   value :Spec<Value<string>>
   style :PMap<TerminalStyle>
 }
@@ -785,6 +802,7 @@ export class Terminal extends Element {
   private readonly _state = Mutable.local("normal")
   private readonly _hovered = Mutable.local(false)
   private readonly _name :Value<string>
+  private readonly _editable :Value<boolean>
   private readonly _value :Value<string>
   private readonly _multiple? :Value<boolean>
   private readonly _connections? :Mutable<InputValue>
@@ -797,6 +815,7 @@ export class Terminal extends Element {
     super(ctx, parent, config)
     this._name = ctx.model.resolve("name" as Spec<Value<string>>)
     this._value = ctx.model.resolve(config.value)
+    this._editable = ctx.model.resolve(config.editable)
     if (config.direction === "input") {
       this._multiple = ctx.model.resolve("multiple" as Spec<Value<boolean>>)
       this._connections = ctx.model.resolve("value" as Spec<Mutable<InputValue>>)
@@ -850,6 +869,7 @@ export class Terminal extends Element {
       : undefined
   }
   handleMouseDown (event :MouseEvent, pos :vec2) {
+    if (!this._editable.current) return
     const endpoint = this._endpoint = vec2.clone(pos)
     this.dirty()
     // move node to end of view so that dragged edge is always on top of other nodes
