@@ -1,6 +1,5 @@
 import {AnimationAction, AnimationMixer, Intersection, Object3D, Raycaster, Vector3} from "three"
 
-import {refEquals} from "../core/data"
 import {Stream, Subject, Value} from "../core/react"
 import {Noop} from "../core/util"
 import {Graph} from "../graph/graph"
@@ -109,7 +108,7 @@ class AnimationActionNode extends EntityComponentNode<Component<AnimationMixer>>
         }
         mixer.addEventListener("finished", listener)
         return () => mixer.removeEventListener("finished", listener)
-      }).toValue(false, refEquals))
+      }).toValue(false))
   }
 
   protected _action? :AnimationAction
