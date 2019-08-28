@@ -1,7 +1,7 @@
 import {AnimationAction, AnimationMixer, Intersection, Object3D, Raycaster, Vector3} from "three"
 
 import {Subject, Value} from "../core/react"
-import {Noop} from "../core/util"
+import {Noop, NoopRemover} from "../core/util"
 import {Graph} from "../graph/graph"
 import {inputEdge, outputEdge, property} from "../graph/meta"
 import {NodeTypeRegistry} from "../graph/node"
@@ -101,6 +101,7 @@ class AnimationActionNode extends EntityComponentNode<Component<AnimationMixer>>
   protected _createOutput () {
     const actplay = Subject.join2(this._action, this.graph.getValue(this.config.play, false))
     return actplay.switchMap(([action, playing]) => Subject.deriveSubject<boolean>(disp => {
+      if (isPlaceholder(action.getRoot())) return NoopRemover
       const listener = (e :any) => {
         if (e.action === action) disp(true)
       }
