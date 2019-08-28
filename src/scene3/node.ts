@@ -1,6 +1,7 @@
 import {AnimationAction, AnimationMixer, Intersection, Object3D, Raycaster, Vector3} from "three"
 
-import {Mutable, Subject, Value} from "../core/react"
+import {refEquals} from "../core/data"
+import {Stream, Subject, Value} from "../core/react"
 import {Noop} from "../core/util"
 import {Graph} from "../graph/graph"
 import {inputEdge, outputEdge, property} from "../graph/meta"
@@ -90,10 +91,8 @@ class AnimationActionNode extends EntityComponentNode<Component<AnimationMixer>>
                 action.clampWhenFinished = this.config.clampWhenFinished
               }
               action.play()
-              //log.debug("Playing clip: " + clip.name)
             } else {
               action.stop()
-              //log.debug("Stopping clip: " + clip.name)
             }
           }
         })
@@ -101,20 +100,16 @@ class AnimationActionNode extends EntityComponentNode<Component<AnimationMixer>>
   }
 
   protected _createOutput () {
-    const finishedOutput = Mutable.local<boolean>(false)
-    this._disposer.add(this._component.getValue(this._entityId).onValue((mixer) => {
-      const listener = (e :any) => {
-        if (e.action === this._action) {
-          finishedOutput.update(true)
-          finishedOutput.update(false)
+    return this._component.getValue(this._entityId).switchMap(
+      mixer => Stream.deriveStream<boolean>(disp => {
+        const listener = (e :any) => {
+          if (e.action === this._action) {
+            disp(true)
+          }
         }
-      }
-      mixer.addEventListener("finished", listener)
-      this._disposer.add(() => {
-        mixer.removeEventListener("finished", listener)
-      })
-    }))
-    return finishedOutput
+        mixer.addEventListener("finished", listener)
+        return () => mixer.removeEventListener("finished", listener)
+      }).toValue(false, refEquals))
   }
 
   protected _action? :AnimationAction
