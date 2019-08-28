@@ -57,7 +57,7 @@ class Hover extends EntityComponentNode<Component<HoverMap>> {
 
 /** Controls an animation action on the entity. */
 abstract class AnimationActionConfig implements EntityComponentConfig {
-  type = "AnimationAction"
+  type = "animationAction"
   @property() component = ""
   @property() url = ""
   @property() repetitions = Number.POSITIVE_INFINITY
@@ -113,7 +113,7 @@ class AnimationActionNode extends EntityComponentNode<Component<AnimationMixer>>
 
 /** Casts a ray into the scene. */
 abstract class RaycasterConfig implements EntityComponentConfig {
-  type = "Raycaster"
+  type = "raycaster"
   @property() component = ""
   @property("CoordinateFrame") frame = "local"
   @inputEdge("Vector3") origin = undefined
@@ -204,7 +204,7 @@ class UpdateVisibleNode extends EntityComponentNode<Component<Object3D>> {
 /** Registers the nodes in this module with the supplied registry. */
 export function registerScene3Nodes (registry :NodeTypeRegistry) {
   registry.registerNodeType("hover", Hover)
-  registry.registerNodeType("AnimationAction", AnimationActionNode)
-  registry.registerNodeType("Raycaster", RaycasterNode)
+  registry.registerNodeType("animationAction", AnimationActionNode)
+  registry.registerNodeType("raycaster", RaycasterNode)
   registry.registerNodeType("updateVisible", UpdateVisibleNode)
 }

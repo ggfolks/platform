@@ -25,7 +25,7 @@ export interface UINodeContext extends NodeContext {
 
 /** Creates a UI element when the input becomes true. */
 abstract class UINodeConfig implements NodeConfig {
-  type = "UI"
+  type = "ui"
   model? :ModelData
   root :RootConfig = {type: "root", scale: Scale.ONE, contents: {type: ""}}
   origin? :vec2
@@ -169,5 +169,5 @@ function createGraphModelData (graph :Graph) :ModelData {
 
 /** Registers the nodes in this module with the supplied registry. */
 export function registerUINodes (registry :NodeTypeRegistry) {
-  registry.registerNodeType("UI", UINode)
+  registry.registerNodeType("ui", UINode)
 }
