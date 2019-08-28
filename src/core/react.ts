@@ -269,7 +269,7 @@ export class Stream<T> extends Source<T> {
     * by this stream whenever they arrive. See note in [[fold]] regarding liveness.
     * @param eq used to check whether successive values from this stream have actually changed.
     * [[Value]]s emit notifications only when values change. */
-  toValue (start :T, eq :Eq<T>) :Value<T> {
+  toValue (start :T, eq :Eq<T> = refEquals) :Value<T> {
     return this.fold(start, (ov, nv) => nv, eq)
   }
 }
