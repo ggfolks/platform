@@ -1,4 +1,5 @@
 import {dim2, rect, vec2, vec2zero} from "../core/math"
+import {getValue} from "../core/util"
 import {Element, ElementConfig, ElementContext} from "./element"
 
 const tmpr = rect.create()
@@ -356,4 +357,26 @@ export class Row extends HGroup {
     super(ctx, parent, config)
     this.contents = config.contents.map(cc => ctx.elem.create(ctx, this, cc))
   }
+}
+
+/** Defines configuration for [[Spacer]] elements. */
+export interface SpacerConfig extends ElementConfig {
+  type :"spacer"
+  width? :number
+  height? :number
+}
+
+/** An element that simply takes up space. */
+export class Spacer extends Element {
+
+  constructor (ctx :ElementContext, parent :Element, readonly config :SpacerConfig) {
+    super(ctx, parent, config)
+  }
+
+  protected computePreferredSize (hintX :number, hintY :number, into :dim2) {
+    dim2.set(into, getValue(this.config.width, hintX), getValue(this.config.height, hintY))
+  }
+
+  protected relayout () {}
+  protected rerender (canvas :CanvasRenderingContext2D, region :rect) {}
 }

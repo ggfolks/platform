@@ -7,7 +7,7 @@ import {InputEdge} from "../graph/node"
 import {Element, ElementConfig, ElementContext, MouseInteraction, Observer} from "./element"
 import {AbsConstraints, AbsGroup, AxisConfig, VGroup} from "./group"
 import {List} from "./list"
-import {Model, ModelData, ModelKey, ModelProvider, Spec} from "./model"
+import {Model, ModelData, ModelKey, ModelProvider, Spec, dataProvider} from "./model"
 import {InputValue} from "./node"
 
 /** A navigable graph viewer. */
@@ -31,35 +31,72 @@ export class GraphViewer extends VGroup {
         type: "box",
         scopeId: "graphViewerHeader",
         contents: {
-          type: "abslayout",
+          type: "row",
           scopeId: "default",
+          offPolicy: "stretch",
           contents: [
             {
-              type: "box",
-              contents: {
-                type: "button",
-                onClick: () => this.pop(),
-                visible: this._poppable,
+              type: "menubar",
+              offPolicy: "stretch",
+              element: {
+                type: "menu",
                 contents: {
                   type: "box",
-                  contents: {type: "label", text: "backButton.text"},
+                  contents: {type: "label", text: "text"},
                 },
+                element: {
+                  type: "menuitem",
+                  contents: {
+                    type: "box",
+                    contents: {type: "label", text: "text"},
+                  },
+                },
+                keys: "keys",
+                data: "data",
               },
-              constraints: {stretchX: true},
-              style: {halign: "left"},
+              data: dataProvider({
+                edit: {
+                  text: Value.constant("Edit"),
+                  keys: Value.constant(["test"]),
+                  data: dataProvider({
+                    test: {
+                      text: Value.constant("Test"),
+                    },
+                  }),
+                },
+                node: {
+                  text: Value.constant("Node"),
+                  keys: Value.constant(["test"]),
+                  data: dataProvider({
+                    test: {
+                      text: Value.constant("Test"),
+                    },
+                  }),
+                },
+              }),
+              keys: Value.constant(["edit", "node"]),
             },
             {
-              type: "box",
+              type: "spacer",
+              height: 0,
+              constraints: {stretch: true},
+            },
+            {
+              type: "button",
+              onClick: () => this.pop(),
+              visible: this._poppable,
               contents: {
-                type: "button",
-                onClick: "remove",
-                contents: {
-                  type: "box",
-                  contents: {type: "label", text: "closeButton.text"},
-                },
+                type: "box",
+                contents: {type: "label", text: "backButton.text"},
               },
-              constraints: {stretchX: true},
-              style: {halign: "right"},
+            },
+            {
+              type: "button",
+              onClick: "remove",
+              contents: {
+                type: "box",
+                contents: {type: "label", text: "closeButton.text"},
+              },
             },
           ],
         },

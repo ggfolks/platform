@@ -112,3 +112,17 @@ export function mutableMapProvider<K extends ModelKey, V> (
     }
   }
 }
+
+/** Provides models from model data. */
+export function dataProvider (data :ModelData) :ModelProvider {
+  const models = new Map<ModelKey, Model>()
+  return {
+    resolve: key => {
+      let model = models.get(key)
+      if (!model) {
+        models.set(key, model = new Model(data[key] as ModelData))
+      }
+      return model
+    }
+  }
+}

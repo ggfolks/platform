@@ -9,15 +9,19 @@ export interface ButtonConfig extends ControlConfig {
   onClick? :Spec<Action>
 }
 
-const ButtonStyleScope = {id: "button", states: [...ControlStates, "pressed"]}
+export const ButtonStates = [...ControlStates, "pressed"]
+const ButtonStyleScope = {id: "button", states: ButtonStates}
 
-export class Button extends Control {
+export class AbstractButton extends Control {
   protected readonly _pressed = Mutable.local(false)
-  protected readonly onClick :Action
 
-  constructor (ctx :ElementContext, parent :Element, readonly config :ButtonConfig) {
+  constructor (
+    ctx :ElementContext,
+    parent :Element,
+    config :ControlConfig,
+    protected readonly _onClick :Action,
+  ) {
     super(ctx, parent, config)
-    this.onClick = config.onClick ? ctx.model.resolve(config.onClick) : NoopAction
     this._pressed.onValue(_ => this._state.update(this.computeState))
   }
 
@@ -32,7 +36,7 @@ export class Button extends Control {
       move: (event, pos) => this._pressed.update(rect.contains(this.bounds, pos)),
       release: () => {
         this._pressed.update(false)
-        if (rect.contains(this.bounds, pos)) this.onClick()
+        if (rect.contains(this.bounds, pos)) this._onClick()
       },
       cancel: () => this._pressed.update(false)
     }
@@ -42,6 +46,13 @@ export class Button extends Control {
     // meh, this can be called before our constructor runs...
     const pressed = (this._pressed  && this._pressed.current)
     return this.enabled.current && pressed ? "pressed" : super.computeState
+  }
+}
+
+export class Button extends AbstractButton {
+
+  constructor (ctx :ElementContext, parent :Element, readonly config :ButtonConfig) {
+    super(ctx, parent, config, config.onClick ? ctx.model.resolve(config.onClick) : NoopAction)
   }
 }
 

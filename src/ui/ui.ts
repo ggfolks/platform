@@ -18,6 +18,7 @@ import * as G from "./group"
 import * as T from "./text"
 import * as B from "./button"
 import * as L from "./list"
+import * as M from "./menu"
 import * as S from "./scroll"
 import * as GR from "./graph"
 
@@ -99,12 +100,16 @@ export class UI {
     case          "row": return new G.Row(ctx, parent, rconfig as G.RowConfig)
     case       "column": return new G.Column(ctx, parent, rconfig as G.ColumnConfig)
     case    "abslayout": return new G.AbsLayout(ctx, parent, rconfig as G.AbsLayoutConfig)
+    case       "spacer": return new G.Spacer(ctx, parent, rconfig as G.SpacerConfig)
     case        "label": return new T.Label(ctx, parent, rconfig as T.LabelConfig)
     case       "cursor": return new T.Cursor(ctx, parent, rconfig as T.CursorConfig)
     case         "text": return new T.Text(ctx, parent, rconfig as T.TextConfig)
     case       "button": return new B.Button(ctx, parent, rconfig as B.ButtonConfig)
     case       "toggle": return new B.Toggle(ctx, parent, rconfig as B.ToggleConfig)
     case         "list": return new L.List(ctx, parent, rconfig as L.ListConfig)
+    case      "menubar": return new M.MenuBar(ctx, parent, rconfig as M.MenuBarConfig)
+    case         "menu": return new M.Menu(ctx, parent, rconfig as M.MenuConfig)
+    case     "menuitem": return new M.MenuItem(ctx, parent, rconfig as M.MenuItemConfig)
     case   "scrollview": return new S.ScrollView(ctx, parent, rconfig as S.ScrollViewConfig)
     case  "graphviewer": return new GR.GraphViewer(ctx, parent, rconfig as GR.GraphViewerConfig)
     case    "graphview": return new GR.GraphView(ctx, parent, rconfig as GR.GraphViewConfig)
