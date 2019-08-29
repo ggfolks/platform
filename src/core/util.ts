@@ -161,3 +161,8 @@ export const log = {
   warn : (msg :string, ...args :any[]) => logAt("warn" , msg, ...args),
   error: (msg :string, ...args :any[]) => logAt("error", msg, ...args),
 }
+
+/** Returns the provided value or, if undefined, the provided default. */
+export function getValue<T> (value :T|undefined, defaultValue :T) :T {
+  return value === undefined ? defaultValue : value
+}

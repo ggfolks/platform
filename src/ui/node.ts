@@ -2,7 +2,7 @@ import {refEquals} from "../core/data"
 import {dim2, vec2} from "../core/math"
 import {Scale, getValueStyle} from "../core/ui"
 import {ChangeFn, Mutable, Value} from "../core/react"
-import {Disposer, Noop} from "../core/util"
+import {Disposer, Noop, getValue} from "../core/util"
 import {Graph} from "../graph/graph"
 import {inputEdge} from "../graph/meta"
 import {Subgraph} from "../graph/util"
@@ -87,8 +87,27 @@ function createGraphModelData (graph :Graph) :ModelData {
         const subgraph = value.current as Subgraph
         subgraphElement.subgraph = createGraphModelData(subgraph.containedGraph)
       }
+      const propertyModels :Map<ModelKey, Model> = new Map()
       const inputModels :Map<ModelKey, Model> = new Map()
       const outputModels :Map<ModelKey, Model> = new Map()
+
+      function createPropertyValue (key :ModelKey, defaultValue :any = undefined) {
+        let onChange :ChangeFn<InputValue> = Noop
+        return Mutable.deriveMutable(
+          dispatch => {
+            onChange = dispatch
+            return Noop
+          },
+          () => getValue(value.current.config[key], defaultValue),
+          input => {
+            const previous = getValue(value.current.config[key], defaultValue)
+            value.current.config[key] = input
+            value.current.reconnect()
+            onChange(input, previous)
+          },
+          refEquals,
+        )
+      }
       return {
         id: Value.constant(value.current.id),
         type: Value.constant(type),
@@ -99,15 +118,17 @@ function createGraphModelData (graph :Graph) :ModelData {
         defaultOutputKey: Value.constant(value.current.defaultOutputKey),
         property: {
           resolve: (key :ModelKey) => {
-            const propertiesMeta = value.current.propertiesMeta[key]
-            const configValue = value.current.config[key]
-            return new Model({
-              name: Value.constant(key),
-              constraints: Value.constant(propertiesMeta.constraints),
-              value: Value.constant(
-                configValue === undefined ? propertiesMeta.defaultValue : configValue,
-              ),
-            })
+            let model = propertyModels.get(key)
+            if (!model) {
+              const propertiesMeta = value.current.propertiesMeta[key]
+              propertyModels.set(key, model = new Model({
+                name: Value.constant(key),
+                type: Value.constant(propertiesMeta.type),
+                constraints: Value.constant(propertiesMeta.constraints),
+                value: createPropertyValue(key, propertiesMeta.defaultValue),
+              }))
+            }
+            return model
           },
         },
         input: {
@@ -115,21 +136,7 @@ function createGraphModelData (graph :Graph) :ModelData {
             let model = inputModels.get(key)
             if (!model) {
               const multiple = value.current.inputsMeta[key].multiple
-              let onChange :ChangeFn<InputValue> = Noop
-              const input = Mutable.deriveMutable(
-                dispatch => {
-                  onChange = dispatch
-                  return Noop
-                },
-                () => value.current.config[key],
-                input => {
-                  const previous = value.current.config[key]
-                  value.current.config[key] = input
-                  value.current.reconnect()
-                  onChange(input, previous)
-                },
-                refEquals,
-              )
+              const input = createPropertyValue(key)
               let style :Value<string>
               if (multiple) {
                 style = input.switchMap(input => value.current.graph.getValues(input, 0)).map(
