@@ -83,7 +83,7 @@ export class Box extends Element {
   constructor (ctx :ElementContext, parent :Element, readonly config :BoxConfig) {
     super(ctx, parent, config)
     this.contents = ctx.elem.create(ctx, this, config.contents)
-    this.state.onValue(state => {
+    this.disposer.add(this.state.onValue(state => {
       const style = this.getStyle(this.config.style, state)
       if (style.background) this.background.observe(ctx.style.resolveBackground(style.background))
       else this.background.update(NoopDecor)
@@ -91,7 +91,7 @@ export class Box extends Element {
       else this.border.update(NoopDecor)
       if (style.cursor) this.setCursor(this, style.cursor)
       else this.clearCursor(this)
-    })
+    }))
   }
 
   get style () :BoxStyle { return this.getStyle(this.config.style, this.state.current) }

@@ -187,10 +187,12 @@ class Tagged extends Node {
 
 /** Registers the nodes in this module with the supplied registry. */
 export function registerEntityNodes (registry :NodeTypeRegistry) {
-  registry.registerNodeType("addEntity", AddEntity)
-  registry.registerNodeType("deleteEntity", DeleteEntity)
-  registry.registerNodeType("entityId", EntityId)
-  registry.registerNodeType("readComponent", ReadComponent)
-  registry.registerNodeType("updateComponent", UpdateComponent)
-  registry.registerNodeType("tagged", Tagged)
+  registry.registerNodeTypes("entity", {
+    addEntity: AddEntity,
+    deleteEntity: DeleteEntity,
+    entityId: EntityId,
+    readComponent: ReadComponent,
+    updateComponent: UpdateComponent,
+    tagged: Tagged,
+  })
 }

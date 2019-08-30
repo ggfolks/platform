@@ -59,6 +59,10 @@ class UINode extends Node {
             root.dispose()
             disposer.dispose()
           },
+          typeKeys: ctx.types.categories.keysSource().map(Array.from),
+          typeData: mapProvider(ctx.types.categories, (value, key) => ({
+            name: Value.constant(key),
+          })),
           ...createGraphModelData(graph),
         }))
         if (this.config.size) root.setSize(this.config.size)
@@ -176,5 +180,5 @@ function createGraphModelData (graph :Graph) :ModelData {
 
 /** Registers the nodes in this module with the supplied registry. */
 export function registerUINodes (registry :NodeTypeRegistry) {
-  registry.registerNodeType("ui", UINode)
+  registry.registerNodeTypes("ui", {ui: UINode})
 }

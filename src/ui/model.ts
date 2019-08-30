@@ -68,14 +68,14 @@ export interface ModelProvider {
   * component where the list of keys is not in sync with its associated map, things will blow up.
   * Be careful. */
 export function mapProvider<K extends ModelKey, V> (
-  map :RMap<K,V>, maker :(v:Value<V>) => ModelData
+  map :RMap<K,V>, maker :(v :Value<V>, k :K) => ModelData
 ) :ModelProvider {
   const models = new Map<ModelKey,Model>()
   return {
     resolve: (key) => {
       const model = models.get(key)
       if (model) return model
-      const nmodel = new Model(maker(map.getValue(key as K) as Value<V>))
+      const nmodel = new Model(maker(map.getValue(key as K) as Value<V>, key as K))
       models.set(key, nmodel)
       return nmodel
     }

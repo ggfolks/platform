@@ -82,7 +82,8 @@ abstract class Group extends Element {
   }
 
   protected rerender (canvas :CanvasRenderingContext2D, region :rect) {
-    for (const child of this.contents) child.render(canvas, region)
+    // render in reverse order since we process events in forward
+    for (let ii = this.contents.length - 1; ii >= 0; ii--) this.contents[ii].render(canvas, region)
   }
 }
 
@@ -143,6 +144,11 @@ export abstract class AbsGroup extends Group {
         constraints.stretchY ? this.height : size[1],
       ))
     }
+  }
+
+  protected rerender (canvas :CanvasRenderingContext2D, region :rect) {
+    // render in forward order since we process events in reverse
+    for (const child of this.contents) child.render(canvas, region)
   }
 }
 

@@ -153,10 +153,12 @@ class Conditional extends Node {
 
 /** Registers the nodes in this module with the supplied registry. */
 export function registerLogicNodes (registry :NodeTypeRegistry) {
-  registry.registerNodeType("and", And)
-  registry.registerNodeType("or", Or)
-  registry.registerNodeType("not", Not)
-  registry.registerNodeType("equals", Equals)
-  registry.registerNodeType("lessThan", LessThan)
-  registry.registerNodeType("conditional", Conditional)
+  registry.registerNodeTypes("logic", {
+    and: And,
+    or: Or,
+    not: Not,
+    equals: Equals,
+    lessThan: LessThan,
+    conditional: Conditional,
+  })
 }

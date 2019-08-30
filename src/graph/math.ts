@@ -293,16 +293,18 @@ class Step extends Node {
 
 /** Registers the nodes in this module with the supplied registry. */
 export function registerMathNodes (registry :NodeTypeRegistry) {
-  registry.registerNodeType("constant", Constant)
-  registry.registerNodeType("value", ValueNode)
-  registry.registerNodeType("add", Add)
-  registry.registerNodeType("subtract", Subtract)
-  registry.registerNodeType("multiply", Multiply)
-  registry.registerNodeType("random", Random)
-  registry.registerNodeType("accumulate", Accumulate)
-  registry.registerNodeType("sign", Sign)
-  registry.registerNodeType("abs", Abs)
-  registry.registerNodeType("min", Min)
-  registry.registerNodeType("max", Max)
-  registry.registerNodeType("step", Step)
+  registry.registerNodeTypes("math", {
+    constant: Constant,
+    value: ValueNode,
+    add: Add,
+    subtract: Subtract,
+    multiply: Multiply,
+    random: Random,
+    accumulate: Accumulate,
+    sign: Sign,
+    abs: Abs,
+    min: Min,
+    max: Max,
+    step: Step,
+  })
 }

@@ -1,5 +1,6 @@
 import {refEquals} from "../core/data"
 import {ChangeFn, Value, addListener, dispatchChange} from "../core/react"
+import {MutableMap, RMap} from "../core/rcollect"
 import {Disposable, Disposer, NoopRemover, PMap} from "../core/util"
 import {Graph} from "./graph"
 import {InputEdgeMeta, OutputEdgeMeta, PropertyMeta, getNodeMeta} from "./meta"
@@ -214,6 +215,9 @@ interface NodeConstructor<T extends NodeConfig> {
 /** Maintains a mapping from string node types to constructors. */
 export class NodeTypeRegistry {
   private _constructors :Map<string, NodeConstructor<NodeConfig>> = new Map()
+  private _categories = MutableMap.local<string, string[]>()
+
+  get categories () :RMap<string, string[]> { return this._categories }
 
   constructor (...regs :((registry :NodeTypeRegistry) => void)[]) {
     for (const reg of regs) {
@@ -221,9 +225,14 @@ export class NodeTypeRegistry {
     }
   }
 
-  /** Registers a node type constructor. */
-  registerNodeType<T extends NodeConfig> (type :string, constructor :NodeConstructor<T>) {
-    this._constructors.set(type, constructor as NodeConstructor<NodeConfig>)
+  /** Registers a group of node type constructors. */
+  registerNodeTypes (category :string, types :{ [type :string]: NodeConstructor<any> }) {
+    let list = this._categories.get(category)
+    if (!list) this._categories.set(category, list = [])
+    for (const type in types) {
+      list.push(type)
+      this._constructors.set(type, types[type] as NodeConstructor<NodeConfig>)
+    }
   }
 
   /** Creates a node with the supplied id and configuration. */

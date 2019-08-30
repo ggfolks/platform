@@ -203,8 +203,10 @@ class UpdateVisibleNode extends EntityComponentNode<Component<Object3D>> {
 
 /** Registers the nodes in this module with the supplied registry. */
 export function registerScene3Nodes (registry :NodeTypeRegistry) {
-  registry.registerNodeType("hover", Hover)
-  registry.registerNodeType("animationAction", AnimationActionNode)
-  registry.registerNodeType("raycaster", RaycasterNode)
-  registry.registerNodeType("updateVisible", UpdateVisibleNode)
+  registry.registerNodeTypes("scene3", {
+    hover: Hover,
+    animationAction: AnimationActionNode,
+    raycaster: RaycasterNode,
+    updateVisible: UpdateVisibleNode,
+  })
 }

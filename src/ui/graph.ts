@@ -1,6 +1,6 @@
 import {dataEquals} from "../core/data"
 import {clamp, dim2, rect, vec2} from "../core/math"
-import {Mutable, Value} from "../core/react"
+import {Mutable, Source, Value} from "../core/react"
 import {PMap, Remover} from "../core/util"
 import {getConstantOrValueNodeId} from "../graph/graph"
 import {InputEdge} from "../graph/node"
@@ -26,6 +26,8 @@ export class GraphViewer extends VGroup {
   constructor (readonly ctx :ElementContext, parent :Element, readonly config :GraphViewerConfig) {
     super(ctx, parent, {...config, offPolicy: "stretch"})
     if (this.config.editable) this._editable = ctx.model.resolve(this.config.editable)
+    const typeKeys = ctx.model.resolve<Source<string[]>>("typeKeys")
+    const typeData = ctx.model.resolve<ModelProvider>("typeData")
     this.contents.push(
       ctx.elem.create(ctx, this, {
         type: "box",
@@ -42,39 +44,27 @@ export class GraphViewer extends VGroup {
                 type: "menu",
                 contents: {
                   type: "box",
-                  contents: {type: "label", text: "text"},
+                  contents: {type: "label", text: "title"},
                 },
                 element: {
                   type: "menuitem",
                   contents: {
                     type: "box",
-                    contents: {type: "label", text: "text"},
+                    contents: {type: "label", text: "name"},
+                    style: {halign: "left"}
                   },
                 },
                 keys: "keys",
                 data: "data",
               },
               data: dataProvider({
-                edit: {
-                  text: Value.constant("Edit"),
-                  keys: Value.constant(["test"]),
-                  data: dataProvider({
-                    test: {
-                      text: Value.constant("Test"),
-                    },
-                  }),
-                },
                 node: {
-                  text: Value.constant("Node"),
-                  keys: Value.constant(["test"]),
-                  data: dataProvider({
-                    test: {
-                      text: Value.constant("Test"),
-                    },
-                  }),
+                  title: Value.constant("Node"),
+                  keys: typeKeys,
+                  data: typeData,
                 },
               }),
-              keys: Value.constant(["edit", "node"]),
+              keys: Value.constant(["node"]),
             },
             {
               type: "spacer",

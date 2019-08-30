@@ -473,20 +473,22 @@ class WorldToLocal extends EntityComponentNode<TransformComponent> {
 
 /** Registers the nodes in this module with the supplied registry. */
 export function registerSpaceNodes (registry :NodeTypeRegistry) {
-  registry.registerNodeType("Euler", EulerNode)
-  registry.registerNodeType("Vector3", Vector3Node)
-  registry.registerNodeType("Vector3.split", Vector3Split)
-  registry.registerNodeType("Vector3.add", Vector3Add)
-  registry.registerNodeType("Vector3.applyEuler", Vector3ApplyEuler)
-  registry.registerNodeType("Vector3.projectOnPlane", Vector3ProjectOnPlane)
-  registry.registerNodeType("Vector3.multiplyScalar", Vector3MultiplyScalar)
-  registry.registerNodeType("Vector3.angleBetween", Vector3AngleBetween)
-  registry.registerNodeType("randomDirection", RandomDirection)
-  registry.registerNodeType("rotate", Rotate)
-  registry.registerNodeType("translate", Translate)
-  registry.registerNodeType("readTransform", ReadTransform)
-  registry.registerNodeType("updatePosition", UpdatePosition)
-  registry.registerNodeType("updateRotation", UpdateRotation)
-  registry.registerNodeType("updateScale", UpdateScale)
-  registry.registerNodeType("worldToLocal", WorldToLocal)
+  registry.registerNodeTypes("space", {
+    Euler: EulerNode,
+    Vector3: Vector3Node,
+    "Vector3.split": Vector3Split,
+    "Vector3.add": Vector3Add,
+    "Vector3.applyEuler": Vector3ApplyEuler,
+    "Vector3.projectOnPlane": Vector3ProjectOnPlane,
+    "Vector3.multiplyScalar": Vector3MultiplyScalar,
+    "Vector3.angleBetween": Vector3AngleBetween,
+    randomDirection: RandomDirection,
+    rotate: Rotate,
+    translate: Translate,
+    readTransform: ReadTransform,
+    updatePosition: UpdatePosition,
+    updateRotation: UpdateRotation,
+    updateScale: UpdateScale,
+    worldToLocal: WorldToLocal,
+  })
 }

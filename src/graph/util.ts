@@ -240,13 +240,15 @@ class Property extends Node {
 
 /** Registers the nodes in this module with the supplied registry. */
 export function registerUtilNodes (registry :NodeTypeRegistry) {
-  registry.registerNodeType("timeout", TimeoutNode)
-  registry.registerNodeType("interval", IntervalNode)
-  registry.registerNodeType("latch", Latch)
-  registry.registerNodeType("clock", ClockNode)
-  registry.registerNodeType("subgraph", Subgraph)
-  registry.registerNodeType("input", Input)
-  registry.registerNodeType("output", Output)
-  registry.registerNodeType("log", Log)
-  registry.registerNodeType("property", Property)
+  registry.registerNodeTypes("util", {
+    timeout: TimeoutNode,
+    interval: IntervalNode,
+    latch: Latch,
+    clock: ClockNode,
+    subgraph: Subgraph,
+    input: Input,
+    output: Output,
+    log: Log,
+    property: Property,
+  })
 }

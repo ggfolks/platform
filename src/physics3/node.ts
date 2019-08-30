@@ -44,5 +44,5 @@ class Collided extends EntityComponentNode<Component<Body>> {
 
 /** Registers the nodes in this module with the supplied registry. */
 export function registerPhysics3Nodes (registry :NodeTypeRegistry) {
-  registry.registerNodeType("collided", Collided)
+  registry.registerNodeTypes("physics3", {collided: Collided})
 }
