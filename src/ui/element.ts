@@ -531,12 +531,11 @@ export class Root extends Element {
     if (debugDirty) {
       canvas.strokeStyle = DebugColors[debugColorIndex]
       debugColorIndex = (debugColorIndex + 1) % DebugColors.length
-      canvas.strokeRect(region[0] - 2, region[1] - 2, region[2] + 4, region[3] + 4)
+      canvas.strokeRect(region[0] - 1, region[1] - 1, region[2] + 2, region[3] + 2)
     }
-    // expand the region by one pixel to allow for subpixel positioning
-    canvas.clearRect(region[0] - 1, region[1] - 1, region[2] + 2, region[3] + 2)
+    canvas.clearRect(region[0], region[1], region[2], region[3])
     canvas.beginPath()
-    canvas.rect(region[0] - 1, region[1] - 1, region[2] + 2, region[3] + 2)
+    canvas.rect(region[0], region[1], region[2], region[3])
     canvas.clip()
     this.contents.render(canvas, region)
     canvas.restore()
