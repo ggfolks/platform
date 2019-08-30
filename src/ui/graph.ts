@@ -8,7 +8,7 @@ import {Element, ElementConfig, ElementContext, MouseInteraction, Observer} from
 import {AbsConstraints, AbsGroup, AxisConfig, VGroup} from "./group"
 import {List} from "./list"
 import {Model, ModelData, ModelKey, ModelProvider, Spec, dataProvider} from "./model"
-import {InputValue} from "./node"
+import {InputValue, NodeCreator} from "./node"
 
 /** A navigable graph viewer. */
 export interface GraphViewerConfig extends ElementConfig {
@@ -20,7 +20,8 @@ export class GraphViewer extends VGroup {
   readonly contents :Element[] = []
 
   private _editable = Value.constant(false)
-  private _stack :Element[] = []
+  private _nodeCreator :Mutable<NodeCreator>
+  private _stack :[Model, Element][] = []
   private _poppable = Mutable.local(false)
 
   constructor (readonly ctx :ElementContext, parent :Element, readonly config :GraphViewerConfig) {
@@ -28,6 +29,7 @@ export class GraphViewer extends VGroup {
     if (this.config.editable) this._editable = ctx.model.resolve(this.config.editable)
     const categoryKeys = ctx.model.resolve<Source<string[]>>("categoryKeys")
     const categoryData = ctx.model.resolve<ModelProvider>("categoryData")
+    this._nodeCreator = ctx.model.resolve<Mutable<NodeCreator>>("nodeCreator")
     this.contents.push(
       ctx.elem.create(ctx, this, {
         type: "box",
@@ -42,6 +44,7 @@ export class GraphViewer extends VGroup {
               offPolicy: "stretch",
               element: {
                 type: "menu",
+                visible: this._editable,
                 contents: {
                   type: "box",
                   contents: {type: "label", text: "title"},
@@ -117,24 +120,32 @@ export class GraphViewer extends VGroup {
         constraints: {stretch: true},
       }),
     )
-    this._stack.push(this.contents[1])
+    this._stack.push([ctx.model, this.contents[1]])
+    this._updateNodeCreator(ctx.model)
   }
 
   push (model :Model) {
-    this._stack.push(this.contents[1] = this.ctx.elem.create({...this.ctx, model}, this, {
+    this._stack.push([model, this.contents[1] = this.ctx.elem.create({...this.ctx, model}, this, {
       type: "scrollview",
       contents: {type: "graphview", editable: this._editable},
       constraints: {stretch: true},
-    }))
+    })])
+    this._updateNodeCreator(model)
     this._poppable.update(true)
     this.invalidate()
   }
 
   pop () {
     this._stack.pop()
-    this.contents[1] = this._stack[this._stack.length - 1]
+    const [model, element] = this._stack[this._stack.length - 1]
+    this.contents[1] = element
+    this._updateNodeCreator(model)
     this._poppable.update(this._stack.length > 1)
     this.invalidate()
+  }
+
+  _updateNodeCreator (model :Model) {
+    this._nodeCreator.update(model.resolve<Value<NodeCreator>>("createNode").current)
   }
 }
 

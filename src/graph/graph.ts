@@ -39,10 +39,20 @@ export class Graph implements Disposable {
     return this._nodes
   }
 
-  constructor (readonly ctx :NodeContext, config :GraphConfig) {
+  constructor (readonly ctx :NodeContext, readonly config :GraphConfig) {
     for (let id in config) {
       this._nodes.set(id, ctx.types.createNode(this, id, config[id]))
     }
+  }
+
+  /** Creates and connects a new node of the specified type, adding it to the config. */
+  createNode (type :string) {
+    // find a unique name based on the type
+    let id = type
+    for (let ii = 2; this._nodes.has(id); ii++) id = type + ii
+    const node = this.ctx.types.createNode(this, id, this.config[id] = {type})
+    this._nodes.set(id, node)
+    node.connect()
   }
 
   /** Connects the nodes in the graph. */

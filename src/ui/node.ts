@@ -37,6 +37,8 @@ abstract class UINodeConfig implements NodeConfig {
   @inputEdge("boolean") input = undefined
 }
 
+export type NodeCreator = (type :string) => void
+
 class UINode extends Node {
 
   constructor (graph :Graph, id :string, readonly config :UINodeConfig) {
@@ -45,51 +47,54 @@ class UINode extends Node {
 
   connect () {
     this._disposer.add(this.graph.getValue(this.config.input, false).onValue(value => {
-      if (value) {
-        let graph = this.graph
-        while (graph.ctx.subgraph) graph = graph.ctx.subgraph.graph
-        const ctx = this.graph.ctx as UINodeContext
-        let root :Root
-        const ui = new UI(ctx.theme, ctx.styles, ctx.image)
-        const disposer = new Disposer()
-        root = ui.createRoot(this.config.root, new Model({
-          ...this.config.model,
-          remove: () => {
-            ctx.host.removeRoot(root)
-            root.dispose()
-            disposer.dispose()
+      if (!value) return
+      let graph = this.graph
+      while (graph.ctx.subgraph) graph = graph.ctx.subgraph.graph
+      const ctx = this.graph.ctx as UINodeContext
+      let root :Root
+      const ui = new UI(ctx.theme, ctx.styles, ctx.image)
+      const disposer = new Disposer()
+      const nodeCreator = Mutable.local<NodeCreator>(Noop)
+      const model = new Model({
+        ...this.config.model,
+        remove: () => {
+          ctx.host.removeRoot(root)
+          root.dispose()
+          disposer.dispose()
+        },
+        categoryKeys: ctx.types.categories.keysSource().map(Array.from),
+        categoryData: mapProvider(ctx.types.categories, (value, key) => ({
+          name: Value.constant(key),
+          typeKeys: value,
+          typeData: {
+            resolve: (key :ModelKey) => new Model({
+              name: Value.constant(key),
+              create: () => nodeCreator.current(key as string),
+            }),
           },
-          categoryKeys: ctx.types.categories.keysSource().map(Array.from),
-          categoryData: mapProvider(ctx.types.categories, (value, key) => ({
-            name: Value.constant(key),
-            typeKeys: value,
-            typeData: {
-              resolve: (key :ModelKey) => new Model({
-                name: Value.constant(key),
-                create: () => console.log(key),
-              }),
-            },
-          })),
-          ...createGraphModelData(graph),
-        }))
-        if (this.config.size) root.setSize(this.config.size)
-        else root.sizeToFit()
-        if (this.config.origin) root.setOrigin(this.config.origin)
-        else disposer.add(root.bindOrigin(
-          ctx.screen,
-          this.config.screenH || "center",
-          this.config.screenV || "center",
-          this.config.rootH || "center",
-          this.config.rootV || "center",
-        ))
-        ctx.host.addRoot(root)
-      }
+        })),
+        nodeCreator,
+        ...createGraphModelData(graph),
+      })
+      root = ui.createRoot(this.config.root, model)
+      if (this.config.size) root.setSize(this.config.size)
+      else root.sizeToFit()
+      if (this.config.origin) root.setOrigin(this.config.origin)
+      else disposer.add(root.bindOrigin(
+        ctx.screen,
+        this.config.screenH || "center",
+        this.config.screenV || "center",
+        this.config.rootH || "center",
+        this.config.rootV || "center",
+      ))
+      ctx.host.addRoot(root)
     }))
   }
 }
 
 function createGraphModelData (graph :Graph) :ModelData {
   return {
+    createNode: Value.constant((type :string) => graph.createNode(type)),
     nodeKeys: graph.nodes.keysSource(),
     nodeData: mapProvider(graph.nodes, value => {
       const type = value.current.config.type
