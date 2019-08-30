@@ -26,8 +26,8 @@ export class GraphViewer extends VGroup {
   constructor (readonly ctx :ElementContext, parent :Element, readonly config :GraphViewerConfig) {
     super(ctx, parent, {...config, offPolicy: "stretch"})
     if (this.config.editable) this._editable = ctx.model.resolve(this.config.editable)
-    const typeKeys = ctx.model.resolve<Source<string[]>>("typeKeys")
-    const typeData = ctx.model.resolve<ModelProvider>("typeData")
+    const categoryKeys = ctx.model.resolve<Source<string[]>>("categoryKeys")
+    const categoryData = ctx.model.resolve<ModelProvider>("categoryData")
     this.contents.push(
       ctx.elem.create(ctx, this, {
         type: "box",
@@ -51,17 +51,28 @@ export class GraphViewer extends VGroup {
                   contents: {
                     type: "box",
                     contents: {type: "label", text: "name"},
-                    style: {halign: "left"}
+                    style: {halign: "left"},
                   },
+                  element: {
+                    type: "menuitem",
+                    contents: {
+                      type: "box",
+                      contents: {type: "label", text: "name"},
+                      style: {halign: "left"},
+                    },
+                    action: "create",
+                  },
+                  keys: "typeKeys",
+                  data: "typeData",
                 },
-                keys: "keys",
-                data: "data",
+                keys: "categoryKeys",
+                data: "categoryData",
               },
               data: dataProvider({
                 node: {
                   title: Value.constant("Node"),
-                  keys: typeKeys,
-                  data: typeData,
+                  categoryKeys,
+                  categoryData,
                 },
               }),
               keys: Value.constant(["node"]),
@@ -249,7 +260,7 @@ export class GraphView extends AbsGroup {
       const key = keys[ii]
       const model = models[ii]
       const inputKeys = model.resolve("inputKeys" as Spec<Value<string[]>>)
-      const input = model.resolve("input" as Spec<ModelProvider>)
+      const inputData = model.resolve("inputData" as Spec<ModelProvider>)
       const inputs :string[] = []
       const pushInput = (edge :InputEdge<any>) => {
         if (Array.isArray(edge)) {
@@ -266,7 +277,7 @@ export class GraphView extends AbsGroup {
       }
       for (const inputKey of inputKeys.current) {
         // remove anything from roots that's used as an input
-        const data = input.resolve(inputKey)
+        const data = inputData.resolve(inputKey)
         const value = data.resolve("value" as Spec<Value<InputValue>>)
         const multiple = data.resolve("multiple" as Spec<Value<boolean>>)
         if (multiple.current) {
@@ -367,7 +378,7 @@ export class NodeView extends VGroup {
                   },
                 ],
               },
-              data: "input",
+              data: "inputData",
               keys: "inputKeys",
             },
           },
@@ -400,7 +411,7 @@ export class NodeView extends VGroup {
                   },
                 ],
               },
-              data: "output",
+              data: "outputData",
               keys: "outputKeys",
             },
           }
@@ -460,7 +471,7 @@ export class PropertyView extends VGroup {
 
   constructor (ctx :ElementContext, parent :Element, readonly config :PropertyViewConfig) {
     super(ctx, parent, config)
-    const property = ctx.model.resolve("property" as Spec<ModelProvider>)
+    const propertyData = ctx.model.resolve("propertyData" as Spec<ModelProvider>)
     this.disposer.add(ctx.model.resolve("propertyKeys" as Spec<Value<string[]>>).onValue(keys => {
       const {contents, elements} = this
       // first dispose no longer used elements
@@ -476,7 +487,7 @@ export class PropertyView extends VGroup {
       for (const key of kset) {
         let elem = this.elements.get(key)
         if (!elem) {
-          const model = property.resolve(key)
+          const model = propertyData.resolve(key)
           elem = ctx.elem.create({...ctx, model}, this, {
             type: "row",
             contents: [
@@ -544,9 +555,9 @@ export class EdgeView extends Element {
   private _editable :Value<boolean>
   private _inputKeys :Value<string[]>
   private _defaultOutputKey :Value<string>
-  private _input :ModelProvider
+  private _inputData :ModelProvider
   private _inputs :Value<InputValue[]>
-  private _output :ModelProvider
+  private _outputData :ModelProvider
   private _edges :{from :vec2, to :OutputTo[]}[] = []
   private readonly _state = Mutable.local("normal")
   private readonly _lineWidth = this.observe(1)
@@ -563,11 +574,11 @@ export class EdgeView extends Element {
     this._editable = ctx.model.resolve(this.config.editable)
     this._inputKeys = ctx.model.resolve("inputKeys" as Spec<Value<string[]>>)
     this._defaultOutputKey = ctx.model.resolve("defaultOutputKey" as Spec<Value<string>>)
-    this._input = ctx.model.resolve("input" as Spec<ModelProvider>)
-    this._output = ctx.model.resolve("output" as Spec<ModelProvider>)
+    this._inputData = ctx.model.resolve("inputData" as Spec<ModelProvider>)
+    this._outputData = ctx.model.resolve("outputData" as Spec<ModelProvider>)
     this.invalidateOnChange(this._inputs = this._inputKeys.switchMap(inputKeys => {
       return Value.join(...inputKeys.map(inputKey => {
-        return this._input.resolve(inputKey).resolve("value" as Spec<Value<InputValue>>)
+        return this._inputData.resolve(inputKey).resolve("value" as Spec<Value<InputValue>>)
       }))
     }))
     this.disposer.add(this.state.onValue(state => {
@@ -592,7 +603,7 @@ export class EdgeView extends Element {
   }
 
   getOutputStyle (key :string) {
-    return this._output.resolve(key).resolve("style" as Spec<Value<string>>)
+    return this._outputData.resolve(key).resolve("style" as Spec<Value<string>>)
   }
 
   applyToContaining (canvas :CanvasRenderingContext2D, pos :vec2, op :(element :Element) => void) {
@@ -636,7 +647,7 @@ export class EdgeView extends Element {
     if (keys === undefined || !this._editable.current) return undefined
     const [inputKey, targetId, outputKey] = keys
     // sever the connection
-    const input = this._input.resolve(inputKey)
+    const input = this._inputData.resolve(inputKey)
     const multiple = input.resolve("multiple" as Spec<Value<boolean>>)
     const value = input.resolve("value" as Spec<Mutable<InputValue>>)
     if (multiple.current) {
@@ -726,7 +737,7 @@ export class EdgeView extends Element {
           vec2.max(max, max, offsetTo)
         }
       }
-      const inputModel = this._input.resolve(inputKey)
+      const inputModel = this._inputData.resolve(inputKey)
       const multiple = inputModel.resolve("multiple" as Spec<Value<boolean>>)
       if (multiple.current) {
         if (Array.isArray(input)) input.forEach(addEdge)

@@ -1,9 +1,11 @@
 import {dim2, rect, vec2} from "../core/math"
+import {Source} from "../core/react"
 import {Noop, PMap, getValue} from "../core/util"
 import {AbstractButton, ButtonStates} from "./button"
-import {ControlConfig, Element, ElementContext, MouseInteraction} from "./element"
+import {ControlConfig, Element, ElementConfig, ElementContext, MouseInteraction} from "./element"
 import {HGroup} from "./group"
-import {AbstractList, AbstractListConfig, syncListContents} from "./list"
+import {AbstractList, AbstractListConfig, List, syncListContents} from "./list"
+import {Action, ModelKey, ModelProvider, Spec} from "./model"
 
 /** Defines configuration for [[MenuBar]] elements. */
 export interface MenuBarConfig extends AbstractListConfig {
@@ -26,38 +28,55 @@ export interface MenuStyle {
   minWidth? :number
 }
 
-/** Defines configuration for [[Menu]] elements. */
-export interface MenuConfig extends ControlConfig, AbstractListConfig {
-  type :"menu"
+export interface AbstractMenuConfig extends ControlConfig {
+  element? :ElementConfig
+  data? :Spec<ModelProvider>
+  keys? :Spec<Source<ModelKey[]>>
   style :PMap<MenuStyle>
 }
-
-const MenuStyleScope = {id: "menu", states: ButtonStates}
 
 const preferredSize = dim2.create()
 const listBounds = rect.create()
 
-/** A menu within a menu bar. */
-export class Menu extends AbstractButton {
-  private _list? :Element
+/** Base class for Menu and MenuItem. */
+abstract class AbstractMenu extends AbstractButton {
+  private _list? :List
   private readonly _combinedBounds = rect.create()
 
-  constructor (private _ctx :ElementContext, parent :Element, readonly config :MenuConfig) {
-    super(_ctx, parent, config, () => this._toggle())
+  constructor (
+    private _ctx :ElementContext,
+    parent :Element,
+    readonly config :AbstractMenuConfig,
+    private readonly _action? :Action,
+  ) {
+    super(_ctx, parent, config, () => this._activate())
     this.disposer.add(this._hovered.onValue(hovered => {
       if (!hovered) return
-      const menuBar = parent as MenuBar
-      for (const element of menuBar.contents) {
-        const menu = element as Menu
-        if (menu._list && menu !== this) {
-          menu._toggle()
-          this._toggle()
+      for (let ancestor = this.parent; ancestor; ancestor = ancestor.parent) {
+        if (ancestor instanceof MenuBar) {
+          for (const element of ancestor.contents) {
+            const menu = element as Menu
+            if (menu._list && menu !== this) {
+              menu._toggle()
+              if (!this._list) this._toggle()
+              return
+            }
+          }
+          return
+        } else if (ancestor instanceof AbstractMenu) {
+          if (!ancestor._list) return
+          for (const element of ancestor._list.contents) {
+            const menu = element as AbstractMenu
+            if (menu._list && menu !== this) {
+              menu._toggle()
+            }
+          }
+          if (config.element && !this._list) this._toggle()
+          return
         }
       }
     }))
   }
-
-  get styleScope () { return MenuStyleScope }
 
   findChild (type :string) :Element|undefined {
     return super.findChild(type) || (this._list && this._list.findChild(type))
@@ -84,7 +103,7 @@ export class Menu extends AbstractButton {
     if (!this._list) return super.handleMouseDown(event, pos)
     const interaction = this._list.handleMouseDown(event, pos)
     if (interaction) return interaction
-    this._toggle()
+    this._closeAncestors()
     // return a dummy interaction just to prevent others from handling the event
     return {move: Noop, release: Noop, cancel: Noop}
   }
@@ -107,6 +126,24 @@ export class Menu extends AbstractButton {
     )
   }
 
+  private _activate () {
+    if (!this._action) {
+      this._toggle()
+      return
+    }
+    this._closeAncestors()
+    this._action()
+  }
+
+  private _closeAncestors () {
+    if (this._list) this._toggle()
+    for (let ancestor = this.parent; ancestor; ancestor = ancestor.parent) {
+      if (ancestor instanceof AbstractMenu) {
+        ancestor._toggle()
+      }
+    }
+  }
+
   private _toggle () {
     if (this._list) {
       this.dirty()
@@ -120,7 +157,7 @@ export class Menu extends AbstractButton {
       element: this.config.element,
       data: this.config.data,
       keys: this.config.keys,
-    })
+    }) as List
     this.invalidate()
   }
 
@@ -130,10 +167,13 @@ export class Menu extends AbstractButton {
       const style = this.getStyle(this.config.style, "normal")
       const minWidth = getValue(style.minWidth, 100)
       dim2.copy(preferredSize, this._list.preferredSize(minWidth, -1))
+      let x = this.x, y = this.y
+      if (this.parent instanceof MenuBar) y += this.height
+      else x += this.width
       this._list.setBounds(rect.set(
         listBounds,
-        this.x,
-        this.y + this.height,
+        x,
+        y,
         Math.max(preferredSize[0], minWidth),
         preferredSize[1],
       ))
@@ -156,18 +196,36 @@ export class Menu extends AbstractButton {
   }
 }
 
+/** Defines configuration for [[Menu]] elements. */
+export interface MenuConfig extends AbstractMenuConfig {
+  type :"menu"
+}
+
+const MenuStyleScope = {id: "menu", states: ButtonStates}
+
+/** A menu within a menu bar. */
+export class Menu extends AbstractMenu {
+
+  constructor (ctx :ElementContext, parent :Element, readonly config :MenuConfig) {
+    super(ctx, parent, config)
+  }
+
+  get styleScope () { return MenuStyleScope }
+}
+
 /** Defines configuration for [[MenuItem]] elements. */
-export interface MenuItemConfig extends ControlConfig {
+export interface MenuItemConfig extends AbstractMenuConfig {
   type :"menuitem"
+  action? :Spec<Action>
 }
 
 const MenuItemStyleScope = {id: "menuitem", states: ButtonStates}
 
 /** A menu item within a menu. */
-export class MenuItem extends AbstractButton {
+export class MenuItem extends AbstractMenu {
 
   constructor (ctx :ElementContext, parent :Element, readonly config :MenuItemConfig) {
-    super(ctx, parent, config, Noop)
+    super(ctx, parent, config, config.action ? ctx.model.resolve(config.action) : undefined)
   }
 
   get styleScope () { return MenuItemStyleScope }

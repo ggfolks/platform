@@ -59,9 +59,16 @@ class UINode extends Node {
             root.dispose()
             disposer.dispose()
           },
-          typeKeys: ctx.types.categories.keysSource().map(Array.from),
-          typeData: mapProvider(ctx.types.categories, (value, key) => ({
+          categoryKeys: ctx.types.categories.keysSource().map(Array.from),
+          categoryData: mapProvider(ctx.types.categories, (value, key) => ({
             name: Value.constant(key),
+            typeKeys: value,
+            typeData: {
+              resolve: (key :ModelKey) => new Model({
+                name: Value.constant(key),
+                create: () => console.log(key),
+              }),
+            },
           })),
           ...createGraphModelData(graph),
         }))
@@ -120,7 +127,7 @@ function createGraphModelData (graph :Graph) :ModelData {
         inputKeys: Value.constant(Object.keys(value.current.inputsMeta)),
         outputKeys: Value.constant(Object.keys(value.current.outputsMeta)),
         defaultOutputKey: Value.constant(value.current.defaultOutputKey),
-        property: {
+        propertyData: {
           resolve: (key :ModelKey) => {
             let model = propertyModels.get(key)
             if (!model) {
@@ -135,7 +142,7 @@ function createGraphModelData (graph :Graph) :ModelData {
             return model
           },
         },
-        input: {
+        inputData: {
           resolve: (key :ModelKey) => {
             let model = inputModels.get(key)
             if (!model) {
@@ -161,7 +168,7 @@ function createGraphModelData (graph :Graph) :ModelData {
             return model
           },
         },
-        output: {
+        outputData: {
           resolve: (key :ModelKey) => {
             let model = outputModels.get(key)
             if (!model) {
