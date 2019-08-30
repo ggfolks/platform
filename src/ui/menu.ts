@@ -23,7 +23,7 @@ export class MenuBar extends HGroup implements AbstractList {
 
 /** Defines the styles that apply to [[Menu]]. */
 export interface MenuStyle {
-  width? :number
+  minWidth? :number
 }
 
 /** Defines configuration for [[Menu]] elements. */
@@ -40,7 +40,7 @@ const listBounds = rect.create()
 /** A menu within a menu bar. */
 export class Menu extends AbstractButton {
   private _list? :Element
-  private readonly _expandedBounds = rect.create()
+  private readonly _combinedBounds = rect.create()
 
   constructor (private _ctx :ElementContext, parent :Element, readonly config :MenuConfig) {
     super(_ctx, parent, config, () => this._toggle())
@@ -101,7 +101,7 @@ export class Menu extends AbstractButton {
   private _combineBounds (bounds :rect) {
     if (!this._list) return bounds
     return rect.union(
-      this._expandedBounds,
+      this._combinedBounds,
       bounds,
       this._list.bounds,
     )
@@ -128,13 +128,13 @@ export class Menu extends AbstractButton {
     super.relayout()
     if (this._list) {
       const style = this.getStyle(this.config.style, "normal")
-      const width = getValue(style.width, 100)
-      dim2.copy(preferredSize, this.contents.preferredSize(width, -1))
+      const minWidth = getValue(style.minWidth, 100)
+      dim2.copy(preferredSize, this._list.preferredSize(minWidth, -1))
       this._list.setBounds(rect.set(
         listBounds,
         this.x,
         this.y + this.height,
-        Math.max(preferredSize[0], width),
+        Math.max(preferredSize[0], minWidth),
         preferredSize[1],
       ))
     }
