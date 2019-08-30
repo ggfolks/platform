@@ -50,8 +50,16 @@ export class GraphViewer extends VGroup {
                   type: "menuitem",
                   contents: {
                     type: "box",
-                    contents: {type: "label", text: "name"},
-                    style: {halign: "left"},
+                    contents: {
+                      type: "row",
+                      offPolicy: "stretch",
+                      contents: [
+                        {type: "label", text: "name"},
+                        {type: "spacer", height: 0, constraints: {stretch: true}},
+                        {type: "label", text: Value.constant("▸")},
+                      ],
+                    },
+                    style: {halign: "stretch"},
                   },
                   element: {
                     type: "menuitem",

@@ -168,8 +168,8 @@ abstract class AbstractMenu extends AbstractButton {
       const minWidth = getValue(style.minWidth, 100)
       dim2.copy(preferredSize, this._list.preferredSize(minWidth, -1))
       let x = this.x, y = this.y
-      if (this.parent instanceof MenuBar) y += this.height
-      else x += this.width
+      if (this.parent instanceof MenuBar) y += this.height + 1
+      else x += this.width + 1
       this._list.setBounds(rect.set(
         listBounds,
         x,
