@@ -49,7 +49,10 @@ export function syncListContents (ctx :ElementContext, list :Element & AbstractL
     // first dispose no longer used elements
     const kset = new Set(keys)
     for (const [ekey, elem] of elements) {
-      if (!kset.has(ekey)) elem.dispose()
+      if (!kset.has(ekey)) {
+        elements.delete(ekey)
+        elem.dispose()
+      }
     }
     // now create/reuse elements for the new keys
     contents.length = 0
