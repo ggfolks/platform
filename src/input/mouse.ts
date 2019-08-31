@@ -74,7 +74,7 @@ export class Mouse implements Disposable {
   }
 
   private _onDoubleClick = (event :MouseEvent) => {
-    this._doubleClicked.emit()
+    if (!event.cancelBubble) this._doubleClicked.emit()
   }
 
   private _onMouseMove = (event :MouseEvent) => {

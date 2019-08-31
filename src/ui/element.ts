@@ -441,6 +441,7 @@ export class Root extends Element {
     const iact = this.interacts[button]
     switch (event.type) {
     case "mousedown":
+      if (rect.contains(this.bounds, pos)) event.cancelBubble = true
       if (iact) {
         console.warn(`Got mouse down but have active interaction? [button=${button}]`)
         iact.cancel()
@@ -448,7 +449,6 @@ export class Root extends Element {
       const niact = this.interacts[button] = this.contents.maybeHandleMouseDown(event, pos)
       // if we click and hit no interactive control, clear the focus
       if (niact === undefined) this.focus.update(undefined)
-      else event.cancelBubble = true
       break
     case "mousemove":
       if (iact) iact.move(event, pos)
@@ -496,9 +496,13 @@ export class Root extends Element {
 
   dispatchWheelEvent (event :WheelEvent) {
     const pos = vec2.set(tmpv, event.offsetX-this.origin[0], event.offsetY-this.origin[1])
-    if (this.contents.maybeHandleWheel(event, pos)) {
-      event.cancelBubble = true
-    }
+    if (rect.contains(this.bounds, pos)) event.cancelBubble = true
+    this.contents.maybeHandleWheel(event, pos)
+  }
+  dispatchDoubleClickEvent (event :MouseEvent) {
+    const pos = vec2.set(tmpv, event.offsetX-this.origin[0], event.offsetY-this.origin[1])
+    if (rect.contains(this.bounds, pos)) event.cancelBubble = true
+    // TODO: allow contents to handle?
   }
 
   protected computePreferredSize (hintX :number, hintY :number, into :dim2) {
@@ -673,6 +677,7 @@ export class Host implements Disposable {
   private readonly onMouse = (event :MouseEvent) => this.handleMouseEvent(event)
   private readonly onKey = (event :KeyboardEvent) => this.handleKeyEvent(event)
   private readonly onWheel = (event :WheelEvent) => this.handleWheelEvent(event)
+  private readonly onDoubleClick = (event :MouseEvent) => this.handleDoubleClickEvent(event)
   private readonly onPointerDown = (event :PointerEvent) => this.handlePointerDown(event)
   private readonly onPointerUp = (event :PointerEvent) => this.handlePointerUp(event)
   private _canvas? :HTMLCanvasElement
@@ -703,6 +708,7 @@ export class Host implements Disposable {
     canvas.addEventListener("mousemove", this.onMouse)
     document.addEventListener("mouseup", this.onMouse)
     canvas.addEventListener("wheel", this.onWheel)
+    canvas.addEventListener("dblclick", this.onDoubleClick)
     canvas.addEventListener("pointerdown", this.onPointerDown)
     canvas.addEventListener("pointerup", this.onPointerUp)
     document.addEventListener("keydown", this.onKey)
@@ -712,6 +718,7 @@ export class Host implements Disposable {
       canvas.removeEventListener("mousemove", this.onMouse)
       document.removeEventListener("mouseup", this.onMouse)
       canvas.removeEventListener("wheel", this.onWheel)
+      canvas.removeEventListener("dblclick", this.onDoubleClick)
       canvas.removeEventListener("pointerdown", this.onPointerDown)
       canvas.removeEventListener("pointerup", this.onPointerUp)
       document.removeEventListener("keydown", this.onKey)
@@ -729,6 +736,9 @@ export class Host implements Disposable {
   }
   handleWheelEvent (event :WheelEvent) {
     for (const root of this.roots) root.dispatchWheelEvent(event)
+  }
+  handleDoubleClickEvent (event :MouseEvent) {
+    for (const root of this.roots) root.dispatchDoubleClickEvent(event)
   }
   handlePointerDown (event :PointerEvent) {
     const canvas = event.target as HTMLElement
