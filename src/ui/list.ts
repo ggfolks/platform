@@ -1,5 +1,5 @@
 import {Source} from "../core/react"
-import {Remover} from "../core/util"
+import {NoopRemover, Remover} from "../core/util"
 import {ModelKey, ModelProvider} from "./model"
 import {Element, ElementConfig, ElementContext} from "./element"
 import {Spec} from "./style"
@@ -43,8 +43,10 @@ export class List extends VGroup implements AbstractList {
 /** Synchronizes a list's contents with its data source. */
 export function syncListContents (ctx :ElementContext, list :Element & AbstractList) :Remover {
   const config = list.config as AbstractListConfig
-  const data = ctx.model.resolve(config.data)
-  return ctx.model.resolve(config.keys).onValue(keys => {
+  const keys = ctx.model.resolveOpt(config.keys)
+  const data = ctx.model.resolveOpt(config.data)
+  if (!(keys && data)) return NoopRemover
+  return keys.onValue(keys => {
     const {contents, elements} = list
     // first dispose no longer used elements
     const kset = new Set(keys)

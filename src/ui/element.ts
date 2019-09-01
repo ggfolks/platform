@@ -9,6 +9,7 @@ import {Spec, StyleContext} from "./style"
 
 const tmpr = rect.create(), tmpv = vec2.create(), tmpd = dim2.create()
 const trueValue = Value.constant(true)
+const falseValue = Value.constant(false)
 const defHintSize = Value.constant(dim2.fromValues(64000, 32000))
 
 /** Used by elements to observe reactive values. Takes care of invalidating the element when the
@@ -102,7 +103,12 @@ export abstract class Element implements Disposable {
 
   constructor (ctx :ElementContext, parent :Element|undefined, config :ElementConfig) {
     this.parent = parent
-    this.visible = config.visible ? ctx.model.resolve(config.visible) : trueValue
+    // base visibility on model value.  if spec is omitted, always assume true.  if spec is given
+    // as a path with missing model elements, always return false
+    const visible = ctx.model.resolveOpt(config.visible)
+    if (visible) this.visible = visible
+    else if (config.visible) this.visible = falseValue
+    else this.visible = trueValue
     if (config.scopeId) this._configScope = {id: config.scopeId, states: RootStates}
     this.invalidateOnChange(this.visible)
   }

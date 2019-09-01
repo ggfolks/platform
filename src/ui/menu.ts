@@ -71,7 +71,7 @@ abstract class AbstractMenu extends AbstractButton {
               menu._toggle()
             }
           }
-          if (config.element && !this._list) this._toggle()
+          if (config.keys && !this._list) this._toggle()
           return
         }
       }
@@ -146,7 +146,7 @@ abstract class AbstractMenu extends AbstractButton {
 
   private _toggle () {
     if (this._list) {
-      this.dirty()
+      this.dirty(this.expandBounds(this.bounds))
       this._list.dispose()
       this._list = undefined
       return
@@ -225,7 +225,7 @@ const MenuItemStyleScope = {id: "menuitem", states: ButtonStates}
 export class MenuItem extends AbstractMenu {
 
   constructor (ctx :ElementContext, parent :Element, readonly config :MenuItemConfig) {
-    super(ctx, parent, config, config.action ? ctx.model.resolve(config.action) : undefined)
+    super(ctx, parent, config, ctx.model.resolveOpt(config.action))
   }
 
   get styleScope () { return MenuItemStyleScope }

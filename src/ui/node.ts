@@ -65,11 +65,12 @@ class UINode extends Node {
         categoryKeys: ctx.types.categories.keysSource().map(Array.from),
         categoryData: mapProvider(ctx.types.categories, (value, key) => ({
           name: Value.constant(key),
-          typeKeys: value,
-          typeData: {
+          submenu: Value.constant(true),
+          keys: value,
+          data: {
             resolve: (key :ModelKey) => new Model({
               name: Value.constant(key),
-              create: () => nodeCreator.current(key as string),
+              action: () => nodeCreator.current(key as string),
             }),
           },
         })),

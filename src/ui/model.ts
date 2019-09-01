@@ -16,11 +16,17 @@ type ModelElem = ModelValue | ModelData
 export interface ModelData { [key :string] :ModelElem }
 
 function find<V extends ModelValue> (data :ModelData, path :string[], pos :number) :V {
+  const value = findOpt(data, path, pos)
+  if (!value) throw new Error(`Missing model element at pos ${pos} in ${path}`)
+  else return value as V
+}
+
+function findOpt<V extends ModelValue> (data :ModelData, path :string[], pos :number) :V|undefined {
   const next = data[path[pos]]
-  if (!next) throw new Error(`Missing model element at pos ${pos} in ${path}`)
+  if (!next) return
   // TODO: would be nice if we could check the types here and freak out if we hit something
   // weird along the way
-  else if (pos < path.length-1) return find(next as ModelData, path, pos+1)
+  else if (pos < path.length-1) return findOpt(next as ModelData, path, pos+1)
   else return next as V
 }
 
@@ -36,9 +42,17 @@ export class Model {
   constructor (readonly data :ModelData) {}
 
   /** Resolves the model component identified by `spec`. The may be an immediate value of the
-    * desired type or be a path which will be resolved from this model's data. */
+    * desired type or be a path which will be resolved from this model's data.
+    * @throws Will throw an error if model elements are missing. */
   resolve <V extends ModelValue> (spec :Spec<V>) :V {
     return (typeof spec !== "string") ? spec : find(this.data, spec.split("."), 0)
+  }
+
+  /** Resolves the model component identified by `spec`. The may be an immediate value of the
+    * desired type or be a path which will be resolved from this model's data. Returns undefined
+    * if 'spec' is undefined or any of its path's model elements are missing. */
+  resolveOpt <V extends ModelValue> (spec :Spec<V>|undefined) :V|undefined {
+    return (typeof spec !== "string") ? spec : findOpt(this.data, spec.split("."), 0)
   }
 }
 

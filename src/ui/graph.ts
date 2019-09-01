@@ -59,7 +59,7 @@ export class GraphViewer extends VGroup {
                       contents: [
                         {type: "label", text: "name"},
                         {type: "spacer", height: 0, constraints: {stretch: true}},
-                        {type: "label", text: Value.constant("▸")},
+                        {type: "label", text: Value.constant("▸"), visible: "submenu"},
                       ],
                     },
                     style: {halign: "stretch"},
@@ -71,22 +71,65 @@ export class GraphViewer extends VGroup {
                       contents: {type: "label", text: "name"},
                       style: {halign: "left"},
                     },
-                    action: "create",
+                    action: "action",
                   },
-                  keys: "typeKeys",
-                  data: "typeData",
+                  keys: "keys",
+                  data: "data",
+                  action: "action",
                 },
-                keys: "categoryKeys",
-                data: "categoryData",
+                keys: "keys",
+                data: "data",
               },
               data: dataProvider({
+                graph: {
+                  title: Value.constant("Graph"),
+                  keys: Value.constant(["close"]),
+                  data: dataProvider({
+                    close: {
+                      name: Value.constant("Close"),
+                      action: () => {},
+                    },
+                  }),
+                },
+                edit: {
+                  title: Value.constant("Edit"),
+                  keys: Value.constant(["undo", "redo"]),
+                  data: dataProvider({
+                    undo: {
+                      name: Value.constant("Undo"),
+                      action: () => {},
+                    },
+                    redo: {
+                      name: Value.constant("Redo"),
+                      action: () => {},
+                    },
+                  }),
+                },
+                view: {
+                  title: Value.constant("View"),
+                  keys: Value.constant(["zoomIn", "zoomOut", "resetZoom"]),
+                  data: dataProvider({
+                    zoomIn: {
+                      name: Value.constant("Zoom In"),
+                      action: () => {},
+                    },
+                    zoomOut: {
+                      name: Value.constant("Zoom Out"),
+                      action: () => {},
+                    },
+                    resetZoom: {
+                      name: Value.constant("Reset Zoom"),
+                      action: () => {},
+                    },
+                  }),
+                },
                 node: {
                   title: Value.constant("Node"),
-                  categoryKeys,
-                  categoryData,
+                  keys: categoryKeys,
+                  data: categoryData,
                 },
               }),
-              keys: Value.constant(["node"]),
+              keys: Value.constant(["graph", "edit", "view", "node"]),
             },
             {
               type: "spacer",
