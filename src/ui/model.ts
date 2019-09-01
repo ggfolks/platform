@@ -15,9 +15,17 @@ type ModelElem = ModelValue | ModelData
 /** Defines a POJO that contains model values. */
 export interface ModelData { [key :string] :ModelElem }
 
-function find<V extends ModelValue> (data :ModelData, path :string[], pos :number) :V {
+function find<V extends ModelValue> (
+  data :ModelData,
+  path :string[],
+  pos :number,
+  defaultValue? :V,
+) :V {
   const value = findOpt(data, path, pos)
-  if (!value) throw new Error(`Missing model element at pos ${pos} in ${path}`)
+  if (!value) {
+    if (defaultValue) return defaultValue
+    else throw new Error(`Missing model element at pos ${pos} in ${path}`)
+  }
   else return value as V
 }
 
@@ -43,9 +51,12 @@ export class Model {
 
   /** Resolves the model component identified by `spec`. The may be an immediate value of the
     * desired type or be a path which will be resolved from this model's data.
-    * @throws Will throw an error if model elements are missing. */
-  resolve <V extends ModelValue> (spec :Spec<V>) :V {
-    return (typeof spec !== "string") ? spec : find(this.data, spec.split("."), 0)
+    * @throws Will throw an error if model elements are missing and no default value is given. */
+  resolve <V extends ModelValue> (spec :Spec<V>|undefined, defaultValue? :V) :V {
+    if (!spec && defaultValue) return defaultValue
+    return (typeof spec !== "string")
+      ? spec as V
+      : find(this.data, spec.split("."), 0, defaultValue)
   }
 
   /** Resolves the model component identified by `spec`. The may be an immediate value of the

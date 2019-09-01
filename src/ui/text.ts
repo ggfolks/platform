@@ -22,26 +22,27 @@ export interface LabelStyle {
 }
 
 /** Defines configuration for [[Label]]. */
-export interface LabelConfig extends ElementConfig {
-  type :"label"
-  text :Spec<Value<string>>
+export interface AbstractLabelConfig extends ElementConfig {
   style :PMap<LabelStyle>
 }
 
-/** Displays styled text. */
-export class Label extends Element {
+/** Base class for elements that display styled text. */
+export abstract class AbstractLabel extends Element {
   readonly xoffset = Mutable.local(0)
   readonly selection = Mutable.localData<[number,number]>([0,0])
   readonly span = this.observe(EmptySpan)
   readonly selFill = this.observe<Paint|undefined>(undefined)
-  readonly text :Value<string>
   private selOff = 0
   private selWid = 0
 
-  constructor (ctx :ElementContext, parent :Element, readonly config :LabelConfig) {
+  constructor (
+    ctx :ElementContext,
+    parent :Element,
+    readonly config :AbstractLabelConfig,
+    readonly text :Value<string>,
+  ) {
     super(ctx, parent, config)
     this.invalidateOnChange(this.selection)
-    this.text = ctx.model.resolve(config.text)
     this.state.onValue(state => {
       const style = this.getStyle(this.config.style, state)
       const fillS = ctx.style.resolvePaintOpt(style.fill)
@@ -91,6 +92,20 @@ export class Label extends Element {
     // render our label
     span.render(canvas, rx, y)
     if (needClip) canvas.restore()
+  }
+}
+
+/** Defines configuration for [[Label]]. */
+export interface LabelConfig extends AbstractLabelConfig {
+  type :"label"
+  text :Spec<Value<string>>
+}
+
+/** Displays styled text. */
+export class Label extends AbstractLabel {
+
+  constructor (ctx :ElementContext, parent :Element, readonly config :LabelConfig) {
+    super(ctx, parent, config, ctx.model.resolve(config.text))
   }
 }
 
@@ -168,10 +183,10 @@ const actions :PMap<TextAction> = {
   },
 }
 
-const ShiftMask = 1 << 0
-const AltMask   = 1 << 1
-const CtrlMask  = 1 << 2
-const MetaMask  = 1 << 3
+export const ShiftMask = 1 << 0
+export const AltMask   = 1 << 1
+export const CtrlMask  = 1 << 2
+export const MetaMask  = 1 << 3
 
 function modMask (event :KeyboardEvent) :number {
   let mask = 0
@@ -182,10 +197,10 @@ function modMask (event :KeyboardEvent) :number {
   return mask
 }
 
-type ModMap = {[key :number] :string}
-type KeyMap = PMap<ModMap>
+export type ModMap = {[key :number] :string}
+export type KeyMap = PMap<ModMap>
 
-const keyMap :KeyMap = {
+export const keyMap :KeyMap = {
   // "Standard" key bindings
   Backspace: {0: "backspace"},
   Delete: {0: "delete"},
@@ -206,6 +221,29 @@ const keyMap :KeyMap = {
   KeyE: {[CtrlMask]: "cursorEnd"},
   KeyD: {[CtrlMask]: "delete"},
   KeyH: {[CtrlMask]: "backspace"},
+
+  KeyW: {[CtrlMask]: "closeTab"},
+  KeyZ: {[CtrlMask]: "undo", [CtrlMask|ShiftMask]: "redo"},
+  KeyY: {[CtrlMask]: "redo"},
+}
+
+let commands :Map<string, KeyMap>|undefined
+
+/** Returns the key map for the named command (maps code names to modifier masks). */
+export function getCommandMap(name :string) :KeyMap {
+  if (!commands) {
+    commands = new Map()
+    for (const code in keyMap) {
+      const modMap = keyMap[code]
+      for (const mods in modMap) {
+        const command = modMap[mods]
+        let map = commands.get(command)
+        if (!map) commands.set(command, map = {})
+        map[code] = mods
+      }
+    }
+  }
+  return commands.get(name) || {}
 }
 
 export interface CursorStyle {

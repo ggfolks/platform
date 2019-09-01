@@ -1,11 +1,20 @@
 import {dim2, rect, vec2} from "../core/math"
-import {Source} from "../core/react"
+import {Source, Value} from "../core/react"
 import {Noop, PMap, getValue} from "../core/util"
 import {AbstractButton, ButtonStates} from "./button"
 import {ControlConfig, Element, ElementConfig, ElementContext, MouseInteraction} from "./element"
 import {HGroup} from "./group"
 import {AbstractList, AbstractListConfig, List, syncListContents} from "./list"
 import {Action, ModelKey, ModelProvider, Spec} from "./model"
+import {
+  AbstractLabel,
+  AbstractLabelConfig,
+  AltMask,
+  CtrlMask,
+  MetaMask,
+  ShiftMask,
+  getCommandMap,
+} from "./text"
 
 /** Defines configuration for [[MenuBar]] elements. */
 export interface MenuBarConfig extends AbstractListConfig {
@@ -229,4 +238,37 @@ export class MenuItem extends AbstractMenu {
   }
 
   get styleScope () { return MenuItemStyleScope }
+}
+
+export type KeyCombo = [string, string]
+
+/** Defines configuration for [[MenuItem]] elements. */
+export interface ShortcutConfig extends AbstractLabelConfig {
+  type :"shortcut"
+  command? :Spec<Value<string>>
+}
+
+export class Shortcut extends AbstractLabel {
+
+  constructor (ctx :ElementContext, parent :Element, readonly config :ShortcutConfig) {
+    super(
+      ctx,
+      parent,
+      config,
+      ctx.model.resolve(config.command, Value.constant("")).map((command :string) => {
+        const keyMap = getCommandMap(command)
+        for (const code in keyMap) {
+          const flags = Number(keyMap[code])
+          let str = ""
+          if (flags & CtrlMask) str += "Ctrl+"
+          if (flags & AltMask) str += "Alt+"
+          if (flags & ShiftMask) str += "Shift+"
+          if (flags & MetaMask) str += "Meta+"
+          // only show the first mapping
+          return str + (code.startsWith("Key") ? code.substring(3) : code)
+        }
+        return ""
+      }),
+    )
+  }
 }

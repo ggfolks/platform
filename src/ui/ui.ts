@@ -110,6 +110,7 @@ export class UI {
     case      "menubar": return new M.MenuBar(ctx, parent, rconfig as M.MenuBarConfig)
     case         "menu": return new M.Menu(ctx, parent, rconfig as M.MenuConfig)
     case     "menuitem": return new M.MenuItem(ctx, parent, rconfig as M.MenuItemConfig)
+    case     "shortcut": return new M.Shortcut(ctx, parent, rconfig as M.ShortcutConfig)
     case   "scrollview": return new S.ScrollView(ctx, parent, rconfig as S.ScrollViewConfig)
     case  "graphviewer": return new GR.GraphViewer(ctx, parent, rconfig as GR.GraphViewerConfig)
     case    "graphview": return new GR.GraphView(ctx, parent, rconfig as GR.GraphViewConfig)

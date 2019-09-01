@@ -105,10 +105,7 @@ export abstract class Element implements Disposable {
     this.parent = parent
     // base visibility on model value.  if spec is omitted, always assume true.  if spec is given
     // as a path with missing model elements, always return false
-    const visible = ctx.model.resolveOpt(config.visible)
-    if (visible) this.visible = visible
-    else if (config.visible) this.visible = falseValue
-    else this.visible = trueValue
+    this.visible = ctx.model.resolve(config.visible, config.visible ? falseValue : trueValue)
     if (config.scopeId) this._configScope = {id: config.scopeId, states: RootStates}
     this.invalidateOnChange(this.visible)
   }

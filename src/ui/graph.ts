@@ -7,7 +7,7 @@ import {InputEdge} from "../graph/node"
 import {Element, ElementConfig, ElementContext, MouseInteraction, Observer} from "./element"
 import {AbsConstraints, AbsGroup, AxisConfig, VGroup} from "./group"
 import {List} from "./list"
-import {Model, ModelData, ModelKey, ModelProvider, Spec, dataProvider} from "./model"
+import {Action, Model, ModelData, ModelKey, ModelProvider, Spec, dataProvider} from "./model"
 import {InputValue, NodeCreator} from "./node"
 
 /** A navigable graph viewer. */
@@ -30,6 +30,7 @@ export class GraphViewer extends VGroup {
     const categoryKeys = ctx.model.resolve<Source<string[]>>("categoryKeys")
     const categoryData = ctx.model.resolve<ModelProvider>("categoryData")
     this._nodeCreator = ctx.model.resolve<Mutable<NodeCreator>>("nodeCreator")
+    const remove = ctx.model.resolve<Action>("remove")
     this.contents.push(
       ctx.elem.create(ctx, this, {
         type: "box",
@@ -60,6 +61,7 @@ export class GraphViewer extends VGroup {
                         {type: "label", text: "name"},
                         {type: "spacer", height: 0, constraints: {stretch: true}},
                         {type: "label", text: Value.constant("▸"), visible: "submenu"},
+                        {type: "shortcut", command: "shortcut"},
                       ],
                     },
                     style: {halign: "stretch"},
@@ -87,20 +89,28 @@ export class GraphViewer extends VGroup {
                   data: dataProvider({
                     close: {
                       name: Value.constant("Close"),
-                      action: () => {},
+                      shortcut: Value.constant("closeTab"),
+                      action: remove,
                     },
                   }),
                 },
                 edit: {
                   title: Value.constant("Edit"),
-                  keys: Value.constant(["undo", "redo"]),
+                  keys: Value.constant(["undo", "redo", "delete"]),
                   data: dataProvider({
                     undo: {
                       name: Value.constant("Undo"),
+                      shortcut: Value.constant("undo"),
                       action: () => {},
                     },
                     redo: {
                       name: Value.constant("Redo"),
+                      shortcut: Value.constant("redo"),
+                      action: () => {},
+                    },
+                    delete: {
+                      name: Value.constant("Delete"),
+                      shortcut: Value.constant("delete"),
                       action: () => {},
                     },
                   }),
@@ -147,7 +157,7 @@ export class GraphViewer extends VGroup {
             },
             {
               type: "button",
-              onClick: "remove",
+              onClick: remove,
               contents: {
                 type: "box",
                 contents: {type: "label", text: "closeButton.text"},
