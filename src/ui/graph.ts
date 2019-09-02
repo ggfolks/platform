@@ -96,7 +96,7 @@ export class GraphViewer extends VGroup {
                 },
                 edit: {
                   title: Value.constant("Edit"),
-                  keys: Value.constant(["undo", "redo", "delete"]),
+                  keys: Value.constant(["undo", "redo", "cut", "copy", "paste", "delete"]),
                   data: dataProvider({
                     undo: {
                       name: Value.constant("Undo"),
@@ -106,6 +106,21 @@ export class GraphViewer extends VGroup {
                     redo: {
                       name: Value.constant("Redo"),
                       shortcut: Value.constant("redo"),
+                      action: () => {},
+                    },
+                    cut: {
+                      name: Value.constant("Cut"),
+                      shortcut: Value.constant("cut"),
+                      action: () => {},
+                    },
+                    copy: {
+                      name: Value.constant("Copy"),
+                      shortcut: Value.constant("copy"),
+                      action: () => {},
+                    },
+                    paste: {
+                      name: Value.constant("Paste"),
+                      shortcut: Value.constant("paste"),
                       action: () => {},
                     },
                     delete: {
@@ -121,14 +136,17 @@ export class GraphViewer extends VGroup {
                   data: dataProvider({
                     zoomIn: {
                       name: Value.constant("Zoom In"),
+                      shortcut: Value.constant("zoomIn"),
                       action: () => {},
                     },
                     zoomOut: {
                       name: Value.constant("Zoom Out"),
+                      shortcut: Value.constant("zoomOut"),
                       action: () => {},
                     },
                     resetZoom: {
                       name: Value.constant("Reset Zoom"),
+                      shortcut: Value.constant("zoomReset"),
                       action: () => {},
                     },
                   }),

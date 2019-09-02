@@ -225,25 +225,30 @@ export const keyMap :KeyMap = {
   KeyW: {[CtrlMask]: "closeTab"},
   KeyZ: {[CtrlMask]: "undo", [CtrlMask|ShiftMask]: "redo"},
   KeyY: {[CtrlMask]: "redo"},
+
+  Equal: {[CtrlMask]: "zoomIn"},
+  Minus: {[CtrlMask]: "zoomOut"},
+  Digit0: {[CtrlMask]: "zoomReset"},
 }
 
-let commands :Map<string, KeyMap>|undefined
+type ModCode = [number, string]
+let commandKeys :Map<string, ModCode[]>|undefined
 
-/** Returns the key map for the named command (maps code names to modifier masks). */
-export function getCommandMap(name :string) :KeyMap {
-  if (!commands) {
-    commands = new Map()
+/** Returns the list of mod/code pairs for the named command. */
+export function getCommandKeys(name :string) :ModCode[] {
+  if (!commandKeys) {
+    commandKeys = new Map()
     for (const code in keyMap) {
       const modMap = keyMap[code]
       for (const mods in modMap) {
         const command = modMap[mods]
-        let map = commands.get(command)
-        if (!map) commands.set(command, map = {})
-        map[code] = mods
+        let list = commandKeys.get(command)
+        if (!list) commandKeys.set(command, list = [])
+        list.push([Number(mods), code])
       }
     }
   }
-  return commands.get(name) || {}
+  return commandKeys.get(name) || []
 }
 
 export interface CursorStyle {
