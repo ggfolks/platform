@@ -8,8 +8,8 @@ import {Model} from "./model"
 import {Spec, StyleContext} from "./style"
 
 const tmpr = rect.create(), tmpv = vec2.create(), tmpd = dim2.create()
-const trueValue = Value.constant(true)
-const falseValue = Value.constant(false)
+export const trueValue = Value.constant(true)
+export const falseValue = Value.constant(false)
 const defHintSize = Value.constant(dim2.fromValues(64000, 32000))
 
 /** Used by elements to observe reactive values. Takes care of invalidating the element when the

@@ -2,7 +2,15 @@ import {dim2, rect, vec2} from "../core/math"
 import {Source, Value} from "../core/react"
 import {Noop, PMap, getValue} from "../core/util"
 import {AbstractButton, ButtonStates} from "./button"
-import {ControlConfig, Element, ElementConfig, ElementContext, MouseInteraction} from "./element"
+import {
+  ControlConfig,
+  Element,
+  ElementConfig,
+  ElementContext,
+  MouseInteraction,
+  trueValue,
+  falseValue,
+} from "./element"
 import {HGroup} from "./group"
 import {AbstractList, AbstractListConfig, List, syncListContents} from "./list"
 import {Action, ModelKey, ModelProvider, Spec} from "./model"
@@ -226,18 +234,42 @@ export class Menu extends AbstractMenu {
 export interface MenuItemConfig extends AbstractMenuConfig {
   type :"menuitem"
   action? :Spec<Action>
+  separator? :Spec<Value<boolean>>
 }
 
-const MenuItemStyleScope = {id: "menuitem", states: ButtonStates}
+const MenuItemStyleScope = {id: "menuitem", states: [...ButtonStates, "separator"]}
 
 /** A menu item within a menu. */
 export class MenuItem extends AbstractMenu {
+  private readonly _separator :Value<boolean>
 
   constructor (ctx :ElementContext, parent :Element, readonly config :MenuItemConfig) {
-    super(ctx, parent, config, ctx.model.resolveOpt(config.action))
+    super(
+      ctx,
+      parent,
+      {
+        ...config,
+        enabled: Value.join(
+          ctx.model.resolve(config.enabled, trueValue),
+          ctx.model.resolve(config.separator, falseValue),
+        ).map(([enabled, separator]) => enabled && !separator),
+      },
+      ctx.model.resolveOpt(config.action),
+    )
+    this._separator = ctx.model.resolve(config.separator, falseValue)
+    this.disposer.add(this._separator.onValue(() => this._state.update(this.computeState)))
   }
 
   get styleScope () { return MenuItemStyleScope }
+
+  protected get computeState () {
+    return this._separator && this._separator.current ? "separator" : super.computeState
+  }
+
+  protected computePreferredSize (hintX :number, hintY :number, into :dim2) {
+    if (this._separator.current) dim2.set(into, hintX, 1)
+    else super.computePreferredSize(hintX, hintY, into)
+  }
 }
 
 export type KeyCombo = [string, string]

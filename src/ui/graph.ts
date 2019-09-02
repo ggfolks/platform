@@ -78,6 +78,7 @@ export class GraphViewer extends VGroup {
                   keys: "keys",
                   data: "data",
                   action: "action",
+                  separator: "separator",
                 },
                 keys: "keys",
                 data: "data",
@@ -96,7 +97,7 @@ export class GraphViewer extends VGroup {
                 },
                 edit: {
                   title: Value.constant("Edit"),
-                  keys: Value.constant(["undo", "redo", "cut", "copy", "paste", "delete"]),
+                  keys: Value.constant(["undo", "redo", "sep", "cut", "copy", "paste", "delete"]),
                   data: dataProvider({
                     undo: {
                       name: Value.constant("Undo"),
@@ -108,6 +109,7 @@ export class GraphViewer extends VGroup {
                       shortcut: Value.constant("redo"),
                       action: () => {},
                     },
+                    sep: {separator: Value.constant(true)},
                     cut: {
                       name: Value.constant("Cut"),
                       shortcut: Value.constant("cut"),

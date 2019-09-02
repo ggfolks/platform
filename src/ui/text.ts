@@ -105,7 +105,7 @@ export interface LabelConfig extends AbstractLabelConfig {
 export class Label extends AbstractLabel {
 
   constructor (ctx :ElementContext, parent :Element, readonly config :LabelConfig) {
-    super(ctx, parent, config, ctx.model.resolve(config.text))
+    super(ctx, parent, config, ctx.model.resolve(config.text, Value.constant("")))
   }
 }
 
