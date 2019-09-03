@@ -9,6 +9,7 @@ import {Subgraph} from "./util"
 /** Configuration shared by all [[Node]]s. */
 export interface NodeConfig {
   type :string
+  position? :[number, number]
   // this allows NodeConfig to contain "extra" stuff that TypeScript will ignore
   [extra :string] :any
 }
@@ -17,10 +18,10 @@ export interface NodeConfig {
 export type NodeInput<T> = string | [string, string] | T | Value<T>
 
 /** Describes the connection state of a single node input. */
-export type InputEdge<T> = undefined | NodeInput<T>
+export type InputEdge<T> = undefined | null | NodeInput<T>
 
 /** Describes the connection states of an array of node inputs. */
-export type InputEdges<T> = undefined | InputEdge<T>[]
+export type InputEdges<T> = undefined | null | InputEdge<T>[]
 
 /** Used to describe output edges, whose connection states are omitted from configs. */
 export type OutputEdge<T> = undefined
@@ -158,8 +159,9 @@ export abstract class Node implements Disposable {
 }
 
 function inputToJSON (input :InputEdge<any>) {
-  const type = typeof input
-  return (type === "undefined" || type === "string" || Array.isArray(input))
+  return input === undefined || input === null
+    ? null
+    : typeof input === "string" || Array.isArray(input)
     ? input
     : getConstantOrValueNodeId(input)
 }

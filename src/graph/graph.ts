@@ -72,7 +72,7 @@ export class Graph implements Disposable {
 
   /** Retrieves a reactive value representing the identified input edge. */
   getValue<T> (input :InputEdge<T>, defaultValue :T) :Value<T> {
-    if (input === undefined) {
+    if (input === undefined || input === null) {
       return Value.constant(defaultValue)
     }
     if (Array.isArray(input)) {

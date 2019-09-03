@@ -237,18 +237,16 @@ export class GraphViewer extends VGroup {
   }
 
   push (model :Model) {
-    this._stack.push([model, this.contents[1] = this.ctx.elem.create({...this.ctx, model}, this, {
-      type: "scrollview",
-      contents: {type: "graphview", editable: this._editable},
-      constraints: {stretch: true},
-    })])
+    this._stack.push([model, this.contents[1] = this._createElement(model)])
     this._updateNodeCreator(model)
     this._poppable.update(true)
     this.invalidate()
   }
 
   pop () {
-    this._stack.pop()
+    const stackEntry = this._stack.pop()
+    if (!stackEntry) throw new Error("Stack is empty")
+    stackEntry[1].dispose()
     const [model, element] = this._stack[this._stack.length - 1]
     this.contents[1] = element
     this._updateNodeCreator(model)
@@ -256,7 +254,13 @@ export class GraphViewer extends VGroup {
     this.invalidate()
   }
 
-  _updateNodeCreator (model :Model) {
+  dispose () {
+    super.dispose()
+    // super.dispose() will dispose of the element on top of the stack
+    for (let ii = this._stack.length - 2; ii >= 0; ii--) this._stack[ii][1].dispose()
+  }
+
+  private _updateNodeCreator (model :Model) {
     this._nodeCreator.update(model.resolve<Value<NodeCreator>>("createNode").current)
   }
 
@@ -273,12 +277,25 @@ export class GraphViewer extends VGroup {
       const reader = new FileReader()
       reader.onload = () => {
         const json = JSON.parse(reader.result as string)
-        const model = this._stack[this._stack.length - 1][0]
+        const stackEntry = this._stack[this._stack.length - 1]
+        const [model, element] = stackEntry
         model.resolve<Value<(json :GraphConfig) => void>>("fromJSON").current(json)
+        // destroy and recreate the entire element
+        element.dispose()
+        stackEntry[1] = this.contents[1] = this._createElement(model)
+        this.invalidate()
       }
       reader.readAsText(input.files[0])
     })
     input.click()
+  }
+
+  private _createElement (model :Model) :Element {
+    return this.ctx.elem.create({...this.ctx, model}, this, {
+      type: "scrollview",
+      contents: {type: "graphview", editable: this._editable},
+      constraints: {stretch: true},
+    })
   }
 
   private _export () {
@@ -322,12 +339,15 @@ export class GraphView extends AbsGroup {
         let elem = this.elements.get(key)
         if (!elem) {
           const model = data.resolve(key)
+          const position = model.resolve<Value<[number, number]>>("position").current
+          // if we encounter any valid positions, don't layout automatically
+          if (position[0] > 0 || position[1] > 0) models = null
           if (models) models.push(model)
           const subctx = {...ctx, model}
           elem = {
             node: ctx.elem.create(subctx, this, {
               type: "box",
-              constraints: {position: [0, 0]},
+              constraints: {position},
               scopeId: "node",
               contents: {type: "nodeview", offPolicy: "stretch", editable},
             }),
@@ -855,7 +875,7 @@ export class EdgeView extends Element {
     const offset = this._controlPointOffset.current
     for (let ii = 0; ii < inputKeys.length; ii++) {
       const input = inputs[ii]
-      if (input === undefined) continue
+      if (input === undefined || input === null) continue
       const inputKey = inputKeys[ii]
       const source = inputList.contents[ii]
       const from = vec2.fromValues(source.x - view.x, source.y + source.height / 2 - view.y)
@@ -870,7 +890,7 @@ export class EdgeView extends Element {
           [targetId, outputKey] = input
         } else if (typeof input === "string") {
           targetId = input
-        } else if (input !== undefined) {
+        } else if (input !== undefined && input !== null) {
           targetId = getConstantOrValueNodeId(input)
         } else {
           return

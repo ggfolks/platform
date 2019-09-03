@@ -8,7 +8,7 @@ import {inputEdge} from "../graph/meta"
 import {Subgraph} from "../graph/util"
 import {InputEdge, InputEdges, Node, NodeConfig, NodeContext, NodeTypeRegistry} from "../graph/node"
 import {HAnchor, Host, Root, RootConfig, VAnchor} from "./element"
-import {Model, ModelData, ModelKey, mapProvider} from "./model"
+import {Model, ModelData, ModelKey, ModelProvider, mapProvider} from "./model"
 import {Theme, UI} from "./ui"
 import {ImageResolver, StyleDefs} from "./style"
 
@@ -104,102 +104,113 @@ class UINode extends Node {
 }
 
 function createGraphModelData (graph :Graph) :ModelData {
+  let nodeData :ModelProvider|undefined
   return {
     createNode: Value.constant((type :string) => graph.createNode(type)),
     toJSON: Value.constant(() => graph.toJSON()),
-    fromJSON: Value.constant((json :GraphConfig) => graph.fromJSON(json)),
-    nodeKeys: graph.nodes.keysSource(),
-    nodeData: mapProvider(graph.nodes, value => {
-      const type = value.current.config.type
-      const subgraphElement :ModelData = {}
-      if (type === "subgraph") {
-        const subgraph = value.current as Subgraph
-        subgraphElement.subgraph = createGraphModelData(subgraph.containedGraph)
-      }
-      const propertyModels :Map<ModelKey, Model> = new Map()
-      const inputModels :Map<ModelKey, Model> = new Map()
-      const outputModels :Map<ModelKey, Model> = new Map()
-
-      function createPropertyValue (key :ModelKey, defaultValue :any = undefined) {
-        let onChange :ChangeFn<InputValue> = Noop
-        return Mutable.deriveMutable(
-          dispatch => {
-            onChange = dispatch
-            return Noop
-          },
-          () => getValue(value.current.config[key], defaultValue),
-          input => {
-            const previous = getValue(value.current.config[key], defaultValue)
-            value.current.config[key] = input
-            value.current.reconnect()
-            onChange(input, previous)
-          },
-          refEquals,
-        )
-      }
-      return {
-        id: Value.constant(value.current.id),
-        type: Value.constant(type),
-        ...subgraphElement,
-        propertyKeys: Value.constant(Object.keys(value.current.propertiesMeta)),
-        inputKeys: Value.constant(Object.keys(value.current.inputsMeta)),
-        outputKeys: Value.constant(Object.keys(value.current.outputsMeta)),
-        defaultOutputKey: Value.constant(value.current.defaultOutputKey),
-        propertyData: {
-          resolve: (key :ModelKey) => {
-            let model = propertyModels.get(key)
-            if (!model) {
-              const propertiesMeta = value.current.propertiesMeta[key]
-              propertyModels.set(key, model = new Model({
-                name: Value.constant(key),
-                type: Value.constant(propertiesMeta.type),
-                constraints: Value.constant(propertiesMeta.constraints),
-                value: createPropertyValue(key, propertiesMeta.defaultValue),
-              }))
-            }
-            return model
-          },
-        },
-        inputData: {
-          resolve: (key :ModelKey) => {
-            let model = inputModels.get(key)
-            if (!model) {
-              const multiple = value.current.inputsMeta[key].multiple
-              const input = createPropertyValue(key)
-              let style :Value<string>
-              if (multiple) {
-                style = input.switchMap(input => value.current.graph.getValues(input, 0)).map(
-                  values => getValueStyle(values[values.length - 1]),
-                )
-              } else {
-                style = input.switchMap(input => value.current.graph.getValue(input, 0)).map(
-                  getValueStyle,
-                )
-              }
-              inputModels.set(key, model = new Model({
-                name: Value.constant(key),
-                multiple: Value.constant(multiple),
-                value: input,
-                style,
-              }))
-            }
-            return model
-          },
-        },
-        outputData: {
-          resolve: (key :ModelKey) => {
-            let model = outputModels.get(key)
-            if (!model) {
-              outputModels.set(key, model = new Model({
-                name: Value.constant(key),
-                style: value.current.getOutput(key as string, undefined).map(getValueStyle),
-              }))
-            }
-            return model
-          },
-        },
-      }
+    fromJSON: Value.constant((json :GraphConfig) => {
+      graph.fromJSON(json)
+      nodeData = undefined // force update to node data
     }),
+    nodeKeys: graph.nodes.keysSource(),
+    nodeData: {
+      resolve: (key :ModelKey) => {
+        if (!nodeData) nodeData = mapProvider(graph.nodes, value => {
+          const type = value.current.config.type
+          const subgraphElement :ModelData = {}
+          if (type === "subgraph") {
+            const subgraph = value.current as Subgraph
+            subgraphElement.subgraph = createGraphModelData(subgraph.containedGraph)
+          }
+          const propertyModels :Map<ModelKey, Model> = new Map()
+          const inputModels :Map<ModelKey, Model> = new Map()
+          const outputModels :Map<ModelKey, Model> = new Map()
+
+          function createPropertyValue (key :ModelKey, defaultValue :any = undefined) {
+            let onChange :ChangeFn<InputValue> = Noop
+            return Mutable.deriveMutable(
+              dispatch => {
+                onChange = dispatch
+                return Noop
+              },
+              () => getValue(value.current.config[key], defaultValue),
+              input => {
+                const previous = getValue(value.current.config[key], defaultValue)
+                value.current.config[key] = input
+                value.current.reconnect()
+                onChange(input, previous)
+              },
+              refEquals,
+            )
+          }
+          if (!value.current.config.position) value.current.config.position = [0, 0]
+          return {
+            id: Value.constant(value.current.id),
+            type: Value.constant(type),
+            position: Value.constant(value.current.config.position),
+            ...subgraphElement,
+            propertyKeys: Value.constant(Object.keys(value.current.propertiesMeta)),
+            inputKeys: Value.constant(Object.keys(value.current.inputsMeta)),
+            outputKeys: Value.constant(Object.keys(value.current.outputsMeta)),
+            defaultOutputKey: Value.constant(value.current.defaultOutputKey),
+            propertyData: {
+              resolve: (key :ModelKey) => {
+                let model = propertyModels.get(key)
+                if (!model) {
+                  const propertiesMeta = value.current.propertiesMeta[key]
+                  propertyModels.set(key, model = new Model({
+                    name: Value.constant(key),
+                    type: Value.constant(propertiesMeta.type),
+                    constraints: Value.constant(propertiesMeta.constraints),
+                    value: createPropertyValue(key, propertiesMeta.defaultValue),
+                  }))
+                }
+                return model
+              },
+            },
+            inputData: {
+              resolve: (key :ModelKey) => {
+                let model = inputModels.get(key)
+                if (!model) {
+                  const multiple = value.current.inputsMeta[key].multiple
+                  const input = createPropertyValue(key)
+                  let style :Value<string>
+                  if (multiple) {
+                    style = input.switchMap(input => value.current.graph.getValues(input, 0)).map(
+                      values => getValueStyle(values[values.length - 1]),
+                    )
+                  } else {
+                    style = input.switchMap(input => value.current.graph.getValue(input, 0)).map(
+                      getValueStyle,
+                    )
+                  }
+                  inputModels.set(key, model = new Model({
+                    name: Value.constant(key),
+                    multiple: Value.constant(multiple),
+                    value: input,
+                    style,
+                  }))
+                }
+                return model
+              },
+            },
+            outputData: {
+              resolve: (key :ModelKey) => {
+                let model = outputModels.get(key)
+                if (!model) {
+                  outputModels.set(key, model = new Model({
+                    name: Value.constant(key),
+                    style: value.current.getOutput(key as string, undefined).map(getValueStyle),
+                  }))
+                }
+                return model
+              },
+            },
+          }
+        })
+        return nodeData.resolve(key)
+      },
+    },
   }
 }
 
