@@ -577,7 +577,7 @@ export class Control extends Element {
     const updateState = () => this._state.update(this.computeState)
     if (!config.enabled) this.enabled = trueValue
     else {
-      this.enabled = ctx.model.resolve(config.enabled)
+      this.enabled = ctx.model.resolve(config.enabled, trueValue)
       this.disposer.add(this.enabled.onValue(updateState))
     }
     this.disposer.add(this._hovered.onValue(updateState))

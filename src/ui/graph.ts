@@ -45,13 +45,13 @@ export class GraphViewer extends VGroup {
               offPolicy: "stretch",
               element: {
                 type: "menu",
-                visible: this._editable,
                 contents: {
                   type: "box",
                   contents: {type: "label", text: "title"},
                 },
                 element: {
                   type: "menuitem",
+                  enabled: "enabled",
                   contents: {
                     type: "box",
                     contents: {
@@ -90,6 +90,7 @@ export class GraphViewer extends VGroup {
                   data: dataProvider({
                     import: {
                       name: Value.constant("Import..."),
+                      enabled: this._editable,
                       action: () => {},
                     },
                     export: {
@@ -110,32 +111,38 @@ export class GraphViewer extends VGroup {
                   data: dataProvider({
                     undo: {
                       name: Value.constant("Undo"),
+                      enabled: Value.constant(false),
                       shortcut: Value.constant("undo"),
                       action: () => {},
                     },
                     redo: {
                       name: Value.constant("Redo"),
+                      enabled: Value.constant(false),
                       shortcut: Value.constant("redo"),
                       action: () => {},
                     },
                     sep: {separator: Value.constant(true)},
                     cut: {
                       name: Value.constant("Cut"),
+                      enabled: Value.constant(false),
                       shortcut: Value.constant("cut"),
                       action: () => {},
                     },
                     copy: {
                       name: Value.constant("Copy"),
+                      enabled: Value.constant(false),
                       shortcut: Value.constant("copy"),
                       action: () => {},
                     },
                     paste: {
                       name: Value.constant("Paste"),
+                      enabled: Value.constant(false),
                       shortcut: Value.constant("paste"),
                       action: () => {},
                     },
                     delete: {
                       name: Value.constant("Delete"),
+                      enabled: Value.constant(false),
                       shortcut: Value.constant("delete"),
                       action: () => {},
                     },
