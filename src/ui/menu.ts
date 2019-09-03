@@ -320,7 +320,7 @@ export interface ShortcutConfig extends AbstractLabelConfig {
   command? :Spec<Value<string>>
 }
 
-const codeReplacements = {Equal: "=", Minus: "-"}
+const codeReplacements = {Escape: "Esc", Equal: "=", Minus: "-"}
 
 export class Shortcut extends AbstractLabel {
 

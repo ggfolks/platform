@@ -222,7 +222,8 @@ export const keyMap :KeyMap = {
   KeyD: {[CtrlMask]: "delete"},
   KeyH: {[CtrlMask]: "backspace"},
 
-  KeyW: {[AltMask]: "closeTab"},
+  Escape: {0: "closeTab"},
+  
   KeyZ: {[CtrlMask]: "undo", [CtrlMask|ShiftMask]: "redo"},
   KeyY: {[CtrlMask]: "redo"},
 
