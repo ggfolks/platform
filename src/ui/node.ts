@@ -3,7 +3,7 @@ import {dim2, vec2} from "../core/math"
 import {Scale, getValueStyle} from "../core/ui"
 import {ChangeFn, Mutable, Value} from "../core/react"
 import {Disposer, Noop, getValue} from "../core/util"
-import {Graph} from "../graph/graph"
+import {Graph, GraphConfig} from "../graph/graph"
 import {inputEdge} from "../graph/meta"
 import {Subgraph} from "../graph/util"
 import {InputEdge, InputEdges, Node, NodeConfig, NodeContext, NodeTypeRegistry} from "../graph/node"
@@ -91,11 +91,23 @@ class UINode extends Node {
       ctx.host.addRoot(root)
     }))
   }
+
+  toJSON () :NodeConfig {
+    const json = super.toJSON()
+    // delete what we can't convert
+    delete json.model
+    delete json.root
+    delete json.origin
+    delete json.size
+    return json
+  }
 }
 
 function createGraphModelData (graph :Graph) :ModelData {
   return {
     createNode: Value.constant((type :string) => graph.createNode(type)),
+    toJSON: Value.constant(() => graph.toJSON()),
+    fromJSON: Value.constant((json :GraphConfig) => graph.fromJSON(json)),
     nodeKeys: graph.nodes.keysSource(),
     nodeData: mapProvider(graph.nodes, value => {
       const type = value.current.config.type

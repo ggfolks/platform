@@ -109,6 +109,45 @@ export class Graph implements Disposable {
     this._clock.emit(clock)
   }
 
+  /** Returns a JSON representation of the graph. */
+  toJSON () :GraphConfig {
+    const json = {}
+    for (const [key, node] of this._nodes) {
+      json[key] = node.toJSON()
+    }
+    return json
+  }
+
+  /** Loads a JSON representation of the graph. */
+  fromJSON (json :GraphConfig) {
+    // remove any nodes not present in the configuration
+    for (const [key, node] of this._nodes) {
+      if (!json[key]) {
+        delete this.config[key]
+        this._nodes.delete(key)
+        node.dispose()
+      }
+    }
+    // add any new nodes, update existing
+    for (const key in json) {
+      const config = json[key]
+      let node = this._nodes.get(key)
+      if (node) {
+        if (node.config.type === config.type) {
+          node.fromJSON(config)
+          continue
+        }
+        // if the type changed, we must dispose and recreate
+        node.dispose()
+      }
+      node = this.ctx.types.createNode(this, key, this.config[key] = {type: config.type})
+      this._nodes.set(key, node)
+      node.fromJSON(config)
+    }
+    this.dispose()
+    for (const node of this._nodes.values()) node.reconnect()
+  }
+
   dispose () {
     for (const node of this._nodes.values()) {
       node.dispose()

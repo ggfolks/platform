@@ -2,7 +2,7 @@ import {dataEquals} from "../core/data"
 import {clamp, dim2, rect, vec2} from "../core/math"
 import {Mutable, Source, Value} from "../core/react"
 import {PMap, Remover} from "../core/util"
-import {getConstantOrValueNodeId} from "../graph/graph"
+import {GraphConfig, getConstantOrValueNodeId} from "../graph/graph"
 import {InputEdge} from "../graph/node"
 import {Element, ElementConfig, ElementContext, MouseInteraction, Observer} from "./element"
 import {AbsConstraints, AbsGroup, AxisConfig, VGroup} from "./group"
@@ -95,11 +95,11 @@ export class GraphViewer extends VGroup {
                     import: {
                       name: Value.constant("Import..."),
                       enabled: this._editable,
-                      action: () => {},
+                      action: () => this._import(),
                     },
                     export: {
                       name: Value.constant("Export..."),
-                      action: () => {},
+                      action: () => this._export(),
                     },
                     sep: {separator: Value.constant(true)},
                     close: {
@@ -262,6 +262,31 @@ export class GraphViewer extends VGroup {
 
   private _createScrollViewAction (op :(scrollView :ScrollView) => void) :Action {
     return () => op(this._stack[this._stack.length - 1][1] as ScrollView)
+  }
+
+  private _import () {
+    const input = document.createElement("input")
+    input.setAttribute("type", "file")
+    input.setAttribute("accept", "application/json")
+    input.addEventListener("change", async event => {
+      if (!input.files || input.files.length === 0) return
+      const reader = new FileReader()
+      reader.onload = () => {
+        const json = JSON.parse(reader.result as string)
+        const model = this._stack[this._stack.length - 1][0]
+        model.resolve<Value<(json :GraphConfig) => void>>("fromJSON").current(json)
+      }
+      reader.readAsText(input.files[0])
+    })
+    input.click()
+  }
+
+  private _export () {
+    const model = this._stack[this._stack.length - 1][0]
+    const json = model.resolve<Value<() => GraphConfig>>("toJSON").current()
+    const file = new File([JSON.stringify(json)], "graph.json", {type: "application/octet-stream"})
+    open(URL.createObjectURL(file), "_self")
+    // TODO: call revokeObjectURL when finished with download
   }
 }
 

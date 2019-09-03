@@ -152,6 +152,18 @@ export class Subgraph extends Node {
     this.containedGraph.connect()
   }
 
+  toJSON () :NodeConfig {
+    const json = super.toJSON()
+    json.graph = this.containedGraph.toJSON()
+    return json
+  }
+
+  fromJSON (json :NodeConfig) {
+    super.fromJSON(json)
+    this.containedGraph.fromJSON(json.graph)
+    return json
+  }
+
   protected _createOutput (name :string, defaultValue :any) {
     let edge :InputEdge<any>
     if (name === undefined) {

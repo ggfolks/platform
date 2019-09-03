@@ -2,7 +2,7 @@ import {refEquals} from "../core/data"
 import {ChangeFn, Value, addListener, dispatchChange} from "../core/react"
 import {MutableMap, RMap} from "../core/rcollect"
 import {Disposable, Disposer, NoopRemover, PMap} from "../core/util"
-import {Graph} from "./graph"
+import {Graph, getConstantOrValueNodeId} from "./graph"
 import {InputEdgeMeta, OutputEdgeMeta, PropertyMeta, getNodeMeta} from "./meta"
 import {Subgraph} from "./util"
 
@@ -120,6 +120,28 @@ export abstract class Node implements Disposable {
   /** Connects and initializes the node. */
   connect () {}
 
+  /** Returns a JSON representation of this node. */
+  toJSON () :NodeConfig {
+    const json = Object.assign({}, this.config)
+    const inputsMeta = this.inputsMeta
+    for (const inputKey in inputsMeta) {
+      const value = json[inputKey]
+      if (inputsMeta[inputKey].multiple) {
+        if (Array.isArray(value)) {
+          json[inputKey] = value.map(inputToJSON)
+        }
+      } else {
+        json[inputKey] = inputToJSON(value)
+      }
+    }
+    return json
+  }
+
+  /** Applies a JSON representation of this node. */
+  fromJSON (json :NodeConfig) {
+    Object.assign(this.config, json)
+  }
+
   dispose () {
     this._disposer.dispose()
   }
@@ -133,6 +155,13 @@ export abstract class Node implements Disposable {
   protected _createOutput (name :string, defaultValue :any) :Value<any> {
     throw new Error("Unknown output " + name)
   }
+}
+
+function inputToJSON (input :InputEdge<any>) {
+  const type = typeof input
+  return (type === "undefined" || type === "string" || Array.isArray(input))
+    ? input
+    : getConstantOrValueNodeId(input)
 }
 
 /** Wraps a value so that we can swap it out after creating it. */
