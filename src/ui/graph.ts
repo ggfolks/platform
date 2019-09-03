@@ -9,6 +9,7 @@ import {AbsConstraints, AbsGroup, AxisConfig, VGroup} from "./group"
 import {List} from "./list"
 import {Action, Model, ModelData, ModelKey, ModelProvider, Spec, dataProvider} from "./model"
 import {InputValue, NodeCreator} from "./node"
+import {ScrollView} from "./scroll"
 
 /** A navigable graph viewer. */
 export interface GraphViewerConfig extends ElementConfig {
@@ -161,21 +162,33 @@ export class GraphViewer extends VGroup {
                     zoomIn: {
                       name: Value.constant("Zoom In"),
                       shortcut: Value.constant("zoomIn"),
-                      action: () => {},
                     },
                     zoomOut: {
                       name: Value.constant("Zoom Out"),
                       shortcut: Value.constant("zoomOut"),
-                      action: () => {},
                     },
                     zoomReset: {
                       name: Value.constant("Reset Zoom"),
                       shortcut: Value.constant("zoomReset"),
-                      action: () => {},
                     },
                     zoomToFit: {
                       name: Value.constant("Zoom to Fit"),
-                      action: () => {},
+                      shortcut: Value.constant("zoomToFit"),
+                    },
+                  }),
+                  shortcutKeys: Value.constant(["zoomIn", "zoomOut", "zoomReset", "zoomToFit"]),
+                  shortcutData: dataProvider({
+                    zoomIn: {
+                      action: this._createScrollViewAction(scrollView => scrollView.zoom(1)),
+                    },
+                    zoomOut: {
+                      action: this._createScrollViewAction(scrollView => scrollView.zoom(-1)),
+                    },
+                    zoomReset: {
+                      action: this._createScrollViewAction(scrollView => scrollView.resetZoom()),
+                    },
+                    zoomToFit: {
+                      action: this._createScrollViewAction(scrollView => scrollView.zoomToFit()),
                     },
                   }),
                 },
@@ -245,6 +258,10 @@ export class GraphViewer extends VGroup {
 
   _updateNodeCreator (model :Model) {
     this._nodeCreator.update(model.resolve<Value<NodeCreator>>("createNode").current)
+  }
+
+  private _createScrollViewAction (op :(scrollView :ScrollView) => void) :Action {
+    return () => op(this._stack[this._stack.length - 1][1] as ScrollView)
   }
 }
 

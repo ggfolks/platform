@@ -11,8 +11,8 @@ const transformedPos = vec2.create()
 const transformedRegion = rect.create()
 
 export class ScrollView extends Control {
-  private _offset = Mutable.local(vec2.create())
-  private _scale = Mutable.local(1)
+  private readonly _offset = Mutable.local(vec2.create())
+  private readonly _scale = Mutable.local(1)
   private _laidOut = false
 
   constructor (ctx :ElementContext, parent :Element, readonly config :ScrollViewConfig) {
@@ -57,17 +57,36 @@ export class ScrollView extends Control {
 
   handleWheel (event :WheelEvent, pos :vec2) {
     // TODO: different delta scales for different devices
-    const delta = event.deltaY > 0 ? -1 : 1
+    this.zoom(event.deltaY > 0 ? -1 : 1)
+    return true
+  }
+
+  /** Zooms in or out by the specified delta. */
+  zoom (delta :number) {
+    this._updateScale(this._scale.current * (1.1 ** delta))
+  }
+
+  /** Resets the zoom to 1. */
+  resetZoom () {
+    this._updateScale(1)
+  }
+
+  /** Zooms out to fit the entire element. */
+  zoomToFit () {
+    const size = this.contents.preferredSize(this.width, this.height)
+    this._updateScale(Math.min(1, this.width / size[0], this.height / size[1]))
+  }
+
+  private _updateScale (scale :number) {
     const beforeX = (this._offset.current[0] + this.width / 2) / this._scale.current
     const beforeY = (this._offset.current[1] + this.height / 2) / this._scale.current
-    this._scale.update(this._scale.current * (1.1 ** delta))
+    this._scale.update(scale)
     const afterX = this._offset.current[0] + this.width / 2
     const afterY = this._offset.current[1] + this.height / 2
     this._updateOffset(
       this._offset.current[0] + (beforeX * this._scale.current) - afterX,
       this._offset.current[1] + (beforeY * this._scale.current) - afterY,
     )
-    return true
   }
 
   private _updateOffset (ox :number, oy :number) {
@@ -103,8 +122,7 @@ export class ScrollView extends Control {
     // scale to fit on first layout if larger than viewport
     if (this._laidOut) return
     this._laidOut = true
-    if (size[0] <= this.width && size[1] <= this.height) return
-    this._scale.update(Math.min(this.width / size[0], this.height / size[1]))
+    this.zoomToFit()
   }
 
   protected get computeState () :string {

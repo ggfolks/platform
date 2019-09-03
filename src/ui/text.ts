@@ -223,13 +223,14 @@ export const keyMap :KeyMap = {
   KeyH: {[CtrlMask]: "backspace"},
 
   Escape: {0: "closeTab"},
-  
+
   KeyZ: {[CtrlMask]: "undo", [CtrlMask|ShiftMask]: "redo"},
   KeyY: {[CtrlMask]: "redo"},
 
   Equal: {[CtrlMask]: "zoomIn"},
   Minus: {[CtrlMask]: "zoomOut"},
   Digit0: {[CtrlMask]: "zoomReset"},
+  KeyJ: {[CtrlMask|ShiftMask]: "zoomToFit"},
 }
 
 type ModCode = [number, string]

@@ -224,6 +224,7 @@ export class Menu extends AbstractMenu {
     this._shortcutData = ctx.model.resolveOpt(config.shortcutData)
     if (!(shortcutKeys && this._shortcutData)) return
     this.disposer.add(this.root.unclaimedKeyEvent.onEmit(event => {
+      if (event.type !== "keydown") return
       for (const key of shortcutKeys.current) {
         for (const [flags, code] of getCommandKeys(key)) {
           if (flags === modMask(event) && code === event.code && this.activateShortcut(key)) {
