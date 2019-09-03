@@ -52,6 +52,7 @@ export class GraphViewer extends VGroup {
                 element: {
                   type: "menuitem",
                   enabled: "enabled",
+                  shortcut: "shortcut",
                   contents: {
                     type: "box",
                     contents: {
@@ -82,6 +83,8 @@ export class GraphViewer extends VGroup {
                 },
                 keys: "keys",
                 data: "data",
+                shortcutKeys: "shortcutKeys",
+                shortcutData: "shortcutData",
               },
               data: dataProvider({
                 graph: {
@@ -101,8 +104,11 @@ export class GraphViewer extends VGroup {
                     close: {
                       name: Value.constant("Close"),
                       shortcut: Value.constant("closeTab"),
-                      action: remove,
                     },
+                  }),
+                  shortcutKeys: Value.constant(["closeTab"]),
+                  shortcutData: dataProvider({
+                    closeTab: {action: remove},
                   }),
                 },
                 edit: {

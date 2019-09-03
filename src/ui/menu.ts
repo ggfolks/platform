@@ -22,6 +22,7 @@ import {
   MetaMask,
   ShiftMask,
   getCommandKeys,
+  modMask,
 } from "./text"
 
 /** Defines configuration for [[MenuBar]] elements. */
@@ -69,7 +70,7 @@ abstract class AbstractMenu extends AbstractButton {
         if (ancestor instanceof MenuBar) {
           for (const element of ancestor.contents) {
             const menu = element as Menu
-            if (menu._list && menu !== this) {
+            if (menu._list && element !== this) {
               menu._toggle()
               if (!this._list) this._toggle()
               return
@@ -207,15 +208,43 @@ abstract class AbstractMenu extends AbstractButton {
 /** Defines configuration for [[Menu]] elements. */
 export interface MenuConfig extends AbstractMenuConfig {
   type :"menu"
+  shortcutKeys? :Spec<Value<string[]>>
+  shortcutData? :Spec<ModelProvider>
 }
 
 const MenuStyleScope = {id: "menu", states: ButtonStates}
 
 /** A menu within a menu bar. */
 export class Menu extends AbstractMenu {
+  private readonly _shortcutData? :ModelProvider
 
   constructor (ctx :ElementContext, parent :Element, readonly config :MenuConfig) {
     super(ctx, parent, config)
+    const shortcutKeys = ctx.model.resolveOpt(config.shortcutKeys)
+    this._shortcutData = ctx.model.resolveOpt(config.shortcutData)
+    if (!(shortcutKeys && this._shortcutData)) return
+    this.disposer.add(this.root.unclaimedKeyEvent.onEmit(event => {
+      for (const key of shortcutKeys.current) {
+        for (const [flags, code] of getCommandKeys(key)) {
+          if (flags === modMask(event) && code === event.code && this.activateShortcut(key)) {
+            event.preventDefault()
+            return
+          }
+        }
+      }
+    }))
+  }
+
+  /** Activates the shortcut identified by the supplied key. */
+  activateShortcut (key :string) :boolean {
+    if (!this._shortcutData) throw new Error("Missing shortcut data")
+    const data = this._shortcutData.resolve(key)
+    const enabled = data.resolve<Value<boolean>>("enabled", trueValue)
+    if (enabled.current) {
+      data.resolve<Action>("action")()
+      return true
+    }
+    return false
   }
 
   get styleScope () { return MenuStyleScope }
@@ -225,6 +254,7 @@ export class Menu extends AbstractMenu {
 export interface MenuItemConfig extends AbstractMenuConfig {
   type :"menuitem"
   action? :Spec<Action>
+  shortcut? :Spec<Value<string>>
   separator? :Spec<Value<boolean>>
 }
 
@@ -250,6 +280,17 @@ export class MenuItem extends AbstractMenu {
     this._separator = ctx.model.resolve(config.separator, falseValue)
     this.disposer.add(this._separator.onValue(() => this._state.update(this.computeState)))
     this._action = ctx.model.resolveOpt(config.action)
+    if (this._action) return
+    const shortcut = ctx.model.resolveOpt(config.shortcut)
+    if (!shortcut) return
+    this._action = () => {
+      for (let ancestor = this.parent; ancestor; ancestor = ancestor.parent) {
+        if (ancestor instanceof Menu) {
+          ancestor.activateShortcut(shortcut.current)
+          return
+        }
+      }
+    }
   }
 
   get styleScope () { return MenuItemStyleScope }

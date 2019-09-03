@@ -188,7 +188,7 @@ export const AltMask   = 1 << 1
 export const CtrlMask  = 1 << 2
 export const MetaMask  = 1 << 3
 
-function modMask (event :KeyboardEvent) :number {
+export function modMask (event :KeyboardEvent) :number {
   let mask = 0
   if (event.shiftKey) mask |= ShiftMask
   if (event.altKey) mask |= AltMask
@@ -222,7 +222,7 @@ export const keyMap :KeyMap = {
   KeyD: {[CtrlMask]: "delete"},
   KeyH: {[CtrlMask]: "backspace"},
 
-  KeyW: {[CtrlMask]: "closeTab"},
+  KeyW: {[AltMask]: "closeTab"},
   KeyZ: {[CtrlMask]: "undo", [CtrlMask|ShiftMask]: "redo"},
   KeyY: {[CtrlMask]: "redo"},
 
@@ -425,30 +425,30 @@ export class Text extends Control {
   }
 
   handleKeyEvent (event :KeyboardEvent) {
-    if (event.type === "keydown") {
-      const supportsChar = typeof event.char === "string"
-      const isPrintable = (
-        (supportsChar && event.char !== "") || // new hotness
-        (event.key.length === 1) // old and busted
-      )
-      const typed = isPrintable ? (supportsChar ? event.char : event.key) : ""
-      const modMap = keyMap[event.code]
-      const mask = modMask(event), binding = modMap && modMap[mask]
-      if (binding) {
-        const action = actions[binding]
-        if (action) {
-          action(this.textState, typed)
-        } else {
-          console.warn(`Invalid binding for ${event.key} (mods: ${mask}): '${action}'`)
-        }
-      } else if (isPrintable) {
-        actions.insert(this.textState, typed)
-      } else if (event.code === "Enter") {
-        this.onEnter()
+    if (event.type !== "keydown") return false
+    const supportsChar = typeof event.char === "string"
+    const isPrintable = (
+      (supportsChar && event.char !== "") || // new hotness
+      (event.key.length === 1) // old and busted
+    )
+    const typed = isPrintable ? (supportsChar ? event.char : event.key) : ""
+    const modMap = keyMap[event.code]
+    const mask = modMask(event), binding = modMap && modMap[mask]
+    if (binding) {
+      const action = actions[binding]
+      if (action) {
+        action(this.textState, typed)
+      } else {
+        console.warn(`Invalid binding for ${event.key} (mods: ${mask}): '${action}'`)
       }
+    } else if (isPrintable) {
+      actions.insert(this.textState, typed)
+    } else if (event.code === "Enter") {
+      this.onEnter()
+    } else {
+      return false
     }
-    // let the browser know we handled this event
-    event.preventDefault()
+    return true
   }
 
   protected revalidate () {

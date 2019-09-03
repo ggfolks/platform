@@ -344,6 +344,7 @@ export class Root extends Element {
   private readonly interacts :Array<MouseInteraction|undefined> = []
   private readonly _clock = new Emitter<Clock>()
   private readonly _sizeChange = new Emitter<Root>()
+  private readonly _unclaimedKeyEvent = new Emitter<KeyboardEvent>()
   private readonly _hintSize :Value<dim2>
   private readonly _origin = vec2.create()
   private _cursorOwner? :Element
@@ -370,6 +371,9 @@ export class Root extends Element {
 
   /** A stream that emits `this` when this root's size changes. */
   get sizeChange () :Stream<Root> { return this._sizeChange }
+
+  /** A stream that emits key events not consumed by focus. */
+  get unclaimedKeyEvent () :Stream<KeyboardEvent> { return this._unclaimedKeyEvent }
 
   setCursor (owner :Element, cursor :string) {
     this.cursor.update(cursor)
@@ -494,7 +498,12 @@ export class Root extends Element {
   dispatchKeyEvent (event :KeyboardEvent) {
     // TODO: focus navigation on Tab/Shift-Tab?
     const focus = this.focus.current
-    focus && focus.handleKeyEvent(event)
+    if (focus && focus.handleKeyEvent(event)) {
+      // let the browser know we handled this event
+      event.preventDefault()
+      return
+    }
+    this._unclaimedKeyEvent.emit(event)
   }
 
   dispatchWheelEvent (event :WheelEvent) {
@@ -612,7 +621,7 @@ export class Control extends Element {
 
   /** Requests that this control handle the supplied keyboard event.
     * This will only be called on controls that have the keyboard focus. */
-  handleKeyEvent (event :KeyboardEvent) {}
+  handleKeyEvent (event :KeyboardEvent) :boolean { return false }
 
   findChild (type :string) :Element|undefined {
     return super.findChild(type) || this.contents.findChild(type)
