@@ -55,6 +55,15 @@ export class Graph implements Disposable {
     node.connect()
   }
 
+  /** Removes all the nodes in the graph. */
+  removeAllNodes () {
+    for (const node of this._nodes.values()) {
+      node.dispose()
+      delete this.config[node.id]
+    }
+    this._nodes.clear()
+  }
+
   /** Connects the nodes in the graph. */
   connect () {
     for (const node of this._nodes.values()) {

@@ -90,8 +90,17 @@ export class GraphViewer extends VGroup {
               data: dataProvider({
                 graph: {
                   title: Value.constant("Graph"),
-                  keys: Value.constant(["import", "export", "sep", "close"]),
+                  keys: Value.constant(["clearAll", "sep1", "import", "export", "sep2", "close"]),
                   data: dataProvider({
+                    clearAll: {
+                      name: Value.constant("Clear All"),
+                      enabled: this._editable,
+                      action: () => {
+                        const model = this._stack[this._stack.length - 1][0]
+                        model.resolve<Action>("removeAllNodes")()
+                      },
+                    },
+                    sep1: {separator: Value.constant(true)},
                     import: {
                       name: Value.constant("Import..."),
                       enabled: this._editable,
@@ -101,7 +110,7 @@ export class GraphViewer extends VGroup {
                       name: Value.constant("Export..."),
                       action: () => this._export(),
                     },
-                    sep: {separator: Value.constant(true)},
+                    sep2: {separator: Value.constant(true)},
                     close: {
                       name: Value.constant("Close"),
                       shortcut: Value.constant("closeTab"),

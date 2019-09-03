@@ -107,6 +107,10 @@ function createGraphModelData (graph :Graph) :ModelData {
   let nodeData :ModelProvider|undefined
   return {
     createNode: Value.constant((type :string) => graph.createNode(type)),
+    removeAllNodes: () => {
+      graph.removeAllNodes()
+      nodeData = undefined
+    },
     toJSON: Value.constant(() => graph.toJSON()),
     fromJSON: Value.constant((json :GraphConfig) => {
       graph.fromJSON(json)

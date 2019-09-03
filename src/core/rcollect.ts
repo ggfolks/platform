@@ -368,7 +368,7 @@ export abstract class RMap<K,V> extends Source<ReadonlyMap<K,V>> implements Read
   keysSource () :Source<IterableIterator<K>> {
     return new Subject((lner, want) => {
       if (want) lner(this.keys())
-      return this.onChange(c => c.type === "deleted" || c.prev === undefined && lner(this.keys()))
+      return this.onChange(c => (c.type === "deleted" || c.prev === undefined) && lner(this.keys()))
     })
   }
 
