@@ -60,13 +60,9 @@ abstract class AbstractMenu extends AbstractButton {
   private _list? :List
   private readonly _combinedBounds = rect.create()
 
-  constructor (
-    private _ctx :ElementContext,
-    parent :Element,
-    readonly config :AbstractMenuConfig,
-    private readonly _action? :Action,
-  ) {
+  constructor (private _ctx :ElementContext, parent :Element, readonly config :AbstractMenuConfig) {
     super(_ctx, parent, config, () => this._activate())
+    const keys = _ctx.model.resolveOpt(config.keys)
     this.disposer.add(this._hovered.onValue(hovered => {
       if (!hovered) return
       for (let ancestor = this.parent; ancestor; ancestor = ancestor.parent) {
@@ -88,7 +84,7 @@ abstract class AbstractMenu extends AbstractButton {
               menu._toggle()
             }
           }
-          if (config.keys && !this._list) this._toggle()
+          if (keys && !this._list) this._toggle()
           return
         }
       }
@@ -143,16 +139,11 @@ abstract class AbstractMenu extends AbstractButton {
     )
   }
 
-  private _activate () {
-    if (!this._action) {
-      this._toggle()
-      return
-    }
-    this._closeAncestors()
-    this._action()
+  protected _activate () {
+    this._toggle()
   }
 
-  private _closeAncestors () {
+  protected _closeAncestors () {
     if (this._list) this._toggle()
     for (let ancestor = this.parent; ancestor; ancestor = ancestor.parent) {
       if (ancestor instanceof AbstractMenu) {
@@ -161,7 +152,7 @@ abstract class AbstractMenu extends AbstractButton {
     }
   }
 
-  private _toggle () {
+  protected _toggle () {
     if (this._list) {
       this.dirty(this.expandBounds(this.bounds))
       this._list.dispose()
@@ -242,6 +233,7 @@ const MenuItemStyleScope = {id: "menuitem", states: [...ButtonStates, "separator
 /** A menu item within a menu. */
 export class MenuItem extends AbstractMenu {
   private readonly _separator :Value<boolean>
+  private readonly _action? :Action
 
   constructor (ctx :ElementContext, parent :Element, readonly config :MenuItemConfig) {
     super(
@@ -254,10 +246,10 @@ export class MenuItem extends AbstractMenu {
           ctx.model.resolve(config.separator, falseValue),
         ).map(([enabled, separator]) => enabled && !separator),
       },
-      ctx.model.resolveOpt(config.action),
     )
     this._separator = ctx.model.resolve(config.separator, falseValue)
     this.disposer.add(this._separator.onValue(() => this._state.update(this.computeState)))
+    this._action = ctx.model.resolveOpt(config.action)
   }
 
   get styleScope () { return MenuItemStyleScope }
@@ -269,6 +261,13 @@ export class MenuItem extends AbstractMenu {
   protected computePreferredSize (hintX :number, hintY :number, into :dim2) {
     if (this._separator.current) dim2.set(into, hintX, 1)
     else super.computePreferredSize(hintX, hintY, into)
+  }
+
+  protected _activate () {
+    if (this._action) {
+      this._closeAncestors()
+      this._action()
+    } else this._toggle()
   }
 }
 

@@ -86,8 +86,17 @@ export class GraphViewer extends VGroup {
               data: dataProvider({
                 graph: {
                   title: Value.constant("Graph"),
-                  keys: Value.constant(["close"]),
+                  keys: Value.constant(["import", "export", "sep", "close"]),
                   data: dataProvider({
+                    import: {
+                      name: Value.constant("Import..."),
+                      action: () => {},
+                    },
+                    export: {
+                      name: Value.constant("Export..."),
+                      action: () => {},
+                    },
+                    sep: {separator: Value.constant(true)},
                     close: {
                       name: Value.constant("Close"),
                       shortcut: Value.constant("closeTab"),
@@ -134,7 +143,7 @@ export class GraphViewer extends VGroup {
                 },
                 view: {
                   title: Value.constant("View"),
-                  keys: Value.constant(["zoomIn", "zoomOut", "resetZoom"]),
+                  keys: Value.constant(["zoomIn", "zoomOut", "zoomReset", "zoomToFit"]),
                   data: dataProvider({
                     zoomIn: {
                       name: Value.constant("Zoom In"),
@@ -146,9 +155,13 @@ export class GraphViewer extends VGroup {
                       shortcut: Value.constant("zoomOut"),
                       action: () => {},
                     },
-                    resetZoom: {
+                    zoomReset: {
                       name: Value.constant("Reset Zoom"),
                       shortcut: Value.constant("zoomReset"),
+                      action: () => {},
+                    },
+                    zoomToFit: {
+                      name: Value.constant("Zoom to Fit"),
                       action: () => {},
                     },
                   }),
