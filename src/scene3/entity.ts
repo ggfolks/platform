@@ -6,6 +6,7 @@ import {
   Camera,
   Color,
   DirectionalLight,
+  HemisphereLight,
   Intersection,
   Mesh,
   MeshBasicMaterial,
@@ -68,6 +69,12 @@ export interface LightConfig extends Object3DConfig {
 /** Configures a directional light. */
 export interface DirectionalLightConfig extends LightConfig {
   type :"directionalLight"
+}
+
+/** Configures a hemisphere light. */
+export interface HemisphereLightConfig extends LightConfig {
+  type: "hemisphereLight"
+  groundColor? :number
 }
 
 /** Configures an ambient light. */
@@ -415,6 +422,11 @@ function createObject3D (objectConfig: Object3DConfig) :Subject<Object3D> {
     case "directionalLight":
       const dlConfig = objectConfig as DirectionalLightConfig
       return Subject.constant(new DirectionalLight(dlConfig.color, dlConfig.intensity))
+
+    case "hemisphereLight":
+      const hlConfig = objectConfig as HemisphereLightConfig
+      return Subject.constant(
+          new HemisphereLight(hlConfig.color, hlConfig.groundColor, hlConfig.intensity))
 
     case "ambientLight":
       const alConfig = objectConfig as AmbientLightConfig
