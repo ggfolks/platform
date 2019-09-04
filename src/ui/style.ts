@@ -1,5 +1,5 @@
 import {Noop, PMap} from "../core/util"
-import {dim2} from "../core/math"
+import {dim2, rect} from "../core/math"
 import {Color} from "../core/color"
 import {Subject} from "../core/react"
 import {makeRoundRectPath} from "./util"
@@ -345,6 +345,29 @@ export interface BackgroundConfig {
 }
 
 const NoDecor = Subject.constant(NoopDecor)
+
+/** Adds the sizes of the provided background and border to the bounds given, placing the result
+  * in `dest`. */
+export function addDecorationBounds (
+  out :rect,
+  bounds :rect,
+  background :Decoration,
+  border :Decoration,
+) :rect {
+  const backgroundSize = background.size
+  const borderSize = border.size
+  const top = Math.max(backgroundSize[0], borderSize[0])
+  const right = Math.max(backgroundSize[1], borderSize[1])
+  const bottom = Math.max(backgroundSize[2], borderSize[2])
+  const left = Math.max(backgroundSize[3], borderSize[3])
+  return rect.set(
+    out,
+    bounds[0] - left,
+    bounds[1] - top,
+    bounds[2] + left + right,
+    bounds[3] + top + bottom,
+  )
+}
 
 /** Creates a background based on the supplied `config`. */
 export function makeBackground (ctx :StyleContext, config :BackgroundConfig) :Subject<Decoration> {

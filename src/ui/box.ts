@@ -1,7 +1,7 @@
 import {rect, dim2, vec2} from "../core/math"
 import {PMap} from "../core/util"
 import {Element, ElementConfig, ElementContext} from "./element"
-import {NoopDecor, BackgroundConfig, BorderConfig, Spec} from "./style"
+import {NoopDecor, BackgroundConfig, BorderConfig, Spec, addDecorationBounds} from "./style"
 
 const tmpr = rect.create()
 const tmpd = dim2.create()
@@ -136,19 +136,7 @@ export class Box extends Element {
   }
 
   expandBounds (bounds :rect) :rect {
-    const backgroundSize = this.background.current.size
-    const borderSize = this.border.current.size
-    const top = Math.max(backgroundSize[0], borderSize[0])
-    const right = Math.max(backgroundSize[1], borderSize[1])
-    const bottom = Math.max(backgroundSize[2], borderSize[2])
-    const left = Math.max(backgroundSize[3], borderSize[3])
-    rect.set(
-      this._expandedBounds,
-      bounds[0] - left,
-      bounds[1] - top,
-      bounds[2] + left + right,
-      bounds[3] + top + bottom,
-    )
+    addDecorationBounds(this._expandedBounds, bounds, this.background.current, this.border.current)
     return rect.union(
       this._expandedBounds,
       this._expandedBounds,

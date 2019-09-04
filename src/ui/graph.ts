@@ -11,6 +11,7 @@ import {List} from "./list"
 import {Action, Model, ModelData, ModelKey, ModelProvider, Spec, dataProvider} from "./model"
 import {InputValue, NodeCreator} from "./node"
 import {ScrollView} from "./scroll"
+import {BackgroundConfig, BorderConfig, NoopDecor, addDecorationBounds} from "./style"
 
 /** A navigable graph viewer. */
 export interface GraphViewerConfig extends ElementConfig {
@@ -325,12 +326,25 @@ export class GraphViewer extends VGroup {
 /** Visualizes a graph. */
 export interface GraphViewConfig extends ElementConfig {
   type :"graphview"
+  style :PMap<GraphViewStyle>
   editable :Spec<Value<boolean>>
 }
+
+export interface GraphViewStyle {
+  selectBackground? :Spec<BackgroundConfig>
+  selectBorder? :Spec<BorderConfig>
+}
+
+const tmpd = dim2.create()
+const tmpr = rect.create()
 
 export class GraphView extends AbsGroup {
   readonly elements = new Map<string, {node :Element, edges :Element}>()
   readonly contents :Element[] = []
+
+  private _select? :rect
+  private _selectBackground = this.observe(NoopDecor)
+  private _selectBorder = this.observe(NoopDecor)
 
   constructor (ctx :ElementContext, parent :Element, readonly config :GraphViewConfig) {
     super(ctx, parent, config)
@@ -381,6 +395,87 @@ export class GraphView extends AbsGroup {
       }
       this.invalidate()
     }))
+
+    const style = this.getStyle(this.config.style, this.state.current)
+    if (style.selectBackground) {
+      this._selectBackground.observe(ctx.style.resolveBackground(style.selectBackground))
+    }
+    if (style.selectBorder) {
+      this._selectBorder.observe(ctx.style.resolveBorder(style.selectBorder))
+    }
+  }
+
+  handleMouseDown (event :MouseEvent, pos :vec2) :MouseInteraction|undefined {
+    const interaction = super.handleMouseDown(event, pos)
+    if (interaction) return interaction
+    const graphViewer = getGraphViewer(this)
+    graphViewer.selection.clear()
+    if (!event.shiftKey) {
+      return
+    }
+    this.root.setCursor(this, "crosshair")
+    const [ox, oy] = pos
+    const select = this._select = rect.fromValues(ox, oy, 0, 0)
+    let hovered = new Set<NodeView>()
+    let nextHovered = new Set<NodeView>()
+    const cleanup = () => {
+      for (const element of hovered) element.hovered.update(false)
+      this.root.clearCursor(this)
+      this.dirty(this._expandSelect(select))
+      this._select = undefined
+    }
+    return {
+      move: (event, pos) => {
+        this.dirty(this._expandSelect(select))
+        const [nx, ny] = pos
+        const x = Math.min(ox, nx)
+        const y = Math.min(oy, ny)
+        rect.set(select, x, y, Math.max(ox, nx) - x, Math.max(oy, ny) - y)
+        const expanded = this._expandSelect(select)
+        this.dirty(expanded)
+
+        this.applyToIntersecting(expanded, element => {
+          if (element instanceof NodeView) {
+            element.hovered.update(true)
+            nextHovered.add(element)
+          }
+        })
+        for (const element of hovered) {
+          if (!nextHovered.has(element)) element.hovered.update(false)
+        }
+        [hovered, nextHovered] = [nextHovered, hovered]
+        nextHovered.clear()
+      },
+      release: () => {
+        for (const element of hovered) graphViewer.selection.add(element.id) 
+        cleanup()
+      },
+      cancel: cleanup,
+    }
+  }
+
+  expandBounds (bounds :rect) :rect {
+    const base = super.expandBounds(bounds)
+    if (!this._select) return base
+    return rect.union(this._expandedBounds, base, this._expandSelect(this._select))
+  }
+
+  private _expandSelect (select :rect) :rect {
+    return addDecorationBounds(
+      tmpr,
+      select,
+      this._selectBackground.current,
+      this._selectBorder.current,
+    )
+  }
+
+  protected rerender (canvas :CanvasRenderingContext2D, region :rect) {
+    super.rerender(canvas, region)
+    if (!this._select) return
+    canvas.translate(this._select[0], this._select[1])
+    this._selectBackground.current.render(canvas, dim2.set(tmpd, this._select[2], this._select[3]))
+    this._selectBorder.current.render(canvas, dim2.set(tmpd, this._select[2], this._select[3]))
+    canvas.translate(-this._select[0], -this._select[1])
   }
 
   private _layoutGraph (keys :string[], models :Model[]) {
@@ -507,10 +602,9 @@ export const NodeViewStyleScope = {id: "nodeview", states: ["normal", "hovered",
 export class NodeView extends VGroup {
   readonly id :string
   readonly contents :Element[] = []
+  readonly hovered = Mutable.local(false)
 
   private readonly _state = Mutable.local("normal")
-  private readonly _hovered = Mutable.local(false)
-  private readonly _graphViewer :GraphViewer
   private readonly _editable :Value<boolean>
 
   constructor (ctx :ElementContext, parent :Element, readonly config :NodeViewConfig) {
@@ -521,19 +615,9 @@ export class NodeView extends VGroup {
     const hasInputs = ctx.model.resolve<Value<ModelKey[]>>("inputKeys").current.length > 0
     const hasOutputs = ctx.model.resolve<Value<ModelKey[]>>("outputKeys").current.length > 0
 
-    let graphViewer :GraphViewer|undefined
-    for (let ancestor = this.parent; ancestor; ancestor = ancestor.parent) {
-      if (ancestor instanceof GraphViewer) {
-        graphViewer = ancestor
-        break
-      }
-    }
-    if (!graphViewer) throw new Error("NodeView outside GraphViewer")
-    this._graphViewer = graphViewer
-
     const updateState = () => this._state.update(this.computeState)
-    this.disposer.add(this._hovered.onValue(updateState))
-    this.disposer.add(graphViewer.selection.onValue(updateState))
+    this.disposer.add(this.hovered.onValue(updateState))
+    this.disposer.add(getGraphViewer(this).selection.onValue(updateState))
 
     const bodyContents :ElementConfig[] = []
     if (ctx.model.resolve<Value<string>>("type").current === "subgraph") {
@@ -656,8 +740,8 @@ export class NodeView extends VGroup {
   get styleScope () { return NodeViewStyleScope }
   get state () :Value<string> { return this._state }
 
-  handleMouseEnter (event :MouseEvent, pos :vec2) { this._hovered.update(true) }
-  handleMouseLeave (event :MouseEvent, pos :vec2) { this._hovered.update(false) }
+  handleMouseEnter (event :MouseEvent, pos :vec2) { this.hovered.update(true) }
+  handleMouseLeave (event :MouseEvent, pos :vec2) { this.hovered.update(false) }
 
   handleMouseDown (event :MouseEvent, pos :vec2) :MouseInteraction|undefined {
     const interaction = super.handleMouseDown(event, pos)
@@ -666,15 +750,14 @@ export class NodeView extends VGroup {
     const constraints = this.requireParent.config.constraints as AbsConstraints
     const position = constraints.position!
     const origin = position.slice()
+    const graphViewer = getGraphViewer(this)
     if (event.ctrlKey) {
-      if (this._graphViewer.selection.has(this.id)) this._graphViewer.selection.delete(this.id)
-      else this._graphViewer.selection.add(this.id)
-    } else if (!(
-      this._graphViewer.selection.size === 1 &&
-      this._graphViewer.selection.has(this.id)
-    )) {
-      this._graphViewer.selection.clear()
-      this._graphViewer.selection.add(this.id)
+      if (graphViewer.selection.has(this.id)) graphViewer.selection.delete(this.id)
+      else graphViewer.selection.add(this.id)
+
+    } else if (!graphViewer.selection.has(this.id)) {
+      graphViewer.selection.clear()
+      graphViewer.selection.add(this.id)
     }
     this.setCursor(this, "move")
     const cancel = () => this.clearCursor(this)
@@ -690,10 +773,19 @@ export class NodeView extends VGroup {
   }
 
   protected get computeState () :string {
-    return this._graphViewer.selection.has(this.id)
+    return getGraphViewer(this).selection.has(this.id)
       ? "selected"
-      : this._hovered.current ? "hovered" : "normal"
+      : this.hovered.current ? "hovered" : "normal"
   }
+}
+
+function getGraphViewer (element :Element) :GraphViewer {
+  for (let ancestor = element.parent; ancestor; ancestor = ancestor.parent) {
+    if (ancestor instanceof GraphViewer) {
+      return ancestor
+    }
+  }
+  throw new Error("Element used outside GraphViewer")
 }
 
 /** Depicts a node's editable/viewable properties. */

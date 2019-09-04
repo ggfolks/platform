@@ -7,7 +7,7 @@ const tmpr = rect.create()
 /** Groups contain multiple child elements.
   * Different subclasses of group implement different layout policies. */
 abstract class Group extends Element {
-  private readonly _expandedBounds = rect.create()
+  protected readonly _expandedBounds = rect.create()
 
   abstract get contents () :Element[]
 
