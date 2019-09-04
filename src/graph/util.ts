@@ -1,6 +1,6 @@
 import {Clock} from "../core/clock"
 import {refEquals} from "../core/data"
-import {Mutable, Value} from "../core/react"
+import {ChangeFn, Mutable, Value} from "../core/react"
 import {log, PMap} from "../core/util"
 import {Graph, GraphConfig} from "./graph"
 import {EdgeMeta, InputEdgeMeta, inputEdge, outputEdge, property} from "./meta"
@@ -250,6 +250,30 @@ class Property extends Node {
   }
 }
 
+/** Calls a callback whenever the input changes. */
+abstract class OnChangeConfig implements NodeConfig {
+  type = "onChange"
+  @property("ChangeFn") callback = undefined
+  @inputEdge("any") input = undefined
+}
+
+class OnChange extends Node {
+
+  constructor (graph :Graph, id :string, readonly config :OnChangeConfig) {
+    super(graph, id, config)
+  }
+
+  connect () {
+    const callback = this.config.callback as any
+    if (callback instanceof Function) {
+      const changeFn = callback as ChangeFn<any>
+      this._disposer.add(this.graph.getValue(this.config.input, undefined).onChange(changeFn))
+    } else {
+      log.warn("Callback does not appear to be a Function")
+    }
+  }
+}
+
 /** Registers the nodes in this module with the supplied registry. */
 export function registerUtilNodes (registry :NodeTypeRegistry) {
   registry.registerNodeTypes("util", {
@@ -262,5 +286,6 @@ export function registerUtilNodes (registry :NodeTypeRegistry) {
     output: Output,
     log: Log,
     property: Property,
+    onChange: OnChange,
   })
 }
