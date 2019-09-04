@@ -1,6 +1,7 @@
-import {Remover} from "./util"
+import {Remover, NoopRemover} from "./util"
 import {Data, dataEquals, refEquals} from "./data"
-import {Eq, Mutable, Source, Subject, Value, ValueFn, dispatchValue, addListener} from "./react"
+import {Eq, Mutable, Remove, Source, Subject,
+        Value, ValueFn, dispatchValue, addListener} from "./react"
 
 //
 // Reactive lists
@@ -367,7 +368,7 @@ export abstract class RMap<K,V> extends Source<ReadonlyMap<K,V>> implements Read
     * anything in the map changes. Simply call `map(m => m.values())` for example. */
   keysSource () :Source<IterableIterator<K>> {
     return new Subject((lner, want) => {
-      if (want) lner(this.keys())
+      if (want && lner(this.keys()) === Remove) return NoopRemover
       return this.onChange(c => (c.type === "deleted" || c.prev === undefined) && lner(this.keys()))
     })
   }
