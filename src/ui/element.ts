@@ -72,6 +72,7 @@ export interface ElementConfig {
   visible? :Spec<Value<boolean>>
   constraints? :Record
   scopeId? :string
+  overrideParentState? :string
   // this allows ElementConfig to contain "extra" stuff that TypeScript will ignore; this is
   // necessary to allow a subtype of ElementConfig to be supplied where a container element wants
   // some sort of ElementConfig; we can only plumb sharp types so deep
@@ -120,7 +121,11 @@ export abstract class Element implements Disposable {
   get styleScope () :StyleScope { return this._configScope || this.requireParent.styleScope }
   get root () :Root { return this.requireParent.root }
   get valid () :Value<boolean> { return this._valid }
-  get state () :Value<string> { return this.requireParent.state }
+  get state () :Value<string> {
+    return this.config.overrideParentState
+      ? Value.constant(this.config.overrideParentState)
+      : this.requireParent.state
+  }
 
   setCursor (owner :Element, cursor :string) {
     this.requireParent.setCursor(owner, cursor)

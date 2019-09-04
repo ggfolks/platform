@@ -394,7 +394,12 @@ export function makeBorder (ctx :StyleContext, config :BorderConfig) :Subject<De
     const cornerRadius = config.cornerRadius
     const shadow = ctx.resolveShadowOpt(config.shadow)
     return {
-      size: [0, 0, 0, 0],
+      size: [
+        Math.max(1, Math.max(-shadow.oy, 0) + shadow.blur),
+        Math.max(1, Math.max(shadow.ox, 0) + shadow.blur),
+        Math.max(1, Math.max(shadow.oy, 0) + shadow.blur),
+        Math.max(1, Math.max(-shadow.ox, 0) + shadow.blur),
+      ],
       render: (canvas, size) => {
         stroke.prepStroke(canvas)
         const w = size[0], h = size[1]

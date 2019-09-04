@@ -1,6 +1,7 @@
 import {dataEquals} from "../core/data"
 import {clamp, dim2, rect, vec2} from "../core/math"
 import {Mutable, Source, Value} from "../core/react"
+import {MutableSet} from "../core/rcollect"
 import {PMap, Remover} from "../core/util"
 import {GraphConfig, getConstantOrValueNodeId} from "../graph/graph"
 import {InputEdge} from "../graph/node"
@@ -19,6 +20,7 @@ export interface GraphViewerConfig extends ElementConfig {
 
 export class GraphViewer extends VGroup {
   readonly contents :Element[] = []
+  readonly selection = MutableSet.local<string>()
 
   private _editable = Value.constant(false)
   private _nodeCreator :Mutable<NodeCreator>
@@ -97,6 +99,7 @@ export class GraphViewer extends VGroup {
                       enabled: this._editable,
                       action: () => {
                         const model = this._stack[this._stack.length - 1][0]
+                        this.selection.clear()
                         model.resolve<Action>("removeAllNodes")()
                       },
                     },
@@ -249,6 +252,7 @@ export class GraphViewer extends VGroup {
     this._stack.push([model, this.contents[1] = this._createElement(model)])
     this._updateNodeCreator(model)
     this._poppable.update(true)
+    this.selection.clear()
     this.invalidate()
   }
 
@@ -260,6 +264,7 @@ export class GraphViewer extends VGroup {
     this.contents[1] = element
     this._updateNodeCreator(model)
     this._poppable.update(this._stack.length > 1)
+    this.selection.clear()
     this.invalidate()
   }
 
@@ -292,6 +297,7 @@ export class GraphViewer extends VGroup {
         // destroy and recreate the entire element
         element.dispose()
         stackEntry[1] = this.contents[1] = this._createElement(model)
+        this.selection.clear()
         this.invalidate()
       }
       reader.readAsText(input.files[0])
@@ -496,10 +502,15 @@ export interface NodeViewConfig extends AxisConfig {
   editable :Spec<Value<boolean>>
 }
 
+export const NodeViewStyleScope = {id: "nodeview", states: ["normal", "hovered", "selected"]}
+
 export class NodeView extends VGroup {
   readonly id :string
   readonly contents :Element[] = []
 
+  private readonly _state = Mutable.local("normal")
+  private readonly _hovered = Mutable.local(false)
+  private readonly _graphViewer :GraphViewer
   private readonly _editable :Value<boolean>
 
   constructor (ctx :ElementContext, parent :Element, readonly config :NodeViewConfig) {
@@ -509,6 +520,20 @@ export class NodeView extends VGroup {
     const hasProperties = ctx.model.resolve<Value<ModelKey[]>>("propertyKeys").current.length > 0
     const hasInputs = ctx.model.resolve<Value<ModelKey[]>>("inputKeys").current.length > 0
     const hasOutputs = ctx.model.resolve<Value<ModelKey[]>>("outputKeys").current.length > 0
+
+    let graphViewer :GraphViewer|undefined
+    for (let ancestor = this.parent; ancestor; ancestor = ancestor.parent) {
+      if (ancestor instanceof GraphViewer) {
+        graphViewer = ancestor
+        break
+      }
+    }
+    if (!graphViewer) throw new Error("NodeView outside GraphViewer")
+    this._graphViewer = graphViewer
+
+    const updateState = () => this._state.update(this.computeState)
+    this.disposer.add(this._hovered.onValue(updateState))
+    this.disposer.add(graphViewer.selection.onValue(updateState))
 
     const bodyContents :ElementConfig[] = []
     if (ctx.model.resolve<Value<string>>("type").current === "subgraph") {
@@ -611,7 +636,7 @@ export class NodeView extends VGroup {
       ctx.elem.create(ctx, this, {
         type: "box",
         scopeId: "nodeHeader",
-        contents: {type: "label", text: "type"},
+        contents: {overrideParentState: "normal", type: "label", text: "type"},
       }),
       ctx.elem.create(ctx, this, {
         type: "box",
@@ -619,6 +644,7 @@ export class NodeView extends VGroup {
         style: {halign: "stretch"},
         contents: {
           type: "column",
+          overrideParentState: "normal",
           offPolicy: "stretch",
           gap: 5,
           contents: bodyContents,
@@ -627,6 +653,12 @@ export class NodeView extends VGroup {
     )
   }
 
+  get styleScope () { return NodeViewStyleScope }
+  get state () :Value<string> { return this._state }
+
+  handleMouseEnter (event :MouseEvent, pos :vec2) { this._hovered.update(true) }
+  handleMouseLeave (event :MouseEvent, pos :vec2) { this._hovered.update(false) }
+
   handleMouseDown (event :MouseEvent, pos :vec2) :MouseInteraction|undefined {
     const interaction = super.handleMouseDown(event, pos)
     if (interaction || !this._editable.current) return interaction
@@ -634,6 +666,16 @@ export class NodeView extends VGroup {
     const constraints = this.requireParent.config.constraints as AbsConstraints
     const position = constraints.position!
     const origin = position.slice()
+    if (event.ctrlKey) {
+      if (this._graphViewer.selection.has(this.id)) this._graphViewer.selection.delete(this.id)
+      else this._graphViewer.selection.add(this.id)
+    } else if (!(
+      this._graphViewer.selection.size === 1 &&
+      this._graphViewer.selection.has(this.id)
+    )) {
+      this._graphViewer.selection.clear()
+      this._graphViewer.selection.add(this.id)
+    }
     this.setCursor(this, "move")
     const cancel = () => this.clearCursor(this)
     return {
@@ -645,6 +687,12 @@ export class NodeView extends VGroup {
       release: cancel,
       cancel,
     }
+  }
+
+  protected get computeState () :string {
+    return this._graphViewer.selection.has(this.id)
+      ? "selected"
+      : this._hovered.current ? "hovered" : "normal"
   }
 }
 
