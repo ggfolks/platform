@@ -321,7 +321,7 @@ export interface Decoration {
 /** A decoration that renders nothing. */
 export const NoopDecor :Decoration = {size: [0, 0, 0, 0], render: Noop}
 
-export type FitConfig = "start"| "center"  | "end" | "stretch"
+export type FitConfig = "start" | "center" | "end" | "stretch"
 
 /** Defines a background rendered behind a [[Box]]. */
 export interface BackgroundConfig {
@@ -347,7 +347,7 @@ export interface BackgroundConfig {
 const NoDecor = Subject.constant(NoopDecor)
 
 /** Adds the sizes of the provided background and border to the bounds given, placing the result
-  * in `dest`. */
+  * in `out`. */
 export function addDecorationBounds (
   out :rect,
   bounds :rect,
