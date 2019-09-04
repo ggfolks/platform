@@ -127,43 +127,70 @@ export class GraphViewer extends VGroup {
                 },
                 edit: {
                   title: Value.constant("Edit"),
-                  keys: Value.constant(["undo", "redo", "sep", "cut", "copy", "paste", "delete"]),
+                  keys: Value.constant(
+                    ["undo", "redo", "sep1", "cut", "copy", "paste", "delete", "sep2", "selectAll"],
+                  ),
                   data: dataProvider({
                     undo: {
                       name: Value.constant("Undo"),
-                      enabled: Value.constant(false),
                       shortcut: Value.constant("undo"),
-                      action: () => {},
                     },
                     redo: {
                       name: Value.constant("Redo"),
-                      enabled: Value.constant(false),
                       shortcut: Value.constant("redo"),
-                      action: () => {},
                     },
-                    sep: {separator: Value.constant(true)},
+                    sep1: {separator: Value.constant(true)},
                     cut: {
                       name: Value.constant("Cut"),
-                      enabled: Value.constant(false),
                       shortcut: Value.constant("cut"),
-                      action: () => {},
                     },
                     copy: {
                       name: Value.constant("Copy"),
-                      enabled: Value.constant(false),
                       shortcut: Value.constant("copy"),
-                      action: () => {},
                     },
                     paste: {
                       name: Value.constant("Paste"),
-                      enabled: Value.constant(false),
                       shortcut: Value.constant("paste"),
-                      action: () => {},
                     },
                     delete: {
                       name: Value.constant("Delete"),
-                      enabled: Value.constant(false),
                       shortcut: Value.constant("delete"),
+                    },
+                    sep2: {separator: Value.constant(true)},
+                    selectAll: {
+                      name: Value.constant("Select All"),
+                      action: this._createModelAction(model => {
+                        const nodeKeys = model.resolve<Source<IterableIterator<string>>>("nodeKeys")
+                        nodeKeys.once(keys => {
+                          for (const key of keys) this.selection.add(key)
+                        })
+                      })
+                    },
+                  }),
+                  shortcutKeys: Value.constant(["undo", "redo", "cut", "copy", "paste", "delete"]),
+                  shortcutData: dataProvider({
+                    undo: {
+                      enabled: Value.constant(false),
+                      action: () => {},
+                    },
+                    redo: {
+                      enabled: Value.constant(false),
+                      action: () => {},
+                    },
+                    cut: {
+                      enabled: Value.constant(false),
+                      action: () => {},
+                    },
+                    copy: {
+                      enabled: Value.constant(false),
+                      action: () => {},
+                    },
+                    paste: {
+                      enabled: Value.constant(false),
+                      action: () => {},
+                    },
+                    delete: {
+                      enabled: Value.constant(false),
                       action: () => {},
                     },
                   }),
@@ -283,6 +310,10 @@ export class GraphViewer extends VGroup {
     return () => op(this._stack[this._stack.length - 1][1] as ScrollView)
   }
 
+  private _createModelAction (op :(model :Model) => void) :Action {
+    return () => op(this._stack[this._stack.length - 1][0])
+  }
+
   private _import () {
     const input = document.createElement("input")
     input.setAttribute("type", "file")
@@ -351,7 +382,8 @@ export class GraphView extends AbsGroup {
     const data = ctx.model.resolve("nodeData" as Spec<ModelProvider>)
     let models :Model[] | null = []
     const editable = ctx.model.resolve(this.config.editable)
-    this.disposer.add(ctx.model.resolve("nodeKeys" as Spec<Value<string[]>>).onValue(keys => {
+    const nodeKeys = ctx.model.resolve<Source<IterableIterator<string>>>("nodeKeys")
+    this.disposer.add(nodeKeys.onValue(keys => {
       const {contents, elements} = this
       // first dispose no longer used elements
       const kset = new Set(keys)
@@ -406,9 +438,12 @@ export class GraphView extends AbsGroup {
   }
 
   handleMouseDown (event :MouseEvent, pos :vec2) :MouseInteraction|undefined {
-    const interaction = super.handleMouseDown(event, pos)
-    if (interaction) return interaction
     const graphViewer = getGraphViewer(this)
+    const interaction = super.handleMouseDown(event, pos)
+    if (interaction) {
+      if (interaction.type !== "node") graphViewer.selection.clear()
+      return interaction
+    }
     graphViewer.selection.clear()
     if (!event.shiftKey) {
       return
@@ -447,7 +482,7 @@ export class GraphView extends AbsGroup {
         nextHovered.clear()
       },
       release: () => {
-        for (const element of hovered) graphViewer.selection.add(element.id) 
+        for (const element of hovered) graphViewer.selection.add(element.id)
         cleanup()
       },
       cancel: cleanup,
@@ -747,10 +782,8 @@ export class NodeView extends VGroup {
     const interaction = super.handleMouseDown(event, pos)
     if (interaction || !this._editable.current) return interaction
     const basePos = vec2.clone(pos)
-    const constraints = this.requireParent.config.constraints as AbsConstraints
-    const position = constraints.position!
-    const origin = position.slice()
-    const graphViewer = getGraphViewer(this)
+    const graphView = getGraphView(this)
+    const graphViewer = getGraphViewer(graphView)
     if (event.ctrlKey) {
       if (graphViewer.selection.has(this.id)) graphViewer.selection.delete(this.id)
       else graphViewer.selection.add(this.id)
@@ -759,13 +792,27 @@ export class NodeView extends VGroup {
       graphViewer.selection.clear()
       graphViewer.selection.add(this.id)
     }
+    const origins = new Map<string, number[]>()
+    for (const key of graphViewer.selection) {
+      const constraints = graphView.elements.get(key)!.node.config.constraints as AbsConstraints
+      const position = constraints.position!
+      origins.set(key, position.slice())
+    }
     this.setCursor(this, "move")
     const cancel = () => this.clearCursor(this)
     return {
+      type: "node",
       move: (event, pos) => {
-        position[0] = origin[0] + pos[0] - basePos[0]
-        position[1] = origin[1] + pos[1] - basePos[1]
-        this.invalidate()
+        const dx = pos[0] - basePos[0]
+        const dy = pos[1] - basePos[1]
+        for (const [key, origin] of origins) {
+          const node = graphView.elements.get(key)!.node
+          const constraints = node.config.constraints as AbsConstraints
+          const position = constraints.position!
+          position[0] = origin[0] + dx
+          position[1] = origin[1] + dy
+          node.invalidate()
+        }
       },
       release: cancel,
       cancel,
@@ -781,11 +828,16 @@ export class NodeView extends VGroup {
 
 function getGraphViewer (element :Element) :GraphViewer {
   for (let ancestor = element.parent; ancestor; ancestor = ancestor.parent) {
-    if (ancestor instanceof GraphViewer) {
-      return ancestor
-    }
+    if (ancestor instanceof GraphViewer) return ancestor
   }
   throw new Error("Element used outside GraphViewer")
+}
+
+function getGraphView (element :Element) :GraphView {
+  for (let ancestor = element.parent; ancestor; ancestor = ancestor.parent) {
+    if (ancestor instanceof GraphView) return ancestor
+  }
+  throw new Error("Element used outside GraphView")
 }
 
 /** Depicts a node's editable/viewable properties. */

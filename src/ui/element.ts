@@ -315,6 +315,9 @@ export type MouseInteraction = {
   release: (upEvent :MouseEvent, pos :vec2) => void
   /** Called if this action is canceled. This ends the interaction. */
   cancel: () => void
+
+  // allow extra stuff in interaction to allow communication with parent elements
+  [extra :string] :any
 }
 
 export const RootStates = ["normal"]

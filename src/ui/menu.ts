@@ -236,10 +236,15 @@ export class Menu extends AbstractMenu {
     }))
   }
 
+  /** Returns the enabled state for the shortcut with the supplied key. */
+  getShortcutEnabled (key :string) :Value<boolean> {
+    const data = this._requireShortcutData.resolve(key)
+    return data.resolve<Value<boolean>>("enabled", trueValue)
+  }
+
   /** Activates the shortcut identified by the supplied key. */
   activateShortcut (key :string) :boolean {
-    if (!this._shortcutData) throw new Error("Missing shortcut data")
-    const data = this._shortcutData.resolve(key)
+    const data = this._requireShortcutData.resolve(key)
     const enabled = data.resolve<Value<boolean>>("enabled", trueValue)
     if (enabled.current) {
       data.resolve<Action>("action")()
@@ -249,6 +254,11 @@ export class Menu extends AbstractMenu {
   }
 
   get styleScope () { return MenuStyleScope }
+
+  private get _requireShortcutData () {
+    if (!this._shortcutData) throw new Error("Missing shortcut data")
+    return this._shortcutData
+  }
 }
 
 /** Defines configuration for [[MenuItem]] elements. */
@@ -273,7 +283,7 @@ export class MenuItem extends AbstractMenu {
       {
         ...config,
         enabled: Value.join(
-          ctx.model.resolve(config.enabled, trueValue),
+          getMenuItemEnabled(ctx, parent, config),
           ctx.model.resolve(config.separator, falseValue),
         ).map(([enabled, separator]) => enabled && !separator),
       },
@@ -284,14 +294,7 @@ export class MenuItem extends AbstractMenu {
     if (this._action) return
     const shortcut = ctx.model.resolveOpt(config.shortcut)
     if (!shortcut) return
-    this._action = () => {
-      for (let ancestor = this.parent; ancestor; ancestor = ancestor.parent) {
-        if (ancestor instanceof Menu) {
-          ancestor.activateShortcut(shortcut.current)
-          return
-        }
-      }
-    }
+    this._action = () => getMenu(parent).activateShortcut(shortcut.current)
   }
 
   get styleScope () { return MenuItemStyleScope }
@@ -311,6 +314,25 @@ export class MenuItem extends AbstractMenu {
       this._action()
     } else this._toggle()
   }
+}
+
+function getMenuItemEnabled (
+  ctx :ElementContext,
+  parent :Element,
+  config :MenuItemConfig,
+) :Value<boolean> {
+  const shortcut = ctx.model.resolveOpt(config.shortcut)
+  if (shortcut) return shortcut.switchMap(key => getMenu(parent).getShortcutEnabled(key))
+  return ctx.model.resolve(config.enabled, trueValue)
+}
+
+function getMenu (parent :Element|undefined) :Menu {
+  for (let ancestor = parent; ancestor; ancestor = ancestor.parent) {
+    if (ancestor instanceof Menu) {
+      return ancestor
+    }
+  }
+  throw new Error("Element used outside Menu")
 }
 
 export type KeyCombo = [string, string]
