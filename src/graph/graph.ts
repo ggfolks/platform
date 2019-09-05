@@ -55,6 +55,15 @@ export class Graph implements Disposable {
     node.connect()
   }
 
+  /** Removes the node identified by `id` from the graph. */
+  removeNode (id :string) {
+    const node = this._nodes.get(id)
+    if (!node) throw new Error("Unknown node id: " + id)
+    this._nodes.delete(id)
+    node.dispose()
+    delete this.config[node.id]
+  }
+
   /** Removes all the nodes in the graph. */
   removeAllNodes () {
     for (const node of this._nodes.values()) {

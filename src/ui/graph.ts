@@ -35,6 +35,10 @@ export class GraphViewer extends VGroup {
     const categoryData = ctx.model.resolve<ModelProvider>("categoryData")
     this._nodeCreator = ctx.model.resolve<Mutable<NodeCreator>>("nodeCreator")
     const remove = ctx.model.resolve<Action>("remove")
+    const haveSelection = this.selection.fold(false, (value, set) => set.size > 0)
+    const editableSelection = Value.join(haveSelection, this._editable).map(
+      ([selection, editable]) => selection && editable,
+    )
     this.contents.push(
       ctx.elem.create(ctx, this, {
         type: "box",
@@ -178,11 +182,15 @@ export class GraphViewer extends VGroup {
                       action: () => {},
                     },
                     cut: {
-                      enabled: Value.constant(false),
-                      action: () => {},
+                      enabled: editableSelection,
+                      action: this._createModelAction(model => {
+                        const removeNode = model.resolve<Value<(id :string) => void>>("removeNode")
+                        for (const id of this.selection) removeNode.current(id)
+                        this.selection.clear()
+                      }),
                     },
                     copy: {
-                      enabled: Value.constant(false),
+                      enabled: haveSelection,
                       action: () => {},
                     },
                     paste: {
@@ -190,8 +198,12 @@ export class GraphViewer extends VGroup {
                       action: () => {},
                     },
                     delete: {
-                      enabled: Value.constant(false),
-                      action: () => {},
+                      enabled: editableSelection,
+                      action: this._createModelAction(model => {
+                        const removeNode = model.resolve<Value<(id :string) => void>>("removeNode")
+                        for (const id of this.selection) removeNode.current(id)
+                        this.selection.clear()
+                      }),
                     },
                   }),
                 },
@@ -390,6 +402,8 @@ export class GraphView extends AbsGroup {
       for (const [ekey, elems] of elements.entries()) {
         if (!kset.has(ekey)) {
           elements.delete(ekey)
+          // invalidate the node so that anything relying on its outputs will be updated
+          elems.node.invalidate()
           elems.node.dispose()
           elems.edges.dispose()
         }
@@ -931,6 +945,9 @@ const offsetTo = vec2.create()
 type EdgeKeys = [string, string, string]
 type OutputTo = [EdgeKeys, vec2, Value<string>]
 
+const nodesUsed = new Set<Element>()
+const stylesUsed = new Set<Value<string>>()
+
 export class EdgeView extends Element {
   private _nodeId :Value<string>
   private _editable :Value<boolean>
@@ -1063,7 +1080,7 @@ export class EdgeView extends Element {
 
   protected computePreferredSize (hintX :number, hintY :number, into :dim2) {
     // find corresponding node
-    const node = this._requireValidatedNode(this._nodeId.current)
+    const node = this._getValidatedNode(this._nodeId.current)!
     const inputList = node.findTaggedChild("inputs") as List
 
     this._edges.length = 0
@@ -1074,6 +1091,9 @@ export class EdgeView extends Element {
     const inputs = this._inputs.current
     const view = this.requireParent as GraphView
     const offset = this._controlPointOffset.current
+    nodesUsed.clear()
+    nodesUsed.add(node)
+    stylesUsed.clear()
     for (let ii = 0; ii < inputKeys.length; ii++) {
       const input = inputs[ii]
       if (input === undefined || input === null) continue
@@ -1094,9 +1114,11 @@ export class EdgeView extends Element {
         } else if (input !== undefined && input !== null) {
           targetId = getConstantOrValueNodeId(input)
         } else {
-          return
+          return true
         }
-        const targetNode = this._requireValidatedNode(targetId)
+        const targetNode = this._getValidatedNode(targetId)
+        if (!targetNode) return false
+        nodesUsed.add(targetNode)
         const outputList = targetNode.findTaggedChild("outputs") as List
         const targetEdges = this._requireEdges(targetId) as EdgeView
         if (!outputKey) outputKey = targetEdges.getDefaultOutputKey()
@@ -1107,6 +1129,7 @@ export class EdgeView extends Element {
             target.y + target.height / 2 - view.y,
           )
           const style = targetEdges.getOutputStyle(outputKey)
+          stylesUsed.add(style)
           if (!this._styleRemovers.has(style)) {
             const remover = style.onValue(() => this.dirty())
             this._styleRemovers.set(style, remover)
@@ -1117,15 +1140,43 @@ export class EdgeView extends Element {
           vec2.min(min, min, toPos)
           vec2.max(max, max, offsetTo)
         }
+        return true
       }
       const inputModel = this._inputData.resolve(inputKey)
       const multiple = inputModel.resolve("multiple" as Spec<Value<boolean>>)
+      const value = inputModel.resolve("value" as Spec<Mutable<InputValue>>)
       if (multiple.current) {
-        if (Array.isArray(input)) input.forEach(addEdge)
-      } else {
-        addEdge(input)
+        if (Array.isArray(input)) {
+          let newInput = input
+          for (let ii = 0; ii < newInput.length; ii++) {
+            if (!addEdge(newInput[ii])) {
+              if (newInput === input) newInput = input.slice()
+              newInput.splice(ii, 1)
+              ii--
+            }
+          }
+          if (newInput !== input) value.update(newInput)
+        }
+      } else if (!addEdge(input)) {
+        value.update(undefined)
       }
       this._edges.push({from, to})
+    }
+    // remove any unused removers
+    for (const [node, remover] of this._nodeRemovers) {
+      if (!nodesUsed.has(node)) {
+        remover()
+        this.disposer.remove(remover)
+        this._nodeRemovers.delete(node)
+      }
+    }
+    // same with style removers
+    for (const [style, remover] of this._styleRemovers) {
+      if (!stylesUsed.has(style)) {
+        remover()
+        this.disposer.remove(remover)
+        this._styleRemovers.delete(style)
+      }
     }
     if (min[0] <= max[0] && min[1] <= max[1]) {
       const expand = Math.ceil(Math.max(this._lineWidth.current, this._outlineWidth.current) / 2)
@@ -1136,9 +1187,11 @@ export class EdgeView extends Element {
     }
   }
 
-  private _requireValidatedNode (nodeId :string) :Element {
+  private _getValidatedNode (nodeId :string) :Element|undefined {
     const view = this.requireParent as GraphView
-    const node = view.elements.get(nodeId)!.node
+    const element = view.elements.get(nodeId)
+    if (!element) return
+    const node = element.node
     const position = (node.config.constraints as AbsConstraints).position!
     const size = node.preferredSize(-1, -1)
     node.setBounds(rect.fromValues(view.x + position[0], view.y + position[1], size[0], size[1]))

@@ -1,6 +1,6 @@
 import {dim2, rect, vec2} from "../core/math"
 import {Source, Value} from "../core/react"
-import {Noop, PMap, getValue} from "../core/util"
+import {Noop, PMap, Remover, getValue} from "../core/util"
 import {AbstractButton, ButtonStates} from "./button"
 import {
   ControlConfig,
@@ -217,12 +217,31 @@ const MenuStyleScope = {id: "menu", states: ButtonStates}
 /** A menu within a menu bar. */
 export class Menu extends AbstractMenu {
   private readonly _shortcutData? :ModelProvider
+  private readonly _shortcutRemovers = new Map<string, Remover>()
 
   constructor (ctx :ElementContext, parent :Element, readonly config :MenuConfig) {
     super(ctx, parent, config)
     const shortcutKeys = ctx.model.resolveOpt(config.shortcutKeys)
     this._shortcutData = ctx.model.resolveOpt(config.shortcutData)
     if (!(shortcutKeys && this._shortcutData)) return
+    this.disposer.add(shortcutKeys.onValue(keys => {
+      // subscribe to enabled states so that they're up-to-date when we want to sample them
+      const kset = new Set(keys)
+      for (const [key, remover] of this._shortcutRemovers) {
+        if (!kset.has(key)) {
+          remover()
+          this._shortcutRemovers.delete(key)
+          this.disposer.remove(remover)
+        }
+      }
+      for (const key of keys) {
+        if (!this._shortcutRemovers.has(key)) {
+          const remover = this.getShortcutEnabled(key).onValue(Noop)
+          this._shortcutRemovers.set(key, remover)
+          this.disposer.add(remover)
+        }
+      }
+    }))
     this.disposer.add(this.root.unclaimedKeyEvent.onEmit(event => {
       if (event.type !== "keydown") return
       for (const key of shortcutKeys.current) {
@@ -246,11 +265,9 @@ export class Menu extends AbstractMenu {
   activateShortcut (key :string) :boolean {
     const data = this._requireShortcutData.resolve(key)
     const enabled = data.resolve<Value<boolean>>("enabled", trueValue)
-    if (enabled.current) {
-      data.resolve<Action>("action")()
-      return true
-    }
-    return false
+    if (!enabled.current) return false
+    data.resolve<Action>("action")()
+    return true
   }
 
   get styleScope () { return MenuStyleScope }
