@@ -25,7 +25,7 @@ export interface StateConfig {
 
 /** Describes the transition to a given state. */
 export interface TransitionConfig {
-  /** The name of the condition that triggers the transition. */
+  /** The name of the condition that triggers the transition.  May begin with ! to negate. */
   condition? :string
   /** The priority that determines which transition to select if multiple ones are valid
     * (default: zero). */
@@ -88,7 +88,7 @@ export class AnimationController implements Disposable {
         const transition = config.transitions[transitionKey]
         stateTransitions.push([transitionKey, transition])
         if (transition.condition) {
-          const condition = this._conditions.get(transition.condition)
+          const condition = this._getCondition(transition.condition)
           if (!condition) throw new Error("Missing condition: " + transition.condition)
           let wasSet = false
           conditions.push(condition.map(condition => {
@@ -140,6 +140,12 @@ export class AnimationController implements Disposable {
         }
       },
     ))
+  }
+
+  private _getCondition (name :string) :Value<boolean>|undefined {
+    if (!name.startsWith("!")) return this._conditions.get(name)
+    const baseCondition = this._conditions.get(name.substring(1))
+    return baseCondition && baseCondition.map(condition => !condition)
   }
 
   dispose () {

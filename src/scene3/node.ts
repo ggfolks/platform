@@ -137,7 +137,10 @@ class AnimationControllerNode extends EntityComponentNode<Component<AnimationMix
       if (!state.transitions) continue
       for (const transitionKey in state.transitions) {
         const transition = state.transitions[transitionKey]
-        if (transition.condition) this._inputsMeta[transition.condition] = {type: "boolean"}
+        if (transition.condition) {
+          const name = transition.condition.substring(transition.condition.indexOf("!") + 1)
+          this._inputsMeta[name] = {type: "boolean"}
+        }
       }
     }
   }
