@@ -1,6 +1,6 @@
 import {AnimationMixer, Event} from "three"
 
-import {Mutable, Value} from "../core/react"
+import {Emitter, Mutable, Value} from "../core/react"
 import {Disposable, Disposer, PMap, getValue} from "../core/util"
 import {loadGLTFAnimationClip} from "./entity"
 
@@ -52,7 +52,7 @@ export class AnimationController implements Disposable {
     const config = this.config.states[name]
     if (!config) throw new Error("Missing state config: " + name)
     const canTransition = Mutable.local(true)
-    const isTransitioning = Mutable.local(false)
+    const transitioning = new Emitter<void>()
     if (config.url) {
       if (config.finishBeforeTransition) canTransition.update(false)
       this._disposer.add(loadGLTFAnimationClip(config.url).once(clip => {
@@ -68,9 +68,7 @@ export class AnimationController implements Disposable {
           }
           this._mixer.addEventListener("finished", listener)
         }
-        this._disposer.add(isTransitioning.onValue(transitioning => {
-          if (transitioning) action.stop()
-        }))
+        this._disposer.add(transitioning.onEmit(() => action.stop()))
         action.reset()
         action.play()
       }))
@@ -92,15 +90,15 @@ export class AnimationController implements Disposable {
         }
         this._disposer.add(activateTransition.onValue(activate => {
           if (activate) {
-            isTransitioning.update(true)
+            transitioning.emit()
             this._enterState(transitionKey)
           }
         }))
       }
     }
+    addTransitions(config)
     const anyStateConfig = this.config.states.any
     if (anyStateConfig) addTransitions(anyStateConfig)
-    addTransitions(config)
   }
 
   dispose () {
