@@ -27,6 +27,12 @@ export interface StateConfig {
 export interface TransitionConfig {
   /** The name of the condition that triggers the transition. */
   condition? :string
+  /** The priority that determines which transition to select if multiple ones are valid
+    * (default: zero). */
+  priority? :number
+  /** The weight that determines the random selection between transitions of same priority
+    * (default: one). */
+  weight? :number
 }
 
 /** Similar to Unity's AnimationController, instances of this class manage a state machine where
@@ -73,32 +79,67 @@ export class AnimationController implements Disposable {
         action.play()
       }))
     }
+    const stateTransitions :[string, TransitionConfig][] = []
+    const conditions :Value<boolean>[] = []
     const addTransitions = (config :StateConfig) => {
       if (!config.transitions) return
       for (const transitionKey in config.transitions) {
-        if (transitionKey === name) continue
+        if (transitionKey === name) continue // can't transition to the current state
         const transition = config.transitions[transitionKey]
-        let activateTransition :Value<boolean> = canTransition
+        stateTransitions.push([transitionKey, transition])
         if (transition.condition) {
           const condition = this._conditions.get(transition.condition)
           if (!condition) throw new Error("Missing condition: " + transition.condition)
           let wasSet = false
-          activateTransition = Value.join(canTransition, condition).map(([can, cond]) => {
-            if (cond) wasSet = true
-            return can && wasSet
-          })
-        }
-        this._disposer.add(activateTransition.onValue(activate => {
-          if (activate) {
-            transitioning.emit()
-            this._enterState(transitionKey)
-          }
-        }))
+          conditions.push(condition.map(condition => {
+            if (condition) wasSet = true
+            return wasSet
+          }))
+        } else conditions.push(Value.constant<boolean>(true))
       }
     }
     addTransitions(config)
     const anyStateConfig = this.config.states.any
     if (anyStateConfig) addTransitions(anyStateConfig)
+
+    this._disposer.add(Value.join2(canTransition, Value.join(...conditions)).onValue(
+      ([can, conds]) => {
+        if (!can) return
+        let highestPriority = -Infinity
+        let totalWeight = 0
+        const highestPriorityStateTransitions :[string, TransitionConfig][] = []
+        for (let ii = 0; ii < stateTransitions.length; ii++) {
+          if (!conds[ii]) continue
+          const stateTransition = stateTransitions[ii]
+          const transition = stateTransition[1]
+          const priority = getValue(transition.priority, 0)
+          const weight = getValue(transition.weight, 1)
+          if (priority > highestPriority) {
+            highestPriority = priority
+            highestPriorityStateTransitions.length = 0
+            highestPriorityStateTransitions.push(stateTransition)
+            totalWeight = weight
+
+          } else if (priority === highestPriority) {
+            highestPriorityStateTransitions.push(stateTransition)
+            totalWeight += weight
+          }
+        }
+        if (highestPriorityStateTransitions.length === 0) return
+        transitioning.emit()
+        if (highestPriorityStateTransitions.length === 1) {
+          this._enterState(highestPriorityStateTransitions[0][0])
+          return
+        }
+        let targetWeight = totalWeight * Math.random()
+        for (const [state, transition] of highestPriorityStateTransitions) {
+          if ((targetWeight -= getValue(transition.weight, 1)) <= 0) {
+            this._enterState(state)
+            return
+          }
+        }
+      },
+    ))
   }
 
   dispose () {

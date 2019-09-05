@@ -148,6 +148,7 @@ class AnimationControllerNode extends EntityComponentNode<Component<AnimationMix
       conditions.set(inputKey, this.graph.getValue<boolean>(this.config[inputKey], false))
     }
     this._disposer.add(this._component.getValue(this._entityId).onValue(mixer => {
+      if (isPlaceholder(mixer.getRoot())) return
       if (this._animationController) {
         this._animationController.dispose()
         this._disposer.remove(this._animationController)
