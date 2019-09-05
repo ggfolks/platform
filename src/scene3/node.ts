@@ -1,13 +1,14 @@
 import {AnimationAction, AnimationMixer, Intersection, Object3D, Raycaster, Vector3} from "three"
 
 import {Subject, Value} from "../core/react"
-import {Noop, NoopRemover} from "../core/util"
+import {Noop, NoopRemover, PMap} from "../core/util"
 import {Graph} from "../graph/graph"
-import {inputEdge, outputEdge, property} from "../graph/meta"
-import {NodeTypeRegistry} from "../graph/node"
+import {InputEdgeMeta, inputEdge, outputEdge, property} from "../graph/meta"
+import {NodeTypeRegistry, WrappedValue} from "../graph/node"
 import {Component} from "../entity/entity"
 import {EntityComponentConfig, EntityComponentNode} from "../entity/node"
 import {PointerConfig} from "../input/node"
+import {AnimationController, AnimationControllerConfig} from "./animation"
 import {HoverMap, loadGLTFAnimationClip} from "./entity"
 
 /** Emits information about a single hover point. */
@@ -111,6 +112,60 @@ class AnimationActionNode extends EntityComponentNode<Component<AnimationMixer>>
   }
 }
 
+/** Controls an animation controller on the entity. */
+abstract class AnimationControllerNodeConfig implements EntityComponentConfig {
+  type = "animationController"
+  config :AnimationControllerConfig = {states: {default: {}}}
+  @property() component = ""
+  @outputEdge("string") state = undefined
+}
+
+class AnimationControllerNode extends EntityComponentNode<Component<AnimationMixer>> {
+  private _inputsMeta :PMap<InputEdgeMeta> = {}
+  private _animationController? :AnimationController
+  private _output = new WrappedValue(Value.constant("default"), "default")
+
+  get inputsMeta () {
+    return this._inputsMeta
+  }
+
+  constructor (graph :Graph, id :string, readonly config :AnimationControllerNodeConfig) {
+    super(graph, id, config)
+    const controllerConfig = config.config
+    for (const stateKey in controllerConfig.states) {
+      const state = controllerConfig.states[stateKey]
+      if (!state.transitions) continue
+      for (const transitionKey in state.transitions) {
+        const transition = state.transitions[transitionKey]
+        if (transition.condition) this._inputsMeta[transition.condition] = {type: "boolean"}
+      }
+    }
+  }
+
+  connect () {
+    const conditions = new Map<string, Value<boolean>>()
+    for (const inputKey in this._inputsMeta) {
+      conditions.set(inputKey, this.graph.getValue<boolean>(this.config[inputKey], false))
+    }
+    this._disposer.add(this._component.getValue(this._entityId).onValue(mixer => {
+      if (this._animationController) {
+        this._animationController.dispose()
+        this._disposer.remove(this._animationController)
+      }
+      this._disposer.add(this._animationController = new AnimationController(
+        mixer,
+        conditions,
+        this.config.config,
+      ))
+      this._output.update(this._animationController.state)
+    }))
+  }
+
+  protected _createOutput () {
+    return this._output
+  }
+}
+
 /** Casts a ray into the scene. */
 abstract class RaycasterConfig implements EntityComponentConfig {
   type = "raycaster"
@@ -206,6 +261,7 @@ export function registerScene3Nodes (registry :NodeTypeRegistry) {
   registry.registerNodeTypes("scene3", {
     hover: Hover,
     animationAction: AnimationActionNode,
+    animationController: AnimationControllerNode,
     raycaster: RaycasterNode,
     updateVisible: UpdateVisibleNode,
   })

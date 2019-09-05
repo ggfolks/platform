@@ -167,7 +167,7 @@ function inputToJSON (input :InputEdge<any>) {
 }
 
 /** Wraps a value so that we can swap it out after creating it. */
-class WrappedValue<T> extends Value<T> {
+export class WrappedValue<T> extends Value<T> {
   private readonly _listeners :ChangeFn<T>[] = []
   private _disconnect = NoopRemover
 
