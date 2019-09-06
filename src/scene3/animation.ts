@@ -1,7 +1,6 @@
 import {AnimationMixer, Event} from "three"
 
-import {Emitter, Mutable, Stream, Value} from "../core/react"
-import {Clock} from "../core/clock"
+import {Emitter, Mutable, Value} from "../core/react"
 import {Disposable, Disposer, PMap, getValue} from "../core/util"
 import {loadGLTFAnimationClip} from "./entity"
 
@@ -42,13 +41,11 @@ export interface TransitionConfig {
 export class AnimationController implements Disposable {
   private readonly _disposer = new Disposer()
   private readonly _state = Mutable.local("default")
-  private _entering = false
-  private _pendingState? :string
+  private _enteringCount = 0
 
   get state () :Value<string> { return this._state }
 
   constructor (
-    private readonly _clock :Stream<Clock>,
     private readonly _mixer :AnimationMixer,
     private readonly _conditions :Map<string, Value<boolean>>,
     readonly config :AnimationControllerConfig,
@@ -57,17 +54,9 @@ export class AnimationController implements Disposable {
   }
 
   private _enterState (name :string) {
-    // don't enter while entering; push it off until the next frame
-    if (this._entering) {
-      if (!this._pendingState) {
-        this._disposer.add(this._clock.once(() => {
-          if (this._pendingState) this._enterState(this._pendingState)
-        }))
-      }
-      this._pendingState = name
-      return
+    if (this._enteringCount > 3) {
+      throw new Error("Too many state transitions: " + name)
     }
-    this._pendingState = undefined
     this._disposer.dispose()
     this._state.update(name)
     const config = this.config.states[name]
@@ -117,46 +106,49 @@ export class AnimationController implements Disposable {
     const anyStateConfig = this.config.states.any
     if (anyStateConfig) addTransitions(anyStateConfig)
 
-    this._entering = true
-    this._disposer.add(Value.join2(canTransition, Value.join(...conditions)).onValue(
-      ([can, conds]) => {
-        if (!can) return
-        let highestPriority = -Infinity
-        let totalWeight = 0
-        const highestPriorityStateTransitions :[string, TransitionConfig][] = []
-        for (let ii = 0; ii < stateTransitions.length; ii++) {
-          if (!conds[ii]) continue
-          const stateTransition = stateTransitions[ii]
-          const transition = stateTransition[1]
-          const priority = getValue(transition.priority, 0)
-          const weight = getValue(transition.weight, 1)
-          if (priority > highestPriority) {
-            highestPriority = priority
-            highestPriorityStateTransitions.length = 0
-            highestPriorityStateTransitions.push(stateTransition)
-            totalWeight = weight
+    this._enteringCount++
+    try {
+      this._disposer.add(Value.join2(canTransition, Value.join(...conditions)).onValue(
+        ([can, conds]) => {
+          if (!can) return
+          let highestPriority = -Infinity
+          let totalWeight = 0
+          const highestPriorityStateTransitions :[string, TransitionConfig][] = []
+          for (let ii = 0; ii < stateTransitions.length; ii++) {
+            if (!conds[ii]) continue
+            const stateTransition = stateTransitions[ii]
+            const transition = stateTransition[1]
+            const priority = getValue(transition.priority, 0)
+            const weight = getValue(transition.weight, 1)
+            if (priority > highestPriority) {
+              highestPriority = priority
+              highestPriorityStateTransitions.length = 0
+              highestPriorityStateTransitions.push(stateTransition)
+              totalWeight = weight
 
-          } else if (priority === highestPriority) {
-            highestPriorityStateTransitions.push(stateTransition)
-            totalWeight += weight
+            } else if (priority === highestPriority) {
+              highestPriorityStateTransitions.push(stateTransition)
+              totalWeight += weight
+            }
           }
-        }
-        if (highestPriorityStateTransitions.length === 0) return
-        transitioning.emit()
-        if (highestPriorityStateTransitions.length === 1) {
-          this._enterState(highestPriorityStateTransitions[0][0])
-          return
-        }
-        let targetWeight = totalWeight * Math.random()
-        for (const [state, transition] of highestPriorityStateTransitions) {
-          if ((targetWeight -= getValue(transition.weight, 1)) <= 0) {
-            this._enterState(state)
+          if (highestPriorityStateTransitions.length === 0) return
+          transitioning.emit()
+          if (highestPriorityStateTransitions.length === 1) {
+            this._enterState(highestPriorityStateTransitions[0][0])
             return
           }
-        }
-      },
-    ))
-    this._entering = false
+          let targetWeight = totalWeight * Math.random()
+          for (const [state, transition] of highestPriorityStateTransitions) {
+            if ((targetWeight -= getValue(transition.weight, 1)) <= 0) {
+              this._enterState(state)
+              return
+            }
+          }
+        },
+      ))
+    } finally {
+      this._enteringCount--
+    }
   }
 
   private _getCondition (name :string) :Value<boolean>|undefined {
