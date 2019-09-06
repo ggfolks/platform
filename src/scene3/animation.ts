@@ -19,6 +19,9 @@ export interface StateConfig {
   clampWhenFinished? :boolean
   /** Whether to wait for the animation to complete before transitioning (default: false). */
   finishBeforeTransition? :boolean
+  /** Transitions with priorities greater than this value can interrupt the animation even if
+    * we're waiting for it to complete (default: zero). */
+  interruptPriority? :number
   /** Describes the transitions to other states, if any. */
   transitions? :PMap<TransitionConfig>
 }
@@ -61,10 +64,10 @@ export class AnimationController implements Disposable {
     this._state.update(name)
     const config = this.config.states[name]
     if (!config) throw new Error("Missing state config: " + name)
-    const canTransition = Mutable.local(true)
+    const interruptPriority = Mutable.local(-Infinity)
     const transitioning = new Emitter<void>()
     if (config.url) {
-      if (config.finishBeforeTransition) canTransition.update(false)
+      if (config.finishBeforeTransition) interruptPriority.update(config.interruptPriority || 0)
       this._disposer.add(loadGLTFAnimationClip(config.url).once(clip => {
         const action = this._mixer.clipAction(clip)
         action.clampWhenFinished = getValue(config.clampWhenFinished, false)
@@ -72,7 +75,7 @@ export class AnimationController implements Disposable {
         if (config.finishBeforeTransition) {
           const listener = (event :Event) => {
             if (event.action === action) {
-              canTransition.update(true)
+              interruptPriority.update(-Infinity)
               this._mixer.removeEventListener("finished", listener)
             }
           }
@@ -108,9 +111,8 @@ export class AnimationController implements Disposable {
 
     this._enteringCount++
     try {
-      this._disposer.add(Value.join2(canTransition, Value.join(...conditions)).onValue(
-        ([can, conds]) => {
-          if (!can) return
+      this._disposer.add(Value.join2(interruptPriority, Value.join(...conditions)).onValue(
+        ([interruptPriority, conds]) => {
           let highestPriority = -Infinity
           let totalWeight = 0
           const highestPriorityStateTransitions :[string, TransitionConfig][] = []
@@ -119,6 +121,7 @@ export class AnimationController implements Disposable {
             const stateTransition = stateTransitions[ii]
             const transition = stateTransition[1]
             const priority = getValue(transition.priority, 0)
+            if (priority <= interruptPriority) continue
             const weight = getValue(transition.weight, 1)
             if (priority > highestPriority) {
               highestPriority = priority
