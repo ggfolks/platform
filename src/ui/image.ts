@@ -9,6 +9,8 @@ import {Spec} from "./style"
 export interface ImageConfig extends ElementConfig {
   type :"image"
   image :Spec<Value<string>>
+  width? :number
+  height? :number
 }
 
 /** Displays an image, which potentially varies based on the element state. */
@@ -27,13 +29,21 @@ export class Image extends Element {
 
   protected computePreferredSize (hintX :number, hintY :number, into :dim2) {
     const image = this.image.current
-    if (image instanceof HTMLImageElement) dim2.set(into, image.width, image.height)
+    if (image instanceof HTMLImageElement) {
+      dim2.set(into, this.config.width || image.width, this.config.height || image.height)
+    }
   }
 
   protected relayout () {} // nothing needed
 
   protected rerender (canvas :CanvasRenderingContext2D, region :rect) {
-    const image = this.image.current, {x, y} = this
-    if (image instanceof HTMLImageElement) canvas.drawImage(image, x, y)
+    const image = this.image.current, {config, x, y} = this
+    if (image instanceof HTMLImageElement) {
+      if (config.width && config.height) {
+        canvas.drawImage(image, x, y, config.width, config.height)
+      } else {
+        canvas.drawImage(image, x, y)
+      }
+    }
   }
 }
