@@ -1,17 +1,14 @@
 import {dim2, rect} from "../core/math"
-import {PMap} from "../core/util"
+import {Value} from "../core/react"
 import {Element, ElementConfig, ElementContext} from "./element"
 import {Spec} from "./style"
 
 // TODO: we need an image spec which defines whether an image is HiDPI
-export interface ImageStyle {
-  image :Spec<string>
-}
 
 /** Defines configuration for [[Image]] elements. */
 export interface ImageConfig extends ElementConfig {
   type :"image"
-  style :PMap<ImageStyle>
+  image :Spec<Value<string>>
 }
 
 /** Displays an image, which potentially varies based on the element state. */
@@ -20,13 +17,9 @@ export class Image extends Element {
 
   constructor (ctx :ElementContext, parent :Element, readonly config :ImageConfig) {
     super(ctx, parent, config)
-    this.disposer.add(this.state.onValue(state => {
-      const style = this.getStyle(this.config.style, state)
-      this.image.observe(ctx.style.image.resolve(style.image));
-    }))
+    const text = ctx.model.resolve(config.image)
+    this.image.observe(text.toSubject().switchMap(path => ctx.style.image.resolve(path)))
   }
-
-  get style () :ImageStyle { return this.getStyle(this.config.style, this.state.current) }
 
   dispose () {
     super.dispose()
