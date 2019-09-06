@@ -157,6 +157,7 @@ class AnimationControllerNode extends EntityComponentNode<Component<AnimationMix
         this._disposer.remove(this._animationController)
       }
       this._disposer.add(this._animationController = new AnimationController(
+        this.graph.clock,
         mixer,
         conditions,
         this.config.config,

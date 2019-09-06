@@ -1,6 +1,7 @@
 import {AnimationMixer, Event} from "three"
 
-import {Emitter, Mutable, Value} from "../core/react"
+import {Emitter, Mutable, Stream, Value} from "../core/react"
+import {Clock} from "../core/clock"
 import {Disposable, Disposer, PMap, getValue} from "../core/util"
 import {loadGLTFAnimationClip} from "./entity"
 
@@ -41,10 +42,13 @@ export interface TransitionConfig {
 export class AnimationController implements Disposable {
   private readonly _disposer = new Disposer()
   private readonly _state = Mutable.local("default")
+  private _entering = false
+  private _pendingState? :string
 
   get state () :Value<string> { return this._state }
 
   constructor (
+    private readonly _clock :Stream<Clock>,
     private readonly _mixer :AnimationMixer,
     private readonly _conditions :Map<string, Value<boolean>>,
     readonly config :AnimationControllerConfig,
@@ -53,6 +57,17 @@ export class AnimationController implements Disposable {
   }
 
   private _enterState (name :string) {
+    // don't enter while entering; push it off until the next frame
+    if (this._entering) {
+      if (!this._pendingState) {
+        this._disposer.add(this._clock.once(() => {
+          if (this._pendingState) this._enterState(this._pendingState)
+        }))
+      }
+      this._pendingState = name
+      return
+    }
+    this._pendingState = undefined
     this._disposer.dispose()
     this._state.update(name)
     const config = this.config.states[name]
@@ -102,6 +117,7 @@ export class AnimationController implements Disposable {
     const anyStateConfig = this.config.states.any
     if (anyStateConfig) addTransitions(anyStateConfig)
 
+    this._entering = true
     this._disposer.add(Value.join2(canTransition, Value.join(...conditions)).onValue(
       ([can, conds]) => {
         if (!can) return
@@ -140,6 +156,7 @@ export class AnimationController implements Disposable {
         }
       },
     ))
+    this._entering = false
   }
 
   private _getCondition (name :string) :Value<boolean>|undefined {
