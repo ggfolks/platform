@@ -12,15 +12,16 @@ import {
   Root,
   RootConfig,
 } from "./element"
-import * as E from "./element"
-import * as X from "./box"
-import * as G from "./group"
-import * as T from "./text"
 import * as B from "./button"
+import * as E from "./element"
+import * as G from "./group"
+import * as GR from "./graph"
+import * as I from "./image"
 import * as L from "./list"
 import * as M from "./menu"
 import * as S from "./scroll"
-import * as GR from "./graph"
+import * as T from "./text"
+import * as X from "./box"
 
 /** Defines a set of styles for elements. This is something like:
   * ```
@@ -101,6 +102,7 @@ export class UI {
     case       "column": return new G.Column(ctx, parent, rconfig as G.ColumnConfig)
     case    "abslayout": return new G.AbsLayout(ctx, parent, rconfig as G.AbsLayoutConfig)
     case       "spacer": return new G.Spacer(ctx, parent, rconfig as G.SpacerConfig)
+    case        "image": return new I.Image(ctx, parent, rconfig as I.ImageConfig)
     case        "label": return new T.Label(ctx, parent, rconfig as T.LabelConfig)
     case       "cursor": return new T.Cursor(ctx, parent, rconfig as T.CursorConfig)
     case         "text": return new T.Text(ctx, parent, rconfig as T.TextConfig)
