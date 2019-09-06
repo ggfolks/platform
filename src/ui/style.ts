@@ -1,4 +1,4 @@
-import {Noop, PMap} from "../core/util"
+import {Noop, PMap, log} from "../core/util"
 import {dim2, rect} from "../core/math"
 import {Color} from "../core/color"
 import {Subject} from "../core/react"
@@ -395,10 +395,15 @@ export function makeBackground (ctx :StyleContext, config :BackgroundConfig) :Su
       }
     }
   })
-  // TODO
-  else if (config.image) return NoDecor
-  // TODO: log a warning?
-  else return NoDecor
+  else if (config.image) {
+    // TODO
+    log.warn("TODO: support for background images.", "src", config.image.source)
+    return NoDecor
+  }
+  else {
+    log.warn("Unknown background.", "config", config)
+    return NoDecor
+  }
 }
 
 /** Defines a border rendered around a [[Box]]. */
