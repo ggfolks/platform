@@ -1,6 +1,6 @@
 import {Clock} from "../core/clock"
 import {refEquals} from "../core/data"
-import {ChangeFn, Value} from "../core/react"
+import {ChangeFn, Mutable, Value} from "../core/react"
 import {log, PMap} from "../core/util"
 import {Graph, GraphConfig} from "./graph"
 import {EdgeMeta, InputEdgeMeta, inputEdge, outputEdge, property} from "./meta"
@@ -15,27 +15,29 @@ abstract class TimeoutConfig implements NodeConfig {
 }
 
 class TimeoutNode extends Node {
+  private _output = Mutable.local(false)
+  private _timeout? :number
 
   constructor (graph :Graph, id :string, readonly config :TimeoutConfig) {
     super(graph, id, config)
   }
 
+  connect () {
+    this._disposer.add(this.graph.getValue(this.config.start, true).onValue(start => {
+      if (!start) return
+      this._output.update(false)
+      window.clearTimeout(this._timeout)
+      this._timeout = window.setTimeout(() => this._output.update(true), this.config.seconds * 1000)
+    }))
+  }
+
+  dispose () {
+    super.dispose()
+    window.clearTimeout(this._timeout)
+  }
+
   protected _createOutput () {
-    return this.graph.getValue(this.config.start, true).switchMap(start => {
-      if (!start) return Value.constant(false)
-      let complete = false
-      return Value.deriveValue(
-        refEquals,
-        dispatch => {
-          const timeout = window.setTimeout(
-            () => dispatch(complete = true, false),
-            this.config.seconds * 1000,
-          )
-          return () => window.clearTimeout(timeout)
-        },
-        () => complete,
-      )
-    })
+    return this._output
   }
 }
 
@@ -48,29 +50,34 @@ abstract class IntervalConfig implements NodeConfig {
 }
 
 class IntervalNode extends Node {
+  private _output = Mutable.local(false)
+  private _interval? :number
 
   constructor (graph :Graph, id :string, readonly config :IntervalConfig) {
     super(graph, id, config)
   }
 
-  protected _createOutput () {
-    return this.graph.getValue(this.config.start, true).switchMap(start => {
-      if (!start) return Value.constant(false)
-      return Value.deriveValue(
-        refEquals,
-        dispatch => {
-          const interval = window.setInterval(
-            () => {
-              dispatch(true, false)
-              dispatch(false, true)
-            },
-            this.config.seconds * 1000,
-          )
-          return () => window.clearInterval(interval)
+  connect () {
+    this._disposer.add(this.graph.getValue(this.config.start, true).onValue(start => {
+      if (!start) return
+      window.clearInterval(this._interval)
+      this._interval = window.setInterval(
+        () => {
+          this._output.update(true)
+          this._output.update(false)
         },
-        () => false,
+        this.config.seconds * 1000,
       )
-    })
+    }))
+  }
+
+  dispose () {
+    super.dispose()
+    window.clearInterval(this._interval)
+  }
+
+  protected _createOutput () {
+    return this._output
   }
 }
 

@@ -1,4 +1,4 @@
-import {Value} from "../core/react"
+import {Mutable, Value} from "../core/react"
 import {Graph} from "./graph"
 import {inputEdge, inputEdges, outputEdge, property} from "./meta"
 import {
@@ -168,27 +168,33 @@ abstract class AccumulateConfig implements NodeConfig {
 }
 
 class Accumulate extends Node {
+  private _output = Mutable.local(0)
 
   constructor (graph :Graph, id :string, readonly config :AccumulateConfig) {
     super(graph, id, config)
   }
 
+  connect () {
+    this._disposer.add(
+      Value
+        .join2(
+          this.graph.getValue(this.config.reset, false),
+          this.graph.getValue(this.config.input, 0),
+        )
+        .onValue(([reset, input]) => {
+          if (reset) this._output.update(0)
+          else {
+            let sum = this._output.current + input
+            if (this.config.min !== undefined) sum = Math.max(this.config.min, sum)
+            if (this.config.max !== undefined) sum = Math.min(this.config.max, sum)
+            this._output.update(sum)
+          }
+        })
+    )
+  }
+
   protected _createOutput () {
-    let sum = 0
-    return Value
-      .join2(
-        this.graph.getValue(this.config.reset, false),
-        this.graph.getValue(this.config.input, 0),
-      )
-      .map(([reset, input]) => {
-        if (reset) sum = 0
-        else {
-          sum += input
-          if (this.config.min !== undefined) sum = Math.max(this.config.min, sum)
-          if (this.config.max !== undefined) sum = Math.min(this.config.max, sum)
-        }
-        return sum
-      })
+    return this._output
   }
 }
 
