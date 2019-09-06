@@ -125,6 +125,30 @@ class LessThan extends Node {
   }
 }
 
+/** Outputs x > y. */
+abstract class GreaterThanConfig implements NodeConfig {
+  type = "greaterThan"
+  @inputEdge("number") x = undefined
+  @inputEdge("number") y = undefined
+  @outputEdge("boolean") output = undefined
+}
+
+class GreaterThan extends Node {
+
+  constructor (graph :Graph, id :string, readonly config :GreaterThanConfig) {
+    super(graph, id, config)
+  }
+
+  protected _createOutput () {
+    return Value
+      .join(
+        this.graph.getValue(this.config.x, 0),
+        this.graph.getValue(this.config.y, 0),
+      )
+      .map(([x, y]) => x > y)
+  }
+}
+
 /** Outputs condition ? ifTrue : ifFalse. */
 abstract class ConditionalConfig implements NodeConfig {
   type = "conditional"
@@ -158,6 +182,7 @@ export function registerLogicNodes (registry :NodeTypeRegistry) {
     or: Or,
     not: Not,
     equals: Equals,
+    greaterThan: GreaterThan,
     lessThan: LessThan,
     conditional: Conditional,
   })
