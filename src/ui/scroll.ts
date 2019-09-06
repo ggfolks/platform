@@ -32,13 +32,11 @@ export class ScrollView extends Control {
 
   handleMouseDown (event :MouseEvent, pos :vec2) :MouseInteraction|undefined {
     const transformedPos = this._transformPos(pos)
-    if (rect.contains(this.contents.bounds, transformedPos)) {
-      const interaction = this.contents.handleMouseDown(event, transformedPos)
-      if (interaction) return {
-        move: (event, pos) => interaction.move(event, this._transformPos(pos)),
-        release: interaction.release,
-        cancel: interaction.cancel,
-      }
+    const interaction = this.contents.maybeHandleMouseDown(event, transformedPos)
+    if (interaction) return {
+      move: (event, pos) => interaction.move(event, this._transformPos(pos)),
+      release: interaction.release,
+      cancel: interaction.cancel,
     }
     if (event.button !== 0) return undefined
     const basePos = vec2.clone(pos)

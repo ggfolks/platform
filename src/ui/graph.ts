@@ -451,6 +451,11 @@ export class GraphView extends AbsGroup {
     }
   }
 
+  maybeHandleMouseDown (event :MouseEvent, pos :vec2) :MouseInteraction|undefined {
+    // just assume that anything in the scroll view is in the graph view
+    return this.handleMouseDown(event, pos)
+  }
+
   handleMouseDown (event :MouseEvent, pos :vec2) :MouseInteraction|undefined {
     const graphViewer = getGraphViewer(this)
     const interaction = super.handleMouseDown(event, pos)
