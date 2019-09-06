@@ -10,15 +10,29 @@ import {InputEdge, Node, NodeConfig, NodeTypeRegistry} from "./node"
 abstract class TimeoutConfig implements NodeConfig {
   type = "timeout"
   @property() seconds = 0
+  @inputEdge("boolean") start = undefined
   @outputEdge("boolean") output = undefined
 }
 
 class TimeoutNode extends Node {
   private _output = Mutable.local(false)
-  private _timeout = setTimeout(() => this._output.update(true), this.config.seconds * 1000)
+  private _timeout? :number
 
   constructor (graph :Graph, id :string, readonly config :TimeoutConfig) {
     super(graph, id, config)
+  }
+
+  connect () {
+    this._disposer.add(this.graph.getValue(this.config.start, true).onValue(start => {
+      if (start) {
+        this._output.update(false)
+        clearTimeout(this._timeout)
+        this._timeout = window.setTimeout(
+          () => this._output.update(true),
+          this.config.seconds * 1000,
+        )
+      }
+    }))
   }
 
   protected _createOutput () {
@@ -35,18 +49,28 @@ class TimeoutNode extends Node {
 abstract class IntervalConfig implements NodeConfig {
   type = "interval"
   @property() seconds = 0
+  @inputEdge("boolean") start = undefined
   @outputEdge("boolean") output = undefined
 }
 
 class IntervalNode extends Node {
   private _output = Mutable.local(false)
-  private _interval = setInterval(
-    () => { this._output.update(true) ; this._output.update(false) },
-    this.config.seconds * 1000,
-  )
+  private _interval? :number
 
   constructor (graph :Graph, id :string, readonly config :IntervalConfig) {
     super(graph, id, config)
+  }
+
+  connect () {
+    this._disposer.add(this.graph.getValue(this.config.start, true).onValue(start => {
+      if (start) {
+        clearInterval(this._interval)
+        this._interval = window.setInterval(
+          () => { this._output.update(true) ; this._output.update(false) },
+          this.config.seconds * 1000,
+        )
+      }
+    }))
   }
 
   protected _createOutput () {

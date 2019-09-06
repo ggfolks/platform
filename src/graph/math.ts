@@ -163,6 +163,7 @@ abstract class AccumulateConfig implements NodeConfig {
   @property() min = -Infinity
   @property() max = Infinity
   @inputEdge("number") input = undefined
+  @inputEdge("boolean") reset = undefined
   @outputEdge("number") output = undefined
 }
 
@@ -174,12 +175,20 @@ class Accumulate extends Node {
 
   protected _createOutput () {
     let sum = 0
-    return this.graph.getValue(this.config.input, 0).map(value => {
-      sum += value
-      if (this.config.min !== undefined) sum = Math.max(this.config.min, sum)
-      if (this.config.max !== undefined) sum = Math.min(this.config.max, sum)
-      return sum
-    })
+    return Value
+      .join2(
+        this.graph.getValue(this.config.reset, false),
+        this.graph.getValue(this.config.input, 0),
+      )
+      .map(([reset, input]) => {
+        if (reset) sum = 0
+        else {
+          sum += input
+          if (this.config.min !== undefined) sum = Math.max(this.config.min, sum)
+          if (this.config.max !== undefined) sum = Math.min(this.config.max, sum)
+        }
+        return sum
+      })
   }
 }
 
