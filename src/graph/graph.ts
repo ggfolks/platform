@@ -2,7 +2,7 @@ import {Clock} from "../core/clock"
 import {Emitter, Stream, Value} from "../core/react"
 import {MutableMap, RMap} from "../core/rcollect"
 import {Disposable} from "../core/util"
-import {InputEdge, InputEdges, Node, NodeConfig, NodeContext} from "./node"
+import {InputEdge, InputEdges, Node, NodeConfig, NodeContext, NodeInput} from "./node"
 
 /** Configuration for a graph. */
 export interface GraphConfig {
@@ -45,14 +45,42 @@ export class Graph implements Disposable {
     }
   }
 
-  /** Creates and connects a new node of the specified type, adding it to the config. */
-  createNode (type :string) {
-    // find a unique name based on the type
-    let id = type
-    for (let ii = 2; this._nodes.has(id); ii++) id = type + ii
-    const node = this.ctx.types.createNode(this, id, this.config[id] = {type})
-    this._nodes.set(id, node)
-    node.connect()
+  /** Creates and connects a set of new nodes, adding them to the config and returning a map from
+    * old to new ids. */
+  createNodes (config :GraphConfig) :Map<string, string> {
+    const ids = new Map<string, string>()
+    for (const key in config) {
+      const nodeConfig = config[key]
+      // find a unique name based on the key
+      let id = key
+      for (let ii = 2; this._nodes.has(id); ii++) id = key + ii
+      const node = this.ctx.types.createNode(this, id, this.config[id] = nodeConfig)
+      this._nodes.set(id, node)
+      ids.set(key, id)
+    }
+    const convertInput = (input :NodeInput<any>) => {
+      if (typeof input === "string") return ids.get(input)
+      else if (Array.isArray(input)) {
+        const newId = ids.get(input[0])
+        return newId === undefined ? undefined : [newId, input[1]]
+      } else return input
+    }
+    for (const id of ids.values()) {
+      const node = this._nodes.get(id)!
+      const inputsMeta = node.inputsMeta
+      for (const inputKey in inputsMeta) {
+        const input = node.config[inputKey]
+        if (inputsMeta[inputKey].multiple) {
+          if (Array.isArray(input)) {
+            node.config[inputKey] = input.map(convertInput)
+          }
+        } else if (input !== undefined) {
+          node.config[inputKey] = convertInput(input)
+        }
+      }
+      node.connect()
+    }
+    return ids
   }
 
   /** Removes the node identified by `id` from the graph. */

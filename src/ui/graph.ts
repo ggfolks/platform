@@ -1,4 +1,4 @@
-import {dataEquals} from "../core/data"
+import {dataCopy, dataEquals} from "../core/data"
 import {clamp, dim2, rect, vec2} from "../core/math"
 import {Mutable, Source, Value} from "../core/react"
 import {MutableSet} from "../core/rcollect"
@@ -9,7 +9,7 @@ import {Element, ElementConfig, ElementContext, MouseInteraction, Observer} from
 import {AbsConstraints, AbsGroup, AxisConfig, VGroup} from "./group"
 import {List} from "./list"
 import {Action, Model, ModelData, ModelKey, ModelProvider, Spec, dataProvider} from "./model"
-import {InputValue, NodeCreator} from "./node"
+import {InputValue, NodeCopier, NodeCreator, NodeRemover} from "./node"
 import {ScrollView} from "./scroll"
 import {BackgroundConfig, BorderConfig, NoopDecor, addDecorationBounds} from "./style"
 
@@ -18,6 +18,8 @@ export interface GraphViewerConfig extends ElementConfig {
   type :"graphviewer"
   editable? :Spec<Value<boolean>>
 }
+
+const clipboard = Mutable.local<GraphConfig|undefined>(undefined)
 
 export class GraphViewer extends VGroup {
   readonly contents :Element[] = []
@@ -184,24 +186,33 @@ export class GraphViewer extends VGroup {
                     cut: {
                       enabled: editableSelection,
                       action: this._createModelAction(model => {
-                        const removeNode = model.resolve<Value<(id :string) => void>>("removeNode")
-                        for (const id of this.selection) removeNode.current(id)
+                        clipboard.update(dataCopy(
+                          model.resolve<Value<NodeCopier>>("copyNodes").current(this.selection),
+                        ))
+                        model.resolve<Value<NodeRemover>>("removeNodes").current(this.selection)
                         this.selection.clear()
                       }),
                     },
                     copy: {
                       enabled: haveSelection,
-                      action: () => {},
+                      action: this._createModelAction(model => {
+                        clipboard.update(dataCopy(
+                          model.resolve<Value<NodeCopier>>("copyNodes").current(this.selection),
+                        ))
+                      }),
                     },
                     paste: {
-                      enabled: Value.constant(false),
-                      action: () => {},
+                      enabled: Value.join2(clipboard, this._editable).map(
+                        ([clipboard, editable]) => clipboard && editable,
+                      ),
+                      action: this._createModelAction(model => {
+                        this._nodeCreator.current(dataCopy(clipboard.current!))
+                      }),
                     },
                     delete: {
                       enabled: editableSelection,
                       action: this._createModelAction(model => {
-                        const removeNode = model.resolve<Value<(id :string) => void>>("removeNode")
-                        for (const id of this.selection) removeNode.current(id)
+                        model.resolve<Value<NodeRemover>>("removeNodes").current(this.selection)
                         this.selection.clear()
                       }),
                     },
@@ -315,7 +326,15 @@ export class GraphViewer extends VGroup {
   }
 
   private _updateNodeCreator (model :Model) {
-    this._nodeCreator.update(model.resolve<Value<NodeCreator>>("createNode").current)
+    const createNodes = model.resolve<Value<NodeCreator>>("createNodes").current
+    this._nodeCreator.update((config :GraphConfig) => {
+      const ids = createNodes(config)
+      this.selection.clear()
+      for (const id of ids.values()) this.selection.add(id)
+      const graphView = this.findChild("graphview") as GraphView
+      graphView.repositionNodes(ids)
+      return ids
+    })
   }
 
   private _createScrollViewAction (op :(scrollView :ScrollView) => void) :Action {
@@ -388,6 +407,7 @@ export class GraphView extends AbsGroup {
   private _select? :rect
   private _selectBackground = this.observe(NoopDecor)
   private _selectBorder = this.observe(NoopDecor)
+  private readonly _lastContaining = vec2.create()
 
   constructor (ctx :ElementContext, parent :Element, readonly config :GraphViewConfig) {
     super(ctx, parent, config)
@@ -448,6 +468,34 @@ export class GraphView extends AbsGroup {
     }
     if (style.selectBorder) {
       this._selectBorder.observe(ctx.style.resolveBorder(style.selectBorder))
+    }
+  }
+
+  applyToContaining (canvas :CanvasRenderingContext2D, pos :vec2, op :(element :Element) => void) {
+    super.applyToContaining(canvas, pos, op)
+    vec2.set(this._lastContaining, pos[0] - this.x, pos[1] - this.y)
+  }
+
+  repositionNodes (ids :Map<string, string>) {
+    // find the centroid
+    let cx = 0
+    let cy = 0
+    for (const id of ids.values()) {
+      const node = this.elements.get(id)!.node
+      const constraints = node.config.constraints as AbsConstraints
+      const position = constraints.position!
+      cx += position[0]
+      cy += position[1]
+    }
+    // now translate the centroid to the last mouse position
+    const dx = this._lastContaining[0] - cx / ids.size
+    const dy = this._lastContaining[1] - cy / ids.size
+    for (const id of ids.values()) {
+      const node = this.elements.get(id)!.node
+      const constraints = node.config.constraints as AbsConstraints
+      const position = constraints.position!
+      position[0] += dx
+      position[1] += dy
     }
   }
 
@@ -817,11 +865,11 @@ export class NodeView extends VGroup {
       const position = constraints.position!
       origins.set(key, position.slice())
     }
-    this.setCursor(this, "move")
     const cancel = () => this.clearCursor(this)
     return {
       type: "node",
       move: (event, pos) => {
+        this.setCursor(this, "move")
         const dx = pos[0] - basePos[0]
         const dy = pos[1] - basePos[1]
         for (const [key, origin] of origins) {
@@ -1366,7 +1414,6 @@ export class Terminal extends Element {
       graphView.contents[index] = tmp
       tmp.dirty()
     }
-    this.setCursor(this, "move")
     const region = rect.create()
     const elementPos = vec2.create()
     let targetTerminal :Terminal|undefined
@@ -1399,6 +1446,7 @@ export class Terminal extends Element {
     }
     return {
       move: (event :MouseEvent, pos :vec2) => {
+        this.setCursor(this, "move")
         this.dirty()
         vec2.copy(endpoint, pos)
         this.dirty()

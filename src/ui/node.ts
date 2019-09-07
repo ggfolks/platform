@@ -37,7 +37,9 @@ abstract class UINodeConfig implements NodeConfig {
   @inputEdge("boolean") input = undefined
 }
 
-export type NodeCreator = (type :string) => void
+export type NodeCreator = (config :GraphConfig) => Map<string, string>
+export type NodeRemover = (ids :Set<string>) => void
+export type NodeCopier = (ids :Set<string>) => GraphConfig
 
 class UINode extends Node {
 
@@ -54,7 +56,7 @@ class UINode extends Node {
       let root :Root
       const ui = new UI(ctx.theme, ctx.styles, ctx.image)
       const disposer = new Disposer()
-      const nodeCreator = Mutable.local<NodeCreator>(Noop)
+      const nodeCreator = Mutable.local<NodeCreator>(() => new Map())
       const model = new Model({
         ...this.config.model,
         remove: () => {
@@ -70,7 +72,7 @@ class UINode extends Node {
           data: {
             resolve: (key :ModelKey) => new Model({
               name: Value.constant(key),
-              action: () => nodeCreator.current(key as string),
+              action: () => nodeCreator.current({[key as string]: {type: (key as string)}}),
             }),
           },
         })),
@@ -106,12 +108,19 @@ class UINode extends Node {
 function createGraphModelData (graph :Graph) :ModelData {
   let nodeData :ModelProvider|undefined
   return {
-    createNode: Value.constant((type :string) => graph.createNode(type)),
-    removeNode: Value.constant((id :string) => graph.removeNode(id)),
+    createNodes: Value.constant((config :GraphConfig) => graph.createNodes(config)),
+    removeNodes: Value.constant((ids :Set<string>) => {
+      for (const id of ids) graph.removeNode(id)
+    }),
     removeAllNodes: () => {
       graph.removeAllNodes()
       nodeData = undefined
     },
+    copyNodes: Value.constant((ids :Set<string>) => {
+      const config = {}
+      for (const id of ids) config[id] = graph.nodes.get(id)!.toJSON()
+      return config
+    }),
     toJSON: Value.constant(() => graph.toJSON()),
     fromJSON: Value.constant((json :GraphConfig) => {
       graph.fromJSON(json)

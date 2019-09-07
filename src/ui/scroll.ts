@@ -41,13 +41,15 @@ export class ScrollView extends Control {
     if (event.button !== 0) return undefined
     const basePos = vec2.clone(pos)
     const baseOffset = this._offset.current
-    this.setCursor(this, "all-scroll")
     const cancel = () => this.clearCursor(this)
     return {
-      move: (event, pos) => this._updateOffset(
-        baseOffset[0] + (basePos[0] - pos[0]),
-        baseOffset[1] + (basePos[1] - pos[1]),
-      ),
+      move: (event, pos) => {
+        this.setCursor(this, "all-scroll")
+        this._updateOffset(
+          baseOffset[0] + (basePos[0] - pos[0]),
+          baseOffset[1] + (basePos[1] - pos[1]),
+        )
+      },
       release: cancel,
       cancel,
     }
