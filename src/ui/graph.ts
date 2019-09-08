@@ -23,7 +23,7 @@ const clipboard = Mutable.local<GraphConfig|undefined>(undefined)
 
 export class GraphViewer extends VGroup {
   readonly contents :Element[] = []
-  readonly selection = MutableSet.local<string>()
+  readonly selection :MutableSet<string>
 
   private _editable = Value.constant(false)
   private _nodeCreator :Mutable<NodeCreator>
@@ -37,6 +37,7 @@ export class GraphViewer extends VGroup {
     const categoryData = ctx.model.resolve<ModelProvider>("categoryData")
     this._nodeCreator = ctx.model.resolve<Mutable<NodeCreator>>("nodeCreator")
     const remove = ctx.model.resolve<Action>("remove")
+    this.selection = ctx.model.resolve<MutableSet<string>>("selection")
     const haveSelection = this.selection.fold(false, (value, set) => set.size > 0)
     const editableSelection = Value.join(haveSelection, this._editable).map(
       ([selection, editable]) => selection && editable,

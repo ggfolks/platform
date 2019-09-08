@@ -2,6 +2,7 @@ import {refEquals} from "../core/data"
 import {dim2, vec2} from "../core/math"
 import {Scale, getValueStyle} from "../core/ui"
 import {ChangeFn, Mutable, Value} from "../core/react"
+import {MutableSet} from "../core/rcollect"
 import {Disposer, Noop, getValue} from "../core/util"
 import {Graph, GraphConfig} from "../graph/graph"
 import {inputEdge} from "../graph/meta"
@@ -108,6 +109,7 @@ class UINode extends Node {
 function createGraphModelData (graph :Graph) :ModelData {
   let nodeData :ModelProvider|undefined
   return {
+    selection: MutableSet.local<string>(),
     createNodes: Value.constant((config :GraphConfig) => graph.createNodes(config)),
     removeNodes: Value.constant((ids :Set<string>) => {
       for (const id of ids) graph.removeNode(id)
