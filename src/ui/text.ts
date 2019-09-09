@@ -64,7 +64,7 @@ export abstract class AbstractLabel extends Element {
   protected relayout () {
     // clamp our x offset so we don't have empty space on the right (TODO: or left?)
     const width = this.width, span = this.span.current, swidth = span.size[0]
-    if (this.xoffset.current + swidth < width) this.xoffset.update(width-swidth)
+    if (swidth > width && this.xoffset.current + swidth < width) this.xoffset.update(width-swidth)
     // if we have a selection, compute its x position & width
     const [ss, se] = this.selection.current
     if (ss < se) {
