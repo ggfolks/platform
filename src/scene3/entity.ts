@@ -32,7 +32,7 @@ import {SkeletonUtils} from "three/examples/jsm/utils/SkeletonUtils"
 import {Clock} from "../core/clock"
 import {Subject} from "../core/react"
 import {RMap} from "../core/rcollect"
-import {log, NoopRemover, Remover} from "../core/util"
+import {NoopRemover, Remover} from "../core/util"
 import {Pointer} from "../input/hand"
 import {
   Component,
