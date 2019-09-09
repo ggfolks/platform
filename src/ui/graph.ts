@@ -277,7 +277,7 @@ export class GraphViewer extends VGroup {
               visible: this._poppable,
               contents: {
                 type: "box",
-                contents: {type: "label", text: "backButton.text"},
+                contents: {type: "label", text: Value.constant("←")},
               },
             },
             {
@@ -285,7 +285,7 @@ export class GraphViewer extends VGroup {
               onClick: remove,
               contents: {
                 type: "box",
-                contents: {type: "label", text: "closeButton.text"},
+                contents: {type: "label", text: Value.constant("×")},
               },
             },
           ],
