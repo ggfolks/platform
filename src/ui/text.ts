@@ -204,6 +204,8 @@ export const keyMap :KeyMap = {
   // "Standard" key bindings
   Backspace: {0: "backspace"},
   Delete: {0: "delete"},
+  NumpadDecimal: {0: "delete"},
+  
   // TODO: Shift-Arrow should extend selection left & right
   ArrowLeft: {0: "cursorLeft", [CtrlMask]: "cursorStart"},
   ArrowRight: {0: "cursorRight", [CtrlMask]: "cursorEnd"},
