@@ -112,7 +112,6 @@ export class GraphViewer extends VGroup {
                       name: Value.constant("Clear All"),
                       enabled: this._editable,
                       action: this._createModelAction(model => {
-                        this.selection.clear()
                         model.resolve<Action>("removeAllNodes")()
                       }),
                     },
@@ -195,8 +194,7 @@ export class GraphViewer extends VGroup {
                         clipboard.update(dataCopy(
                           model.resolve<Value<NodeCopier>>("copyNodes").current(this.selection),
                         ))
-                        this.applyEdit.current({remove: this.selection})
-                        this.selection.clear()
+                        this.applyEdit.current({selection: new Set(), remove: this.selection})
                       }),
                     },
                     copy: {
@@ -218,8 +216,7 @@ export class GraphViewer extends VGroup {
                     delete: {
                       enabled: editableSelection,
                       action: this._createModelAction(model => {
-                        this.applyEdit.current({remove: this.selection})
-                        this.selection.clear()
+                        this.applyEdit.current({selection: new Set(), remove: this.selection})
                       }),
                     },
                   }),
@@ -334,8 +331,6 @@ export class GraphViewer extends VGroup {
     const createNodes = model.resolve<Value<NodeCreator>>("createNodes").current
     this._nodeCreator.update((config :GraphConfig) => {
       const ids = createNodes(config)
-      this.selection.clear()
-      for (const id of ids.values()) this.selection.add(id)
       const graphView = this.findChild("graphview") as GraphView
       graphView.repositionNodes(ids)
       return ids

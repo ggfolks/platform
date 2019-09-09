@@ -52,12 +52,14 @@ export interface GraphEditConfig {
 
 export interface NodeEdit {
   editNumber? :number
+  selection? :Set<string>
   add? :GraphConfig
   edit? :GraphEditConfig
   remove? :Set<string>
 }
 
 interface FullNodeEdit extends NodeEdit {
+  selection :Set<string>
   add :GraphConfig
   edit :GraphEditConfig
   remove :Set<string>
@@ -85,14 +87,22 @@ class UINode extends Node {
       const ui = new UI(ctx.theme, ctx.styles, ctx.image)
       const disposer = new Disposer()
       const selection = MutableSet.local<string>()
+      const setSelection = (newSelection :Set<string>) => {
+        selection.clear()
+        for (const id of newSelection) selection.add(id)
+      }
       const nodeCreator = Mutable.local<NodeCreator>(() => new Map())
-      const nodeEditor = Mutable.local<NodeEditor>(edit => ({add: {}, edit: {}, remove: new Set()}))
+      const nodeEditor = Mutable.local<NodeEditor>(
+        edit => ({selection: new Set(), add: {}, edit: {}, remove: new Set()}),
+      )
       const canUndo = Mutable.local(false)
       const canRedo = Mutable.local(false)
       const undoStack :FullNodeEdit[] = []
       const redoStack :FullNodeEdit[] = []
       const applyEdit = (edit :NodeEdit) => {
+        const oldSelection = new Set(selection)
         const reverseEdit = nodeEditor.current(edit)
+        if (edit.selection) setSelection(edit.selection)
         const lastEdit = undoStack[undoStack.length - 1]
         if (lastEdit && lastEdit.editNumber === currentEditNumber) {
           // merge into last edit
@@ -126,6 +136,7 @@ class UINode extends Node {
           }
         } else {
           reverseEdit.editNumber = currentEditNumber
+          reverseEdit.selection = oldSelection
           undoStack.push(reverseEdit)
         }
         redoStack.length = 0
@@ -157,13 +168,23 @@ class UINode extends Node {
         applyEdit: Value.constant(applyEdit),
         canUndo,
         undo: () => {
-          redoStack.push(nodeEditor.current(undoStack.pop()!))
+          const oldSelection = new Set(selection)
+          const edit = undoStack.pop()!
+          const reverseEdit = nodeEditor.current(edit)
+          setSelection(edit.selection)
+          reverseEdit.selection = oldSelection
+          redoStack.push(reverseEdit)
           canRedo.update(true)
           canUndo.update(undoStack.length > 0)
         },
         canRedo,
         redo: () => {
-          undoStack.push(nodeEditor.current(redoStack.pop()!))
+          const oldSelection = new Set(selection)
+          const edit = redoStack.pop()!
+          const reverseEdit = nodeEditor.current(edit)
+          setSelection(edit.selection)
+          reverseEdit.selection = oldSelection
+          undoStack.push(reverseEdit)
           canUndo.update(true)
           canRedo.update(redoStack.length > 0)
         },
@@ -235,7 +256,7 @@ function createGraphModelData (graph :Graph, applyEdit :(edit :NodeEdit) => void
           }
         }
       }
-      applyEdit({add})
+      applyEdit({selection: new Set(ids.values()), add})
       return ids
     }),
     editNodes: Value.constant((edit :NodeEdit) => {
@@ -276,7 +297,7 @@ function createGraphModelData (graph :Graph, applyEdit :(edit :NodeEdit) => void
       return {add: reverseAdd, edit: reverseEdit, remove: reverseRemove}
     }),
     removeAllNodes: () => {
-      applyEdit({remove: new Set(graph.nodes.keys())})
+      applyEdit({selection: new Set(), remove: new Set(graph.nodes.keys())})
       nodeData = undefined
     },
     copyNodes: Value.constant((ids :Set<string>) => {
