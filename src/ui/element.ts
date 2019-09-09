@@ -348,6 +348,14 @@ let elementsOver :Set<Element> = new Set()
 let lastElementsOver :Set<Element> = new Set()
 const addToElementsOver = (element :Element) => elementsOver.add(element)
 
+let currentEditNumber = 0
+
+/** Returns the current value of the edit number, which is simply a number that we increment after
+  * certain input events (mouse up, key up) to determine which edits should be merged. */
+export function getCurrentEditNumber () {
+  return currentEditNumber
+}
+
 /** The top-level of the UI hierarchy. Manages the canvas into which the UI is rendered. */
 export class Root extends Element {
   private readonly interacts :Array<MouseInteraction|undefined> = []
@@ -476,6 +484,7 @@ export class Root extends Element {
         this.interacts[button] = undefined
         this._updateElementsOver(event, pos)
       }
+      currentEditNumber++
       break
     case "mousecancel":
       if (iact) {
@@ -513,6 +522,7 @@ export class Root extends Element {
       return
     }
     this._unclaimedKeyEvent.emit(event)
+    if (event.type === "keyup") currentEditNumber++
   }
 
   dispatchWheelEvent (event :WheelEvent) {

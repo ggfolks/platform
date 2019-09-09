@@ -11,7 +11,7 @@ import {
   InputEdge, InputEdges, Node, NodeConfig,
   NodeContext, NodeInput, NodeTypeRegistry,
 } from "../graph/node"
-import {HAnchor, Host, Root, RootConfig, VAnchor} from "./element"
+import {HAnchor, Host, Root, RootConfig, VAnchor, getCurrentEditNumber} from "./element"
 import {Model, ModelData, ModelKey, mapProvider} from "./model"
 import {Theme, UI} from "./ui"
 import {ImageResolver, StyleDefs} from "./style"
@@ -65,12 +65,6 @@ interface FullNodeEdit extends NodeEdit {
   remove :Set<string>
 }
 
-let currentEditNumber = 0
-function advanceEditNumber () { currentEditNumber++ }
-document.addEventListener("keyup", advanceEditNumber)
-document.addEventListener("mouseup", advanceEditNumber)
-document.addEventListener("touchend", advanceEditNumber)
-
 class UINode extends Node {
 
   constructor (graph :Graph, id :string, readonly config :UINodeConfig) {
@@ -104,6 +98,7 @@ class UINode extends Node {
         const reverseEdit = nodeEditor.current(edit)
         if (edit.selection) setSelection(edit.selection)
         const lastEdit = undoStack[undoStack.length - 1]
+        const currentEditNumber = getCurrentEditNumber()
         if (lastEdit && lastEdit.editNumber === currentEditNumber) {
           // merge into last edit
           for (const id in reverseEdit.add) {
