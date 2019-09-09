@@ -5,11 +5,12 @@ import {MutableSet} from "../core/rcollect"
 import {PMap, Remover} from "../core/util"
 import {GraphConfig, getConstantOrValueNodeId} from "../graph/graph"
 import {InputEdge} from "../graph/node"
+import {Box} from "./box"
 import {Element, ElementConfig, ElementContext, MouseInteraction, Observer} from "./element"
 import {AbsConstraints, AbsGroup, AxisConfig, VGroup} from "./group"
 import {List} from "./list"
 import {Action, Model, ModelData, ModelKey, ModelProvider, Spec, dataProvider} from "./model"
-import {InputValue, NodeCopier, NodeCreator, NodeRemover} from "./node"
+import {InputValue, NodeCopier, NodeCreator, NodeEdit, NodeEditor} from "./node"
 import {ScrollView} from "./scroll"
 import {BackgroundConfig, BorderConfig, NoopDecor, addDecorationBounds} from "./style"
 
@@ -24,9 +25,11 @@ const clipboard = Mutable.local<GraphConfig|undefined>(undefined)
 export class GraphViewer extends VGroup {
   readonly contents :Element[] = []
   readonly selection :MutableSet<string>
+  readonly applyEdit :Value<(edit :NodeEdit) => void>
 
   private _editable = Value.constant(false)
   private _nodeCreator :Mutable<NodeCreator>
+  private _nodeEditor :Mutable<NodeEditor>
   private _stack :[Model, Element][] = []
   private _poppable = Mutable.local(false)
 
@@ -36,12 +39,15 @@ export class GraphViewer extends VGroup {
     const categoryKeys = ctx.model.resolve<Source<string[]>>("categoryKeys")
     const categoryData = ctx.model.resolve<ModelProvider>("categoryData")
     this._nodeCreator = ctx.model.resolve<Mutable<NodeCreator>>("nodeCreator")
+    this._nodeEditor = ctx.model.resolve<Mutable<NodeEditor>>("nodeEditor")
     const remove = ctx.model.resolve<Action>("remove")
     this.selection = ctx.model.resolve<MutableSet<string>>("selection")
+    this.applyEdit = ctx.model.resolve<Value<(edit :NodeEdit) => void>>("applyEdit")
     const haveSelection = this.selection.fold(false, (value, set) => set.size > 0)
     const editableSelection = Value.join(haveSelection, this._editable).map(
       ([selection, editable]) => selection && editable,
     )
+    this._updateNodeFunctions(ctx.model)
     this.contents.push(
       ctx.elem.create(ctx, this, {
         type: "box",
@@ -105,11 +111,10 @@ export class GraphViewer extends VGroup {
                     clearAll: {
                       name: Value.constant("Clear All"),
                       enabled: this._editable,
-                      action: () => {
-                        const model = this._stack[this._stack.length - 1][0]
+                      action: this._createModelAction(model => {
                         this.selection.clear()
                         model.resolve<Action>("removeAllNodes")()
-                      },
+                      }),
                     },
                     sep1: {separator: Value.constant(true)},
                     import: {
@@ -171,18 +176,18 @@ export class GraphViewer extends VGroup {
                         nodeKeys.once(keys => {
                           for (const key of keys) this.selection.add(key)
                         })
-                      })
+                      }),
                     },
                   }),
                   shortcutKeys: Value.constant(["undo", "redo", "cut", "copy", "paste", "delete"]),
                   shortcutData: dataProvider({
                     undo: {
-                      enabled: Value.constant(false),
-                      action: () => {},
+                      enabled: ctx.model.resolve<Value<boolean>>("canUndo"),
+                      action: ctx.model.resolve<Action>("undo"),
                     },
                     redo: {
-                      enabled: Value.constant(false),
-                      action: () => {},
+                      enabled: ctx.model.resolve<Value<boolean>>("canRedo"),
+                      action: ctx.model.resolve<Action>("redo"),
                     },
                     cut: {
                       enabled: editableSelection,
@@ -190,7 +195,7 @@ export class GraphViewer extends VGroup {
                         clipboard.update(dataCopy(
                           model.resolve<Value<NodeCopier>>("copyNodes").current(this.selection),
                         ))
-                        model.resolve<Value<NodeRemover>>("removeNodes").current(this.selection)
+                        this.applyEdit.current({remove: this.selection})
                         this.selection.clear()
                       }),
                     },
@@ -213,7 +218,7 @@ export class GraphViewer extends VGroup {
                     delete: {
                       enabled: editableSelection,
                       action: this._createModelAction(model => {
-                        model.resolve<Value<NodeRemover>>("removeNodes").current(this.selection)
+                        this.applyEdit.current({remove: this.selection})
                         this.selection.clear()
                       }),
                     },
@@ -297,12 +302,11 @@ export class GraphViewer extends VGroup {
       }),
     )
     this._stack.push([ctx.model, this.contents[1]])
-    this._updateNodeCreator(ctx.model)
   }
 
   push (model :Model) {
+    this._updateNodeFunctions(model)
     this._stack.push([model, this.contents[1] = this._createElement(model)])
-    this._updateNodeCreator(model)
     this._poppable.update(true)
     this.selection.clear()
     this.invalidate()
@@ -314,7 +318,7 @@ export class GraphViewer extends VGroup {
     stackEntry[1].dispose()
     const [model, element] = this._stack[this._stack.length - 1]
     this.contents[1] = element
-    this._updateNodeCreator(model)
+    this._updateNodeFunctions(model)
     this._poppable.update(this._stack.length > 1)
     this.selection.clear()
     this.invalidate()
@@ -326,7 +330,7 @@ export class GraphViewer extends VGroup {
     for (let ii = this._stack.length - 2; ii >= 0; ii--) this._stack[ii][1].dispose()
   }
 
-  private _updateNodeCreator (model :Model) {
+  private _updateNodeFunctions (model :Model) {
     const createNodes = model.resolve<Value<NodeCreator>>("createNodes").current
     this._nodeCreator.update((config :GraphConfig) => {
       const ids = createNodes(config)
@@ -336,6 +340,7 @@ export class GraphViewer extends VGroup {
       graphView.repositionNodes(ids)
       return ids
     })
+    this._nodeEditor.update(model.resolve<Value<NodeEditor>>("editNodes").current)
   }
 
   private _createScrollViewAction (op :(scrollView :ScrollView) => void) :Action {
@@ -402,7 +407,7 @@ const tmpd = dim2.create()
 const tmpr = rect.create()
 
 export class GraphView extends AbsGroup {
-  readonly elements = new Map<string, {node :Element, edges :Element}>()
+  readonly elements = new Map<string, {node :Box, edges :EdgeView}>()
   readonly contents :Element[] = []
 
   private _select? :rect
@@ -446,8 +451,8 @@ export class GraphView extends AbsGroup {
               constraints: {position},
               scopeId: "node",
               contents: {type: "nodeview", offPolicy: "stretch", editable},
-            }),
-            edges: ctx.elem.create(subctx, this, {type: "edgeview", editable}),
+            }) as Box,
+            edges: ctx.elem.create(subctx, this, {type: "edgeview", editable}) as EdgeView,
           }
           this.elements.set(key, elem)
         }
@@ -482,9 +487,8 @@ export class GraphView extends AbsGroup {
     let cx = 0
     let cy = 0
     for (const id of ids.values()) {
-      const node = this.elements.get(id)!.node
-      const constraints = node.config.constraints as AbsConstraints
-      const position = constraints.position!
+      const nodeView = this.elements.get(id)!.node.contents as NodeView
+      const position = nodeView.position.current
       cx += position[0]
       cy += position[1]
     }
@@ -492,11 +496,9 @@ export class GraphView extends AbsGroup {
     const dx = this._lastContaining[0] - cx / ids.size
     const dy = this._lastContaining[1] - cy / ids.size
     for (const id of ids.values()) {
-      const node = this.elements.get(id)!.node
-      const constraints = node.config.constraints as AbsConstraints
-      const position = constraints.position!
-      position[0] += dx
-      position[1] += dy
+      const nodeView = this.elements.get(id)!.node.contents as NodeView
+      const position = nodeView.position
+      position.update([position.current[0] + dx, position.current[1] + dy])
     }
   }
 
@@ -591,7 +593,7 @@ export class GraphView extends AbsGroup {
         class Column {
           height = 0
           width = 0
-          elements :Element[] = []
+          elements :Box[] = []
           constructor (readonly keys :string[] = []) {}
         }
         const columns :Column[] = []
@@ -631,8 +633,8 @@ export class GraphView extends AbsGroup {
         for (const column of columns) {
           let y = top + (maxHeight - column.height) / 2
           for (const element of column.elements) {
-            const constraints = element.config.constraints as AbsConstraints
             const size = element.preferredSize(-1, -1)
+            const constraints = element.config.constraints as AbsConstraints
             const position = constraints.position as number[]
             position[0] = x + (column.width - size[0])
             position[1] = y
@@ -646,7 +648,7 @@ export class GraphView extends AbsGroup {
     }
     const roots = new Set(keys)
     const layoutNodes = new Map<string, LayoutNode>()
-    const placed = new Set<Element>()
+    const placed = new Set<Box>()
 
     // create layout nodes, note roots
     for (let ii = 0; ii < keys.length; ii++) {
@@ -706,6 +708,7 @@ export class NodeView extends VGroup {
   readonly id :string
   readonly contents :Element[] = []
   readonly hovered = Mutable.local(false)
+  readonly position :Mutable<[number, number]>
 
   private readonly _state = Mutable.local("normal")
   private readonly _editable :Value<boolean>
@@ -714,6 +717,12 @@ export class NodeView extends VGroup {
     super(ctx, parent, config)
     this.id = ctx.model.resolve<Value<string>>("id").current
     this._editable = ctx.model.resolve(this.config.editable)
+    this.position = ctx.model.resolve<Mutable<[number, number]>>("position")
+    this.disposer.add(this.position.onChange(position => {
+      const constraints = parent.config.constraints as AbsConstraints
+      constraints.position = position
+      parent.invalidate()
+    }))
     const hasProperties = ctx.model.resolve<Value<ModelKey[]>>("propertyKeys").current.length > 0
     const hasInputs = ctx.model.resolve<Value<ModelKey[]>>("inputKeys").current.length > 0
     const hasOutputs = ctx.model.resolve<Value<ModelKey[]>>("outputKeys").current.length > 0
@@ -874,12 +883,8 @@ export class NodeView extends VGroup {
         const dx = pos[0] - basePos[0]
         const dy = pos[1] - basePos[1]
         for (const [key, origin] of origins) {
-          const node = graphView.elements.get(key)!.node
-          const constraints = node.config.constraints as AbsConstraints
-          const position = constraints.position!
-          position[0] = origin[0] + dx
-          position[1] = origin[1] + dy
-          node.invalidate()
+          const node = graphView.elements.get(key)!.node.contents as NodeView
+          node.position.update([origin[0] + dx, origin[1] + dy])
         }
       },
       release: cancel,

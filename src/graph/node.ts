@@ -1,7 +1,7 @@
 import {refEquals} from "../core/data"
-import {ChangeFn, Value, addListener, dispatchChange} from "../core/react"
+import {ChangeFn, Mutable, Value, addListener, dispatchChange} from "../core/react"
 import {MutableMap, RMap} from "../core/rcollect"
-import {Disposable, Disposer, NoopRemover, PMap} from "../core/util"
+import {Disposable, Disposer, Noop, NoopRemover, PMap} from "../core/util"
 import {Graph, getConstantOrValueNodeId} from "./graph"
 import {InputEdgeMeta, OutputEdgeMeta, PropertyMeta, getNodeMeta} from "./meta"
 import {Subgraph} from "./util"
@@ -37,6 +37,7 @@ export interface NodeContext {
 /** Parent class for all nodes. */
 export abstract class Node implements Disposable {
   protected _disposer = new Disposer()
+  private _properties :Map<string, Mutable<any>> = new Map()
   private _outputs :Map<string, Value<any>> = new Map()
   private _wrappedOutputs :Map<string, WrappedValue<any>> = new Map()
   private _defaultOutputKey? :string
@@ -73,6 +74,35 @@ export abstract class Node implements Disposable {
       }
     }
     return this._defaultOutputKey
+  }
+
+  /** Returns a reactive view of the specified property. */
+  getProperty<T> (name :string) :Mutable<T|undefined> {
+    let property = this._properties.get(name)
+    if (!property) {
+      let changeFn :ChangeFn<T|undefined> = Noop
+      this._properties.set(name, property = Mutable.deriveMutable(
+        dispatch => {
+          changeFn = dispatch
+          return Noop
+        },
+        () => this.config[name],
+        (value :T|undefined) => {
+          const oldValue = this.config[name]
+          if (value === null) {
+            if (oldValue === undefined) return
+            delete this.config[name]
+            changeFn(undefined, oldValue)
+          } else {
+            if (oldValue === value) return
+            this.config[name] = value
+            changeFn(value, oldValue)
+          }
+        },
+        refEquals,
+      ))
+    }
+    return property
   }
 
   /** Returns the value corresponding to the identified output, or the default if none. */

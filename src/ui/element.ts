@@ -188,8 +188,9 @@ export abstract class Element implements Disposable {
   }
 
   render (canvas :CanvasRenderingContext2D, region :rect) {
-    if (!rect.intersects(this.expandBounds(this._bounds), region)) return
-    if (this.visible.current) this.rerender(canvas, region)
+    if (rect.intersects(this.expandBounds(this._bounds), region) && this.visible.current) {
+      this.rerender(canvas, region)
+    }
     rect.zero(this._dirtyRegion)
   }
 

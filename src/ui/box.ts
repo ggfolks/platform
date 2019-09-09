@@ -77,7 +77,7 @@ export interface BoxConfig extends ElementConfig {
 export class Box extends Element {
   private background = this.observe(NoopDecor)
   private border = this.observe(NoopDecor)
-  private readonly contents :Element
+  readonly contents :Element
   private readonly _expandedBounds = rect.create()
 
   constructor (ctx :ElementContext, parent :Element, readonly config :BoxConfig) {

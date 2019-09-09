@@ -1,13 +1,16 @@
 import {refEquals} from "../core/data"
 import {dim2, vec2} from "../core/math"
 import {Scale, getValueStyle} from "../core/ui"
-import {ChangeFn, Mutable, Value} from "../core/react"
+import {Mutable, Value} from "../core/react"
 import {MutableSet} from "../core/rcollect"
-import {Disposer, Noop, getValue} from "../core/util"
+import {Disposer, PMap, getValue} from "../core/util"
 import {Graph, GraphConfig} from "../graph/graph"
-import {inputEdge} from "../graph/meta"
+import {getNodeMeta, inputEdge} from "../graph/meta"
 import {Subgraph} from "../graph/util"
-import {InputEdge, InputEdges, Node, NodeConfig, NodeContext, NodeTypeRegistry} from "../graph/node"
+import {
+  InputEdge, InputEdges, Node, NodeConfig,
+  NodeContext, NodeInput, NodeTypeRegistry,
+} from "../graph/node"
 import {HAnchor, Host, Root, RootConfig, VAnchor} from "./element"
 import {Model, ModelData, ModelKey, ModelProvider, mapProvider} from "./model"
 import {Theme, UI} from "./ui"
@@ -39,8 +42,32 @@ abstract class UINodeConfig implements NodeConfig {
 }
 
 export type NodeCreator = (config :GraphConfig) => Map<string, string>
+export type NodeEditor = (edit :NodeEdit) => FullNodeEdit
 export type NodeRemover = (ids :Set<string>) => void
 export type NodeCopier = (ids :Set<string>) => GraphConfig
+
+export interface GraphEditConfig {
+  [id :string] :PMap<any>
+}
+
+export interface NodeEdit {
+  editNumber? :number
+  add? :GraphConfig
+  edit? :GraphEditConfig
+  remove? :Set<string>
+}
+
+interface FullNodeEdit extends NodeEdit {
+  add :GraphConfig
+  edit :GraphEditConfig
+  remove :Set<string>
+}
+
+let currentEditNumber = 0
+function advanceEditNumber () { currentEditNumber++ }
+document.addEventListener("keyup", advanceEditNumber)
+document.addEventListener("mouseup", advanceEditNumber)
+document.addEventListener("touchend", advanceEditNumber)
 
 class UINode extends Node {
 
@@ -57,7 +84,54 @@ class UINode extends Node {
       let root :Root
       const ui = new UI(ctx.theme, ctx.styles, ctx.image)
       const disposer = new Disposer()
+      const selection = MutableSet.local<string>()
       const nodeCreator = Mutable.local<NodeCreator>(() => new Map())
+      const nodeEditor = Mutable.local<NodeEditor>(edit => ({add: {}, edit: {}, remove: new Set()}))
+      const canUndo = Mutable.local(false)
+      const canRedo = Mutable.local(false)
+      const undoStack :FullNodeEdit[] = []
+      const redoStack :FullNodeEdit[] = []
+      const applyEdit = (edit :NodeEdit) => {
+        const reverseEdit = nodeEditor.current(edit)
+        const lastEdit = undoStack[undoStack.length - 1]
+        if (lastEdit && lastEdit.editNumber === currentEditNumber) {
+          // merge into last edit
+          for (const id in reverseEdit.add) {
+            const nodeConfig = reverseEdit.add[id]
+            const editConfig = lastEdit.edit[id]
+            if (editConfig) {
+              delete lastEdit.edit[id]
+              mergeEdits(nodeConfig, editConfig)
+
+            } else if (lastEdit.remove.has(id)) {
+              lastEdit.remove.delete(id)
+              continue
+            }
+            lastEdit.add[id] = nodeConfig
+          }
+          for (const id in reverseEdit.edit) {
+            const nodeConfig = reverseEdit.edit[id]
+            const editConfig = lastEdit.edit[id]
+            if (editConfig) {
+              mergeEdits(nodeConfig, editConfig)
+            } else if (lastEdit.remove.has(id)) {
+              continue
+            }
+            lastEdit.edit[id] = nodeConfig
+          }
+          for (const id of reverseEdit.remove) {
+            if (!lastEdit.add[id]) {
+              lastEdit.remove.add(id)
+            }
+          }
+        } else {
+          reverseEdit.editNumber = currentEditNumber
+          undoStack.push(reverseEdit)
+        }
+        redoStack.length = 0
+        canUndo.update(true)
+        canRedo.update(false)
+      }
       const model = new Model({
         ...this.config.model,
         remove: () => {
@@ -77,8 +151,23 @@ class UINode extends Node {
             }),
           },
         })),
+        selection,
         nodeCreator,
-        ...createGraphModelData(graph),
+        nodeEditor,
+        applyEdit: Value.constant(applyEdit),
+        canUndo,
+        undo: () => {
+          redoStack.push(nodeEditor.current(undoStack.pop()!))
+          canRedo.update(true)
+          canUndo.update(undoStack.length > 0)
+        },
+        canRedo,
+        redo: () => {
+          undoStack.push(nodeEditor.current(redoStack.pop()!))
+          canUndo.update(true)
+          canRedo.update(redoStack.length > 0)
+        },
+        ...createGraphModelData(graph, applyEdit),
       })
       root = ui.createRoot(this.config.root, model)
       if (this.config.size) root.setSize(this.config.size)
@@ -106,16 +195,88 @@ class UINode extends Node {
   }
 }
 
-function createGraphModelData (graph :Graph) :ModelData {
+function mergeEdits (first :PMap<any>, second :PMap<any>) {
+  for (const key in second) {
+    first[key] = second[key]
+  }
+}
+
+function createGraphModelData (graph :Graph, applyEdit :(edit :NodeEdit) => void) :ModelData {
   let nodeData :ModelProvider|undefined
   return {
-    selection: MutableSet.local<string>(),
-    createNodes: Value.constant((config :GraphConfig) => graph.createNodes(config)),
-    removeNodes: Value.constant((ids :Set<string>) => {
-      for (const id of ids) graph.removeNode(id)
+    createNodes: Value.constant((config :GraphConfig) => {
+      const add :GraphConfig = {}
+      const ids = new Map<string, string>()
+      for (const oldId in config) {
+        // find a unique name based on the original id
+        let newId = oldId
+        for (let ii = 2; graph.nodes.has(newId); ii++) newId = oldId + ii
+        ids.set(oldId, newId)
+        add[newId] = config[oldId]
+      }
+      const convertInput = (input :NodeInput<any>) => {
+        if (typeof input === "string") return ids.get(input)
+        else if (Array.isArray(input)) {
+          const newId = ids.get(input[0])
+          return newId === undefined ? undefined : [newId, input[1]]
+        } else return input
+      }
+      for (const oldId in config) {
+        const nodeConfig = config[oldId]
+        const inputsMeta = getNodeMeta(nodeConfig.type).inputs
+        for (const inputKey in inputsMeta) {
+          const input = nodeConfig[inputKey]
+          if (inputsMeta[inputKey].multiple) {
+            if (Array.isArray(input)) {
+              nodeConfig[inputKey] = input.map(convertInput)
+            }
+          } else if (input !== undefined) {
+            nodeConfig[inputKey] = convertInput(input)
+          }
+        }
+      }
+      applyEdit({add})
+      return ids
+    }),
+    editNodes: Value.constant((edit :NodeEdit) => {
+      const reverseAdd :GraphConfig = {}
+      const reverseEdit :GraphEditConfig = {}
+      const reverseRemove = new Set<string>()
+      if (edit.remove) {
+        for (const id of edit.remove) {
+          reverseAdd[id] = graph.removeNode(id)
+        }
+      }
+      if (edit.add) {
+        for (const id in edit.add) {
+          graph.createNode(id, edit.add[id])
+          reverseRemove.add(id)
+        }
+      }
+      if (edit.edit) {
+        for (const id in edit.edit) {
+          const node = graph.nodes.require(id)
+          const editConfig = edit.edit[id]
+          const reverseConfig :PMap<any> = {}
+          for (const key in editConfig) {
+            const property = node.getProperty(key)
+            const currentValue = property.current
+            reverseConfig[key] = currentValue === undefined ? null : currentValue
+            property.update(editConfig[key])
+          }
+          reverseEdit[id] = reverseConfig
+        }
+        for (const id in edit.edit) {
+          graph.nodes.require(id).reconnect()
+        }
+      }
+      if (edit.add) {
+        for (const id in edit.add) graph.nodes.require(id).connect()
+      }
+      return {add: reverseAdd, edit: reverseEdit, remove: reverseRemove}
     }),
     removeAllNodes: () => {
-      graph.removeAllNodes()
+      applyEdit({remove: new Set(graph.nodes.keys())})
       nodeData = undefined
     },
     copyNodes: Value.constant((ids :Set<string>) => {
@@ -136,25 +297,23 @@ function createGraphModelData (graph :Graph) :ModelData {
           const subgraphElement :ModelData = {}
           if (type === "subgraph") {
             const subgraph = value.current as Subgraph
-            subgraphElement.subgraph = createGraphModelData(subgraph.containedGraph)
+            subgraphElement.subgraph = createGraphModelData(subgraph.containedGraph, applyEdit)
           }
           const propertyModels :Map<ModelKey, Model> = new Map()
           const inputModels :Map<ModelKey, Model> = new Map()
           const outputModels :Map<ModelKey, Model> = new Map()
 
           function createPropertyValue (key :ModelKey, defaultValue :any = undefined) {
-            let onChange :ChangeFn<InputValue> = Noop
+            const property = value.current.getProperty(key as string)
             return Mutable.deriveMutable(
-              dispatch => {
-                onChange = dispatch
-                return Noop
-              },
-              () => getValue(value.current.config[key], defaultValue),
+              dispatch => property.onChange(dispatch),
+              () => getValue(property.current, defaultValue),
               input => {
-                const previous = getValue(value.current.config[key], defaultValue)
-                value.current.config[key] = input
-                value.current.reconnect()
-                onChange(input, previous)
+                applyEdit({
+                  edit: {
+                    [value.current.id]: {[key]: input},
+                  },
+                })
               },
               refEquals,
             )
@@ -163,7 +322,7 @@ function createGraphModelData (graph :Graph) :ModelData {
           return {
             id: Value.constant(value.current.id),
             type: Value.constant(type),
-            position: Value.constant(value.current.config.position),
+            position: createPropertyValue("position"),
             ...subgraphElement,
             propertyKeys: Value.constant(Object.keys(value.current.propertiesMeta)),
             inputKeys: Value.constant(Object.keys(value.current.inputsMeta)),

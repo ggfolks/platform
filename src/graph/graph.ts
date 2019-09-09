@@ -2,7 +2,7 @@ import {Clock} from "../core/clock"
 import {Emitter, Stream, Value} from "../core/react"
 import {MutableMap, RMap} from "../core/rcollect"
 import {Disposable} from "../core/util"
-import {InputEdge, InputEdges, Node, NodeConfig, NodeContext, NodeInput} from "./node"
+import {InputEdge, InputEdges, Node, NodeConfig, NodeContext} from "./node"
 
 /** Configuration for a graph. */
 export interface GraphConfig {
@@ -45,51 +45,19 @@ export class Graph implements Disposable {
     }
   }
 
-  /** Creates and connects a set of new nodes, adding them to the config and returning a map from
-    * old to new ids. */
-  createNodes (config :GraphConfig) :Map<string, string> {
-    const ids = new Map<string, string>()
-    for (const key in config) {
-      const nodeConfig = config[key]
-      // find a unique name based on the key
-      let id = key
-      for (let ii = 2; this._nodes.has(id); ii++) id = key + ii
-      const node = this.ctx.types.createNode(this, id, this.config[id] = nodeConfig)
-      this._nodes.set(id, node)
-      ids.set(key, id)
-    }
-    const convertInput = (input :NodeInput<any>) => {
-      if (typeof input === "string") return ids.get(input)
-      else if (Array.isArray(input)) {
-        const newId = ids.get(input[0])
-        return newId === undefined ? undefined : [newId, input[1]]
-      } else return input
-    }
-    for (const id of ids.values()) {
-      const node = this._nodes.get(id)!
-      const inputsMeta = node.inputsMeta
-      for (const inputKey in inputsMeta) {
-        const input = node.config[inputKey]
-        if (inputsMeta[inputKey].multiple) {
-          if (Array.isArray(input)) {
-            node.config[inputKey] = input.map(convertInput)
-          }
-        } else if (input !== undefined) {
-          node.config[inputKey] = convertInput(input)
-        }
-      }
-      node.connect()
-    }
-    return ids
+  /** Creates a node with the supplied id and configuration, but does not connect it. */
+  createNode (id :string, config :NodeConfig) {
+    this._nodes.set(id, this.ctx.types.createNode(this, id, this.config[id] = config))
   }
 
-  /** Removes the node identified by `id` from the graph. */
-  removeNode (id :string) {
-    const node = this._nodes.get(id)
-    if (!node) throw new Error("Unknown node id: " + id)
+  /** Removes the node identified by `id` from the graph and returns its config. */
+  removeNode (id :string) :NodeConfig {
+    const node = this._nodes.require(id)
     this._nodes.delete(id)
     node.dispose()
+    const config = this.config[node.id]
     delete this.config[node.id]
+    return config
   }
 
   /** Removes all the nodes in the graph. */
