@@ -12,7 +12,7 @@ import {
   NodeContext, NodeInput, NodeTypeRegistry,
 } from "../graph/node"
 import {HAnchor, Host, Root, RootConfig, VAnchor} from "./element"
-import {Model, ModelData, ModelKey, ModelProvider, mapProvider} from "./model"
+import {Model, ModelData, ModelKey, mapProvider} from "./model"
 import {Theme, UI} from "./ui"
 import {ImageResolver, StyleDefs} from "./style"
 
@@ -223,7 +223,7 @@ function mergeEdits (first :PMap<any>, second :PMap<any>) {
 }
 
 function createGraphModelData (graph :Graph, applyEdit :(edit :NodeEdit) => void) :ModelData {
-  let nodeData :ModelProvider|undefined
+  const nodeModels = new Map<ModelKey, Model>()
   return {
     createNodes: Value.constant((config :GraphConfig) => {
       const add :GraphConfig = {}
@@ -266,6 +266,7 @@ function createGraphModelData (graph :Graph, applyEdit :(edit :NodeEdit) => void
       if (edit.remove) {
         for (const id of edit.remove) {
           reverseAdd[id] = graph.removeNode(id)
+          nodeModels.delete(id)
         }
       }
       if (edit.add) {
@@ -298,7 +299,6 @@ function createGraphModelData (graph :Graph, applyEdit :(edit :NodeEdit) => void
     }),
     removeAllNodes: () => {
       applyEdit({selection: new Set(), remove: new Set(graph.nodes.keys())})
-      nodeData = undefined
     },
     copyNodes: Value.constant((ids :Set<string>) => {
       const config = {}
@@ -308,16 +308,18 @@ function createGraphModelData (graph :Graph, applyEdit :(edit :NodeEdit) => void
     toJSON: Value.constant(() => graph.toJSON()),
     fromJSON: Value.constant((json :GraphConfig) => {
       graph.fromJSON(json)
-      nodeData = undefined // force update to node data
+      nodeModels.clear() // force update to node data
     }),
     nodeKeys: graph.nodes.keysSource(),
     nodeData: {
       resolve: (key :ModelKey) => {
-        if (!nodeData) nodeData = mapProvider(graph.nodes, value => {
-          const type = value.current.config.type
+        let model = nodeModels.get(key)
+        if (!model) {
+          const node = graph.nodes.require(key as string)
+          const type = node.config.type
           const subgraphElement :ModelData = {}
           if (type === "subgraph") {
-            const subgraph = value.current as Subgraph
+            const subgraph = node as Subgraph
             subgraphElement.subgraph = createGraphModelData(subgraph.containedGraph, applyEdit)
           }
           const propertyModels :Map<ModelKey, Model> = new Map()
@@ -325,35 +327,35 @@ function createGraphModelData (graph :Graph, applyEdit :(edit :NodeEdit) => void
           const outputModels :Map<ModelKey, Model> = new Map()
 
           function createPropertyValue (key :ModelKey, defaultValue :any = undefined) {
-            const property = value.current.getProperty(key as string)
+            const property = node.getProperty(key as string)
             return Mutable.deriveMutable(
               dispatch => property.onChange(dispatch),
               () => getValue(property.current, defaultValue),
               input => {
                 applyEdit({
                   edit: {
-                    [value.current.id]: {[key]: input},
+                    [node.id]: {[key]: input},
                   },
                 })
               },
               refEquals,
             )
           }
-          if (!value.current.config.position) value.current.config.position = [0, 0]
-          return {
-            id: Value.constant(value.current.id),
+          if (!node.config.position) node.config.position = [0, 0]
+          nodeModels.set(key, model = new Model({
+            id: Value.constant(node.id),
             type: Value.constant(type),
             position: createPropertyValue("position"),
             ...subgraphElement,
-            propertyKeys: Value.constant(Object.keys(value.current.propertiesMeta)),
-            inputKeys: Value.constant(Object.keys(value.current.inputsMeta)),
-            outputKeys: Value.constant(Object.keys(value.current.outputsMeta)),
-            defaultOutputKey: Value.constant(value.current.defaultOutputKey),
+            propertyKeys: Value.constant(Object.keys(node.propertiesMeta)),
+            inputKeys: Value.constant(Object.keys(node.inputsMeta)),
+            outputKeys: Value.constant(Object.keys(node.outputsMeta)),
+            defaultOutputKey: Value.constant(node.defaultOutputKey),
             propertyData: {
               resolve: (key :ModelKey) => {
                 let model = propertyModels.get(key)
                 if (!model) {
-                  const propertiesMeta = value.current.propertiesMeta[key]
+                  const propertiesMeta = node.propertiesMeta[key]
                   propertyModels.set(key, model = new Model({
                     name: Value.constant(key),
                     type: Value.constant(propertiesMeta.type),
@@ -368,17 +370,15 @@ function createGraphModelData (graph :Graph, applyEdit :(edit :NodeEdit) => void
               resolve: (key :ModelKey) => {
                 let model = inputModels.get(key)
                 if (!model) {
-                  const multiple = value.current.inputsMeta[key].multiple
+                  const multiple = node.inputsMeta[key].multiple
                   const input = createPropertyValue(key)
                   let style :Value<string>
                   if (multiple) {
-                    style = input.switchMap(input => value.current.graph.getValues(input, 0)).map(
+                    style = input.switchMap(input => graph.getValues(input, 0)).map(
                       values => getValueStyle(values[values.length - 1]),
                     )
                   } else {
-                    style = input.switchMap(input => value.current.graph.getValue(input, 0)).map(
-                      getValueStyle,
-                    )
+                    style = input.switchMap(input => graph.getValue(input, 0)).map(getValueStyle)
                   }
                   inputModels.set(key, model = new Model({
                     name: Value.constant(key),
@@ -396,15 +396,15 @@ function createGraphModelData (graph :Graph, applyEdit :(edit :NodeEdit) => void
                 if (!model) {
                   outputModels.set(key, model = new Model({
                     name: Value.constant(key),
-                    style: value.current.getOutput(key as string, undefined).map(getValueStyle),
+                    style: node.getOutput(key as string, undefined).map(getValueStyle),
                   }))
                 }
                 return model
               },
             },
-          }
-        })
-        return nodeData.resolve(key)
+          }))
+        }
+        return model
       },
     },
   }
