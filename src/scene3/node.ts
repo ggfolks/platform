@@ -34,9 +34,19 @@ class Hover extends EntityComponentNode<Component<HoverMap>> {
   }
 
   protected _createOutput (name :string) {
+    const component = this._component
+    if (!component) {
+      switch (name) {
+        case "worldPosition":
+        case "worldMovement":
+        case "viewPosition":
+        case "viewMovement": return Value.constant(new Vector3())
+        default: return Value.constant(false)
+      }
+    }
     const index = this.config.index || 0
     const count = this.config.count === undefined ? 1 : this.config.count
-    const hover = this._component.getValue(this._entityId).map(hovers => {
+    const hover = component.getValue(this._entityId).map(hovers => {
       if (hovers.size === count) {
         let remaining = index
         for (const value of hovers.values()) {
@@ -71,18 +81,19 @@ abstract class AnimationActionConfig implements EntityComponentConfig {
 const isPlaceholder = (obj :Object3D) => obj.children.length == 0
 
 class AnimationActionNode extends EntityComponentNode<Component<AnimationMixer>> {
-  private readonly _action :Subject<AnimationAction>
+  private _action? :Subject<AnimationAction>
 
   constructor (graph :Graph, id :string, readonly config :AnimationActionConfig) {
     super(graph, id, config)
-    this._action = Subject.join2(
-      this._component.getValue(this._entityId),
-      loadGLTFAnimationClip(this.config.url)
-    ).map(([mixer, clip]) => mixer.clipAction(clip))
   }
 
   connect () {
-    const actplay = Subject.join2(this._action, this.graph.getValue(this.config.play, false))
+    const component = this._component
+    if (!component) return
+    const actplay = Subject.join2(
+      this._getAction(component),
+      this.graph.getValue(this.config.play, false),
+    )
     this._disposer.add(actplay.onValue(([action, play]) => {
       // if the object being animated is still a placeholder, don't try to animate it
       if (!isPlaceholder(action.getRoot()) && play !== action.isScheduled()) {
@@ -99,8 +110,18 @@ class AnimationActionNode extends EntityComponentNode<Component<AnimationMixer>>
     }))
   }
 
+  dispose () {
+    super.dispose()
+    this._action = undefined
+  }
+
   protected _createOutput () {
-    const actplay = Subject.join2(this._action, this.graph.getValue(this.config.play, false))
+    const component = this._component
+    if (!component) return Value.constant(false)
+    const actplay = Subject.join2(
+      this._getAction(component),
+      this.graph.getValue(this.config.play, false),
+    )
     return actplay.switchMap(([action, playing]) => Subject.deriveSubject<boolean>(disp => {
       if (isPlaceholder(action.getRoot())) return NoopRemover
       const listener = (e :any) => {
@@ -109,6 +130,16 @@ class AnimationActionNode extends EntityComponentNode<Component<AnimationMixer>>
       action.getMixer().addEventListener("finished", listener)
       return () => action.getMixer().removeEventListener("finished", listener)
     })).fold(false, (ov, nv) => nv)
+  }
+
+  protected _getAction (component :Component<AnimationMixer>) {
+    if (!this._action) {
+      this._action = Subject.join2(
+        component.getValue(this._entityId),
+        loadGLTFAnimationClip(this.config.url)
+      ).map(([mixer, clip]) => mixer.clipAction(clip))
+    }
+    return this._action
   }
 }
 
@@ -146,11 +177,13 @@ class AnimationControllerNode extends EntityComponentNode<Component<AnimationMix
   }
 
   connect () {
+    const component = this._component
+    if (!component) return
     const conditions = new Map<string, Value<boolean>>()
     for (const inputKey in this._inputsMeta) {
       conditions.set(inputKey, this.graph.getValue<boolean>(this.config[inputKey], false))
     }
-    this._disposer.add(this._component.getValue(this._entityId).onValue(mixer => {
+    this._disposer.add(component.getValue(this._entityId).onValue(mixer => {
       if (isPlaceholder(mixer.getRoot())) return
       if (this._animationController) {
         this._animationController.dispose()
@@ -207,8 +240,10 @@ class RaycasterNode extends EntityComponentNode<Component<Object3D>> {
       const raycaster = new Raycaster()
       const target :Intersection[] = []
       this._intersection = this.graph.clock.fold(NoIntersection, () => {
+        const component = this._component
+        if (!component) return NoIntersection
         target.length = 0
-        const object = this._component.read(this._entityId)
+        const object = component.read(this._entityId)
         const parent = object.parent as Object3D
         let ancestor = parent
         while (ancestor.parent) ancestor = ancestor.parent
@@ -253,9 +288,11 @@ class UpdateVisibleNode extends EntityComponentNode<Component<Object3D>> {
   }
 
   connect () {
+    const component = this._component
+    if (!component) return
     this._disposer.add(
       this.graph.getValue(this.config.input, true).onValue(vis => {
-        this._component.read(this._entityId).visible = vis
+        component.read(this._entityId).visible = vis
       }))
   }
 }

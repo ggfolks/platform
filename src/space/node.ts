@@ -298,15 +298,17 @@ class Rotate extends EntityComponentNode<TransformComponent> {
   constructor (graph :Graph, id :string, readonly config :RotateConfig) { super(graph, id, config) }
 
   connect () {
+    const component = this._component
+    if (!component) return
     const quaternion = new Quaternion()
     const rotation = new Quaternion()
     this._disposer.add(
       this.graph.getValue(this.config.input, new Euler()).onValue(euler => {
-        this._component.readQuaternion(this._entityId, quaternion)
+        component.readQuaternion(this._entityId, quaternion)
         rotation.setFromEuler(euler)
         if (this.config.frame === "world") quaternion.premultiply(rotation)
         else quaternion.multiply(rotation)
-        this._component.updateQuaternion(this._entityId, quaternion)
+        component.updateQuaternion(this._entityId, quaternion)
       }),
     )
   }
@@ -327,16 +329,18 @@ class Translate extends EntityComponentNode<TransformComponent> {
   }
 
   connect () {
+    const component = this._component
+    if (!component) return
     const position = new Vector3()
     const quaternion = new Quaternion()
     this._disposer.add(
       this.graph.getValue(this.config.input, new Vector3()).onValue(vector => {
-        this._component.readPosition(this._entityId, position)
+        component.readPosition(this._entityId, position)
         if (this.config.frame !== "world") {
-          this._component.readQuaternion(this._entityId, quaternion)
+          component.readQuaternion(this._entityId, quaternion)
           vector.applyQuaternion(quaternion)
         }
-        this._component.updatePosition(this._entityId, position.add(vector))
+        component.updatePosition(this._entityId, position.add(vector))
       }),
     )
   }
@@ -358,16 +362,24 @@ class ReadTransform extends EntityComponentNode<TransformComponent> {
   }
 
   protected _createOutput (name :string, defaultValue :any) {
+    const component = this._component
+    if (!component) {
+      switch (name) {
+        case "quaternion": return Value.constant(new Quaternion())
+        case "scale": return Value.constant(new Vector3(1, 1, 1))
+        default: return Value.constant(new Vector3())
+      }
+    }
     let getter :() => any
     switch (name) {
       case "quaternion":
-        getter = () => this._component.readQuaternion(this._entityId, new Quaternion())
+        getter = () => component.readQuaternion(this._entityId, new Quaternion())
         break;
       case "scale":
-        getter = () => this._component.readScale(this._entityId, new Vector3())
+        getter = () => component.readScale(this._entityId, new Vector3())
         break;
       default:
-        getter = () => this._component.readPosition(this._entityId, new Vector3())
+        getter = () => component.readPosition(this._entityId, new Vector3())
         break;
     }
     return this.graph.clock.fold(getter(), getter)
@@ -388,9 +400,11 @@ class UpdatePosition extends EntityComponentNode<TransformComponent> {
   }
 
   connect () {
+    const component = this._component
+    if (!component) return
     this._disposer.add(
       this.graph.getValue(this.config.input, new Vector3()).onValue(position => {
-        this._component.updatePosition(this._entityId, position)
+        component.updatePosition(this._entityId, position)
       }),
     )
   }
@@ -410,10 +424,12 @@ class UpdateRotation extends EntityComponentNode<TransformComponent> {
   }
 
   connect () {
+    const component = this._component
+    if (!component) return
     const quaternion = new Quaternion()
     this._disposer.add(
       this.graph.getValue(this.config.input, new Euler()).onValue(euler => {
-        this._component.updateQuaternion(this._entityId, quaternion.setFromEuler(euler))
+        component.updateQuaternion(this._entityId, quaternion.setFromEuler(euler))
       }),
     )
   }
@@ -433,9 +449,11 @@ class UpdateScale extends EntityComponentNode<TransformComponent> {
   }
 
   connect () {
+    const component = this._component
+    if (!component) return
     this._disposer.add(
       this.graph.getValue(this.config.input, new Vector3(1, 1, 1)).onValue(scale => {
-        this._component.updateScale(this._entityId, scale)
+        component.updateScale(this._entityId, scale)
       }),
     )
   }
@@ -456,15 +474,17 @@ class WorldToLocal extends EntityComponentNode<TransformComponent> {
   }
 
   protected _createOutput () {
+    const component = this._component
+    if (!component) return this.graph.getValue(this.config.input, new Vector3())
     const position = new Vector3()
     const quaternion = new Quaternion()
     const scale = new Vector3()
     const matrix = new Matrix4()
     const inverse = new Matrix4()
     return this.graph.getValue(this.config.input, new Vector3()).map(point => {
-      this._component.readPosition(this._entityId, position)
-      this._component.readQuaternion(this._entityId, quaternion)
-      this._component.readScale(this._entityId, scale)
+      component.readPosition(this._entityId, position)
+      component.readQuaternion(this._entityId, quaternion)
+      component.readScale(this._entityId, scale)
       inverse.getInverse(matrix.compose(position, quaternion, scale))
       return point.clone().applyMatrix4(inverse)
     })

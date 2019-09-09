@@ -46,8 +46,7 @@ export class EntityComponentNode<T extends Component<any>> extends EntityNode {
 
   protected get _component () {
     const ctx = this.graph.ctx as EntityNodeContext
-    const component = ctx.domain.component(this.config.component) as unknown
-    return component as T
+    return ctx.domain.components[this.config.component] as T|undefined
   }
 }
 
@@ -129,8 +128,10 @@ class ReadComponent extends EntityComponentNode<Component<any>> {
     super(graph, id, config)
   }
 
-  protected _createOutput () {
-    return this._component.getValue(this._entityId)
+  protected _createOutput (name :string, defaultValue :any) {
+    const component = this._component
+    if (!component) return Value.constant(defaultValue)
+    return component.getValue(this._entityId)
   }
 }
 
@@ -148,9 +149,11 @@ class UpdateComponent extends EntityComponentNode<Component<any>> {
   }
 
   connect () {
+    const component = this._component
+    if (!component) return
     this._disposer.add(
       this.graph.getValue(this.config.input, 0).onValue(value => {
-        this._component.update(this._entityId, value)
+        component.update(this._entityId, value)
       })
     )
   }

@@ -23,7 +23,9 @@ class Collided extends EntityComponentNode<Component<Body>> {
   }
 
   protected _createOutput () {
-    return this._component.getValue(this._entityId).switchMap(body => {
+    const component = this._component
+    if (!component) return Value.constant(undefined)
+    return component.getValue(this._entityId).switchMap(body => {
       let value :ID | undefined
       return Value.deriveValue(
         refEquals,
