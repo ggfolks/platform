@@ -45,14 +45,14 @@ import {TransformComponent} from "../space/entity"
 /** Base class for 3D object configs. */
 export interface Object3DConfig {
   type :string
+  /** An optional callback may be used to modify or replace the loaded resource. */
+  onLoad? :(obj :Object3D) => Object3D|undefined
 }
 
 /** Configures an object loaded from a GLTF resource. */
 export interface GLTFConfig extends Object3DConfig {
   type :"gltf"
   url :string
-  /** An optional callback may be used to modify or replace the loaded resource. */
-  onLoad? :(scene :Object3D) => Object3D|undefined
 }
 
 /** Configures a perspective camera. */
@@ -314,13 +314,15 @@ export class SceneSystem extends System {
   protected added (id :ID, config :EntityConfig) {
     super.added(id, config)
     // start with an empty object
+    const cfg = config.components[this.obj.id]
     const obj = new Object3D()
     obj.userData.id = id
     this.obj.update(id, obj)
     this.scene.add(obj)
     this._updateObject(id, obj)
     obj.updateMatrixWorld()
-    createObject3D(config.components[this.obj.id]).onValue(obj => {
+    createObject3D(cfg).onValue(obj => {
+      if (cfg.onLoad) obj = cfg.onLoad(obj) || obj
       // if this is the initial, default Object3D, it won't actually be in the scene;
       // otherwise, we're replacing the model with another
       const oldObj = this.obj.read(id)
@@ -408,13 +410,7 @@ function createObject3D (objectConfig: Object3DConfig) :Subject<Object3D> {
   switch (objectConfig.type) {
     case "gltf":
       const gltfConfig = objectConfig as GLTFConfig
-      return loadGLTF(gltfConfig.url).map(gltf => {
-        let cloned :Object3D = SkeletonUtils.clone(gltf.scene) as Object3D
-        if (gltfConfig.onLoad) {
-          cloned = gltfConfig.onLoad(cloned) || cloned
-        }
-        return cloned
-      })
+      return loadGLTF(gltfConfig.url).map(gltf => SkeletonUtils.clone(gltf.scene) as Object3D)
 
     case "perspectiveCamera":
       return Subject.constant(new PerspectiveCamera())
