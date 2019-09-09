@@ -13,9 +13,11 @@ import {
   MeshStandardMaterial,
   MeshToonMaterial,
   Object3D,
+  ObjectLoader,
   PerspectiveCamera,
   Plane,
   PlaneBufferGeometry,
+  Quaternion,
   RGBAFormat,
   Raycaster,
   Scene,
@@ -30,7 +32,7 @@ import {SkeletonUtils} from "three/examples/jsm/utils/SkeletonUtils"
 import {Clock} from "../core/clock"
 import {Subject} from "../core/react"
 import {RMap} from "../core/rcollect"
-import {NoopRemover, Remover} from "../core/util"
+import {log, NoopRemover, Remover} from "../core/util"
 import {Pointer} from "../input/hand"
 import {
   Component,
@@ -52,6 +54,12 @@ export interface Object3DConfig {
 /** Configures an object loaded from a GLTF resource. */
 export interface GLTFConfig extends Object3DConfig {
   type :"gltf"
+  url :string
+}
+
+/** Configures an object loaded from a Json resource. */
+export interface JsonConfig extends Object3DConfig {
+  type :"json"
   url :string
 }
 
@@ -332,7 +340,13 @@ export class SceneSystem extends System {
       this.obj.update(id, obj)
       this.scene.add(obj)
       if (obj instanceof Camera) this._cameras.add(obj)
-      this._updateObject(id, obj)
+      if (cfg.type === "json") {
+        this.trans.updatePosition(id, obj.getWorldPosition(new Vector3()))
+        this.trans.updateQuaternion(id, obj.getWorldQuaternion(new Quaternion()))
+        this.trans.updateScale(id, obj.getWorldScale(new Vector3()))
+      } else {
+        this._updateObject(id, obj)
+      }
       obj.updateMatrixWorld()
     })
   }
@@ -411,6 +425,13 @@ function createObject3D (objectConfig: Object3DConfig) :Subject<Object3D> {
     case "gltf":
       const gltfConfig = objectConfig as GLTFConfig
       return loadGLTF(gltfConfig.url).map(gltf => SkeletonUtils.clone(gltf.scene) as Object3D)
+
+    case "json":
+      const jsonConfig = objectConfig as JsonConfig
+      return Subject.deriveSubject(dispatch => {
+        new ObjectLoader().load(jsonConfig.url, dispatch)
+        return NoopRemover
+      })
 
     case "perspectiveCamera":
       return Subject.constant(new PerspectiveCamera())
