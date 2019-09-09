@@ -408,6 +408,8 @@ export function makeBackground (ctx :StyleContext, config :BackgroundConfig) :Su
 
 /** Defines a border rendered around a [[Box]]. */
 export interface BorderConfig {
+  /** The width of the line used to stroke this border. */
+  width? :number
   /** The paint used to stroke this border. */
   stroke :Spec<PaintConfig>
   /** The corner radius or radii ([ul, ur, lr, ll]) of the border. */
@@ -419,6 +421,7 @@ export interface BorderConfig {
 /** Creates a border based on the supplied `config`. */
 export function makeBorder (ctx :StyleContext, config :BorderConfig) :Subject<Decoration> {
   return ctx.resolvePaint(config.stroke).map(stroke => {
+    const lineWidth = config.width || 1
     const cornerRadius = config.cornerRadius
     const shadow = ctx.resolveShadowOpt(config.shadow)
     return {
@@ -429,6 +432,8 @@ export function makeBorder (ctx :StyleContext, config :BorderConfig) :Subject<De
         Math.max(1, Math.max(-shadow.ox, 0) + shadow.blur),
       ],
       render: (canvas, size) => {
+        const oldWidth = canvas.lineWidth
+        canvas.lineWidth = lineWidth
         stroke.prepStroke(canvas)
         const w = size[0], h = size[1]
         shadow.prep(canvas)
@@ -439,6 +444,7 @@ export function makeBorder (ctx :StyleContext, config :BorderConfig) :Subject<De
           canvas.strokeRect(0, 0, w, h)
         }
         shadow.reset(canvas)
+        canvas.lineWidth = oldWidth
       }
     }
   })
