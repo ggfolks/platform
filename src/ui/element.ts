@@ -4,7 +4,6 @@ import {dim2, rect, vec2} from "../core/math"
 import {Record} from "../core/data"
 import {Emitter, Mutable, Source, Stream, Value} from "../core/react"
 import {Scale} from "../core/ui"
-import {Hand} from "../input/hand"
 import {Model} from "./model"
 import {Spec, StyleContext} from "./style"
 
@@ -721,18 +720,6 @@ export class Host implements Disposable {
       if (dispose) root.dispose()
       if (this._canvas) this._canvas.style.cursor = "auto"
     }
-  }
-
-  // TODO: What are we going to do with touch events on UIs?
-  // For now: fake-up mouse events on release. Cheese Patrol.
-  setHand (hand :Hand) :Remover {
-    return hand.pointers.onChange(ch => {
-      if (ch.type === "deleted" && hand.pointers.size === 0 && ch.key !== 0) { // Hand.MOUSE
-        const dict = <MouseEventInit>{clientX: ch.prev.position[0], clientY: ch.prev.position[1]}
-        this.onMouse(new MouseEvent("mousedown", dict))
-        this.onMouse(new MouseEvent("mouseup", dict))
-      }
-    })
   }
 
   bind (canvas :HTMLCanvasElement) :Remover {
