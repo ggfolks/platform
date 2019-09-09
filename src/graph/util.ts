@@ -308,6 +308,8 @@ export function registerUtilNodes (registry :NodeTypeRegistry) {
     output: Output,
     log: Log,
     property: Property,
+  })
+  registry.registerNodeTypes(undefined, {
     onChange: OnChange,
   })
 }

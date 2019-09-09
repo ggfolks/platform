@@ -310,7 +310,6 @@ class Step extends Node {
 export function registerMathNodes (registry :NodeTypeRegistry) {
   registry.registerNodeTypes("math", {
     constant: Constant,
-    value: ValueNode,
     add: Add,
     subtract: Subtract,
     multiply: Multiply,
@@ -321,5 +320,8 @@ export function registerMathNodes (registry :NodeTypeRegistry) {
     min: Min,
     max: Max,
     step: Step,
+  })
+  registry.registerNodeTypes(undefined, {
+    value: ValueNode,
   })
 }

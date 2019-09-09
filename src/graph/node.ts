@@ -286,12 +286,18 @@ export class NodeTypeRegistry {
     }
   }
 
-  /** Registers a group of node type constructors. */
-  registerNodeTypes (category :string, types :{ [type :string]: NodeConstructor<any> }) {
-    let list = this._categories.get(category)
-    if (!list) this._categories.set(category, list = [])
+  /** Registers a group of node type constructors.
+    * @param category the category under which to list the nodes, or undefined to avoid listing.
+    * @param types the map from node type names to node constructors.
+    */
+  registerNodeTypes (category :string|undefined, types :{ [type :string]: NodeConstructor<any> }) {
+    let list :string[] | undefined
+    if (category) {
+      list = this._categories.get(category)
+      if (!list) this._categories.set(category, list = [])
+    }
     for (const type in types) {
-      list.push(type)
+      if (list) list.push(type)
       this._constructors.set(type, types[type] as NodeConstructor<NodeConfig>)
     }
   }
