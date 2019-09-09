@@ -17,7 +17,6 @@ import {
   PerspectiveCamera,
   Plane,
   PlaneBufferGeometry,
-  Quaternion,
   RGBAFormat,
   Raycaster,
   Scene,
@@ -341,9 +340,10 @@ export class SceneSystem extends System {
       this.scene.add(obj)
       if (obj instanceof Camera) this._cameras.add(obj)
       if (cfg.type === "json") {
-        this.trans.updatePosition(id, obj.getWorldPosition(new Vector3()))
-        this.trans.updateQuaternion(id, obj.getWorldQuaternion(new Quaternion()))
-        this.trans.updateScale(id, obj.getWorldScale(new Vector3()))
+        // init the trans component with the loaded values
+        this.trans.updatePosition(id, obj.position)
+        this.trans.updateQuaternion(id, obj.quaternion)
+        this.trans.updateScale(id, obj.scale)
       } else {
         this._updateObject(id, obj)
       }
