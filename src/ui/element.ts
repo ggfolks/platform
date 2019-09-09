@@ -400,17 +400,19 @@ export class Root extends Element {
     if (this._cursorOwner === owner) this.cursor.update("auto")
   }
 
-  /** Informs the root of the position at which it is displayed on the screen. This value is used to interpret
-    * mouse and touch events. */
+  /** Informs the root of the position at which it is displayed on the screen. This value is used to
+    * interpret mouse and touch events. */
   setOrigin (pos :vec2) {
     vec2.copy(this._origin, pos)
   }
 
-  /** Binds the origin of this root by matching a point of this root (specified by `rootH` & `rootV`) to a point
-    * on the screen (specified by `screenH` & `screenV`), given a reactive view of the screen `size`.
-    * @return a remover that can be used to cancel the binding. The binding will also be cleared when the root
-    * is disposed. */
-  bindOrigin (screen :Value<dim2>, screenH :HAnchor, screenV :VAnchor, rootH :HAnchor, rootV :VAnchor) :Remover {
+  /** Binds the origin of this root by matching a point of this root (specified by `rootH` &
+    * `rootV`) to a point on the screen (specified by `screenH` & `screenV`), given a reactive view
+    * of the screen `size`.
+    * @return a remover that can be used to cancel the binding. The binding will also be cleared
+    * when the root is disposed. */
+  bindOrigin (screen :Value<dim2>, screenH :HAnchor, screenV :VAnchor,
+              rootH :HAnchor, rootV :VAnchor) :Remover {
     const rsize = this.sizeChange.fold(dim2.fromValues(this.width, this.height),
                                        (sz, r) => dim2.fromValues(r.width, r.height), dim2.eq)
     const remover = Value.join2(screen, rsize).onValue(([ss, rs]) => {
@@ -440,7 +442,9 @@ export class Root extends Element {
     if (!this.valid.current && this.config.autoSize) {
       const hint = this._hintSize.current
       this.computePreferredSize(hint[0], hint[1], tmpd)
-      this.setBounds(rect.set(tmpr, 0, 0, tmpd[0], tmpd[1]))
+      // clamp the root bounds to the configured "hint" size
+      // (TODO: maybe we want a better name for that config option)
+      this.setBounds(rect.set(tmpr, 0, 0, Math.min(tmpd[0], hint[0]), Math.min(tmpd[1], hint[1])))
     }
     const changed = this.validate() || !rect.isEmpty(this._dirtyRegion)
     changed && this.render(this.canvas, this._dirtyRegion)
