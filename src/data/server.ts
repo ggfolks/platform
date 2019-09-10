@@ -59,11 +59,13 @@ export class Resolved {
   }
 
   resolvedData () {
+    if (DebugLog) log.debug("Object resolved", "obj", this.object)
     this.state.update("active")
     this.store.postMeta(this.object, {type: "created"})
   }
 
   sendSync (msg :SyncMsg, persist :boolean) {
+    if (DebugLog) log.debug("sendSync", "obj", this.object, "msg", msg)
     const obj = this.object, name = obj.metas[msg.idx].name
     for (const sub of this.subscribers) if (obj.canRead(name, sub.auth)) sub.sendSync(msg)
   }
@@ -88,6 +90,7 @@ export class DataStore {
     // that the resolver (will need to pass auth into this method) is allowed to create
     const nres = this.createResolved(path, findObjectType(this.rtype, path))
     this.resolved.set(key, nres)
+    nres.resolveData()
     return nres
   }
 
