@@ -32,6 +32,7 @@ export class GraphViewer extends VGroup {
   private _nodeEditor :Mutable<NodeEditor>
   private _stack :[Model, Element][] = []
   private _poppable = Mutable.local(false)
+  private _clearUndoStacks :Action
 
   constructor (readonly ctx :ElementContext, parent :Element, readonly config :GraphViewerConfig) {
     super(ctx, parent, {...config, offPolicy: "stretch"})
@@ -43,6 +44,7 @@ export class GraphViewer extends VGroup {
     const remove = ctx.model.resolve<Action>("remove")
     this.selection = ctx.model.resolve<MutableSet<string>>("selection")
     this.applyEdit = ctx.model.resolve<Value<(edit :NodeEdit) => void>>("applyEdit")
+    this._clearUndoStacks = ctx.model.resolve<Action>("clearUndoStacks")
     const haveSelection = this.selection.fold(false, (value, set) => set.size > 0)
     const editableSelection = Value.join(haveSelection, this._editable).map(
       ([selection, editable]) => selection && editable,
@@ -306,6 +308,7 @@ export class GraphViewer extends VGroup {
     this._stack.push([model, this.contents[1] = this._createElement(model)])
     this._poppable.update(true)
     this.selection.clear()
+    this._clearUndoStacks()
     this.invalidate()
   }
 
@@ -318,6 +321,7 @@ export class GraphViewer extends VGroup {
     this._updateNodeFunctions(model)
     this._poppable.update(this._stack.length > 1)
     this.selection.clear()
+    this._clearUndoStacks()
     this.invalidate()
   }
 
@@ -362,6 +366,7 @@ export class GraphViewer extends VGroup {
         element.dispose()
         stackEntry[1] = this.contents[1] = this._createElement(model)
         this.selection.clear()
+        this._clearUndoStacks()
         this.invalidate()
       }
       reader.readAsText(input.files[0])

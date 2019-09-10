@@ -183,6 +183,12 @@ class UINode extends Node {
           canUndo.update(true)
           canRedo.update(redoStack.length > 0)
         },
+        clearUndoStacks: () => {
+          undoStack.length = 0
+          redoStack.length = 0
+          canUndo.update(false)
+          canRedo.update(false)
+        },
         ...createGraphModelData(graph, applyEdit),
       })
       root = ui.createRoot(this.config.root, model)
