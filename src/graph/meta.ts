@@ -85,3 +85,23 @@ export function getNodeMeta (type :string) :NodeMeta {
   if (!meta) meta = nodeMeta[type] = {properties: {}, inputs: {}, outputs: {}}
   return meta
 }
+
+/** The metadata associated with an enum type. */
+export interface EnumMeta {
+  values :string[]
+}
+
+const enumMeta :PMap<EnumMeta> = {}
+
+/** Registers an enum type.
+  * @param type the name of the type.
+  * @param values the values that the type can take.
+  */
+export function setEnumMeta (type :string, values :string[]) {
+  enumMeta[type] = {values}
+}
+
+/** Returns the metadata for the specified enum type, if registered. */
+export function getEnumMeta (type :string) :EnumMeta|undefined {
+  return enumMeta[type]
+}

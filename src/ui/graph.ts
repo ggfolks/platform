@@ -752,6 +752,8 @@ export class NodeView extends VGroup {
         scopeId: "nodeProperties",
         offPolicy: "stretch",
         editable: this._editable,
+        keys: "propertyKeys",
+        data: "propertyData",
       })
     }
     if (hasInputs || hasOutputs) {
@@ -911,70 +913,6 @@ function getGraphView (element :Element) :GraphView {
     if (ancestor instanceof GraphView) return ancestor
   }
   throw new Error("Element used outside GraphView")
-}
-
-/** Depicts a node's editable/viewable properties. */
-export interface PropertyViewConfig extends AxisConfig {
-  type :"propertyview"
-  editable :Spec<Value<boolean>>
-}
-
-export class PropertyView extends VGroup {
-  readonly elements = new Map<string, Element>()
-  readonly contents :Element[] = []
-
-  constructor (ctx :ElementContext, parent :Element, readonly config :PropertyViewConfig) {
-    super(ctx, parent, config)
-    const propertyData = ctx.model.resolve("propertyData" as Spec<ModelProvider>)
-    this.disposer.add(ctx.model.resolve("propertyKeys" as Spec<Value<string[]>>).onValue(keys => {
-      const {contents, elements} = this
-      // first dispose no longer used elements
-      const kset = new Set(keys)
-      for (const [ekey, elem] of elements.entries()) {
-        if (!kset.has(ekey)) {
-          elements.delete(ekey)
-          elem.dispose()
-        }
-      }
-      // now create/reuse elements for the new keys
-      contents.length = 0
-      for (const key of kset) {
-        let elem = this.elements.get(key)
-        if (!elem) {
-          const model = propertyData.resolve(key)
-          elem = ctx.elem.create({...ctx, model}, this, {
-            type: "row",
-            contents: [
-              {
-                type: "box",
-                constraints: {stretch: true},
-                style: {halign: "left"},
-                contents: {
-                  type: "label",
-                  text: model.resolve("name" as Spec<Value<string>>).map(name => name + ":"),
-                },
-              },
-              {
-                type: "label",
-                constraints: {stretch: true},
-                text: model.resolve("value" as Spec<Value<any>>).map(toLimitedString),
-              },
-            ],
-          })
-          this.elements.set(key, elem)
-        }
-        contents.push(elem)
-      }
-      this.invalidate()
-    }))
-  }
-}
-
-function toLimitedString (value :any) {
-  // round numbers to six digits after decimal
-  if (typeof value === "number") return String(Math.round(value * 1000000) / 1000000)
-  const string = String(value)
-  return string.length > 30 ? string.substring(0, 27) + "..." : string
 }
 
 /** Visualizes a node's input edges. */

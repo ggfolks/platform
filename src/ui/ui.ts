@@ -13,12 +13,14 @@ import {
   RootConfig,
 } from "./element"
 import * as B from "./button"
+import * as D from "./dropdown"
 import * as E from "./element"
 import * as G from "./group"
 import * as GR from "./graph"
 import * as I from "./image"
 import * as L from "./list"
 import * as M from "./menu"
+import * as P from "./property"
 import * as S from "./scroll"
 import * as T from "./text"
 import * as X from "./box"
@@ -109,6 +111,8 @@ export class UI {
     case       "button": return new B.Button(ctx, parent, rconfig as B.ButtonConfig)
     case       "toggle": return new B.Toggle(ctx, parent, rconfig as B.ToggleConfig)
     case         "list": return new L.List(ctx, parent, rconfig as L.ListConfig)
+    case     "dropdown": return new D.Dropdown(ctx, parent, rconfig as D.DropdownConfig)
+    case "dropdownitem": return new D.DropdownItem(ctx, parent, rconfig as D.DropdownItemConfig)
     case      "menubar": return new M.MenuBar(ctx, parent, rconfig as M.MenuBarConfig)
     case         "menu": return new M.Menu(ctx, parent, rconfig as M.MenuConfig)
     case     "menuitem": return new M.MenuItem(ctx, parent, rconfig as M.MenuItemConfig)
@@ -117,7 +121,7 @@ export class UI {
     case  "graphviewer": return new GR.GraphViewer(ctx, parent, rconfig as GR.GraphViewerConfig)
     case    "graphview": return new GR.GraphView(ctx, parent, rconfig as GR.GraphViewConfig)
     case     "nodeview": return new GR.NodeView(ctx, parent, rconfig as GR.NodeViewConfig)
-    case "propertyview": return new GR.PropertyView(ctx, parent, rconfig as GR.PropertyViewConfig)
+    case "propertyview": return new P.PropertyView(ctx, parent, rconfig as P.PropertyViewConfig)
     case     "edgeview": return new GR.EdgeView(ctx, parent, rconfig as GR.EdgeViewConfig)
     case     "terminal": return new GR.Terminal(ctx, parent, rconfig as GR.TerminalConfig)
     default: throw new Error(`Unknown element type '${config.type}'.`)

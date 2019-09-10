@@ -9,6 +9,7 @@ export const DefaultStyles = {
     nodeTitle: {family: "Helvetica, sans-serif", size: 16},
     nodeButton: {family: "Helvetica, sans-serif", size: 14},
     nodeProperty: {family: "Helvetica, sans-serif", size: 14},
+    dropdown: {family: "Helvetica, sans-serif", size: 14},
     edgeName: {family: "Helvetica, sans-serif", size: 14},
   },
   paints: {
@@ -51,6 +52,27 @@ export const DefaultStyles = {
     root: {
       fill: {type: "color", color: "rgba(48, 48, 48, 0.5)"},
     },
+    dropdown: {
+      fill: {type: "color", color: "#303030"},
+      cornerRadius: 5,
+    },
+    dropdownHovered: {
+      fill: {type: "color", color: "#282828"},
+      cornerRadius: 5,
+    },
+    dropdownPressed: {
+      fill: {type: "color", color: "#202020"},
+      cornerRadius: 5,
+    },
+    dropdownitem: {
+      fill: {type: "color", color: "#303030"},
+    },
+    dropdownitemHovered: {
+      fill: {type: "color", color: "#282828"},
+    },
+    dropdownitemPressed: {
+      fill: {type: "color", color: "#202020"},
+    },
     menu: {
       fill: {type: "color", color: "#303030"},
       cornerRadius: [5, 5, 0, 0],
@@ -70,9 +92,6 @@ export const DefaultStyles = {
       fill: {type: "color", color: "#282828"},
     },
     menuitemPressed: {
-      fill: {type: "color", color: "#202020"},
-    },
-    menuitemSeparator: {
       fill: {type: "color", color: "#202020"},
     },
     graphViewerHeader: {
@@ -119,6 +138,8 @@ export const DefaultTheme = {
       hoverFocused: {cursor: "pointer"},
       pressed: {cursor: "pointer"},
     },
+    dropdown: {},
+    dropdownitem: {},
     menu: {
       hovered: {},
       hoverFocused: {},
@@ -148,6 +169,27 @@ export const DefaultTheme = {
       hoverFocused: {fill: "$lighterGray"},
       pressed: {fill: "$lightGray"},
     },
+  },
+  dropdown: {
+    box: {
+      padding: [5, 10, 5, 10],
+      background: "$dropdown",
+      hovered: {background: "$dropdownHovered"},
+      hoverFocused: {background: "$dropdownHovered"},
+      pressed: {background: "$dropdownPressed"},
+    },
+    label: {font: "$dropdown"},
+  },
+  dropdownitem: {
+    box: {
+      padding: [5, 5, 5, 15],
+      background: "$dropdownitem",
+      hovered: {background: "$dropdownitemHovered"},
+      hoverFocused: {background: "$dropdownitemHovered"},
+      pressed: {background: "$dropdownitemPressed"},
+      separator: {background: null},
+    },
+    label: {font: "$dropdown"},
   },
   menu: {
     box: {

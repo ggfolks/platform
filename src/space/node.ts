@@ -3,7 +3,7 @@ import {Euler, Math as ThreeMath, Matrix4, Quaternion, Vector3} from "three"
 import {Value} from "../core/react"
 import {getValueStyleComponent} from "../core/ui"
 import {Graph} from "../graph/graph"
-import {inputEdge, inputEdges, outputEdge, property} from "../graph/meta"
+import {inputEdge, inputEdges, outputEdge, property, setEnumMeta} from "../graph/meta"
 import {
   Operator,
   OperatorConfig,
@@ -52,9 +52,11 @@ function radToDegString (radians :number) {
 
 /** The different types of coordinate frames available. */
 export type CoordinateFrame = "world" | "local"
+setEnumMeta("CoordinateFrame", ["world", "local"])
 
 /** The different rotation orders available. */
 export type RotationOrder = "XYZ" | "XZY" | "YXZ" | "YZX" | "ZXY" | "ZYX"
+setEnumMeta("RotationOrder", ["XYZ", "XZY", "YXZ", "YZX", "ZXY", "ZYX"])
 
 /** Creates a set of Euler angles from individual components. */
 abstract class EulerConfig implements NodeConfig {
