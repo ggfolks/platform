@@ -98,11 +98,7 @@ export abstract class AbstractDropdown extends AbstractButton {
 
   private _combineBounds (bounds :rect) {
     if (!this._list) return bounds
-    return rect.union(
-      this._combinedBounds,
-      bounds,
-      this._list.bounds,
-    )
+    return rect.union(this._combinedBounds, bounds, this._list.bounds)
   }
 
   protected _activate () {
@@ -112,9 +108,7 @@ export abstract class AbstractDropdown extends AbstractButton {
   protected _closeAll () {
     if (this._list) this.toggle()
     for (let ancestor = this.parent; ancestor; ancestor = ancestor.parent) {
-      if (ancestor instanceof AbstractDropdown) {
-        ancestor.toggle()
-      }
+      if (ancestor instanceof AbstractDropdown) ancestor.toggle()
     }
   }
 
@@ -178,7 +172,7 @@ export interface AbstractDropdownItemConfig extends AbstractDropdownConfig {
   separator? :Spec<Value<boolean>>
 }
 
-/** A menu item within a menu. */
+/** Base class for dropdown and menu items. */
 export class AbstractDropdownItem extends AbstractDropdown {
   private readonly _separator :Value<boolean>
   protected _action? :Action
@@ -202,9 +196,9 @@ export class AbstractDropdownItem extends AbstractDropdown {
         if (ancestor instanceof AbstractDropdown) {
           if (!ancestor.list) return
           for (const element of ancestor.list.contents) {
-            const menu = element as AbstractDropdown
-            if (menu.list && menu !== this) {
-              menu.toggle()
+            const dropdown = element as AbstractDropdown
+            if (dropdown.list && dropdown !== this) {
+              dropdown.toggle()
             }
           }
           if (keys && !this.list) this.toggle()
