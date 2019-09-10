@@ -1,4 +1,5 @@
 import {Mutable, Value} from "../core/react"
+import {PMap} from "../core/util"
 import {EnumMeta, getEnumMeta} from "../graph/meta"
 import {Element, ElementConfig, ElementContext} from "./element"
 import {AxisConfig, VGroup} from "./group"
@@ -51,8 +52,26 @@ export class PropertyView extends VGroup {
   }
 }
 
+type PropertyConfigCreator = (model :Model, editable :Value<boolean>) => ElementConfig
+
+const propertyConfigCreators :PMap<PropertyConfigCreator> = {
+  string: (model, editable) => createPropertyRowConfig(model, {
+    type: "text",
+    constraints: {stretch: true},
+    text: "value",
+    enabled: editable,
+    contents: {
+      type: "box",
+      contents: {type: "label", text: "value"},
+      style: {halign: "left"},
+    },
+  }),
+}
+
 function createPropertyElementConfig (model :Model, editable :Value<boolean>) {
   const type = model.resolve<Value<string>>("type")
+  const creator = propertyConfigCreators[type.current]
+  if (creator) return creator(model, editable)
   const enumMeta = getEnumMeta(type.current)
   if (enumMeta) return createEnumPropertyConfig(model, editable, enumMeta)
   return createPropertyRowConfig(model, {
@@ -93,6 +112,7 @@ function createEnumPropertyConfig (model :Model, editable :Value<boolean>, enumM
 function createPropertyRowConfig (model :Model, valueConfig :ElementConfig) {
   return {
     type: "row",
+    gap: 2,
     contents: [
       {
         type: "box",

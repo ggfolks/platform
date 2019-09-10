@@ -1,3 +1,4 @@
+const textCorner = 2
 
 /** A default set of styles to use as a base. */
 export const DefaultStyles = {
@@ -10,6 +11,7 @@ export const DefaultStyles = {
     nodeButton: {family: "Helvetica, sans-serif", size: 14},
     nodeProperty: {family: "Helvetica, sans-serif", size: 14},
     dropdown: {family: "Helvetica, sans-serif", size: 14},
+    text: {family: "Helvetica, sans-serif", size: 14},
     edgeName: {family: "Helvetica, sans-serif", size: 14},
   },
   paints: {
@@ -20,6 +22,9 @@ export const DefaultStyles = {
     black: {type: "color", color: "#000000"},
   },
   borders: {
+    textNormal: {stroke: {type: "color", color: "#808080"}, cornerRadius: textCorner},
+    textDisabled: {stroke: {type: "color", color: "#606060"}, cornerRadius: textCorner},
+    textFocused: {stroke: {type: "color", color: "#D0D0D0"}, cornerRadius: textCorner},
     graphViewSelect: {
       stroke: {type: "color", color: "#808080"},
     },
@@ -52,6 +57,7 @@ export const DefaultStyles = {
     root: {
       fill: {type: "color", color: "rgba(48, 48, 48, 0.5)"},
     },
+    text: {fill: {type: "color", color: "#FFFFFF"}, cornerRadius: textCorner},
     dropdown: {
       fill: {type: "color", color: "#303030"},
       cornerRadius: 5,
@@ -170,9 +176,22 @@ export const DefaultTheme = {
       pressed: {fill: "$lightGray"},
     },
   },
+  text: {
+    box: {
+      padding: 2,
+      border: "$textNormal",
+      background: "$text",
+      hovered: {cursor: "text"},
+      disabled: {border: "$textDisabled"},
+      focused: {border: "$textFocused", cursor: "text"},
+      hoverFocused: {border: "$textFocused", cursor: "text"},
+    },
+    label: {font: "$text", fill: "$black"},
+    cursor: {stroke: "$black"},
+  },
   dropdown: {
     box: {
-      padding: [5, 10, 5, 10],
+      padding: [3, 8, 3, 8],
       background: "$dropdown",
       hovered: {background: "$dropdownHovered"},
       hoverFocused: {background: "$dropdownHovered"},
@@ -182,7 +201,7 @@ export const DefaultTheme = {
   },
   dropdownitem: {
     box: {
-      padding: [5, 5, 5, 15],
+      padding: [3, 8, 3, 8],
       background: "$dropdownitem",
       hovered: {background: "$dropdownitemHovered"},
       hoverFocused: {background: "$dropdownitemHovered"},

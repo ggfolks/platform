@@ -749,6 +749,7 @@ export class NodeView extends VGroup {
     if (hasProperties) {
       bodyContents.push({
         type: "propertyview",
+        gap: 2,
         scopeId: "nodeProperties",
         offPolicy: "stretch",
         editable: this._editable,
