@@ -1,7 +1,7 @@
 import {refEquals} from "../core/data"
 import {ChangeFn, Mutable, Value, addListener, dispatchChange} from "../core/react"
 import {MutableMap, RMap} from "../core/rcollect"
-import {Disposable, Disposer, Noop, NoopRemover, PMap} from "../core/util"
+import {Disposable, Disposer, Noop, NoopRemover, PMap, getValue} from "../core/util"
 import {Graph, getConstantOrValueNodeId} from "./graph"
 import {InputEdgeMeta, OutputEdgeMeta, PropertyMeta, getNodeMeta} from "./meta"
 import {Subgraph} from "./util"
@@ -80,19 +80,22 @@ export abstract class Node implements Disposable {
   getProperty<T> (name :string) :Mutable<T|undefined> {
     let property = this._properties.get(name)
     if (!property) {
+      const meta = this.propertiesMeta[name]
+      const defaultValue = meta && meta.defaultValue
       let changeFn :ChangeFn<T|undefined> = Noop
       this._properties.set(name, property = Mutable.deriveMutable(
         dispatch => {
           changeFn = dispatch
           return Noop
         },
-        () => this.config[name],
+        () => getValue(this.config[name], defaultValue),
         (value :T|undefined) => {
-          const oldValue = this.config[name]
-          if (value === null) {
-            if (oldValue === undefined) return
+          const baseValue = this.config[name]
+          const oldValue = getValue(baseValue, defaultValue)
+          if (value === undefined || value === null) {
+            if (baseValue === undefined) return
             delete this.config[name]
-            changeFn(undefined, oldValue)
+            changeFn(defaultValue, oldValue)
           } else {
             if (oldValue === value) return
             this.config[name] = value
