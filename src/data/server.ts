@@ -10,26 +10,72 @@ import {Auth, DObject, DObjectType, DState, DQueueAddr, MetaMsg, Path,
 import {DownType, DownMsg, UpMsg, UpType, SyncMsg, decodeUp, encodeDown} from "./protocol"
 
 import WebSocket from "ws"
-import * as crypto from "crypto"
 
+import * as crypto from "crypto"
 setRandomSource(array => crypto.randomFillSync(Buffer.from(array.buffer)))
 
-export const sysAuth :Auth = {id: UUID0, isSystem: true}
-
 const DebugLog = false
+
+export const sysAuth :Auth = {id: UUID0, isSystem: true}
 
 interface Subscriber {
   auth :Auth
   sendSync (msg :SyncMsg) :void
 }
-interface Resolved {
-  object :DObject,
-  subscribe: (sub :Subscriber) => Subject<DObject|Error>
+
+export class Resolved {
+  readonly state = Mutable.local<DState>("resolving")
+  readonly subscribers :Subscriber[] = []
+  readonly object :DObject
+
+  constructor (readonly store :DataStore, path :Path, otype :DObjectType<any>) {
+    this.object = new otype({
+      state: store.state,
+      post: (queue, msg) => this.store.post(sysAuth, queue, msg),
+      sendSync: (obj, msg, persist) => this.sendSync(msg, persist)
+    }, path, this.state)
+  }
+
+  subscribe (sub :Subscriber) :Subject<DObject|Error> {
+    return Subject.deriveSubject(disp => {
+      // wait for object to be active before we do canSubscribe check
+      this.object.state.whenOnce(s => s === "active", _ => {
+        if (!this.object.canSubscribe(sub.auth)) disp(new Error("Access denied."))
+        else {
+          this.subscribers.push(sub)
+          disp(this.object)
+        }
+      })
+      return () => {
+        const idx = this.subscribers.indexOf(sub)
+        if (idx >= 0) this.subscribers.splice(idx, 1)
+      }
+    })
+  }
+
+  resolveData () {
+    // default implementation doesn't resolve anything
+    this.resolvedData()
+  }
+
+  resolvedData () {
+    this.state.update("active")
+    this.store.postMeta(this.object, {type: "created"})
+  }
+
+  sendSync (msg :SyncMsg, persist :boolean) {
+    const obj = this.object, name = obj.metas[msg.idx].name
+    for (const sub of this.subscribers) if (obj.canRead(name, sub.auth)) sub.sendSync(msg)
+  }
 }
 
 export class DataStore {
   // TODO: flush and unload objects with no subscribers after some idle timeout
   private readonly resolved = new Map<string,Resolved>()
+
+  // the server datastore is always connected (unlike the client) (TODO: is this true, maybe there
+  // will be times when the server datastore is also disconnected?)
+  readonly state = Value.constant<DState>("active")
 
   constructor (readonly rtype :DObjectType<any>) {}
 
@@ -38,39 +84,9 @@ export class DataStore {
     if (res) return res
 
     if (DebugLog) log.debug("Creating object", "path", path)
-    const subscribers :Subscriber[] = []
-    const state = Mutable.local<DState>("resolving")
-    const otype = findObjectType(this.rtype, path)
-    const object = new otype({
-      state: Value.constant<DState>("active"),
-      post: (queue, msg) => this.post(sysAuth, queue, msg),
-      sendSync: (obj, msg) => {
-        const name = obj.metas[msg.idx].name
-        for (const sub of subscribers) if (obj.canRead(name, sub.auth)) sub.sendSync(msg)
-      }
-    }, path, state)
-
     // TODO: if we need to create a non-existent object, potentially check with the parent object
     // that the resolver (will need to pass auth into this method) is allowed to create
-
-    // TODO: load data from persistent storage, populate object, then transition to active
-    state.update("active")
-    this.postMeta(object, {type: "created"})
-
-    const nres :Resolved = {object, subscribe: sub => Subject.deriveSubject(disp => {
-      // wait for object to be active before we do canSubscribe check
-      object.state.whenOnce(s => s === "active", _ => {
-        if (!object.canSubscribe(sub.auth)) disp(new Error("Access denied."))
-        else {
-          subscribers.push(sub)
-          disp(object)
-        }
-      })
-      return () => {
-        const idx = subscribers.indexOf(sub)
-        if (idx >= 0) subscribers.splice(idx, 1)
-      }
-    })}
+    const nres = this.createResolved(path, findObjectType(this.rtype, path))
     this.resolved.set(key, nres)
     return nres
   }
@@ -114,6 +130,10 @@ export class DataStore {
   protected authFail (msg :string) :never {
     log.warn(msg)
     throw new Error(`Access denied.`)
+  }
+
+  protected createResolved (path :Path, otype :DObjectType<any>) :Resolved {
+    return new Resolved(this, path, otype)
   }
 }
 

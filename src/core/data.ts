@@ -37,7 +37,7 @@ export function dataCopy<T extends Data> (value :T) :T {
     return setc as T
 
   } else if (isMap(value)) {
-    const mapv = value as Map<Data,Data>, mapc = new Map<Data,Data>()
+    const mapv = value as Map<DataMapKey,Data>, mapc = new Map<DataMapKey,Data>()
     mapv.forEach((elem, key) => mapc.set(dataCopy(key), dataCopy(elem)))
     return mapc as T
 

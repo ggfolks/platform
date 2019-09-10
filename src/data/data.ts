@@ -3,8 +3,7 @@ import {UUID} from "../core/uuid"
 import {Data, Record, dataEquals, refEquals} from "../core/data"
 import {ChangeFn, Eq, Mutable, Value, ValueFn, addListener, dispatchChange} from "../core/react"
 import {MutableSet, MutableMap} from "../core/rcollect"
-import {KeyType, ValueType} from "../core/codec"
-import {PropMeta, getPropMetas} from "./meta"
+import {PropMeta, ValueMeta, SetMeta, MapMeta, getPropMetas} from "./meta"
 import {SyncMsg, SyncType} from "./protocol"
 
 export type Auth = {
@@ -21,14 +20,17 @@ export type MetaMsg = {type :"created"}
 
 export class DMutable<T> extends Mutable<T> {
 
-  static create<T> (eq :Eq<T>, owner :DObject, idx :number, vtype :ValueType, start :T) {
+  static create<T> (eq :Eq<T>, owner :DObject, idx :number, meta :ValueMeta, start :T) {
     const listeners :ValueFn<T>[] = []
     let current = start
     const update = (value :T, fromSync? :boolean) => {
       const ov = current
       if (!eq(ov, value)) {
         dispatchChange(listeners, current = value, ov)
-        if (!fromSync) owner.noteWrite({type: SyncType.VALSET, idx, vtype, value})
+        if (!fromSync) {
+          const {vtype, persist} = meta
+          owner.noteWrite({type: SyncType.VALSET, idx, vtype, value}, persist)
+        }
       }
     }
     return new DMutable(eq, lner => addListener(listeners, lner), () => current, update)
@@ -45,17 +47,17 @@ export class DMutable<T> extends Mutable<T> {
 class DMutableSet<E> extends MutableSet<E> {
   protected data = new Set<E>()
 
-  constructor (readonly owner :DObject,
-               readonly idx :number,
-               readonly etype :KeyType) { super() }
+  constructor (readonly owner :DObject, readonly idx :number, readonly meta :SetMeta) { super() }
 
   add (elem :E, fromSync? :boolean) :this {
     const size = this.data.size
     this.data.add(elem)
     if (this.data.size !== size) {
       this.notifyAdd(elem)
-      if (!fromSync) this.owner.noteWrite({
-        type: SyncType.SETADD, idx: this.idx, elem, etype: this.etype})
+      if (!fromSync) {
+        const {etype, persist} = this.meta
+        this.owner.noteWrite({type: SyncType.SETADD, idx: this.idx, elem, etype}, persist)
+      }
     }
     return this
   }
@@ -63,8 +65,10 @@ class DMutableSet<E> extends MutableSet<E> {
   delete (elem :E, fromSync? :boolean) :boolean {
     if (!this.data.delete(elem)) return false
     this.notifyDelete(elem)
-    if (!fromSync) this.owner.noteWrite({
-      type: SyncType.SETDEL, idx: this.idx, elem, etype: this.etype})
+    if (!fromSync) {
+      const {etype, persist} = this.meta
+      this.owner.noteWrite({type: SyncType.SETDEL, idx: this.idx, elem, etype}, persist)
+    }
     return true
   }
 }
@@ -72,16 +76,15 @@ class DMutableSet<E> extends MutableSet<E> {
 class DMutableMap<K,V> extends MutableMap<K,V> {
   protected data = new Map<K,V>()
 
-  constructor (readonly owner :DObject, readonly idx :number,
-               readonly ktype :KeyType, readonly vtype :ValueType) { super() }
+  constructor (readonly owner :DObject, readonly idx :number, readonly meta :MapMeta) { super() }
 
   set (key :K, value :V, fromSync? :boolean) :this {
     const data = this.data, prev = data.get(key)
     data.set(key, value)
     this.notifySet(key, value, prev)
     if (!fromSync) {
-      const {owner, idx, ktype, vtype} = this
-      owner.noteWrite({type: SyncType.MAPSET, idx, key, value, ktype, vtype})
+      const {owner, idx} = this, {ktype, vtype, persist} = this.meta
+      owner.noteWrite({type: SyncType.MAPSET, idx, key, value, ktype, vtype}, persist)
     }
     return this
   }
@@ -91,8 +94,8 @@ class DMutableMap<K,V> extends MutableMap<K,V> {
     if (!data.delete(key)) return false
     this.notifyDelete(key, prev as V)
     if (!fromSync) {
-      const {owner, idx, ktype} = this
-      owner.noteWrite({type: SyncType.MAPDEL, idx, key, ktype})
+      const {owner, idx} = this, {ktype, persist} = this.meta
+      owner.noteWrite({type: SyncType.MAPDEL, idx, key, ktype}, persist)
     }
     return true
   }
@@ -157,7 +160,7 @@ export interface DataSource {
   // TODO: optional auth for server entities that want to post to further queues with same creds?
   // TODO: variants that wait for the message to be processed? also return channels?
 
-  sendSync (obj :DObject, msg :SyncMsg) :void
+  sendSync (obj :DObject, msg :SyncMsg, persist :boolean) :void
 }
 
 function metaMismatch (meta :PropMeta, expect :string) :never {
@@ -207,9 +210,9 @@ export abstract class DObject {
     * and `canRead` tests. */
   canCreate (prop :string, auth :Auth) :boolean { return auth.isSystem }
 
-  noteWrite (msg :SyncMsg) { this.source.sendSync(this, msg) }
+  noteWrite (msg :SyncMsg, persist :boolean) { this.source.sendSync(this, msg, persist) }
 
-  applySync (msg :SyncMsg, fromSync = true) {
+  applySync (msg :SyncMsg, fromSync :boolean) {
     const prop = this[this.metas[msg.idx].name]
     switch (msg.type) {
     case SyncType.VALSET: (prop as DMutable<any>).update(msg.value, fromSync) ; break
@@ -224,7 +227,7 @@ export abstract class DObject {
 
   protected value<T> (initVal :T, eq :Eq<T> = refEquals) :Mutable<T> {
     const index = this.metaIdx++, meta = this.metas[index]
-    return (meta.type === "value") ? DMutable.create(eq, this, index, meta.vtype, initVal) :
+    return (meta.type === "value") ? DMutable.create(eq, this, index, meta, initVal) :
       metaMismatch(meta, "value")
   }
 
@@ -234,14 +237,12 @@ export abstract class DObject {
 
   protected set<E> () :MutableSet<E> {
     const index = this.metaIdx++, meta = this.metas[index]
-    return (meta.type === "set") ? new DMutableSet(this, index, meta.etype) :
-      metaMismatch(meta, "set")
+    return (meta.type === "set") ? new DMutableSet(this, index, meta) : metaMismatch(meta, "set")
   }
 
   protected map<K,V> () :MutableMap<K,V> {
     const index = this.metaIdx++, meta = this.metas[index]
-    return (meta.type === "map") ? new DMutableMap(this, index, meta.ktype, meta.vtype) :
-      metaMismatch(meta, "map")
+    return (meta.type === "map") ? new DMutableMap(this, index, meta) : metaMismatch(meta, "map")
   }
 
   protected collection<O extends DObject> () {

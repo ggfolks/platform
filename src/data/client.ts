@@ -122,7 +122,7 @@ export class Client implements Disposable {
     else if (msg.type === DownType.SUBERR) {
       info.state.update("failed")
       this.reportError(log.format("Subscribe failed", "obj", info.object, "cause", msg.cause))
-    } else info.object.applySync(msg)
+    } else info.object.applySync(msg, true)
   }
 
   reportError (msg :string) {
