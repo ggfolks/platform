@@ -354,7 +354,7 @@ export class GraphViewer extends VGroup {
     const input = document.createElement("input")
     input.setAttribute("type", "file")
     input.setAttribute("accept", "application/json")
-    input.addEventListener("change", async event => {
+    input.addEventListener("change", event => {
       if (!input.files || input.files.length === 0) return
       const reader = new FileReader()
       reader.onload = () => {
