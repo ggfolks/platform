@@ -1,6 +1,6 @@
 import {clamp, dim2, rect, vec2, vec2zero} from "../core/math"
 import {Mutable} from "../core/react"
-import {Control, ControlConfig, Element, ElementContext, MouseInteraction} from "./element"
+import {Control, ControlConfig, Element, ElementContext, PointerInteraction} from "./element"
 
 /** Provides a scrolling window onto its contents. */
 export interface ScrollViewConfig extends ControlConfig {
@@ -30,15 +30,15 @@ export class ScrollView extends Control {
     this.contents.applyToIntersecting(this._transformRegion(region), op)
   }
 
-  handleMouseDown (event :MouseEvent, pos :vec2) :MouseInteraction|undefined {
+  handlePointerDown (event :MouseEvent|TouchEvent, pos :vec2) :PointerInteraction|undefined {
     const transformedPos = this._transformPos(pos)
-    const interaction = this.contents.maybeHandleMouseDown(event, transformedPos)
+    const interaction = this.contents.maybeHandlePointerDown(event, transformedPos)
     if (interaction) return {
       move: (event, pos) => interaction.move(event, this._transformPos(pos)),
       release: interaction.release,
       cancel: interaction.cancel,
     }
-    if (event.button !== 0) return undefined
+    if (event instanceof MouseEvent && event.button !== 0) return undefined
     const basePos = vec2.clone(pos)
     const baseOffset = this._offset.current
     const cancel = () => this.clearCursor(this)

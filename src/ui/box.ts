@@ -115,13 +115,13 @@ export class Box extends Element {
     this.contents.applyToIntersecting(region, op)
   }
 
-  maybeHandleMouseDown (event :MouseEvent, pos :vec2) {
+  maybeHandlePointerDown (event :MouseEvent|TouchEvent, pos :vec2) {
     return rect.contains(this.expandBounds(this.bounds), pos)
-      ? this.handleMouseDown(event, pos)
+      ? this.handlePointerDown(event, pos)
       : undefined
   }
-  handleMouseDown (event :MouseEvent, pos :vec2) {
-    return this.contents.maybeHandleMouseDown(event, pos)
+  handlePointerDown (event :MouseEvent|TouchEvent, pos :vec2) {
+    return this.contents.maybeHandlePointerDown(event, pos)
   }
   maybeHandleWheel (event :WheelEvent, pos :vec2) {
     return rect.contains(this.expandBounds(this.bounds), pos) && this.handleWheel(event, pos)

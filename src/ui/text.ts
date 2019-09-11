@@ -3,7 +3,7 @@ import {refEquals} from "../core/data"
 import {PMap, getValue} from "../core/util"
 import {Mutable, Subject, Value} from "../core/react"
 import {Control, ControlConfig, ControlStates, Element, ElementConfig, ElementContext,
-        MouseInteraction} from "./element"
+        PointerInteraction} from "./element"
 import {Spec, FontConfig, Paint, PaintConfig, DefaultPaint, ShadowConfig,
         Span, EmptySpan} from "./style"
 import {Action, NoopAction} from "./model"
@@ -397,8 +397,8 @@ export abstract class AbstractText extends Control {
 
   get styleScope () { return {id: "text", states: ControlStates} }
 
-  handleMouseDown (event :MouseEvent, pos :vec2) :MouseInteraction|undefined {
-    if (event.button !== 0) return undefined
+  handlePointerDown (event :MouseEvent|TouchEvent, pos :vec2) :PointerInteraction|undefined {
+    if (event instanceof MouseEvent && event.button !== 0) return undefined
 
     // if we're already focused, jiggle the cursor blinker so it restarts; this ensures that the
     // user immediately sees the cursor at the new location

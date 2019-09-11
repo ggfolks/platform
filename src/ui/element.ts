@@ -230,21 +230,21 @@ export abstract class Element implements Disposable {
    */
   handleMouseLeave (event :MouseEvent, pos :vec2) {}
 
-  /** Requests that this element handle the supplied mouse down event if it contains the position.
+  /** Requests that this element handle the supplied pointer down event if it contains the position.
     * @param event the event forwarded from the browser.
     * @param pos the position of the event relative to the root origin.
-    * @return an interaction if an element started an interaction with the mouse, `undefined`
+    * @return an interaction if an element started an interaction with the pointer, `undefined`
     * otherwise. */
-  maybeHandleMouseDown (event :MouseEvent, pos :vec2) :MouseInteraction|undefined {
-    return rect.contains(this.bounds, pos) ? this.handleMouseDown(event, pos) : undefined
+  maybeHandlePointerDown (event :MouseEvent|TouchEvent, pos :vec2) :PointerInteraction|undefined {
+    return rect.contains(this.bounds, pos) ? this.handlePointerDown(event, pos) : undefined
   }
 
-  /** Requests that this element handle the supplied mouse down event.
+  /** Requests that this element handle the supplied pointer down event.
     * @param event the event forwarded from the browser.
     * @param pos the position of the event relative to the root origin.
-    * @return an interaction if an element started an interaction with the mouse, `undefined`
+    * @return an interaction if an element started an interaction with the pointer, `undefined`
     * otherwise. */
-  handleMouseDown (event :MouseEvent, pos :vec2) :MouseInteraction|undefined {
+  handlePointerDown (event :MouseEvent|TouchEvent, pos :vec2) :PointerInteraction|undefined {
     return undefined
   }
 
@@ -306,15 +306,15 @@ export abstract class Element implements Disposable {
   protected abstract rerender (canvas :CanvasRenderingContext2D, region :rect) :void
 }
 
-/** Encapsulates a mouse interaction with an element. When the mouse button is pressed over an
-  * element, it can start an interaction which will then handle subsequent mouse events until the
-  * button is released or the interaction is canceled. */
-export type MouseInteraction = {
+/** Encapsulates a mouse or touch interaction with an element. When the button is pressed over an
+  * element, it can start an interaction which will then handle subsequent events until the button
+  * is released or the interaction is canceled. */
+export type PointerInteraction = {
   /** Called when the pointer is moved while this interaction is active. */
-  move: (moveEvent :MouseEvent, pos :vec2) => void
+  move: (moveEvent :MouseEvent|TouchEvent, pos :vec2) => void
   /** Called when the pointer is released while this interaction is active. This ends the
     * interaction. */
-  release: (upEvent :MouseEvent, pos :vec2) => void
+  release: (upEvent :MouseEvent|TouchEvent, pos :vec2) => void
   /** Called if this action is canceled. This ends the interaction. */
   cancel: () => void
 
@@ -360,7 +360,7 @@ export function getCurrentEditNumber () {
 
 /** The top-level of the UI hierarchy. Manages the canvas into which the UI is rendered. */
 export class Root extends Element {
-  private readonly interacts :Array<MouseInteraction|undefined> = []
+  private readonly interacts :Array<PointerInteraction|undefined> = []
   private readonly _clock = new Emitter<Clock>()
   private readonly _sizeChange = new Emitter<Root>()
   private readonly _unclaimedKeyEvent = new Emitter<KeyboardEvent>()
@@ -479,7 +479,7 @@ export class Root extends Element {
         console.warn(`Got mouse down but have active interaction? [button=${button}]`)
         iact.cancel()
       }
-      const niact = this.interacts[button] = this.contents.maybeHandleMouseDown(event, pos)
+      const niact = this.interacts[button] = this.contents.maybeHandlePointerDown(event, pos)
       // if we click and hit no interactive control, clear the focus
       if (niact === undefined) this.focus.update(undefined)
       break
@@ -503,7 +503,60 @@ export class Root extends Element {
       }
     }
   }
-  // TODO: dispatchTouchEvent, handlePointerDown (called by mouse & touch)?
+
+  /** Dispatches a browser touch event to this root.
+    * @param event the browser event to dispatch.
+    * @param origin the origin of the root in screen coordinates. */
+  dispatchTouchEvent (event :TouchEvent) {
+    const iact = this.interacts[0]
+    switch (event.type) {
+    case "touchstart":
+      if (event.touches.length === 1) {
+        const touch = event.changedTouches[0]
+        const pos = vec2.set(tmpv, touch.clientX-this.origin[0], touch.clientY-this.origin[1])
+        if (rect.contains(this.bounds, pos)) {
+          // note that we are assuming responsibility for the event
+          event.cancelBubble = true
+          // prevent any default touch behavior
+          event.preventDefault()
+        }
+        if (iact) {
+          console.warn("Got touch start but have active interaction?")
+          iact.cancel()
+        }
+        const niact = this.interacts[0] = this.contents.maybeHandlePointerDown(event, pos)
+        // if we click and hit no interactive control, clear the focus
+        if (niact === undefined) this.focus.update(undefined)
+
+      } else if (iact) {
+        iact.cancel()
+        this.interacts[0] = undefined
+      }
+      break
+    case "touchmove":
+      if (iact) {
+        const touch = event.changedTouches[0]
+        const pos = vec2.set(tmpv, touch.clientX-this.origin[0], touch.clientY-this.origin[1])
+        iact.move(event, pos)
+      }
+      break
+    case "touchcancel":
+      if (iact) {
+        iact.cancel()
+        this.interacts[0] = undefined
+      }
+      break
+    case "touchend":
+      if (iact) {
+        const touch = event.changedTouches[0]
+        const pos = vec2.set(tmpv, touch.clientX-this.origin[0], touch.clientY-this.origin[1])
+        iact.release(event, pos)
+        this.interacts[0] = undefined
+      }
+      currentEditNumber++
+      break
+    }
+  }
 
   private _updateElementsOver (event :MouseEvent, pos :vec2) {
     const sf = this.config.scale.factor
@@ -720,6 +773,7 @@ export class Host implements Disposable {
   private readonly onDoubleClick = (event :MouseEvent) => this.handleDoubleClickEvent(event)
   private readonly onPointerDown = (event :PointerEvent) => this.handlePointerDown(event)
   private readonly onPointerUp = (event :PointerEvent) => this.handlePointerUp(event)
+  private readonly onTouch = (event :TouchEvent) => this.handleTouchEvent(event)
   private _canvas? :HTMLCanvasElement
   protected readonly roots :Root[] = []
 
@@ -751,6 +805,10 @@ export class Host implements Disposable {
     canvas.addEventListener("dblclick", this.onDoubleClick)
     canvas.addEventListener("pointerdown", this.onPointerDown)
     canvas.addEventListener("pointerup", this.onPointerUp)
+    canvas.addEventListener("touchstart", this.onTouch)
+    canvas.addEventListener("touchmove", this.onTouch)
+    canvas.addEventListener("touchcancel", this.onTouch)
+    canvas.addEventListener("touchend", this.onTouch)
     document.addEventListener("keydown", this.onKey)
     document.addEventListener("keyup", this.onKey)
     return () => {
@@ -761,6 +819,10 @@ export class Host implements Disposable {
       canvas.removeEventListener("dblclick", this.onDoubleClick)
       canvas.removeEventListener("pointerdown", this.onPointerDown)
       canvas.removeEventListener("pointerup", this.onPointerUp)
+      canvas.removeEventListener("touchstart", this.onTouch)
+      canvas.removeEventListener("touchmove", this.onTouch)
+      canvas.removeEventListener("touchcancel", this.onTouch)
+      canvas.removeEventListener("touchend", this.onTouch)
       document.removeEventListener("keydown", this.onKey)
       document.removeEventListener("keyup", this.onKey)
       this._canvas = undefined
@@ -787,6 +849,9 @@ export class Host implements Disposable {
   handlePointerUp (event :PointerEvent) {
     const canvas = event.target as HTMLElement
     canvas.releasePointerCapture(event.pointerId)
+  }
+  handleTouchEvent (event :TouchEvent) {
+    for (const root of this.roots) root.dispatchTouchEvent(event)
   }
 
   update (clock :Clock) {

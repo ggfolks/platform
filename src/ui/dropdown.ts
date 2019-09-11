@@ -4,7 +4,7 @@ import {Noop, PMap, getValue} from "../core/util"
 import {AbstractButton, ButtonStates} from "./button"
 import {
   ControlConfig, Element, ElementConfig, ElementContext,
-  MouseInteraction, falseValue, trueValue,
+  PointerInteraction, falseValue, trueValue,
 } from "./element"
 import {List} from "./list"
 import {Action, ModelKey, ModelProvider, Spec} from "./model"
@@ -56,14 +56,14 @@ export abstract class AbstractDropdown extends AbstractButton {
     this._list && this._list.applyToIntersecting(region, op)
   }
 
-  maybeHandleMouseDown (event :MouseEvent, pos :vec2) {
+  maybeHandlePointerDown (event :MouseEvent|TouchEvent, pos :vec2) {
     return rect.contains(this.expandBounds(this.bounds), pos)
-      ? this.handleMouseDown(event, pos)
+      ? this.handlePointerDown(event, pos)
       : undefined
   }
-  handleMouseDown (event :MouseEvent, pos :vec2) :MouseInteraction|undefined {
-    if (!this._list) return super.handleMouseDown(event, pos)
-    const interaction = this._list.handleMouseDown(event, pos)
+  handlePointerDown (event :MouseEvent|TouchEvent, pos :vec2) :PointerInteraction|undefined {
+    if (!this._list) return super.handlePointerDown(event, pos)
+    const interaction = this._list.handlePointerDown(event, pos)
     if (interaction) return interaction
     this._closeAll()
     // return a dummy interaction just to prevent others from handling the event

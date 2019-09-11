@@ -22,6 +22,7 @@ export class Touchpad implements Disposable {
 
   private _onTouchStartMove = (event :TouchEvent) => {
     event.preventDefault()
+    if (event.cancelBubble) return
     for (let ii = 0; ii < event.changedTouches.length; ii++) {
       const touch = event.changedTouches.item(ii)
       if (touch) this.touches.set(touch.identifier, touch)

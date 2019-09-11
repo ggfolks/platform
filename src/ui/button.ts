@@ -2,7 +2,7 @@ import {dim2, rect, vec2} from "../core/math"
 import {Mutable, Value} from "../core/react"
 import {Action, NoopAction, Spec} from "./model"
 import {Control, ControlConfig, ControlStates, Element, ElementConfig, ElementContext,
-        MouseInteraction} from "./element"
+        PointerInteraction} from "./element"
 
 export interface ButtonConfig extends ControlConfig {
   type :"button"
@@ -28,8 +28,14 @@ export class AbstractButton extends Control {
   get styleScope () { return ButtonStyleScope }
   get pressed () :Value<boolean> { return this._pressed }
 
-  handleMouseDown (event :MouseEvent, pos :vec2) :MouseInteraction|undefined {
-    if (!(event.button === 0 && this.visible.current && this.enabled.current)) return undefined
+  handlePointerDown (event :MouseEvent|TouchEvent, pos :vec2) :PointerInteraction|undefined {
+    if (
+      event instanceof MouseEvent && event.button !== 0 ||
+      !this.visible.current ||
+      !this.enabled.current
+    ) {
+      return undefined
+    }
     this._pressed.update(true)
     this.focus()
     return {
@@ -103,8 +109,8 @@ export class Toggle extends Control {
     if (this.checkedContents) this.checkedContents.dispose()
   }
 
-  handleMouseDown (event :MouseEvent, pos :vec2) :MouseInteraction|undefined {
-    if (event.button !== 0) return undefined
+  handlePointerDown (event :MouseEvent|TouchEvent, pos :vec2) :PointerInteraction|undefined {
+    if (event instanceof MouseEvent && event.button !== 0) return undefined
     this.focus()
     return {
       move: (event, pos) => {},

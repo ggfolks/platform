@@ -11,14 +11,14 @@ abstract class Group extends Element {
 
   abstract get contents () :Element[]
 
-  maybeHandleMouseDown (event :MouseEvent, pos :vec2) {
+  maybeHandlePointerDown (event :MouseEvent|TouchEvent, pos :vec2) {
     return rect.contains(this.expandBounds(this.bounds), pos)
-      ? this.handleMouseDown(event, pos)
+      ? this.handlePointerDown(event, pos)
       : undefined
   }
-  handleMouseDown (event :MouseEvent, pos :vec2) {
+  handlePointerDown (event :MouseEvent|TouchEvent, pos :vec2) {
     for (const cc of this.contents) {
-      const interaction = cc.maybeHandleMouseDown(event, pos)
+      const interaction = cc.maybeHandlePointerDown(event, pos)
       if (interaction) return interaction
     }
     return undefined
@@ -104,10 +104,10 @@ function absPosition (c :AbsConstraints) { return c.position || vec2zero }
 /** A group whose contents are positioned absolutely. */
 export abstract class AbsGroup extends Group {
 
-  handleMouseDown (event :MouseEvent, pos :vec2) {
+  handlePointerDown (event :MouseEvent|TouchEvent, pos :vec2) {
     // handle mouse events in reverse order of drawing
     for (let ii = this.contents.length - 1; ii >= 0; ii--) {
-      const interaction = this.contents[ii].maybeHandleMouseDown(event, pos)
+      const interaction = this.contents[ii].maybeHandlePointerDown(event, pos)
       if (interaction) return interaction
     }
     return undefined

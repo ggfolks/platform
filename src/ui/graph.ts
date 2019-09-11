@@ -6,7 +6,7 @@ import {PMap, Remover} from "../core/util"
 import {GraphConfig, getConstantOrValueNodeId} from "../graph/graph"
 import {InputEdge} from "../graph/node"
 import {Box} from "./box"
-import {Element, ElementConfig, ElementContext, MouseInteraction, Observer} from "./element"
+import {Element, ElementConfig, ElementContext, PointerInteraction, Observer} from "./element"
 import {AbsConstraints, AbsGroup, AxisConfig, VGroup} from "./group"
 import {List} from "./list"
 import {Action, Model, ModelData, ModelKey, ModelProvider, Spec, dataProvider} from "./model"
@@ -502,14 +502,14 @@ export class GraphView extends AbsGroup {
     }
   }
 
-  maybeHandleMouseDown (event :MouseEvent, pos :vec2) :MouseInteraction|undefined {
+  maybeHandlePointerDown (event :MouseEvent|TouchEvent, pos :vec2) :PointerInteraction|undefined {
     // just assume that anything in the scroll view is in the graph view
-    return this.handleMouseDown(event, pos)
+    return this.handlePointerDown(event, pos)
   }
 
-  handleMouseDown (event :MouseEvent, pos :vec2) :MouseInteraction|undefined {
+  handlePointerDown (event :MouseEvent|TouchEvent, pos :vec2) :PointerInteraction|undefined {
     const graphViewer = getGraphViewer(this)
-    const interaction = super.handleMouseDown(event, pos)
+    const interaction = super.handlePointerDown(event, pos)
     if (interaction) {
       if (interaction.type !== "node") graphViewer.selection.clear()
       return interaction
@@ -858,8 +858,8 @@ export class NodeView extends VGroup {
   handleMouseEnter (event :MouseEvent, pos :vec2) { this.hovered.update(true) }
   handleMouseLeave (event :MouseEvent, pos :vec2) { this.hovered.update(false) }
 
-  handleMouseDown (event :MouseEvent, pos :vec2) :MouseInteraction|undefined {
-    const interaction = super.handleMouseDown(event, pos)
+  handlePointerDown (event :MouseEvent|TouchEvent, pos :vec2) :PointerInteraction|undefined {
+    const interaction = super.handlePointerDown(event, pos)
     if (interaction || !this._editable.current) return interaction
     const basePos = vec2.clone(pos)
     const graphView = getGraphView(this)
@@ -1036,9 +1036,9 @@ export class EdgeView extends Element {
     canvas.translate(-view.x, -view.y)
   }
 
-  handleMouseLeave (event :MouseEvent, pos :vec2) { this._hoverKeys.update(undefined) }
+  handleMouseLeave (event :MouseEvent|TouchEvent, pos :vec2) { this._hoverKeys.update(undefined) }
 
-  handleMouseDown (event :MouseEvent, pos :vec2) {
+  handlePointerDown (event :MouseEvent|TouchEvent, pos :vec2) {
     const keys = this._hoverKeys.current
     if (keys === undefined || !this._editable.current) return undefined
     const [inputKey, targetId, outputKey] = keys
@@ -1069,7 +1069,7 @@ export class EdgeView extends Element {
     const node = view.elements.get(targetId)!.node
     const outputs = node.findTaggedChild("outputs") as List
     const terminal = outputs.getElement(outputKey)!.findChild("terminal") as Terminal
-    return terminal.handleMouseDown(event, pos)
+    return terminal.handlePointerDown(event, pos)
   }
 
   protected get computeState () :string {
@@ -1333,12 +1333,12 @@ export class Terminal extends Element {
   handleMouseEnter (event :MouseEvent, pos :vec2) { this._hovered.update(true) }
   handleMouseLeave (event :MouseEvent, pos :vec2) { this._hovered.update(false) }
 
-  maybeHandleMouseDown (event :MouseEvent, pos :vec2) {
+  maybeHandlePointerDown (event :MouseEvent|TouchEvent, pos :vec2) {
     return rect.contains(this.expandBounds(this.bounds), pos)
-      ? this.handleMouseDown(event, pos)
+      ? this.handlePointerDown(event, pos)
       : undefined
   }
-  handleMouseDown (event :MouseEvent, pos :vec2) {
+  handlePointerDown (event :MouseEvent|TouchEvent, pos :vec2) {
     if (!this._editable.current) return
     const endpoint = this._endpoint = vec2.clone(pos)
     this.dirty()
@@ -1390,7 +1390,7 @@ export class Terminal extends Element {
       if (targetTerminal) targetTerminal.targeted.update(false)
     }
     return {
-      move: (event :MouseEvent, pos :vec2) => {
+      move: (event :MouseEvent|TouchEvent, pos :vec2) => {
         this.setCursor(this, "move")
         this.dirty()
         vec2.copy(endpoint, pos)
