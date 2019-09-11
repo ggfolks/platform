@@ -11,6 +11,7 @@ const tmpr = rect.create(), tmpv = vec2.create(), tmpd = dim2.create()
 export const trueValue = Value.constant(true)
 export const falseValue = Value.constant(false)
 const defHintSize = Value.constant(dim2.fromValues(64000, 32000))
+const defMinSize = Value.constant(dim2.fromValues(0, 0))
 
 /** Used by elements to observe reactive values. Takes care of invalidating the element when the
   * value changes, clearing old listeners when switching sources, and cleaning up when the element
@@ -330,6 +331,7 @@ export interface RootConfig extends ElementConfig {
   scale :Scale
   autoSize? :boolean
   hintSize? :Spec<Value<dim2>>
+  minSize? :Spec<Value<dim2>>
   contents :ElementConfig
 }
 
@@ -363,6 +365,7 @@ export class Root extends Element {
   private readonly _sizeChange = new Emitter<Root>()
   private readonly _unclaimedKeyEvent = new Emitter<KeyboardEvent>()
   private readonly _hintSize :Value<dim2>
+  private readonly _minSize :Value<dim2>
   private readonly _origin = vec2.create()
   private _cursorOwner? :Element
   readonly canvasElem :HTMLCanvasElement = document.createElement("canvas")
@@ -377,6 +380,7 @@ export class Root extends Element {
     if (canvas) this.canvas = canvas
     else throw new Error(`Canvas rendering context not supported?`)
     this._hintSize = config.hintSize ? ctx.model.resolve(config.hintSize) : defHintSize
+    this._minSize = config.minSize ? ctx.model.resolve(config.minSize) : defMinSize
     this.contents = ctx.elem.create(ctx, this, config.contents)
   }
 
@@ -440,11 +444,12 @@ export class Root extends Element {
   update (clock :Clock) :boolean {
     this._clock.emit(clock)
     if (!this.valid.current && this.config.autoSize) {
-      const hint = this._hintSize.current
+      const hint = this._hintSize.current, min = this._minSize.current
       this.computePreferredSize(hint[0], hint[1], tmpd)
-      // clamp the root bounds to the configured "hint" size
-      // (TODO: maybe we want a better name for that config option)
-      this.setBounds(rect.set(tmpr, 0, 0, Math.min(tmpd[0], hint[0]), Math.min(tmpd[1], hint[1])))
+      // clamp the root bounds to be no smaller than min, and no bigger than hint
+      const width = Math.min(hint[0], min[0] > 0 ? Math.max(tmpd[0], min[0]) : tmpd[0])
+      const height = Math.min(hint[1], min[1] > 0 ? Math.max(tmpd[1], min[1]) : tmpd[1])
+      this.setBounds(rect.set(tmpr, 0, 0, width, height))
     }
     const changed = this.validate() || !rect.isEmpty(this._dirtyRegion)
     changed && this.render(this.canvas, this._dirtyRegion)
