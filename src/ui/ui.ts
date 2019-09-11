@@ -60,7 +60,11 @@ function processStyles (styles :Record, states: string[]) :Record {
 class StyleResolver {
   private protoStyles = new Map<string,Record>()
 
-  constructor (readonly scope :StyleScope, readonly styles :ElemStyles[]) {}
+  constructor (readonly scope :StyleScope, readonly styles :ElemStyles[]) {
+    for (let ii = 0; ii < styles.length; ii += 1) {
+      if (!styles[ii]) throw new Error(`Missing styles for scope ${scope.id} @ ${scope.states[ii]}`)
+    }
+  }
 
   resolveStyles (type :string) :Record {
     const cached = this.protoStyles.get(type)
