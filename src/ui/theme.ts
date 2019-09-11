@@ -25,6 +25,7 @@ export const DefaultStyles = {
     textNormal: {stroke: {type: "color", color: "#808080"}, cornerRadius: textCorner},
     textDisabled: {stroke: {type: "color", color: "#606060"}, cornerRadius: textCorner},
     textFocused: {stroke: {type: "color", color: "#D0D0D0"}, cornerRadius: textCorner},
+    textInvalid: {stroke: {type: "color", color: "#FF0000"}, cornerRadius: textCorner},
     graphViewSelect: {
       stroke: {type: "color", color: "#808080"},
     },
@@ -185,6 +186,7 @@ export const DefaultTheme = {
       disabled: {border: "$textDisabled"},
       focused: {border: "$textFocused", cursor: "text"},
       hoverFocused: {border: "$textFocused", cursor: "text"},
+      invalid: {border: "$textInvalid", cursor: "text"},
     },
     label: {font: "$text", fill: "$black"},
     cursor: {stroke: "$black"},

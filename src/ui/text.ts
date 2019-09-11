@@ -360,6 +360,8 @@ export interface AbstractTextConfig extends ControlConfig {
   onEnter? :Spec<Action>
 }
 
+const TextStyleScope = {id: "text", states: [...ControlStates, "invalid"]}
+
 /** Base class for text edit elements. */
 export abstract class AbstractText extends Control {
   private readonly jiggle = Mutable.local(false)
@@ -378,6 +380,9 @@ export abstract class AbstractText extends Control {
     super(ctx, parent, changeConfigText(config, text))
     this.invalidateOnChange(this.coffset)
     this.onEnter = config.onEnter ? ctx.model.resolve(config.onEnter) : NoopAction
+
+    // update state when text changes; we may become invalid
+    this.disposer.add(text.onChange(() => this._state.update(this.computeState)))
 
     const label = this.contents.findChild("label")
     if (label) this.label = label as Label
@@ -402,7 +407,7 @@ export abstract class AbstractText extends Control {
     this.textState = {text: this.text, cursor: this.coffset, selection: this.label.selection}
   }
 
-  get styleScope () { return {id: "text", states: ControlStates} }
+  get styleScope () { return TextStyleScope }
 
   handlePointerDown (event :MouseEvent|TouchEvent, pos :vec2) :PointerInteraction|undefined {
     if (event instanceof MouseEvent && event.button !== 0) return undefined
@@ -463,6 +468,12 @@ export abstract class AbstractText extends Control {
     this.jiggle.update(!this.jiggle.current)
     return true
   }
+
+  protected get computeState () :string {
+    return this.inputValid ? super.computeState : "invalid"
+  }
+
+  protected get inputValid () :boolean { return true }
 
   protected revalidate () {
     super.revalidate()
@@ -555,7 +566,7 @@ export class NumberText extends AbstractText {
     this.disposer.add(
       this.text.onChange(text => {
         const value = parseFloat(text)
-        if (!isNaN(value)) this.number.update(this._clamp(value))
+        if (this._isValueValid(value)) this.number.update(value)
       })
     )
   }
@@ -564,6 +575,19 @@ export class NumberText extends AbstractText {
     const wheelStep = getValue(this.config.wheelStep, 1)
     this.number.update(this._clamp(this.number.current - wheelStep * Math.sign(event.deltaY)))
     return true
+  }
+
+  protected get inputValid () :boolean {
+    // can be called before constructor finishes
+    return this.text ? this._isValueValid(parseFloat(this.text.current)) : true
+  }
+
+  private _isValueValid (value :number) :boolean {
+    return !(
+      isNaN(value) ||
+      this.config.min !== undefined && value < this.config.min ||
+      this.config.max !== undefined && value > this.config.max
+    )
   }
 
   private _clamp (value :number) :number {
