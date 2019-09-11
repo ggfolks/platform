@@ -1036,7 +1036,7 @@ export class EdgeView extends Element {
     canvas.translate(-view.x, -view.y)
   }
 
-  handleMouseLeave (event :MouseEvent|TouchEvent, pos :vec2) { this._hoverKeys.update(undefined) }
+  handleMouseLeave (event :MouseEvent, pos :vec2) { this._hoverKeys.update(undefined) }
 
   handlePointerDown (event :MouseEvent|TouchEvent, pos :vec2) {
     const keys = this._hoverKeys.current
