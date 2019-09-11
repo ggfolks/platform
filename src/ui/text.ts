@@ -282,16 +282,23 @@ export class Cursor extends Element {
 
   get style () :CursorStyle { return this.getStyle(this.config.style, this.state.current) }
 
+  private get _lineWidth () :number { return this.style.width || 1 }
+
+  expandBounds (bounds :rect) :rect {
+    return rect.expand(tmpr, bounds, Math.ceil(this._lineWidth / 2))
+  }
+
   protected computePreferredSize (hintX :number, hintY :number, into :dim2) {} // not used
   protected relayout () {} // not used
 
   protected rerender (canvas :CanvasRenderingContext2D, region :rect) {
-    const x = this.x, y = this.y, h = this.height
+    // offset by 0.5 so that we're in the middle of the pixel
+    const x = this.x + 0.5, y = this.y, h = this.height
     this.stroke.current.prepStroke(canvas)
     canvas.beginPath()
     canvas.moveTo(x, y)
     canvas.lineTo(x, y+h)
-    canvas.lineWidth = this.style.width || 1
+    canvas.lineWidth = this._lineWidth
     canvas.stroke()
     canvas.lineWidth = 1
   }
@@ -453,6 +460,7 @@ export abstract class AbstractText extends Control {
     } else {
       return false
     }
+    this.jiggle.update(!this.jiggle.current)
     return true
   }
 

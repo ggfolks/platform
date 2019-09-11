@@ -141,6 +141,11 @@ export class rect extends Float32Array {
     return rect.set(out, x1, y1, x2 - x1, y2 - y1)
   }
 
+  static expand (out :rect, src :rect, amount :number) :rect {
+    const amount2 = amount * 2
+    return rect.set(out, src[0] - amount, src[1] - amount, src[2] + amount2, src[3] + amount2)
+  }
+
   static zero (out :rect) :rect {
     return rect.set(out, 0, 0, 0, 0)
   }

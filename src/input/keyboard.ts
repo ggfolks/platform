@@ -31,7 +31,7 @@ export class Keyboard implements Disposable {
   }
 
   private _onKeyDown = (event :KeyboardEvent) => {
-    this._getKeyState(event.keyCode).update(true)
+    if (!event.cancelBubble) this._getKeyState(event.keyCode).update(true)
   }
 
   private _onKeyUp = (event :KeyboardEvent) => {

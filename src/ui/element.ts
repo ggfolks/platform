@@ -581,6 +581,7 @@ export class Root extends Element {
     if (focus && focus.handleKeyEvent(event)) {
       // let the browser know we handled this event
       event.preventDefault()
+      event.cancelBubble = true
       return
     }
     this._unclaimedKeyEvent.emit(event)

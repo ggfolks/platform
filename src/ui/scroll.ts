@@ -39,6 +39,7 @@ export class ScrollView extends Control {
       cancel: interaction.cancel,
     }
     if (event instanceof MouseEvent && event.button !== 0) return undefined
+    this.root.focus.update(undefined)
     const basePos = vec2.clone(pos)
     const baseOffset = this._offset.current
     const cancel = () => this.clearCursor(this)
