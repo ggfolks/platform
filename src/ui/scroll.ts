@@ -56,8 +56,11 @@ export class ScrollView extends Control {
   }
 
   handleWheel (event :WheelEvent, pos :vec2) {
-    // TODO: different delta scales for different devices
-    this.zoom(event.deltaY > 0 ? -1 : 1)
+    const transformedPos = this._transformPos(pos)
+    if (!this.contents.maybeHandleWheel(event, transformedPos)) {
+      // TODO: different delta scales for different devices
+      this.zoom(event.deltaY > 0 ? -1 : 1)
+    }
     return true
   }
 

@@ -66,6 +66,17 @@ const propertyConfigCreators :PMap<PropertyConfigCreator> = {
       style: {halign: "left"},
     },
   }),
+  number: (model, editable) => createPropertyRowConfig(model, {
+    type: "numbertext",
+    constraints: {stretch: true},
+    number: "value",
+    enabled: editable,
+    contents: {
+      type: "box",
+      contents: {type: "label"}, // text filled in by NumberText
+      style: {halign: "right"},
+    },
+  }),
 }
 
 function createPropertyElementConfig (model :Model, editable :Value<boolean>) {

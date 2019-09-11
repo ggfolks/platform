@@ -108,6 +108,7 @@ export class UI {
     case        "label": return new T.Label(ctx, parent, rconfig as T.LabelConfig)
     case       "cursor": return new T.Cursor(ctx, parent, rconfig as T.CursorConfig)
     case         "text": return new T.Text(ctx, parent, rconfig as T.TextConfig)
+    case   "numbertext": return new T.NumberText(ctx, parent, rconfig as T.NumberTextConfig)
     case       "button": return new B.Button(ctx, parent, rconfig as B.ButtonConfig)
     case       "toggle": return new B.Toggle(ctx, parent, rconfig as B.ToggleConfig)
     case         "list": return new L.List(ctx, parent, rconfig as L.ListConfig)

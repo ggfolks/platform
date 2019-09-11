@@ -1,6 +1,6 @@
 import {dim2, vec2, rect} from "../core/math"
 import {refEquals} from "../core/data"
-import {PMap} from "../core/util"
+import {PMap, getValue} from "../core/util"
 import {Mutable, Subject, Value} from "../core/react"
 import {Control, ControlConfig, ControlStates, Element, ElementConfig, ElementContext,
         MouseInteraction} from "./element"
@@ -205,7 +205,7 @@ export const keyMap :KeyMap = {
   Backspace: {0: "backspace"},
   Delete: {0: "delete"},
   NumpadDecimal: {0: "delete"},
-  
+
   // TODO: Shift-Arrow should extend selection left & right
   ArrowLeft: {0: "cursorLeft", [CtrlMask]: "cursorStart"},
   ArrowRight: {0: "cursorRight", [CtrlMask]: "cursorEnd"},
@@ -347,28 +347,29 @@ function allSelector (text :string, doff :number, state :TextState) :Selector {
 
 const DefaultCursor :CursorConfig = {type: "cursor", style: {}}
 
-/** Defines configuration for [[Text]]. */
-export interface TextConfig extends ControlConfig {
-  type :"text"
+/** Defines configuration for text edit elements. */
+export interface AbstractTextConfig extends ControlConfig {
   cursor? :CursorConfig
-  text :Spec<Mutable<string>>
   onEnter? :Spec<Action>
 }
 
-/** Displays a span of editable text. */
-export class Text extends Control {
+/** Base class for text edit elements. */
+export abstract class AbstractText extends Control {
   private readonly jiggle = Mutable.local(false)
   private readonly textState :TextState
   private readonly onEnter :Action
   readonly coffset = Mutable.local(0)
-  readonly text :Mutable<string>
   readonly label :Label
   readonly cursor :Cursor
 
-  constructor (ctx :ElementContext, parent :Element, readonly config :TextConfig) {
-    super(ctx, parent, config)
+  constructor (
+    ctx :ElementContext,
+    parent :Element,
+    readonly config :AbstractTextConfig,
+    readonly text :Mutable<string>,
+  ) {
+    super(ctx, parent, changeConfigText(config, text))
     this.invalidateOnChange(this.coffset)
-    this.text = ctx.model.resolve(config.text)
     this.onEnter = config.onEnter ? ctx.model.resolve(config.onEnter) : NoopAction
 
     const label = this.contents.findChild("label")
@@ -476,4 +477,65 @@ export class Text extends Control {
     super.rerender(canvas, region)
     this.cursor.render(canvas, region)
   }
+}
+
+function changeConfigText (config :AbstractTextConfig, text :Mutable<string>) :AbstractTextConfig {
+  const newConfig = Object.assign({}, config)
+  newConfig.contents = Object.assign({}, config.contents)
+  newConfig.contents.contents = Object.assign({}, config.contents.contents)
+  newConfig.contents.contents.text = text
+  return newConfig
+}
+
+/** Defines configuration for [[Text]]. */
+export interface TextConfig extends AbstractTextConfig {
+  type :"text"
+  text :Spec<Mutable<string>>
+}
+
+/** Displays a span of editable text. */
+export class Text extends AbstractText {
+
+  constructor (ctx :ElementContext, parent :Element, readonly config :TextConfig) {
+    super(ctx, parent, config, ctx.model.resolve(config.text))
+  }
+}
+
+/** Defines configuration for [[NumberText]]. */
+export interface NumberTextConfig extends AbstractTextConfig {
+  type :"numbertext"
+  maxDecimals? :number
+  wheelStep? :number
+  number :Spec<Mutable<number>>
+}
+
+/** Displays an editable number. */
+export class NumberText extends AbstractText {
+  readonly number :Mutable<number>
+
+  constructor (ctx :ElementContext, parent :Element, readonly config :NumberTextConfig) {
+    super(ctx, parent, config, Mutable.local(""))
+    this.number = ctx.model.resolve(config.number)
+    const maxDecimals = getValue(config.maxDecimals, 3)
+    this.disposer.add(
+      this.number.onValue(value => this.text.update(numberToString(value, maxDecimals))),
+    )
+    this.disposer.add(
+      this.text.onChange(text => {
+        const value = parseFloat(text)
+        if (!isNaN(value)) this.number.update(value)
+      })
+    )
+  }
+
+  handleWheel (event :WheelEvent, pos :vec2) :boolean {
+    const wheelStep = getValue(this.config.wheelStep, 1)
+    this.number.update(this.number.current - wheelStep * Math.sign(event.deltaY))
+    return true
+  }
+}
+
+function numberToString (value :number, maxDecimals :number) :string {
+  const scale = 10 ** maxDecimals
+  return String(Math.round(value * scale) / scale)
 }
