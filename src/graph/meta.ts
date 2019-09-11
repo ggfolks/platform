@@ -17,6 +17,8 @@ export interface PropertyConstraints {
 export interface NumberConstraints {
   min? :number
   max? :number
+  maxDecimals? :number
+  wheelStep? :number
 }
 
 /** The metadata associated with a graph edge. */

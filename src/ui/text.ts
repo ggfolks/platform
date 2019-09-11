@@ -504,17 +504,41 @@ export class Text extends AbstractText {
 /** Defines configuration for [[NumberText]]. */
 export interface NumberTextConfig extends AbstractTextConfig {
   type :"numbertext"
+  min? :number
+  max? :number
   maxDecimals? :number
   wheelStep? :number
   number :Spec<Mutable<number>>
 }
+
+const NonNegativeIntegerPattern = /^\d*$/
+const IntegerPattern = /^-?\d*$/
+const NonNegativeFloatPattern = /^\d*\.?\d*$/
+const FloatPattern = /^-?\d*\.?\d*$/
 
 /** Displays an editable number. */
 export class NumberText extends AbstractText {
   readonly number :Mutable<number>
 
   constructor (ctx :ElementContext, parent :Element, readonly config :NumberTextConfig) {
-    super(ctx, parent, config, Mutable.local(""))
+    super(
+      ctx,
+      parent,
+      config,
+      Mutable.local("").bimap(
+        text => text,
+        (oldText, newText) => {
+          let pattern :RegExp
+          const nonNegative = config.min !== undefined && config.min >= 0
+          if (config.maxDecimals === 0) {
+            pattern = nonNegative ? NonNegativeIntegerPattern : IntegerPattern
+          } else {
+            pattern = nonNegative ? NonNegativeFloatPattern : FloatPattern
+          }
+          return pattern.test(newText) ? newText : oldText
+        },
+      ),
+    )
     this.number = ctx.model.resolve(config.number)
     const maxDecimals = getValue(config.maxDecimals, 3)
     this.disposer.add(
@@ -523,15 +547,21 @@ export class NumberText extends AbstractText {
     this.disposer.add(
       this.text.onChange(text => {
         const value = parseFloat(text)
-        if (!isNaN(value)) this.number.update(value)
+        if (!isNaN(value)) this.number.update(this._clamp(value))
       })
     )
   }
 
   handleWheel (event :WheelEvent, pos :vec2) :boolean {
     const wheelStep = getValue(this.config.wheelStep, 1)
-    this.number.update(this.number.current - wheelStep * Math.sign(event.deltaY))
+    this.number.update(this._clamp(this.number.current - wheelStep * Math.sign(event.deltaY)))
     return true
+  }
+
+  private _clamp (value :number) :number {
+    if (this.config.min !== undefined) value = Math.max(this.config.min, value)
+    if (this.config.max !== undefined) value = Math.min(this.config.max, value)
+    return value
   }
 }
 

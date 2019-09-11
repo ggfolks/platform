@@ -1,6 +1,6 @@
 import {Mutable, Value} from "../core/react"
 import {PMap} from "../core/util"
-import {EnumMeta, getEnumMeta} from "../graph/meta"
+import {EnumMeta, NumberConstraints, getEnumMeta} from "../graph/meta"
 import {Element, ElementConfig, ElementContext} from "./element"
 import {AxisConfig, VGroup} from "./group"
 import {Model, ModelKey, ModelProvider, Spec} from "./model"
@@ -66,17 +66,21 @@ const propertyConfigCreators :PMap<PropertyConfigCreator> = {
       style: {halign: "left"},
     },
   }),
-  number: (model, editable) => createPropertyRowConfig(model, {
-    type: "numbertext",
-    constraints: {stretch: true},
-    number: "value",
-    enabled: editable,
-    contents: {
-      type: "box",
-      contents: {type: "label"}, // text filled in by NumberText
-      style: {halign: "right"},
-    },
-  }),
+  number: (model, editable) => {
+    const constraints = model.resolve<Value<NumberConstraints>>("constraints").current
+    return createPropertyRowConfig(model, {
+      type: "numbertext",
+      constraints: {stretch: true},
+      number: "value",
+      enabled: editable,
+      contents: {
+        type: "box",
+        contents: {type: "label"}, // text filled in by NumberText
+        style: {halign: "right"},
+      },
+      ...constraints,
+    })
+  },
 }
 
 function createPropertyElementConfig (model :Model, editable :Value<boolean>) {
