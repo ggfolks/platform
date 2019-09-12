@@ -21,6 +21,7 @@ function getValueNodeId (value :Value<any>) {
 
 /** Returns the node id used for a fixed constant value. */
 function getConstantNodeId (value :any) {
+  if (value && value.value !== undefined) value = value.value
   return `__${value}`
 }
 
@@ -110,9 +111,10 @@ export class Graph implements Disposable {
     const id = getConstantNodeId(input)
     let node = this._nodes.get(id)
     if (!node) {
+      const value :any = input
       this._nodes.set(id, node = this.ctx.types.createNode(this, id, {
         type: "constant",
-        value: input,
+        value: (value && value.value !== undefined) ? value.value : value,
       }))
     }
     return node.getOutput(undefined, defaultValue)
