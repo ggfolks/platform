@@ -190,7 +190,7 @@ class Tagged extends Node {
 
 /** Registers the nodes in this module with the supplied registry. */
 export function registerEntityNodes (registry :NodeTypeRegistry) {
-  registry.registerNodeTypes("entity", {
+  registry.registerNodeTypes(["entity"], {
     addEntity: AddEntity,
     deleteEntity: DeleteEntity,
     entityId: EntityId,

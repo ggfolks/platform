@@ -308,7 +308,7 @@ class Step extends Node {
 
 /** Registers the nodes in this module with the supplied registry. */
 export function registerMathNodes (registry :NodeTypeRegistry) {
-  registry.registerNodeTypes("math", {
+  registry.registerNodeTypes(["math"], {
     constant: Constant,
     add: Add,
     subtract: Subtract,

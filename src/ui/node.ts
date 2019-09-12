@@ -1,18 +1,18 @@
 import {refEquals} from "../core/data"
 import {dim2, vec2} from "../core/math"
 import {Scale, getValueStyle} from "../core/ui"
-import {Mutable, Value} from "../core/react"
+import {Mutable, Source, Value} from "../core/react"
 import {MutableSet} from "../core/rcollect"
 import {Disposer, PMap, getValue} from "../core/util"
 import {Graph, GraphConfig} from "../graph/graph"
 import {getNodeMeta, inputEdge} from "../graph/meta"
 import {Subgraph} from "../graph/util"
 import {
-  InputEdge, InputEdges, Node, NodeConfig,
+  CategoryNode, InputEdge, InputEdges, Node, NodeConfig,
   NodeContext, NodeInput, NodeTypeRegistry,
 } from "../graph/node"
 import {HAnchor, Host, Root, RootConfig, VAnchor, getCurrentEditNumber} from "./element"
-import {Model, ModelData, ModelKey, mapProvider} from "./model"
+import {Model, ModelData, ModelKey, ModelProvider, mapProvider} from "./model"
 import {Theme, UI} from "./ui"
 import {ImageResolver, StyleDefs} from "./style"
 
@@ -138,6 +138,23 @@ class UINode extends Node {
         canUndo.update(true)
         canRedo.update(false)
       }
+      function getCategoryKeys (category :CategoryNode) :Source<string[]> {
+        return category.children.keysSource().map<string[]>(Array.from)
+      }
+      function getCategoryData (category :CategoryNode) :ModelProvider {
+        return mapProvider(category.children, (value, key) => {
+          if (value.current instanceof CategoryNode) return {
+            name: Value.constant(key),
+            submenu: Value.constant(true),
+            keys: getCategoryKeys(value.current),
+            data: getCategoryData(value.current),
+          }
+          return {
+            name: Value.constant(key),
+            action: () => nodeCreator.current({[key as string]: {type: (key as string)}}),
+          } as ModelData
+        })
+      }
       const model = new Model({
         ...this.config.model,
         remove: () => {
@@ -145,18 +162,8 @@ class UINode extends Node {
           root.dispose()
           disposer.dispose()
         },
-        categoryKeys: ctx.types.categories.keysSource().map(Array.from),
-        categoryData: mapProvider(ctx.types.categories, (value, key) => ({
-          name: Value.constant(key),
-          submenu: Value.constant(true),
-          keys: value,
-          data: {
-            resolve: (key :ModelKey) => new Model({
-              name: Value.constant(key),
-              action: () => nodeCreator.current({[key as string]: {type: (key as string)}}),
-            }),
-          },
-        })),
+        categoryKeys: getCategoryKeys(ctx.types.root),
+        categoryData: getCategoryData(ctx.types.root),
         selection,
         nodeCreator,
         nodeEditor,
@@ -413,5 +420,5 @@ function createGraphModelData (graph :Graph, applyEdit :(edit :NodeEdit) => void
 
 /** Registers the nodes in this module with the supplied registry. */
 export function registerUINodes (registry :NodeTypeRegistry) {
-  registry.registerNodeTypes("ui", {ui: UINode})
+  registry.registerNodeTypes(["ui"], {ui: UINode})
 }

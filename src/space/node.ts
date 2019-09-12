@@ -495,8 +495,7 @@ class WorldToLocal extends EntityComponentNode<TransformComponent> {
 
 /** Registers the nodes in this module with the supplied registry. */
 export function registerSpaceNodes (registry :NodeTypeRegistry) {
-  registry.registerNodeTypes("space", {
-    Euler: EulerNode,
+  registry.registerNodeTypes(["space", "Vector3"], {
     Vector3: Vector3Node,
     "Vector3.split": Vector3Split,
     "Vector3.add": Vector3Add,
@@ -504,6 +503,9 @@ export function registerSpaceNodes (registry :NodeTypeRegistry) {
     "Vector3.projectOnPlane": Vector3ProjectOnPlane,
     "Vector3.multiplyScalar": Vector3MultiplyScalar,
     "Vector3.angleBetween": Vector3AngleBetween,
+  })
+  registry.registerNodeTypes(["space"], {
+    Euler: EulerNode,
     randomDirection: RandomDirection,
     rotate: Rotate,
     translate: Translate,

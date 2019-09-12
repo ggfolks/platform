@@ -276,12 +276,40 @@ interface NodeConstructor<T extends NodeConfig> {
   new (graph :Graph, id :string, config :T): Node
 }
 
+/** Base class for nodes in the type registry. */
+export class RegistryNode {
+  constructor (readonly name :string) {}
+}
+
+/** A node representing a category of types (an internal node). */
+export class CategoryNode extends RegistryNode {
+  private readonly _children = MutableMap.local<string, RegistryNode>()
+
+  get children () :RMap<string, RegistryNode> { return this._children }
+
+  getCategoryNode (categories :string[]) :CategoryNode {
+    if (categories.length === 0) return this
+    const name = categories[0]
+    let child = this._children.get(name)
+    if (!(child instanceof CategoryNode)) {
+      this._children.set(name, child = new CategoryNode(name))
+    }
+    const category = child as CategoryNode
+    return category.getCategoryNode(categories.slice(1))
+  }
+
+  addTypeNode (type :string) {
+    this._children.set(type, new TypeNode(type))
+  }
+}
+
+/** A node representing a single type (a leaf node). */
+export class TypeNode extends RegistryNode {}
+
 /** Maintains a mapping from string node types to constructors. */
 export class NodeTypeRegistry {
+  readonly root = new CategoryNode("")
   private _constructors :Map<string, NodeConstructor<NodeConfig>> = new Map()
-  private _categories = MutableMap.local<string, string[]>()
-
-  get categories () :RMap<string, string[]> { return this._categories }
 
   constructor (...regs :((registry :NodeTypeRegistry) => void)[]) {
     for (const reg of regs) {
@@ -290,17 +318,17 @@ export class NodeTypeRegistry {
   }
 
   /** Registers a group of node type constructors.
-    * @param category the category under which to list the nodes, or undefined to avoid listing.
+    * @param categories the category path under which to list the nodes, or undefined to avoid
+    * listing.
     * @param types the map from node type names to node constructors.
     */
-  registerNodeTypes (category :string|undefined, types :{ [type :string]: NodeConstructor<any> }) {
-    let list :string[] | undefined
-    if (category) {
-      list = this._categories.get(category)
-      if (!list) this._categories.set(category, list = [])
-    }
+  registerNodeTypes (
+    categories :string[]|undefined,
+    types :{ [type :string]: NodeConstructor<any> },
+  ) {
+    const category = categories && this.root.getCategoryNode(categories)
     for (const type in types) {
-      if (list) list.push(type)
+      if (category) category.addTypeNode(type)
       this._constructors.set(type, types[type] as NodeConstructor<NodeConfig>)
     }
   }

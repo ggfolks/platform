@@ -298,7 +298,7 @@ class OnChange extends Node {
 
 /** Registers the nodes in this module with the supplied registry. */
 export function registerUtilNodes (registry :NodeTypeRegistry) {
-  registry.registerNodeTypes("util", {
+  registry.registerNodeTypes(["util"], {
     timeout: TimeoutNode,
     interval: IntervalNode,
     latch: Latch,

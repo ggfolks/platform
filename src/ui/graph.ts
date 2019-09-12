@@ -50,6 +50,33 @@ export class GraphViewer extends VGroup {
       ([selection, editable]) => selection && editable,
     )
     this._updateNodeFunctions(ctx.model)
+
+    function createMenuItem (element :ElementConfig) {
+      return {
+        type: "menuitem",
+        enabled: "enabled",
+        shortcut: "shortcut",
+        contents: {
+          type: "box",
+          contents: {
+            type: "row",
+            offPolicy: "stretch",
+            contents: [
+              {type: "label", text: "name"},
+              {type: "spacer", height: 0, constraints: {stretch: true}},
+              {type: "label", text: Value.constant("▸"), visible: "submenu"},
+              {type: "shortcut", command: "shortcut"},
+            ],
+          },
+          style: {halign: "stretch"},
+        },
+        element,
+        keys: "keys",
+        data: "data",
+        action: "action",
+        separator: "separator",
+      }
+    }
     this.contents.push(
       ctx.elem.create(ctx, this, {
         type: "box",
@@ -68,38 +95,16 @@ export class GraphViewer extends VGroup {
                   type: "box",
                   contents: {type: "label", text: "title"},
                 },
-                element: {
+                // max category depth of two for the moment
+                element: createMenuItem(createMenuItem({
                   type: "menuitem",
-                  enabled: "enabled",
-                  shortcut: "shortcut",
                   contents: {
                     type: "box",
-                    contents: {
-                      type: "row",
-                      offPolicy: "stretch",
-                      contents: [
-                        {type: "label", text: "name"},
-                        {type: "spacer", height: 0, constraints: {stretch: true}},
-                        {type: "label", text: Value.constant("▸"), visible: "submenu"},
-                        {type: "shortcut", command: "shortcut"},
-                      ],
-                    },
-                    style: {halign: "stretch"},
+                    contents: {type: "label", text: "name"},
+                    style: {halign: "left"},
                   },
-                  element: {
-                    type: "menuitem",
-                    contents: {
-                      type: "box",
-                      contents: {type: "label", text: "name"},
-                      style: {halign: "left"},
-                    },
-                    action: "action",
-                  },
-                  keys: "keys",
-                  data: "data",
                   action: "action",
-                  separator: "separator",
-                },
+                })),
                 keys: "keys",
                 data: "data",
                 shortcutKeys: "shortcutKeys",

@@ -139,7 +139,7 @@ class PointerMovement extends Node {
 
 /** Registers the nodes in this module with the supplied registry. */
 export function registerInputNodes (registry :NodeTypeRegistry) {
-  registry.registerNodeTypes("input", {
+  registry.registerNodeTypes(["input"], {
     key: Key,
     mouseButton: MouseButton,
     doubleClick: DoubleClick,
