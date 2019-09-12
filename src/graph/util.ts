@@ -296,6 +296,24 @@ class OnChange extends Node {
   }
 }
 
+/** Emits a constant string. */
+abstract class StringConfig implements NodeConfig {
+  type = "string"
+  @property() value = ""
+  @outputEdge("string") output = undefined
+}
+
+class StringNode extends Node {
+
+  constructor (graph :Graph, id :string, readonly config :StringConfig) {
+    super(graph, id, config)
+  }
+
+  protected _createOutput () {
+    return Value.constant(this.config.value)
+  }
+}
+
 /** Registers the nodes in this module with the supplied registry. */
 export function registerUtilNodes (registry :NodeTypeRegistry) {
   registry.registerNodeTypes(["util"], {
@@ -308,6 +326,7 @@ export function registerUtilNodes (registry :NodeTypeRegistry) {
     output: Output,
     log: Log,
     property: Property,
+    string: StringNode,
   })
   registry.registerNodeTypes(undefined, {
     onChange: OnChange,

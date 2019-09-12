@@ -1,6 +1,6 @@
 import {Value} from "../core/react"
 import {Graph} from "./graph"
-import {inputEdge, inputEdges, outputEdge} from "./meta"
+import {inputEdge, inputEdges, outputEdge, property} from "./meta"
 import {
   Node,
   NodeConfig,
@@ -8,6 +8,24 @@ import {
   OperatorConfig,
   Operator,
 } from "./node"
+
+/** Outputs a constant boolean value. */
+abstract class BooleanConfig implements NodeConfig {
+  type = "boolean"
+  @property() value = false
+  @outputEdge("boolean") output = undefined
+}
+
+class BooleanNode extends Node {
+
+  constructor (graph :Graph, id :string, readonly config :BooleanConfig) {
+    super(graph, id, config)
+  }
+
+  protected _createOutput () {
+    return Value.constant(this.config.value)
+  }
+}
 
 /** Computes the logical and of its inputs. */
 abstract class AndConfig implements OperatorConfig<boolean> {
@@ -178,6 +196,7 @@ class Conditional extends Node {
 /** Registers the nodes in this module with the supplied registry. */
 export function registerLogicNodes (registry :NodeTypeRegistry) {
   registry.registerNodeTypes(["logic"], {
+    boolean: BooleanNode,
     and: And,
     or: Or,
     not: Not,

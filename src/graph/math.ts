@@ -9,16 +9,16 @@ import {
   Operator,
 } from "./node"
 
-/** Outputs a single constant. */
-abstract class ConstantConfig implements NodeConfig {
-  type = "constant"
+/** Outputs a constant number. */
+abstract class NumberConfig implements NodeConfig {
+  type = "number"
   @property() value = 0
   @outputEdge("number") output = undefined
 }
 
-class Constant extends Node {
+class NumberNode extends Node {
 
-  constructor (graph :Graph, id :string, readonly config :ConstantConfig) {
+  constructor (graph :Graph, id :string, readonly config :NumberConfig) {
     super(graph, id, config)
   }
 
@@ -309,7 +309,7 @@ class Step extends Node {
 /** Registers the nodes in this module with the supplied registry. */
 export function registerMathNodes (registry :NodeTypeRegistry) {
   registry.registerNodeTypes(["math"], {
-    constant: Constant,
+    number: NumberNode,
     add: Add,
     subtract: Subtract,
     multiply: Multiply,

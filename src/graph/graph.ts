@@ -111,11 +111,12 @@ export class Graph implements Disposable {
     const id = getConstantNodeId(input)
     let node = this._nodes.get(id)
     if (!node) {
-      const value :any = input
-      this._nodes.set(id, node = this.ctx.types.createNode(this, id, {
-        type: "constant",
-        value: (value && value.value !== undefined) ? value.value : value,
-      }))
+      let value :any = input
+      if (value && value.value !== undefined) value = value.value
+      let type = typeof value
+      if (type === "object" && value && value.nodeType) type = value.nodeType
+      if (type === "object") type = "number" // temporary measure until we have all the node types
+      this._nodes.set(id, node = this.ctx.types.createNode(this, id, {type, value}))
     }
     return node.getOutput(undefined, defaultValue)
   }
