@@ -530,9 +530,6 @@ export interface NumberTextConfig extends AbstractTextConfig {
   number :Spec<Mutable<number>>
 }
 
-// matches a whole or partial number
-const FloatPattern = /^-?\d*\.?\d*$/
-
 /** Displays an editable number. */
 export class NumberText extends AbstractText {
   readonly number :Mutable<number>
@@ -542,10 +539,7 @@ export class NumberText extends AbstractText {
       ctx,
       parent,
       config,
-      Mutable.local("").bimap(
-        text => text,
-        (oldText, newText) => FloatPattern.test(newText) ? newText : oldText,
-      ),
+      Mutable.local(""),
     )
     this.number = ctx.model.resolve(config.number)
     const maxDecimals = getValue(config.maxDecimals, 3)
