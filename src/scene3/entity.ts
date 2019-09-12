@@ -463,39 +463,57 @@ interface GLTF {
   animations :AnimationClip[]
 }
 
-const gltfs :Map<string, Subject<GLTF>> = new Map()
+const activeGLTFs :Map<string, Subject<GLTF>> = new Map()
+const dormantGLTFs :Map<string, GLTF> = new Map()
 const errorGeom = new BoxBufferGeometry()
 const errorMat = new MeshBasicMaterial({color: 0xFF0000})
 
 function loadGLTF (url :string) {
-  let gltf = gltfs.get(url)
+  let gltf = activeGLTFs.get(url)
   if (!gltf) {
-    gltfs.set(url, gltf = Subject.deriveSubject(dispatch => {
-      new GLTFLoader().load(
-        url,
-        gltf => {
-          // hack for alpha testing: enable on any materials with a color texture that has
-          // an alpha channel
-          gltf.scene.traverse((node :Object3D) => {
-            if (node instanceof Mesh) {
-              const material = node.material
-              if (material instanceof MeshStandardMaterial &&
-                  material.map &&
-                  material.map.format === RGBAFormat) {
-                material.alphaTest = 0.9
-                material.transparent = false
+    let active = false
+    activeGLTFs.set(url, gltf = Subject.deriveSubject(dispatch => {
+      active = true
+      let savedGLTF = dormantGLTFs.get(url)
+      if (savedGLTF) {
+        dormantGLTFs.delete(url)
+        dispatch(savedGLTF)
+      } else {
+        const maybeDispatch = (gltf :GLTF) => {
+          savedGLTF = gltf
+          if (active) dispatch(gltf)
+          else dormantGLTFs.set(url, gltf)
+        }
+        new GLTFLoader().load(
+          url,
+          gltf => {
+            // hack for alpha testing: enable on any materials with a color texture that has
+            // an alpha channel
+            gltf.scene.traverse((node :Object3D) => {
+              if (node instanceof Mesh) {
+                const material = node.material
+                if (material instanceof MeshStandardMaterial &&
+                    material.map &&
+                    material.map.format === RGBAFormat) {
+                  material.alphaTest = 0.9
+                  material.transparent = false
+                }
               }
-            }
-          })
-          dispatch(gltf)
-        },
-        event => { /* do nothing with progress for now */ },
-        error => {
-          console.error(error)
-          dispatch({scene: new Mesh(errorGeom, errorMat), animations: []})
-        },
-      )
-      return NoopRemover
+            })
+            maybeDispatch(gltf)
+          },
+          event => { /* do nothing with progress for now */ },
+          error => {
+            console.error(error)
+            maybeDispatch({scene: new Mesh(errorGeom, errorMat), animations: []})
+          },
+        )
+      }
+      return () => {
+        active = false
+        activeGLTFs.delete(url)
+        if (savedGLTF) dormantGLTFs.set(url, savedGLTF)
+      }
     }))
   }
   return gltf
