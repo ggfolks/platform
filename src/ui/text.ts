@@ -382,7 +382,7 @@ export abstract class AbstractText extends Control {
     this.onEnter = config.onEnter ? ctx.model.resolve(config.onEnter) : NoopAction
 
     // update state when text changes; we may become invalid
-    this.disposer.add(text.onChange(() => this._state.update(this.computeState)))
+    this.disposer.add(text.onValue(() => this._state.update(this.computeState)))
 
     const label = this.contents.findChild("label")
     if (label) this.label = label as Label
@@ -530,9 +530,7 @@ export interface NumberTextConfig extends AbstractTextConfig {
   number :Spec<Mutable<number>>
 }
 
-const NonNegativeIntegerPattern = /^\d*$/
-const IntegerPattern = /^-?\d*$/
-const NonNegativeFloatPattern = /^\d*\.?\d*$/
+// matches a whole or partial number
 const FloatPattern = /^-?\d*\.?\d*$/
 
 /** Displays an editable number. */
@@ -546,16 +544,7 @@ export class NumberText extends AbstractText {
       config,
       Mutable.local("").bimap(
         text => text,
-        (oldText, newText) => {
-          let pattern :RegExp
-          const nonNegative = config.min !== undefined && config.min >= 0
-          if (config.maxDecimals === 0) {
-            pattern = nonNegative ? NonNegativeIntegerPattern : IntegerPattern
-          } else {
-            pattern = nonNegative ? NonNegativeFloatPattern : FloatPattern
-          }
-          return pattern.test(newText) ? newText : oldText
-        },
+        (oldText, newText) => FloatPattern.test(newText) ? newText : oldText,
       ),
     )
     this.number = ctx.model.resolve(config.number)
