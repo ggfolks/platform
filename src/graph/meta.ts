@@ -50,6 +50,7 @@ export function property (type? :string, constraints? :PropertyConstraints) {
     const defaultValue = instance[name]
     if (type === undefined) {
       type = typeof defaultValue
+      if (type === "object" && defaultValue !== null) type = defaultValue.constructor.name as string
     }
     getNodeMeta(instance.type).properties[name] = {type, defaultValue, constraints}
   }

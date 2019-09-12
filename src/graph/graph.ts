@@ -114,8 +114,10 @@ export class Graph implements Disposable {
       let value :any = input
       if (value && value.value !== undefined) value = value.value
       let type = typeof value
-      if (type === "object" && value && value.nodeType) type = value.nodeType
-      if (type === "object") type = "number" // temporary measure until we have all the node types
+      if (type === "object") {
+        if (value && value.nodeType) type = value.nodeType
+        else throw new Error("Constant value of unsupported type: " + value)
+      }
       this._nodes.set(id, node = this.ctx.types.createNode(this, id, {type, value}))
     }
     return node.getOutput(undefined, defaultValue)

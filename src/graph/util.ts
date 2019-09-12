@@ -310,7 +310,7 @@ class StringNode extends Node {
   }
 
   protected _createOutput () {
-    return Value.constant(this.config.value)
+    return Value.constant(this.config.value || "")
   }
 }
 

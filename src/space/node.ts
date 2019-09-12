@@ -20,7 +20,7 @@ Euler.prototype.toString = function() {
   return `(${radToDegString(this.x)}, ${radToDegString(this.y)}, ${radToDegString(this.z)})`
 }
 
-// path in getStyle functions
+// patch in getStyle functions
 const Vector3Prototype = Vector3.prototype as any
 Vector3Prototype.getStyle = function() {
   const self = this as Vector3
@@ -38,6 +38,10 @@ EulerPrototype.getStyle = function() {
   const b = Math.round(128 + normalizeAngle(self.z) * angleScale)
   return `rgb(${r}, ${g}, ${b})`
 }
+
+// patch in nodeType properties
+Vector3Prototype.nodeType = "Vector3.constant"
+EulerPrototype.nodeType = "Euler.constant"
 
 const TWO_PI = 2 * Math.PI
 function normalizeAngle (angle :number) {
@@ -85,6 +89,24 @@ class EulerNode extends Node {
   }
 }
 
+/** A constant set of Euler angles. */
+abstract class EulerConstantConfig implements NodeConfig {
+  type = "Euler.constant"
+  @property() value = new Euler()
+  @outputEdge("Euler") output = undefined
+}
+
+class EulerConstant extends Node {
+
+  constructor (graph :Graph, id :string, readonly config :EulerConstantConfig) {
+    super(graph, id, config)
+  }
+
+  protected _createOutput () {
+    return Value.constant(this.config.value || new Euler())
+  }
+}
+
 /** Creates a vector from individual components. */
 abstract class Vector3Config implements NodeConfig {
   type = "Vector3"
@@ -108,6 +130,24 @@ class Vector3Node extends Node {
         this.graph.getValue(this.config.z, 0),
       )
       .map(([x, y, z]) => new Vector3(x, y, z))
+  }
+}
+
+/** A constant vector value. */
+abstract class Vector3ConstantConfig implements NodeConfig {
+  type = "Vector3.constant"
+  @property() value = new Vector3()
+  @outputEdge("Vector3") output = undefined
+}
+
+class Vector3Constant extends Node {
+
+  constructor (graph :Graph, id :string, readonly config :Vector3ConstantConfig) {
+    super(graph, id, config)
+  }
+
+  protected _createOutput () {
+    return Value.constant(this.config.value || new Vector3())
   }
 }
 
@@ -497,6 +537,7 @@ class WorldToLocal extends EntityComponentNode<TransformComponent> {
 export function registerSpaceNodes (registry :NodeTypeRegistry) {
   registry.registerNodeTypes(["space", "Vector3"], {
     Vector3: Vector3Node,
+    "Vector3.constant": Vector3Constant,
     "Vector3.split": Vector3Split,
     "Vector3.add": Vector3Add,
     "Vector3.applyEuler": Vector3ApplyEuler,
@@ -504,8 +545,11 @@ export function registerSpaceNodes (registry :NodeTypeRegistry) {
     "Vector3.multiplyScalar": Vector3MultiplyScalar,
     "Vector3.angleBetween": Vector3AngleBetween,
   })
-  registry.registerNodeTypes(["space"], {
+  registry.registerNodeTypes(["space", "Euler"], {
     Euler: EulerNode,
+    "Euler.constant": EulerConstant,
+  })
+  registry.registerNodeTypes(["space"], {
     randomDirection: RandomDirection,
     rotate: Rotate,
     translate: Translate,
