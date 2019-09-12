@@ -464,7 +464,7 @@ interface GLTF {
 }
 
 const activeGLTFs :Map<string, Subject<GLTF>> = new Map()
-const dormantGLTFs :Map<string, GLTF> = new Map()
+const dormantGLTFs :Map<string, Promise<GLTF>> = new Map()
 const errorGeom = new BoxBufferGeometry()
 const errorMat = new MeshBasicMaterial({color: 0xFF0000})
 
@@ -472,19 +472,14 @@ function loadGLTF (url :string) {
   let gltf = activeGLTFs.get(url)
   if (!gltf) {
     let active = false
-    activeGLTFs.set(url, gltf = Subject.deriveSubject(dispatch => {
+    gltf = Subject.deriveSubject(dispatch => {
       active = true
+      activeGLTFs.set(url, gltf!)
       let savedGLTF = dormantGLTFs.get(url)
       if (savedGLTF) {
         dormantGLTFs.delete(url)
-        dispatch(savedGLTF)
       } else {
-        const maybeDispatch = (gltf :GLTF) => {
-          savedGLTF = gltf
-          if (active) dispatch(gltf)
-          else dormantGLTFs.set(url, gltf)
-        }
-        new GLTFLoader().load(
+        savedGLTF = new Promise(resolve => new GLTFLoader().load(
           url,
           gltf => {
             // hack for alpha testing: enable on any materials with a color texture that has
@@ -500,21 +495,24 @@ function loadGLTF (url :string) {
                 }
               }
             })
-            maybeDispatch(gltf)
+            resolve(gltf)
           },
           event => { /* do nothing with progress for now */ },
           error => {
             console.error(error)
-            maybeDispatch({scene: new Mesh(errorGeom, errorMat), animations: []})
+            resolve({scene: new Mesh(errorGeom, errorMat), animations: []})
           },
-        )
+        ))
       }
+      savedGLTF.then(gltf => {
+        if (active) dispatch(gltf)
+      })
       return () => {
         active = false
         activeGLTFs.delete(url)
-        if (savedGLTF) dormantGLTFs.set(url, savedGLTF)
+        dormantGLTFs.set(url, savedGLTF!)
       }
-    }))
+    })
   }
   return gltf
 }
