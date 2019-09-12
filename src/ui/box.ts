@@ -1,4 +1,5 @@
 import {rect, dim2, vec2} from "../core/math"
+import {Mutable} from "../core/react"
 import {PMap} from "../core/util"
 import {Element, ElementConfig, ElementContext} from "./element"
 import {NoopDecor, BackgroundConfig, BorderConfig, Spec, addDecorationBounds} from "./style"
@@ -79,6 +80,7 @@ export class Box extends Element {
   private border = this.observe(NoopDecor)
   readonly contents :Element
   private readonly _expandedBounds = rect.create()
+  private readonly _hovered = Mutable.local(false)
 
   constructor (ctx :ElementContext, parent :Element, readonly config :BoxConfig) {
     super(ctx, parent, config)
@@ -89,7 +91,14 @@ export class Box extends Element {
       else this.background.update(NoopDecor)
       if (style.border) this.border.observe(ctx.style.resolveBorder(style.border))
       else this.border.update(NoopDecor)
-      if (style.cursor) this.setCursor(this, style.cursor)
+      if (this._hovered.current) {
+        if (style.cursor) this.setCursor(this, style.cursor)
+        else this.clearCursor(this)
+      }
+    }))
+    this.disposer.add(this._hovered.onChange(hovered => {
+      const style = this.style
+      if (hovered && style.cursor) this.setCursor(this, style.cursor)
       else this.clearCursor(this)
     }))
   }
@@ -114,6 +123,9 @@ export class Box extends Element {
     super.applyToIntersecting(region, op)
     this.contents.applyToIntersecting(region, op)
   }
+
+  handleMouseEnter (event :MouseEvent, pos :vec2) { this._hovered.update(true) }
+  handleMouseLeave (event :MouseEvent, pos :vec2) { this._hovered.update(false) }
 
   maybeHandlePointerDown (event :MouseEvent|TouchEvent, pos :vec2) {
     return rect.contains(this.expandBounds(this.bounds), pos)

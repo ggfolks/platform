@@ -110,6 +110,7 @@ export abstract class Element implements Disposable {
     this.visible = ctx.model.resolve(config.visible, config.visible ? falseValue : trueValue)
     if (config.scopeId) this._configScope = {id: config.scopeId, states: RootStates}
     this.invalidateOnChange(this.visible)
+    this.disposer.add(() => this.clearCursor(this))
   }
 
   get x () :number { return this._bounds[0] }
@@ -367,7 +368,7 @@ export class Root extends Element {
   private readonly _hintSize :Value<dim2>
   private readonly _minSize :Value<dim2>
   private readonly _origin = vec2.create()
-  private _cursorOwner? :Element
+  private _cursorOwners = new Map<Element, string>()
   readonly canvasElem :HTMLCanvasElement = document.createElement("canvas")
   readonly canvas :CanvasRenderingContext2D
   readonly contents :Element
@@ -398,10 +399,15 @@ export class Root extends Element {
 
   setCursor (owner :Element, cursor :string) {
     this.cursor.update(cursor)
-    this._cursorOwner = owner
+    this._cursorOwners.set(owner, cursor)
   }
   clearCursor (owner :Element) {
-    if (this._cursorOwner === owner) this.cursor.update("auto")
+    const cursor = this._cursorOwners.get(owner)
+    if (cursor === undefined) return
+    this._cursorOwners.delete(owner)
+    if (this.cursor.current !== cursor) return
+    if (this._cursorOwners.size > 0) this.cursor.update(this._cursorOwners.values().next().value)
+    else this.cursor.update("auto")
   }
 
   /** Informs the root of the position at which it is displayed on the screen. This value is used to
