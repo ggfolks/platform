@@ -1,29 +1,8 @@
 import {
-  AmbientLight,
-  AnimationClip,
-  AnimationMixer,
-  BoxBufferGeometry,
-  Camera,
-  Color,
-  DirectionalLight,
-  HemisphereLight,
-  Intersection,
-  Mesh,
-  MeshBasicMaterial,
-  MeshStandardMaterial,
-  MeshToonMaterial,
-  Object3D,
-  ObjectLoader,
-  PerspectiveCamera,
-  Plane,
-  PlaneBufferGeometry,
-  RGBAFormat,
-  Raycaster,
-  Scene,
-  SphereBufferGeometry,
-  Vector2,
-  Vector3,
-  WebGLRenderer,
+  AmbientLight, AnimationClip, AnimationMixer, BoxBufferGeometry, Camera, Color, DirectionalLight,
+  HemisphereLight, Intersection, Material, Mesh, MeshBasicMaterial, MeshStandardMaterial,
+  MeshToonMaterial, Object3D, ObjectLoader, PerspectiveCamera, Plane, PlaneBufferGeometry,
+  RGBAFormat, Raycaster, Scene, SphereBufferGeometry, Vector2, Vector3, WebGLRenderer,
 } from "three"
 import {GLTFLoader} from "three/examples/jsm/loaders/GLTFLoader"
 import {SkeletonUtils} from "three/examples/jsm/utils/SkeletonUtils"
@@ -490,15 +469,7 @@ function loadGLTF (url :string) {
             // hack for alpha testing: enable on any materials with a color texture that has
             // an alpha channel
             gltf.scene.traverse((node :Object3D) => {
-              if (node instanceof Mesh) {
-                const material = node.material
-                if (material instanceof MeshStandardMaterial &&
-                    material.map &&
-                    material.map.format === RGBAFormat) {
-                  material.alphaTest = 0.9
-                  material.transparent = false
-                }
-              }
+              if (node instanceof Mesh) processMaterial(node.material)
             })
             resolve(gltf)
           },
@@ -520,6 +491,20 @@ function loadGLTF (url :string) {
     })
   }
   return gltf
+}
+
+function processMaterial (material :Material|Material[]) {
+  if (Array.isArray(material)) material.forEach(processMaterial)
+  else {
+    if (material instanceof MeshStandardMaterial &&
+        material.map &&
+        material.map.format === RGBAFormat) {
+      material.alphaTest = 0.9
+      material.transparent = false
+    }
+    // note that this material may be shared by multiple instances
+    material.userData.shared = true
+  }
 }
 
 function maybeCreateMaterial (materialConfig? :MaterialConfig) {

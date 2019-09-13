@@ -1,7 +1,10 @@
-import {AnimationAction, AnimationMixer, Intersection, Object3D, Raycaster, Vector3} from "three"
+import {
+  AnimationAction, AnimationMixer, Color, Intersection,
+  Material, Mesh, Object3D, Raycaster, Vector3,
+} from "three"
 
 import {Subject, Value} from "../core/react"
-import {Noop, NoopRemover, PMap} from "../core/util"
+import {Noop, NoopRemover, PMap, getValue} from "../core/util"
 import {Graph} from "../graph/graph"
 import {InputEdgeMeta, inputEdge, outputEdge, property} from "../graph/meta"
 import {NodeTypeRegistry, WrappedValue} from "../graph/node"
@@ -298,6 +301,56 @@ class UpdateVisibleNode extends EntityComponentNode<Component<Object3D>> {
   }
 }
 
+/** Updates a single material property. */
+abstract class UpdateMaterialPropertyConfig implements EntityComponentConfig {
+  type = "updateMaterialProperty"
+  @property() component = ""
+  @property() name = "color"
+  @inputEdge("any") input = undefined
+}
+
+class UpdateMaterialProperty extends EntityComponentNode<Component<Object3D>> {
+
+  constructor (graph :Graph, id :string, readonly config :UpdateMaterialPropertyConfig) {
+    super(graph, id, config)
+  }
+
+  connect () {
+    const component = this._component
+    if (!component) return
+    const name = getValue(this.config.name as string|undefined, "color")
+    this._disposer.add(
+      this.graph.getValue(this.config.input, new Color()).onValue(input => {
+        component.read(this._entityId).traverse(object => {
+          if (!(object instanceof Mesh)) return
+          if (Array.isArray(object.material)) {
+            for (const material of object.material) {
+              if (material.userData.shared) {
+                object.material = object.material.map(cloneMaterial)
+                break
+              }
+            }
+            for (const material of object.material) {
+              material[name] = input
+            }
+          } else {
+            if (object.material.userData.shared) {
+              object.material = cloneMaterial(object.material)
+            }
+            object.material[name] = input
+          }
+        })
+      }),
+    )
+  }
+}
+
+function cloneMaterial (material :Material) :Material {
+  const cloned = material.clone()
+  cloned.userData.shared = false
+  return cloned
+}
+
 /** Registers the nodes in this module with the supplied registry. */
 export function registerScene3Nodes (registry :NodeTypeRegistry) {
   registry.registerNodeTypes(["scene3"], {
@@ -306,5 +359,6 @@ export function registerScene3Nodes (registry :NodeTypeRegistry) {
     animationController: AnimationControllerNode,
     raycaster: RaycasterNode,
     updateVisible: UpdateVisibleNode,
+    updateMaterialProperty: UpdateMaterialProperty,
   })
 }
