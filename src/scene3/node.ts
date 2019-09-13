@@ -8,7 +8,7 @@ import {NodeTypeRegistry, WrappedValue} from "../graph/node"
 import {Component} from "../entity/entity"
 import {EntityComponentConfig, EntityComponentNode} from "../entity/node"
 import {PointerConfig} from "../input/node"
-import {AnimationController, AnimationControllerConfig} from "./animation"
+import {AnimationController, AnimationControllerConfig, playAction} from "./animation"
 import {HoverMap, loadGLTFAnimationClip} from "./entity"
 
 /** Emits information about a single hover point. */
@@ -102,7 +102,7 @@ class AnimationActionNode extends EntityComponentNode<Component<AnimationMixer>>
           if (this.config.clampWhenFinished !== undefined) {
             action.clampWhenFinished = this.config.clampWhenFinished
           }
-          action.play()
+          playAction(component.read(this._entityId), action)
         } else {
           action.stop()
         }

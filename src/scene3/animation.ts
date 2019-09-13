@@ -1,4 +1,4 @@
-import {AnimationMixer, Event} from "three"
+import {AnimationAction, AnimationMixer, Event} from "three"
 
 import {Emitter, Mutable, Value} from "../core/react"
 import {Disposable, Disposer, PMap, getValue} from "../core/util"
@@ -82,8 +82,7 @@ export class AnimationController implements Disposable {
           this._mixer.addEventListener("finished", listener)
         }
         this._disposer.add(transitioning.onEmit(() => action.stop()))
-        action.reset()
-        action.play()
+        playAction(this._mixer, action)
       }))
     }
     const stateTransitions :[string, TransitionConfig][] = []
@@ -163,4 +162,19 @@ export class AnimationController implements Disposable {
   dispose () {
     this._disposer.dispose()
   }
+}
+
+/** Starts playing an action, immediately updating the scene graph. */
+export function playAction (mixer :AnimationMixer, action :AnimationAction) {
+  action.reset()
+  action.play()
+  // update to first frame immediately in case we render before updating animation system
+  const unsafeMixer = mixer as any
+  const unsafeAction = action as any
+  unsafeAction._update(mixer.time, 1 / 60, 1, unsafeMixer._accuIndex)
+  for (let ii = 0; ii < unsafeMixer._nActiveBindings; ii++) {
+    unsafeMixer._bindings[ii].apply(unsafeMixer._accuIndex)
+  }
+  mixer.getRoot().updateMatrixWorld()
+  action.time = 0 // back to animation start
 }
