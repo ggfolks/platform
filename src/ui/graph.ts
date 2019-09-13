@@ -865,10 +865,21 @@ export class NodeView extends VGroup {
   handleMouseLeave (event :MouseEvent, pos :vec2) { this.hovered.update(false) }
 
   handlePointerDown (event :MouseEvent|TouchEvent, pos :vec2) :PointerInteraction|undefined {
+    // move node to end of view
+    const graphView = getGraphView(this)
+    const parent = this.requireParent
+    const index = graphView.contents.lastIndexOf(parent)
+    const lastIndex = graphView.contents.length - 1
+    if (index !== lastIndex) {
+      const tmp = graphView.contents[lastIndex]
+      graphView.contents[lastIndex] = parent
+      graphView.contents[index] = tmp
+      parent.dirty()
+      tmp.dirty()
+    }
     const interaction = super.handlePointerDown(event, pos)
     if (interaction || !this._editable.current) return interaction
     const basePos = vec2.clone(pos)
-    const graphView = getGraphView(this)
     const graphViewer = getGraphViewer(graphView)
     if (event.ctrlKey) {
       if (graphViewer.selection.has(this.id)) graphViewer.selection.delete(this.id)
@@ -1350,23 +1361,7 @@ export class Terminal extends Element {
     this.root.focus.update(undefined)
     const endpoint = this._endpoint = vec2.clone(pos)
     this.dirty()
-    // move node to end of view so that dragged edge is always on top of other nodes
-    let ancestor = this.parent!
-    let id = ""
-    while (!(ancestor instanceof GraphView)) {
-      if (ancestor instanceof NodeView) id = ancestor.id
-      ancestor = ancestor.parent!
-    }
-    const graphView = ancestor as GraphView
-    const elements = graphView.elements.get(id)!
-    const index = graphView.contents.lastIndexOf(elements.node)
-    const lastIndex = graphView.contents.length - 1
-    if (index !== lastIndex) {
-      const tmp = graphView.contents[lastIndex]
-      graphView.contents[lastIndex] = elements.node
-      graphView.contents[index] = tmp
-      tmp.dirty()
-    }
+    const graphView = getGraphView(this)
     const region = rect.create()
     const elementPos = vec2.create()
     let targetTerminal :Terminal|undefined
