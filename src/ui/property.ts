@@ -1,4 +1,4 @@
-import {Euler, Math as M, Vector3} from "three"
+import {Color, Euler, Math as M, Vector3} from "three"
 
 import {Mutable, Value} from "../core/react"
 import {PMap} from "../core/util"
@@ -160,6 +160,20 @@ const propertyConfigCreators :PMap<PropertyConfigCreator> = {
           maxDecimals: 0,
         },
       ],
+    })
+  },
+  Color: (model, editable) => {
+    const value = model.resolve<Mutable<Color>>("value")
+    return createPropertyRowConfig(model, {
+      type: "colortext",
+      constraints: {stretch: true},
+      color: value.bimap(c => c.getHexString(), (c, s) => new Color("#" + s)),
+      enabled: editable,
+      contents: {
+        type: "box",
+        contents: {type: "label"},
+        style: {halign: "left"},
+      },
     })
   },
 }

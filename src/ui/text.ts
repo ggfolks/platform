@@ -535,12 +535,7 @@ export class NumberText extends AbstractText {
   readonly number :Mutable<number>
 
   constructor (ctx :ElementContext, parent :Element, readonly config :NumberTextConfig) {
-    super(
-      ctx,
-      parent,
-      config,
-      Mutable.local(""),
-    )
+    super(ctx, parent, config, Mutable.local(""))
     this.number = ctx.model.resolve(config.number)
     const maxDecimals = getValue(config.maxDecimals, 3)
     this.disposer.add(
@@ -583,4 +578,39 @@ export class NumberText extends AbstractText {
 function numberToString (value :number, maxDecimals :number) :string {
   const scale = 10 ** maxDecimals
   return String(Math.round(value * scale) / scale)
+}
+
+/** Defines configuration for [[ColorText]]. */
+export interface ColorTextConfig extends AbstractTextConfig {
+  type :"colortext"
+  color :Spec<Mutable<string>>
+}
+
+const ColorPattern = /^[\da-fA-F]{6}$/
+
+/** Displays a hex color value. */
+export class ColorText extends AbstractText {
+  readonly color :Mutable<string>
+
+  constructor (ctx :ElementContext, parent :Element, readonly config :ColorTextConfig) {
+    super(ctx, parent, config, Mutable.local(""))
+    this.color = ctx.model.resolve(config.color)
+    this.disposer.add(
+      this.color.onValue(value => this.text.update(value)),
+    )
+    this.disposer.add(
+      this.text.onChange(text => {
+        if (this._isValueValid(text)) this.color.update(text)
+      })
+    )
+  }
+
+  protected get inputValid () :boolean {
+    // can be called before constructor finishes
+    return this.text ? this._isValueValid(this.text.current) : true
+  }
+
+  private _isValueValid (value :string) :boolean {
+    return ColorPattern.test(value)
+  }
 }

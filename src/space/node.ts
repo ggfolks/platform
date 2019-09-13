@@ -1,16 +1,10 @@
-import {Euler, Math as ThreeMath, Matrix4, Quaternion, Vector3} from "three"
+import {Color, Euler, Math as ThreeMath, Matrix4, Quaternion, Vector3} from "three"
 
 import {Value} from "../core/react"
 import {getValueStyleComponent} from "../core/ui"
 import {Graph} from "../graph/graph"
 import {inputEdge, inputEdges, outputEdge, property, setEnumMeta} from "../graph/meta"
-import {
-  Operator,
-  OperatorConfig,
-  Node,
-  NodeConfig,
-  NodeTypeRegistry,
-} from "../graph/node"
+import {Operator, OperatorConfig, Node, NodeConfig, NodeTypeRegistry} from "../graph/node"
 import {EntityComponentConfig, EntityComponentNode} from "../entity/node"
 import {TransformComponent} from "./entity"
 
@@ -18,6 +12,9 @@ import {TransformComponent} from "./entity"
 Vector3.prototype.toString = function() { return `(${this.x}, ${this.y}, ${this.z})` }
 Euler.prototype.toString = function() {
   return `(${radToDegString(this.x)}, ${radToDegString(this.y)}, ${radToDegString(this.z)})`
+}
+Color.prototype.toString = function() {
+  return this.getStyle()
 }
 
 // patch in getStyle functions
@@ -38,10 +35,12 @@ EulerPrototype.getStyle = function() {
   const b = Math.round(128 + normalizeAngle(self.z) * angleScale)
   return `rgb(${r}, ${g}, ${b})`
 }
+const ColorPrototype = Color.prototype as any
 
 // patch in nodeType properties
 Vector3Prototype.nodeType = "Vector3.constant"
 EulerPrototype.nodeType = "Euler.constant"
+ColorPrototype.nodeType = "Color.constant"
 
 const TWO_PI = 2 * Math.PI
 function normalizeAngle (angle :number) {
@@ -104,6 +103,50 @@ class EulerConstant extends Node {
 
   protected _createOutput () {
     return Value.constant(this.config.value || new Euler())
+  }
+}
+
+/** Creates a color from individual components. */
+abstract class ColorConfig implements NodeConfig {
+  type = "Color"
+  @inputEdge("number") r = undefined
+  @inputEdge("number") g = undefined
+  @inputEdge("number") b = undefined
+  @outputEdge("Color") output = undefined
+}
+
+class ColorNode extends Node {
+
+  constructor (graph :Graph, id :string, readonly config :ColorConfig) {
+    super(graph, id, config)
+  }
+
+  protected _createOutput () {
+    return Value
+      .join(
+        this.graph.getValue(this.config.r, 0),
+        this.graph.getValue(this.config.g, 0),
+        this.graph.getValue(this.config.b, 0),
+      )
+      .map(([r, g, b]) => new Color(r, g, b))
+  }
+}
+
+/** A constant color value. */
+abstract class ColorConstantConfig implements NodeConfig {
+  type = "Color.constant"
+  @property() value = new Color()
+  @outputEdge("Color") output = undefined
+}
+
+class ColorConstant extends Node {
+
+  constructor (graph :Graph, id :string, readonly config :ColorConstantConfig) {
+    super(graph, id, config)
+  }
+
+  protected _createOutput () {
+    return Value.constant(this.config.value || new Color())
   }
 }
 
@@ -548,6 +591,10 @@ export function registerSpaceNodes (registry :NodeTypeRegistry) {
   registry.registerNodeTypes(["space", "Euler"], {
     Euler: EulerNode,
     "Euler.constant": EulerConstant,
+  })
+  registry.registerNodeTypes(["space", "Color"], {
+    Color: ColorNode,
+    "Color.constant": ColorConstant,
   })
   registry.registerNodeTypes(["space"], {
     randomDirection: RandomDirection,
