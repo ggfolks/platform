@@ -1,3 +1,5 @@
+import {Euler, Math as M, Vector3} from "three"
+
 import {Mutable, Value} from "../core/react"
 import {PMap} from "../core/util"
 import {EnumMeta, NumberConstraints, getEnumMeta} from "../graph/meta"
@@ -54,6 +56,8 @@ export class PropertyView extends VGroup {
 
 type PropertyConfigCreator = (model :Model, editable :Value<boolean>) => ElementConfig
 
+const NumberBox = {type: "box", contents: {type: "label"}, style: {halign: "right"}}
+
 const propertyConfigCreators :PMap<PropertyConfigCreator> = {
   string: (model, editable) => createPropertyRowConfig(model, {
     type: "text",
@@ -73,12 +77,70 @@ const propertyConfigCreators :PMap<PropertyConfigCreator> = {
       constraints: {stretch: true},
       number: "value",
       enabled: editable,
-      contents: {
-        type: "box",
-        contents: {type: "label"}, // text filled in by NumberText
-        style: {halign: "right"},
-      },
+      contents: NumberBox,
       ...constraints,
+    })
+  },
+  Vector3: (model, editable) => {
+    const value = model.resolve<Mutable<Vector3>>("value")
+    return createPropertyRowConfig(model, {
+      type: "row",
+      constraints: {stretch: true},
+      contents: [
+        {
+          type: "numbertext",
+          constraints: {stretch: true},
+          number: value.bimap(v => v.x, (v, x) => new Vector3(x, v.y, v.z)),
+          contents: NumberBox,
+        },
+        {
+          type: "numbertext",
+          constraints: {stretch: true},
+          number: value.bimap(v => v.y, (v, y) => new Vector3(v.x, y, v.z)),
+          contents: NumberBox,
+        },
+        {
+          type: "numbertext",
+          constraints: {stretch: true},
+          number: value.bimap(v => v.z, (v, z) => new Vector3(v.x, v.y, z)),
+          contents: NumberBox,
+        },
+      ],
+    })
+  },
+  Euler: (model, editable) => {
+    const value = model.resolve<Mutable<Euler>>("value")
+    return createPropertyRowConfig(model, {
+      type: "row",
+      contents: [
+        {
+          type: "numbertext",
+          constraints: {stretch: true},
+          number: value.bimap(e => M.radToDeg(e.x), (e, x) => new Euler(M.degToRad(x), e.y, e.z)),
+          contents: NumberBox,
+          min: -180,
+          max: 180,
+          maxDecimals: 0,
+        },
+        {
+          type: "numbertext",
+          constraints: {stretch: true},
+          number: value.bimap(e => M.radToDeg(e.y), (e, y) => new Euler(e.x, M.degToRad(y), e.z)),
+          contents: NumberBox,
+          min: -180,
+          max: 180,
+          maxDecimals: 0,
+        },
+        {
+          type: "numbertext",
+          constraints: {stretch: true},
+          number: value.bimap(e => M.radToDeg(e.z), (e, z) => new Euler(e.x, e.y, M.degToRad(z))),
+          contents: NumberBox,
+          min: -180,
+          max: 180,
+          maxDecimals: 0,
+        },
+      ],
     })
   },
 }
