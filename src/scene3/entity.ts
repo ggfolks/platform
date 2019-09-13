@@ -159,6 +159,98 @@ export class SceneSystem extends System {
     this.scene.autoUpdate = false
   }
 
+  /** Updates the hover states.  Because this can trigger graph updates (and animation updates,
+    * transforms, etc.), it should be called before the graph update but after the hand update. */
+  updateHovers (renderer :WebGLRenderer) {
+    if (!(this.hovers && this.pointers)) return
+    renderer.getSize(rendererSize)
+    hovered.clear()
+    for (const [identifier, pointer] of this.pointers) {
+      for (const camera of this._cameras) {
+        // make sure forward/inverse world matrices are up-to-date
+        camera.updateMatrixWorld()
+
+        raycaster.setFromCamera(
+          pointerCoords.set(
+            pointer.position[0] / rendererSize.x * 2 - 1,
+            1 - pointer.position[1] / rendererSize.y * 2,
+          ),
+          camera,
+        )
+
+        // pressed objects stay hovered until the press ends
+        const pressedObject = this._pressedObjects.get(identifier)
+        if (pressedObject) {
+          if (pointer.pressed) {
+            if (!pressedObject.parent) {
+              continue // hold off updating until pointer released
+            }
+            // constrain motion to a plane aligned with the camera direction
+            const hoverMap = this.hovers.read(pressedObject.userData.id)
+            const hover = hoverMap && hoverMap.get(identifier)
+            if (hover) {
+              plane.setFromNormalAndCoplanarPoint(
+                camera.getWorldDirection(direction),
+                point.copy(hover.viewPosition).applyMatrix4(camera.matrixWorld),
+              )
+              this._maybeNoteHovered(
+                identifier,
+                pointer,
+                camera,
+                pressedObject,
+                raycaster.ray.intersectPlane(plane, point) || point.copy(hover.worldPosition),
+              )
+              continue
+            }
+          } else {
+            this._pressedObjects.delete(identifier)
+          }
+        }
+        intersections.length = 0
+        let noted = false
+        for (const intersection of raycaster.intersectObject(this.scene, true, intersections)) {
+          let ancestor :Object3D | null = intersection.object
+          while (ancestor && ancestor.userData.id === undefined) {
+            ancestor = ancestor.parent
+          }
+          if (
+            ancestor &&
+            this._maybeNoteHovered(identifier, pointer, camera, ancestor, intersection.point)
+          ) {
+            noted = true
+            break
+          }
+        }
+        // if we didn't hit anything else, "hover" on the camera
+        if (!noted) {
+          // use intersection with a plane one unit in front of the camera
+          const dp = camera.getWorldDirection(direction).dot(raycaster.ray.direction)
+          this._maybeNoteHovered(
+            identifier,
+            pointer,
+            camera,
+            camera,
+            raycaster.ray.at(1 / dp, point),
+          )
+        }
+      }
+    }
+    // remove any pressed objects whose pointers are no longer in the map
+    for (const identifier of this._pressedObjects.keys()) {
+      if (!this.pointers.has(identifier)) this._pressedObjects.delete(identifier)
+    }
+    // clear the components of any entities not in the current map
+    for (const id of lastHovered.keys()) {
+      if (!hovered.has(id)) this.hovers.update(id, new Map())
+    }
+    // update the components of any entities in the current map
+    for (const [id, map] of hovered) {
+      this.hovers.update(id, map)
+    }
+    // swap for next time
+    [lastHovered, hovered] = [hovered, lastHovered]
+  }
+
   /** Updates the scene. */
   update () {
     this.onEntities(id => this._updateObject(id, this.obj.read(id)))
@@ -169,93 +261,6 @@ export class SceneSystem extends System {
   render (renderer :WebGLRenderer) {
     renderer.getSize(rendererSize)
     const aspect = rendererSize.x / rendererSize.y
-    if (this.hovers && this.pointers) {
-      hovered.clear()
-      for (const [identifier, pointer] of this.pointers) {
-        for (const camera of this._cameras) {
-          // make sure forward/inverse world matrices are up-to-date
-          camera.updateMatrixWorld()
-
-          raycaster.setFromCamera(
-            pointerCoords.set(
-              pointer.position[0] / rendererSize.x * 2 - 1,
-              1 - pointer.position[1] / rendererSize.y * 2,
-            ),
-            camera,
-          )
-
-          // pressed objects stay hovered until the press ends
-          const pressedObject = this._pressedObjects.get(identifier)
-          if (pressedObject) {
-            if (pointer.pressed) {
-              if (!pressedObject.parent) {
-                continue // hold off updating until pointer released
-              }
-              // constrain motion to a plane aligned with the camera direction
-              const hoverMap = this.hovers.read(pressedObject.userData.id)
-              const hover = hoverMap && hoverMap.get(identifier)
-              if (hover) {
-                plane.setFromNormalAndCoplanarPoint(
-                  camera.getWorldDirection(direction),
-                  point.copy(hover.viewPosition).applyMatrix4(camera.matrixWorld),
-                )
-                this._maybeNoteHovered(
-                  identifier,
-                  pointer,
-                  camera,
-                  pressedObject,
-                  raycaster.ray.intersectPlane(plane, point) || point.copy(hover.worldPosition),
-                )
-                continue
-              }
-            } else {
-              this._pressedObjects.delete(identifier)
-            }
-          }
-          intersections.length = 0
-          let noted = false
-          for (const intersection of raycaster.intersectObject(this.scene, true, intersections)) {
-            let ancestor :Object3D | null = intersection.object
-            while (ancestor && ancestor.userData.id === undefined) {
-              ancestor = ancestor.parent
-            }
-            if (
-              ancestor &&
-              this._maybeNoteHovered(identifier, pointer, camera, ancestor, intersection.point)
-            ) {
-              noted = true
-              break
-            }
-          }
-          // if we didn't hit anything else, "hover" on the camera
-          if (!noted) {
-            // use intersection with a plane one unit in front of the camera
-            const dp = camera.getWorldDirection(direction).dot(raycaster.ray.direction)
-            this._maybeNoteHovered(
-              identifier,
-              pointer,
-              camera,
-              camera,
-              raycaster.ray.at(1 / dp, point),
-            )
-          }
-        }
-      }
-      // remove any pressed objects whose pointers are no longer in the map
-      for (const identifier of this._pressedObjects.keys()) {
-        if (!this.pointers.has(identifier)) this._pressedObjects.delete(identifier)
-      }
-      // clear the components of any entities not in the current map
-      for (const id of lastHovered.keys()) {
-        if (!hovered.has(id)) this.hovers.update(id, new Map())
-      }
-      // update the components of any entities in the current map
-      for (const [id, map] of hovered) {
-        this.hovers.update(id, map)
-      }
-      // swap for next time
-      [lastHovered, hovered] = [hovered, lastHovered]
-    }
     for (const camera of this._cameras) {
       if (camera instanceof PerspectiveCamera && camera.aspect !== aspect) {
         camera.aspect = aspect
