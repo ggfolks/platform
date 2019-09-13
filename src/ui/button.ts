@@ -63,7 +63,7 @@ export class Button extends AbstractButton {
 }
 
 export interface ToggleConfig extends ControlConfig {
-  type :"checkbox"
+  type :"toggle"
   checked :Spec<Value<boolean>>
   onClick? :Spec<Action>
   checkedContents? :ElementConfig

@@ -1,4 +1,5 @@
 const textCorner = 2
+const checkBoxCorner = 2
 
 /** A default set of styles to use as a base. */
 export const DefaultStyles = {
@@ -26,6 +27,7 @@ export const DefaultStyles = {
     textDisabled: {stroke: {type: "color", color: "#606060"}, cornerRadius: textCorner},
     textFocused: {stroke: {type: "color", color: "#D0D0D0"}, cornerRadius: textCorner},
     textInvalid: {stroke: {type: "color", color: "#FF0000"}, cornerRadius: textCorner},
+    checkBox: {stroke: {type: "color", color: "#999999"}, cornerRadius: checkBoxCorner},
     graphViewSelect: {
       stroke: {type: "color", color: "#808080"},
     },
@@ -176,6 +178,14 @@ export const DefaultTheme = {
       hoverFocused: {fill: "$lighterGray"},
       pressed: {fill: "$lightGray"},
     },
+  },
+  checkBox: {
+    box: {border: "$checkBox", padding: [3, 8, 0, 7]},
+    label: {font: "$nodeProperty"},
+  },
+  checkBoxChecked: {
+    box: {border: "$checkBox", padding: [3, 5, 0, 5]},
+    label: {font: "$nodeProperty"},
   },
   text: {
     box: {

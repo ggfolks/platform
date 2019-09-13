@@ -81,6 +81,25 @@ const propertyConfigCreators :PMap<PropertyConfigCreator> = {
       ...constraints,
     })
   },
+  boolean: (model, editable) => {
+    const value = model.resolve<Mutable<boolean>>("value")
+    return createPropertyRowConfig(model, {
+      type: "toggle",
+      checked: value,
+      onClick: () => value.update(!value.current),
+      enabled: editable,
+      contents: {
+        type: "box",
+        scopeId: "checkBox",
+        contents: {type: "label", text: Value.constant(" ")},
+      },
+      checkedContents: {
+        type: "box",
+        scopeId: "checkBoxChecked",
+        contents: {type: "label", text: Value.constant("✔︎")},
+      },
+    })
+  },
   Vector3: (model, editable) => {
     const value = model.resolve<Mutable<Vector3>>("value")
     return createPropertyRowConfig(model, {
