@@ -111,12 +111,15 @@ export class Domain {
   }
 
   /** Returns a reference to entity `id` which also indicates when the entity has been deleted. The
-    * caller must call the `dispose` think on the returned ref when they no longer need to observe
-    * this entity. */
+    * caller should call the `dispose` thunk on the returned ref when they no longer need to observe
+    * this entity. If the entity is deleted, the ref will be automatically disposed. */
   ref (id :ID) :Ref {
     let exists = true
     const dispose = this.events.onValue(ev => {
-      if (ev.type === "deleted" && ev.id === id) exists = false
+      if (ev.type === "deleted" && ev.id === id) {
+        exists = false
+        dispose()
+      }
     })
     return {id, exists, dispose}
   }
