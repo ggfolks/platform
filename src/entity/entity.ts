@@ -23,6 +23,14 @@ export type EntityConfig = {
   tags? :Set<string>
 }
 
+/** A handle on an entity that allows the caller to check whether it has become invalid. */
+export interface Ref extends Disposable {
+  /** The id of the entity being referenced. */
+  id :ID
+  /** Whether or not the entity still exists. */
+  exists :boolean
+}
+
 /** A collection of entities and their configuration records. Entity ids are only unique within a
   * single domain, and systems operate in a single domain. A game can safely use a single domain for
   * all of its entities, at the cost of some memory and/or performance overhead. If a game contains
@@ -100,6 +108,28 @@ export class Domain {
     this.emit("deleted", id)
     delete this._configs[id]
     if (id < this._nextID) this._nextID = id
+  }
+
+  /** Returns a reference to entity `id` which also indicates when the entity has been deleted. The
+    * caller must call the `dispose` think on the returned ref when they no longer need to observe
+    * this entity. */
+  ref (id :ID) :Ref {
+    let exists = true
+    const dispose = this.events.onValue(ev => {
+      if (ev.type === "deleted" && ev.id === id) exists = false
+    })
+    return {id, exists, dispose}
+  }
+
+  /** Creates an entity reference set. Entity ids can be added to or removed from the set manually;
+    * any entities that are deleted will automatically be removed from the set.
+    * @return the id set and a thunk that must be called to stop managing the set when it is no
+    * longer needed. */
+  refSet () :[Set<ID>, Remover] {
+    const ids = new Set<ID>()
+    return [ids, this.events.onValue(ev => {
+      if (ev.type === "deleted") ids.delete(ev.id)
+    })]
   }
 
   private nextID () :number {
