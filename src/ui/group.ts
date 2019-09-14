@@ -179,7 +179,7 @@ class Metrics {
   stretchers = 0
   totalWeight = 0
 
-  gaps (gap :number) :number { return Math.max(0, gap * (this.count-1)) }
+  gaps (gap :number) :number { return gap * Math.max(0, this.count-1) }
 }
 
 /** Layout constraints for elements contained by a group that lays out along an axis. */
