@@ -2,11 +2,12 @@ import {UUID, UUID0, uuidv1} from "../core/uuid"
 import {Disposer, Timestamp, log} from "../core/util"
 import {Mutable, Subject, Value} from "../core/react"
 import {Encoder, Decoder, setTextCodec} from "../core/codec"
+import {guestValidator} from "../auth/auth"
 import {getPropMetas, dobject, dmap, dvalue, dcollection, dqueue} from "./meta"
 import {Auth, DObject, DState, MetaMsg, Path, findObjectType} from "./data"
 import {addObject, getObject} from "./protocol"
 import {Address, Client, Connection, CState, Resolved} from "./client"
-import {DataStore, Session} from "./server"
+import {DataStore, Session, SessionConfig} from "./server"
 
 import {TextEncoder, TextDecoder} from "util"
 setTextCodec(() => new TextEncoder() as any, () => new TextDecoder() as any)
@@ -254,26 +255,30 @@ function handleSysChatReq (obj :RootObject, req :SysChatReq, auth :Auth) {
 
 test("metas", () => {
   const rmetas = getPropMetas(RootObject.prototype)
-  expect(rmetas[0]).toEqual({type: "map", name: "publicRooms", index: 0,
-                             ktype: "uuid", vtype: "record"})
+  expect(rmetas[0]).toEqual({
+    type: "map", name: "publicRooms", index: 0, ktype: "uuid", vtype: "record", persist: false})
   expect(rmetas[1]).toEqual({type: "collection", name: "users", index: 1, otype: UserObject})
   expect(rmetas[3]).toEqual({type: "queue", name: "chatq", index: 3, handler: handleChatReq})
 
   const umetas = getPropMetas(UserObject.prototype)
-  expect(umetas[0]).toEqual({type: "value", name: "username", index: 0, vtype: "string"})
-  expect(umetas[1]).toEqual({type: "value", name: "lastLogin", index: 1, vtype: "timestamp"})
+  expect(umetas[0]).toEqual({
+    type: "value", name: "username", index: 0, vtype: "string", persist: false})
+  expect(umetas[1]).toEqual({
+    type: "value", name: "lastLogin", index: 1, vtype: "timestamp", persist: false})
 
   const rmmetas = getPropMetas(RoomObject.prototype)
-  expect(rmmetas[0]).toEqual({type: "value", name: "owner", index: 0, vtype: "uuid"})
-  expect(rmmetas[1]).toEqual({type: "value", name: "name", index: 1, vtype: "string"})
+  expect(rmmetas[0]).toEqual({
+    type: "value", name: "owner", index: 0, vtype: "uuid", persist: false})
+  expect(rmmetas[1]).toEqual({
+    type: "value", name: "name", index: 1, vtype: "string", persist: false})
 })
 
-const sysauth = {id: UUID0, isSystem: true}
+const sysauth = {id: UUID0, isGuest: false, isSystem: true}
 
 test("access", () => {
   const store = new DataStore(RootObject)
-  const auth1 = {id: uuidv1(), isSystem: false}
-  const auth2 = {id: uuidv1(), isSystem: false}
+  const auth1 = {id: uuidv1(), isGuest: false, isSystem: false}
+  const auth2 = {id: uuidv1(), isGuest: false, isSystem: false}
 
   const res = store.resolve(["users", auth1.id]), user = res.object
   expect(user.key).toEqual(auth1.id)
@@ -351,8 +356,8 @@ function process (queue :RunQueue) {
 }
 
 class ClientHandler extends Session {
-  constructor (store :DataStore, readonly conn :TestConnection,
-               readonly queue :RunQueue) { super(store) }
+  constructor (config :SessionConfig, readonly conn :TestConnection,
+               readonly queue :RunQueue) { super(config) }
 
   sendMsg (data :Uint8Array) {
     const cdata = data.slice()
@@ -364,9 +369,10 @@ class TestConnection extends Connection {
   private readonly handler :ClientHandler
   readonly state = Value.constant("connected" as CState)
 
-  constructor (readonly client :Client, addr :Address, store :DataStore, readonly runq :RunQueue) {
+  constructor (readonly client :Client, addr :Address, config :SessionConfig,
+               readonly runq :RunQueue) {
     super()
-    this.handler = new ClientHandler(store, this, runq)
+    this.handler = new ClientHandler(config, this, runq)
   }
 
   sendMsg (data :Uint8Array) {
@@ -381,13 +387,14 @@ test("subscribe-auth", () => {
   const testAddr = {host: "test", port: 0, path: "/"}
   const testLocator = (path :Path) => Subject.constant(testAddr)
   const testStore = new DataStore(RootObject)
+  const sconfig = {store: testStore, authers: {guest: guestValidator}}
 
   const ida = uuidv1(), idb = uuidv1()
   const queue :RunQueue = []
 
-  const authA = {id: ida, token: "test"}
+  const authA = {source: "guest", id: ida, token: ""}
   const clientA = new Client(
-    testLocator, authA, (c, a) => new TestConnection(c, a, testStore, queue))
+    testLocator, Value.constant(authA), (c, a) => new TestConnection(c, a, sconfig, queue))
   const objAA = clientA.resolve(["users", ida], UserObject)[0]
   expect(objAA.key).toBe(ida)
   let gotAA = false
@@ -408,6 +415,7 @@ test("subscribe-post", done => {
   const testAddr = {host: "test", port: 0, path: "/"}
   const testLocator = (path :Path) => Subject.constant(testAddr)
   const testStore = new DataStore(RootObject)
+  const sconfig = {store: testStore, authers: {guest: guestValidator}}
 
   const ida = uuidv1(), idb = uuidv1()
   const queue :RunQueue = []
@@ -421,7 +429,8 @@ test("subscribe-post", done => {
 
     constructor (id :UUID) {
       this.client = new Client(
-        testLocator, {id, token: "test"}, (c, a) => new TestConnection(c, a, testStore, queue))
+        testLocator, Value.constant({source: "guest", id, token: ""}),
+        (c, a) => new TestConnection(c, a, sconfig, queue))
 
       if (DebugLog) this.state.onChange(ns => log.debug("Client state", "id", id, "state", ns))
 

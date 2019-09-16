@@ -10,6 +10,7 @@
 
 - Add RMap.merge(key, record) for merging partial data onto existing map key; maybe same for Value?
 
-- Allow record of initial values to be passed when creating DObject
-
 - Come up with some helper for dealing with T|Error reactive sources
+
+- Add "intern" or "token" key type, which will assign 16-bit integers to each word as it goes over
+  the wire and decode based on that (maintaining table per connection)

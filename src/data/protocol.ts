@@ -17,7 +17,7 @@ export type SyncMsg = ValSetMsg | SetAddMsg | SetDelMsg | MapSetMsg | MapDelMsg
 type OidSyncMsg = SyncMsg & {oid: number}
 
 export const enum UpType   { /* SyncType is 0-4 */ AUTH = 5, SUB, UNSUB, POST }
-export type UpMsg = {type :UpType.AUTH, id :UUID, token :string}
+export type UpMsg = {type :UpType.AUTH, source :string, id :UUID, token :string}
                   | {type :UpType.SUB, path :Path, oid :number}
                   | {type :UpType.UNSUB, oid :number}
                   | {type :UpType.POST, queue :DQueueAddr, msg :Record}
@@ -47,6 +47,7 @@ export function encodeUp (upm :UpMsg, enc :Encoder) {
   enc.addValue(upm.type, "int8")
   switch (upm.type) {
   case UpType.AUTH:
+    enc.addValue(upm.source, "string")
     enc.addValue(upm.id, "uuid")
     enc.addValue(upm.token, "string")
     break
@@ -124,7 +125,8 @@ export function decodeUp (objects :Objects, dec :Decoder) :UpMsg {
   if (DebugLog) log.debug("decodeUp", "type", type)
   switch (type) {
   case UpType.AUTH:
-    return {type, id: dec.getValue("uuid"), token: dec.getValue("string")}
+    return {type, source: dec.getValue("string"),
+            id: dec.getValue("uuid"), token: dec.getValue("string")}
   case UpType.SUB:
     return {type, oid: dec.getValue("size32"), path: getPath(dec)}
   case UpType.UNSUB:

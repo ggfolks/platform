@@ -17,3 +17,5 @@
   - animated style transitions will often dirty but not invalidate
 
 - Unfocus all roots if we click outside any root?
+
+- Clear selection when Text loses focus.

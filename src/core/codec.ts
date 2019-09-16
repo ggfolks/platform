@@ -1,3 +1,4 @@
+import {log} from "./util"
 import {UUID, uuidToString, uuidFromString} from "./uuid"
 import {Data, DataArray, DataMap, DataMapKey, DataSet, Record, isMap, isSet} from "./data"
 
@@ -78,7 +79,11 @@ function addString (enc :Encoder, text :string) {
 function addUUID (enc :Encoder, uuid :UUID) {
   const p = enc.pos
   enc.prepAdd(16)
-  uuidFromString(uuid, enc.bytes, p)
+  try {
+    uuidFromString(uuid, enc.bytes, p)
+  } catch (error) {
+    log.warn(`${enc.eid}: Unable to add UUID at ${p} (cap ${enc.buffer.byteLength})`, error)
+  }
 }
 
 function addDataIterable (enc :Encoder, iter :Iterable<Data>, size :number) {
@@ -294,12 +299,19 @@ export function setTextCodec (mkEnc :() => TextEncoder, mkDec :() => TextDecoder
 const DefaultEncoderSize = 256
 const EncoderExpandSize = 256
 
+let eid = 0
+
 export class Encoder {
   readonly encoder = mkTextEncoder()
   buffer = new ArrayBuffer(DefaultEncoderSize)
   data = new DataView(this.buffer)
   bytes = new Uint8Array(this.buffer)
   pos = 0
+  readonly eid :number
+
+  constructor () {
+    this.eid = ++eid
+  }
 
   prepAdd (size :number) :DataView {
     const npos = this.pos + size, capacity = this.buffer.byteLength

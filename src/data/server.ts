@@ -1,11 +1,12 @@
-import {Remover, log} from "../core/util"
-import {UUID0, setRandomSource} from "../core/uuid"
+import {PMap, Remover, log} from "../core/util"
+import {UUID, UUID0, setRandomSource} from "../core/uuid"
 import {Record} from "../core/data"
 import {Mutable, Subject, Value} from "../core/react"
 import {RSet, MutableSet} from "../core/rcollect"
 import {Encoder, Decoder} from "../core/codec"
+import {Auth, AuthValidator, guestValidator} from "../auth/auth"
 import {getPropMetas} from "./meta"
-import {Auth, DObject, DObjectType, DState, DQueueAddr, MetaMsg, Path,
+import {DObject, DObjectType, DState, DQueueAddr, MetaMsg, Path,
         findObjectType, pathToKey} from "./data"
 import {DownType, DownMsg, UpMsg, UpType, SyncMsg, decodeUp, encodeDown} from "./protocol"
 
@@ -16,7 +17,7 @@ setRandomSource(array => crypto.randomFillSync(Buffer.from(array.buffer)))
 
 const DebugLog = false
 
-export const sysAuth :Auth = {id: UUID0, isSystem: true}
+export const sysAuth :Auth = {id: UUID0, isGuest: false, isSystem: true}
 
 interface Subscriber {
   auth :Auth
@@ -140,6 +141,8 @@ export class DataStore {
   }
 }
 
+export type SessionConfig = {store :DataStore, authers :PMap<AuthValidator>}
+
 export abstract class Session {
   private readonly subscrips = new Map<number, {object :DObject, release :Remover}>()
   private readonly encoder = new Encoder()
@@ -151,9 +154,13 @@ export abstract class Session {
     }
   }
   private _auth :Auth|undefined = undefined
+  private readonly store :DataStore
+  private readonly authers :PMap<AuthValidator>
 
-  // TODO: maybe the session should handle auth?
-  constructor (readonly store :DataStore) {}
+  constructor (config :SessionConfig) {
+    this.store = config.store
+    this.authers = config.authers
+  }
 
   get auth () :Auth {
     if (this._auth) return this._auth
@@ -194,9 +201,15 @@ export abstract class Session {
     if (DebugLog) log.debug("handleMsg", "sess", this, "msg", msg)
     switch (msg.type) {
     case UpType.AUTH:
-      // TODO: validate auth token
-      this._auth = {id: msg.id, isSystem: false}
-      log.info("Session authed", "sess", this)
+      const auther = this.authers[msg.source]
+      if (auther) auther.validateAuth(msg.id, msg.token).onValue(auth => {
+        this._auth = auth
+        log.info("Session authed", "sess", this)
+      })
+      else {
+        log.warn("Session authed with invalid auth source", "sess", this, "source", msg.source)
+        console.dir(this.authers)
+      }
       break
     case UpType.SUB:
       const res = this.store.resolve(msg.path), oid = msg.oid
@@ -247,8 +260,8 @@ type SessionState = "connecting" | "open" | "closed"
 class WSSession extends Session {
   private readonly _state = Mutable.local("connecting" as SessionState)
 
-  constructor (store :DataStore, readonly addr :string, readonly ws :WebSocket) {
-    super(store)
+  constructor (config :SessionConfig, readonly addr :string, readonly ws :WebSocket) {
+    super(config)
 
     const onOpen = () => this._state.update("open")
     if (ws.readyState === WebSocket.OPEN) onOpen()
@@ -298,12 +311,25 @@ class WSSession extends Session {
 
 export type ServerState = "initializing" | "listening" | "terminating" | "terminated"
 
+export interface AuthValidator {
+
+  /** Validates authentication info provided by a client.
+    * @return a subject that yields an `Auth` instance iff the supplied info is valid. If it is
+    * invalid, a warning should be logged and the subject should not complete. */
+  validateAuth (id :UUID, token :string) :Subject<Auth>
+}
+
 export class Server {
   private readonly wss :WebSocket.Server
   private readonly _sessions = MutableSet.local<WSSession>()
   private readonly _state = Mutable.local("initializing" as ServerState)
 
-  constructor (readonly store :DataStore, config :ServerConfig = {}) {
+  readonly authers :PMap<AuthValidator>
+
+  constructor (readonly store :DataStore,
+               authers :PMap<AuthValidator> = {},
+               config :ServerConfig = {}) {
+    this.authers = {...authers, guest: guestValidator}
     // TODO: eventually we'll piggy back on a separate web server
     const port = config.port || 8080
     const wss = this.wss = new WebSocket.Server({port})
@@ -317,7 +343,7 @@ export class Server {
       const xffs = req.headers["x-forwarded-for"], xff = Array.isArray(xffs) ? xffs[0] : xffs
       // parsing "X-Forwarded-For: <client>, <proxy1>, <proxy2>, ..."
       const addr = (xff ? xff.split(/\s*,\s*/)[0] : req.connection.remoteAddress) || "<unknown>"
-      const sess = new WSSession(this.store, addr, ws)
+      const sess = new WSSession(this, addr, ws)
       this._sessions.add(sess)
       sess.state.when(ss => ss === "closed", () => this._sessions.delete(sess))
     })

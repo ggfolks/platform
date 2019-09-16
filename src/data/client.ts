@@ -1,8 +1,8 @@
 import {Disposable, Remover, log} from "../core/util"
-import {UUID} from "../core/uuid"
 import {Record} from "../core/data"
 import {Emitter, Mutable, Stream, Subject, Value} from "../core/react"
 import {Encoder, Decoder} from "../core/codec"
+import {SessionAuth, sessionAuth} from "../auth/auth"
 import {DataSource, DObject, DObjectType, DState, DQueueAddr, Path, pathToKey} from "./data"
 import {DownMsg, DownType, UpMsg, UpType, encodeUp, decodeDown} from "./protocol"
 
@@ -19,9 +19,6 @@ export function addrToURL (addr :Address) :string {
 
 /** Resolves the address of the server that hosts the object at `path`. */
 export type Locator = (path :Path) => Subject<Address>
-
-/** Provides authentication information when connecting to a server. */
-export type AuthInfo = {id :UUID, token :string}
 
 /** Creates `Connection` instances for clients. */
 export type Connector = (client :Client, addr :Address) => Connection
@@ -54,7 +51,8 @@ export class Client implements Disposable {
     }
   }
 
-  constructor (readonly locator :Locator, readonly auth :AuthInfo,
+  constructor (readonly locator :Locator,
+               readonly auth :Value<SessionAuth> = sessionAuth,
                readonly connector :Connector = wsConnector) {}
 
   get errors () :Stream<string> { return this._errors }
@@ -142,10 +140,16 @@ export class Client implements Disposable {
       const conn = conns.get(addr)
       if (conn) return conn
       const nconn = connector(this, addr)
-      nconn.state.when(cs => cs === "closed", _ => conns.delete(addr))
       conns.set(addr, nconn)
-      // send our auth info as the first message to this connection
-      this.sendUpVia(nconn, [], {type: UpType.AUTH, ...this.auth})
+      // send our auth info as the first message to this connection and again if it ever changes
+      const unauth = this.auth.onValue(auth => {
+        this.sendUpVia(nconn, [], {type: UpType.AUTH, ...auth})
+      })
+      // when the connection closes, clean up after it
+      nconn.state.when(cs => cs === "closed", _ => {
+        unauth()
+        conns.delete(addr)
+      })
       return nconn
     })
   }

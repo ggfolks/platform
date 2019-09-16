@@ -3,15 +3,12 @@ import {UUID} from "../core/uuid"
 import {Data, Record, dataEquals, refEquals} from "../core/data"
 import {ChangeFn, Eq, Mutable, Value, ValueFn, addListener, dispatchChange} from "../core/react"
 import {MutableSet, MutableMap} from "../core/rcollect"
+import {Auth} from "../auth/auth"
 import {PropMeta, ValueMeta, SetMeta, MapMeta, getPropMetas} from "./meta"
 import {SyncMsg, SyncType} from "./protocol"
 
-export type Auth = {
-  id :UUID
-  // TODO: change this to something extensible like: hasToken("admin"|"support"|"system")
-  // or maybe those tokens are named "isAdmin" etc. and are jammed into this object...
-  isSystem :boolean
-}
+// re-export Auth to make life easier for modules that define DObjects & DQueues & handlers
+export {Auth} from "../auth/auth"
 
 export type MetaMsg = {type :"created"}
                     | {type :"destroyed"}

@@ -1,6 +1,7 @@
 demo/node_modules
 demo/tsconfig.tsbuildinfo
 docs
+lib/auth
 lib/core
 lib/data
 lib/entity
