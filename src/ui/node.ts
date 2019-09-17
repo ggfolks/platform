@@ -168,11 +168,10 @@ class UINode extends Node {
         typeCategoryKeys: getCategoryKeys(ctx.types.root),
         typeCategoryData: getCategoryData(ctx.types.root, name => ({type: name})),
         subgraphCategoryKeys: getCategoryKeys(ctx.subgraphs.root),
-        subgraphCategoryData: getCategoryData(ctx.subgraphs.root, name => ({
-          type: "subgraph",
-          title: name,
-          graph: ctx.subgraphs.createConfig(name),
-        })),
+        subgraphCategoryData: getCategoryData(
+          ctx.subgraphs.root,
+          name => ctx.subgraphs.createNodeConfig(name),
+        ),
         selection,
         nodeCreator,
         nodeEditor,

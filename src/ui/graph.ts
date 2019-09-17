@@ -30,7 +30,7 @@ export class GraphViewer extends VGroup {
   private _editable = Value.constant(false)
   private _nodeCreator :Mutable<NodeCreator>
   private _nodeEditor :Mutable<NodeEditor>
-  private _stack :[Model, Element][] = []
+  private _stack :Model[] = []
   private _poppable = Mutable.local(false)
   private _clearUndoStacks :Action
 
@@ -312,12 +312,14 @@ export class GraphViewer extends VGroup {
         constraints: {stretch: true},
       }),
     )
-    this._stack.push([ctx.model, this.contents[1]])
+    this._stack.push(ctx.model)
   }
 
   push (model :Model) {
     this._updateNodeFunctions(model)
-    this._stack.push([model, this.contents[1] = this._createElement(model)])
+    this._stack.push(model)
+    this.contents[1].dispose()
+    this.contents[1] = this._createElement(model)
     this._poppable.update(true)
     this.selection.clear()
     this._clearUndoStacks()
@@ -325,22 +327,16 @@ export class GraphViewer extends VGroup {
   }
 
   pop () {
-    const stackEntry = this._stack.pop()
-    if (!stackEntry) throw new Error("Stack is empty")
-    stackEntry[1].dispose()
-    const [model, element] = this._stack[this._stack.length - 1]
-    this.contents[1] = element
+    const oldModel = this._stack.pop()
+    if (!oldModel) throw new Error("Stack is empty")
+    const model = this._stack[this._stack.length - 1]
+    this.contents[1].dispose()
+    this.contents[1] = this._createElement(model)
     this._updateNodeFunctions(model)
     this._poppable.update(this._stack.length > 1)
     this.selection.clear()
     this._clearUndoStacks()
     this.invalidate()
-  }
-
-  dispose () {
-    super.dispose()
-    // super.dispose() will dispose of the element on top of the stack
-    for (let ii = this._stack.length - 2; ii >= 0; ii--) this._stack[ii][1].dispose()
   }
 
   private _updateNodeFunctions (model :Model) {
@@ -355,11 +351,11 @@ export class GraphViewer extends VGroup {
   }
 
   private _createScrollViewAction (op :(scrollView :ScrollView) => void) :Action {
-    return () => op(this._stack[this._stack.length - 1][1] as ScrollView)
+    return () => op(this.contents[1] as ScrollView)
   }
 
   private _createModelAction (op :(model :Model) => void) :Action {
-    return () => op(this._stack[this._stack.length - 1][0])
+    return () => op(this._stack[this._stack.length - 1])
   }
 
   private _import () {
@@ -371,12 +367,11 @@ export class GraphViewer extends VGroup {
       const reader = new FileReader()
       reader.onload = () => {
         const json = JSON.parse(reader.result as string)
-        const stackEntry = this._stack[this._stack.length - 1]
-        const [model, element] = stackEntry
+        const model = this._stack[this._stack.length - 1]
         model.resolve<Value<(json :GraphConfig) => void>>("fromJSON").current(json)
         // destroy and recreate the entire element
-        element.dispose()
-        stackEntry[1] = this.contents[1] = this._createElement(model)
+        this.contents[1].dispose()
+        this.contents[1] = this._createElement(model)
         this.selection.clear()
         this._clearUndoStacks()
         this.invalidate()
@@ -395,7 +390,7 @@ export class GraphViewer extends VGroup {
   }
 
   private _export () {
-    const model = this._stack[this._stack.length - 1][0]
+    const model = this._stack[this._stack.length - 1]
     const json = model.resolve<Value<() => GraphConfig>>("toJSON").current()
     const file = new File([JSON.stringify(json)], "graph.json", {type: "application/octet-stream"})
     open(URL.createObjectURL(file), "_self")

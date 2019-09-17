@@ -286,12 +286,12 @@ interface NodeConstructor<T extends NodeConfig> {
   new (graph :Graph, id :string, config :T): Node
 }
 
-/** Base class for nodes in the type registry. */
+/** Base class for nodes in the type registry (or similar registries). */
 export class RegistryNode {
   constructor (readonly name :string) {}
 }
 
-/** A node representing a category of types (an internal node). */
+/** A node representing a category of entries (an internal node). */
 export class CategoryNode extends RegistryNode {
   private readonly _children = MutableMap.local<string, RegistryNode>()
 
@@ -313,7 +313,7 @@ export class CategoryNode extends RegistryNode {
   }
 }
 
-/** A node representing a single type. */
+/** A node representing a single terminal entry. */
 export class LeafNode extends RegistryNode {}
 
 /** Maintains a mapping from string node types to constructors. */

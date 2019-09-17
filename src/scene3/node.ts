@@ -390,5 +390,15 @@ export function registerScene3Subgraphs (registry :SubgraphRegistry) {
         },
       },
     },
+    pointerDraggable: {
+      hover: {type: "hover", component: "hovers"},
+      drag: {
+        type: "Vector3.multiplyScalar",
+        vector: ["hover", "worldMovement"],
+        scalar: ["hover", "pressed"],
+      },
+      grabbed: {type: "output", name: "grabbed", input: ["hover", "pressed"]},
+      translate: {type: "translate", component: "trans", frame: "world", input: "drag"},
+    },
   })
 }

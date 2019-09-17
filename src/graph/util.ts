@@ -209,7 +209,7 @@ export class Subgraph extends Node {
 /** Maintains a registry of common subgraphs. */
 export class SubgraphRegistry {
   readonly root = new CategoryNode("")
-  private _configs :Map<string, GraphConfig> = new Map()
+  private _graphConfigs :Map<string, GraphConfig> = new Map()
 
   constructor (...regs :((registry :SubgraphRegistry) => void)[]) {
     for (const reg of regs) {
@@ -229,15 +229,19 @@ export class SubgraphRegistry {
     const category = categories && this.root.getCategoryNode(categories)
     for (const name in subgraphs) {
       if (category) category.addLeafNode(name)
-      this._configs.set(name, subgraphs[name])
+      this._graphConfigs.set(name, subgraphs[name])
     }
   }
 
-  /** Creates and returns a copy of the graph config corresponding to the specified name. */
-  createConfig (name :string) :GraphConfig {
-    const config = this._configs.get(name)
-    if (!config) throw new Error("Unknown subgraph: " + name)
-    return dataCopy(config)
+  /** Creates and returns a new node config for a subgraph of the specified registered name. */
+  createNodeConfig (name :string) :NodeConfig {
+    const graphConfig = this._graphConfigs.get(name)
+    if (!graphConfig) throw new Error("Unknown subgraph: " + name)
+    return {
+      type: "subgraph",
+      title: name,
+      graph: dataCopy(graphConfig),
+    }
   }
 }
 
