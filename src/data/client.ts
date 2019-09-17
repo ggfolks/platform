@@ -1,4 +1,5 @@
 import {Disposable, Remover, log} from "../core/util"
+import {UUID, UUID0} from "../core/uuid"
 import {Record} from "../core/data"
 import {Emitter, Mutable, Stream, Subject, Value} from "../core/react"
 import {Encoder, Decoder} from "../core/codec"
@@ -41,6 +42,7 @@ export class Client implements Disposable {
   private readonly resolved = new Map<string,Resolver<DObject>>()
   private readonly encoder = new Encoder()
   private readonly _errors = new Emitter<string>()
+  private readonly _serverAuth = Mutable.local(UUID0)
   private nextOid = 1
 
   private readonly resolver = {
@@ -54,6 +56,10 @@ export class Client implements Disposable {
   constructor (readonly locator :Locator,
                readonly auth :Value<SessionAuth> = sessionAuth,
                readonly connector :Connector = wsConnector) {}
+
+  /** The id as which we're authenticated on the server. This should eventually match the id in
+    * [[auth]] once the server has acknowledged our auth request. */
+  get serverAuth () :Value<UUID> { return this._serverAuth }
 
   get errors () :Stream<string> { return this._errors }
 
@@ -114,13 +120,16 @@ export class Client implements Disposable {
 
   handleDown (msg :DownMsg) {
     if (DebugLog) log.debug("handleDown", "msg", msg)
-    const info = this.objects.get(msg.oid)
-    if (!info) this.reportError(log.format("Message for unknown object", "msg", msg))
-    else if (msg.type === DownType.SUBOBJ) info.state.update("active")
-    else if (msg.type === DownType.SUBERR) {
-      info.state.update("failed")
-      this.reportError(log.format("Subscribe failed", "obj", info.object, "cause", msg.cause))
-    } else info.object.applySync(msg, true)
+    if (msg.type === DownType.AUTHED) this._serverAuth.update(msg.id)
+    else {
+      const info = this.objects.get(msg.oid)
+      if (!info) this.reportError(log.format("Message for unknown object", "msg", msg))
+      else if (msg.type === DownType.SUBOBJ) info.state.update("active")
+      else if (msg.type === DownType.SUBERR) {
+        info.state.update("failed")
+        this.reportError(log.format("Subscribe failed", "obj", info.object, "cause", msg.cause))
+      } else info.object.applySync(msg, true)
+    }
   }
 
   reportError (msg :string) {

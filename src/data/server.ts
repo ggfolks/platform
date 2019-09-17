@@ -234,7 +234,8 @@ export abstract class Session {
       const auther = this.authers[msg.source]
       if (auther) auther.validateAuth(msg.id, msg.token).onValue(auth => {
         this._auth = auth
-        log.info("Session authed", "sess", this)
+        this.sendDown({type: DownType.AUTHED, id: msg.id})
+        log.info("Session authed", "sess", this, "source", msg.source)
       })
       else {
         log.warn("Session authed with invalid auth source", "sess", this, "source", msg.source)
