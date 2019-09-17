@@ -173,7 +173,7 @@ class FirebaseResolved extends Resolved {
       this.ref.update({[`${meta.name}.${sync.key}`]: setValue})
       break
     case SyncType.MAPDEL:
-      this.ref.update({[`${meta.name}.${sync.key}`]: FieldValue.delete})
+      this.ref.update({[`${meta.name}.${sync.key}`]: FieldValue.delete()})
       break
     }
   }
