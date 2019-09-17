@@ -4,8 +4,10 @@ import "firebase/firestore"
 type Firestore = firebase.firestore.Firestore
 type DocRef = firebase.firestore.DocumentReference
 type Timestamp = firebase.firestore.Timestamp
+type Blob = firebase.firestore.Blob
 const Timestamp = firebase.firestore.Timestamp
 const FieldValue = firebase.firestore.FieldValue
+const Blob = firebase.firestore.Blob
 
 import {TextEncoder, TextDecoder} from "util"
 import {Data, Record} from "../core/data"
@@ -30,23 +32,23 @@ function pathToRef (db :Firestore, path :Path) :DocRef {
 
 const encoder = new Encoder()
 
-function dataToFirestore (value :Data) :Uint8Array {
+function dataToFirestore (value :Data) :Blob {
   encoder.addValue(value, "data")
-  return encoder.finish() // TODO: clone Uint8Array
+  return Blob.fromUint8Array(encoder.finish()) // TODO: clone Uint8Array?
 }
 
-function dataFromFirestore (value :Uint8Array) :Data {
-  const decoder = new Decoder(value)
+function dataFromFirestore (value :Blob) :Data {
+  const decoder = new Decoder(value.toUint8Array())
   return decoder.getValue("data") as Data
 }
 
-function recordToFirestore (value :Record) :Uint8Array {
+function recordToFirestore (value :Record) :Blob {
   encoder.addValue(value, "record")
-  return encoder.finish() // TODO: clone Uint8Array
+  return Blob.fromUint8Array(encoder.finish()) // TODO: clone Uint8Array?
 }
 
-function recordFromFirestore (value :any) :Record {
-  const decoder = new Decoder(value)
+function recordFromFirestore (value :Blob) :Record {
+  const decoder = new Decoder(value.toUint8Array())
   return decoder.getValue("record") as Record
 }
 
