@@ -321,6 +321,7 @@ export class Encoder {
       const nbuffer = new ArrayBuffer(ncapacity)
       new Uint8Array(nbuffer).set(new Uint8Array(this.buffer), 0)
       this.buffer = nbuffer
+      this.bytes = new Uint8Array(nbuffer)
       this.data = new DataView(nbuffer)
     }
     this.pos = npos
