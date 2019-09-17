@@ -30,10 +30,16 @@ function initialAuth () :SessionAuth {
   * listen to this value to hear about current and future auth states. */
 export const sessionAuth = Mutable.local<SessionAuth>(initialAuth())
 
+/** Resets the session to a guest session, reusing this client's preferred guest id if possible. */
+export function resetAuth () {
+  sessionAuth.update(initialAuth())
+}
+
 if (haveLocalStorage) {
   sessionAuth.onValue(auth => {
     if (auth.source === "guest") localStorage.setItem(authKey, JSON.stringify(auth))
-    else localStorage.removeItem(authKey)
+    // TEMP: not sure we want to delete our "preferred" guest ID when we auth...
+    // else localStorage.removeItem(authKey)
   })
 }
 

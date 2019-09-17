@@ -11,7 +11,7 @@ const FieldValue = firebase.firestore.FieldValue
 import {NoopRemover, log} from "../core/util"
 import {UUID, uuidv1, uuidv4} from "../core/uuid"
 import {Mutable, Subject} from "../core/react"
-import {Auth, AuthValidator, sessionAuth} from "./auth"
+import {Auth, AuthValidator, sessionAuth, resetAuth} from "./auth"
 
 export const currentUser = Mutable.local<firebase.User|null>(null)
 
@@ -84,6 +84,13 @@ export async function showGoogleLogin () {
     var credential = error.credential
     console.log(`Auth error ${errorCode} / ${errorMessage} / ${email} / ${credential}`)
   }
+}
+
+/** Logs the user out of Firebase and clears local session data. */
+export function firebaseLogout () {
+  firebase.auth().signOut()
+  if (haveLocalStorage) localStorage.removeItem("_lastsess")
+  if (sessionAuth.current.source === "firebase") resetAuth()
 }
 
 /** Validates client sessions using Firebase auth & session table. */
