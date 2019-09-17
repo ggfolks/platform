@@ -126,7 +126,8 @@ class FirebaseResolved extends Resolved {
 
   resolveData () {
     const hasPersist = this.object.metas.some(isPersist)
-    if (hasPersist) {
+    if (!hasPersist) this.resolvedData()
+    else {
       const unsub = this.ref.onSnapshot(snap => {
         if (snap.exists) {
           for (const meta of this.object.metas) {
