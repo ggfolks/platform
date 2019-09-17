@@ -14,6 +14,14 @@ export type Meta = ValueMeta | SetMeta | MapMeta | CollectionMeta | QueueMeta
 
 export type PropMeta = Meta & {name :string, index :number}
 
+export function isPersist (meta :Meta) {
+  switch (meta.type) {
+  case "value":
+  case "set":
+  case "map": return meta.persist
+  default: return false
+  }
+}
 export function getPropMetas (proto :Function|Object) :PropMeta[] {
   const atarget = proto as any
   const props = atarget["__props__"]

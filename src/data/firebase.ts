@@ -15,6 +15,7 @@ import {UUID} from "../core/uuid"
 import {Encoder, Decoder, SyncSet, SyncMap, ValueType, setTextCodec} from "../core/codec"
 import {SyncMsg, SyncType} from "./protocol"
 import {DObjectType, DMutable, Path} from "./data"
+import {isPersist} from "./meta"
 import {DataStore, Resolved} from "./server"
 
 setTextCodec(() => new TextEncoder() as any, () => new TextDecoder() as any)
@@ -124,26 +125,30 @@ class FirebaseResolved extends Resolved {
   }
 
   resolveData () {
-    // TODO: only wire this up if object is annotated with @dobject(persist=true)?
-    const unsub = this.ref.onSnapshot(snap => {
-      if (snap.exists) {
-        for (const meta of this.object.metas) {
-          const value = snap.get(meta.name)
-          if (value === undefined) continue // TEMP: todo, handle undefined `value` props
-          const prop = this.object[meta.name]
-          switch (meta.type) {
-          case "value": (prop as DMutable<any>).update(
-              valueFromFirestore(value, meta.vtype), true) ; break
-          case "set": setFromFirestore(value, meta.etype, (prop as SyncSet<any>)) ; break
-          case "map": mapFromFirestore(value, meta.vtype, (prop as SyncMap<string,any>)) ; break
-          default: break // nothing to sync for collection & queue props
+    const hasPersist = this.object.metas.some(isPersist)
+    if (hasPersist) {
+      const unsub = this.ref.onSnapshot(snap => {
+        if (snap.exists) {
+          for (const meta of this.object.metas) {
+            const value = snap.get(meta.name)
+            if (value === undefined) continue // TEMP: todo, handle undefined `value` props
+            const prop = this.object[meta.name]
+            switch (meta.type) {
+            case "value": (prop as DMutable<any>).update(
+                valueFromFirestore(value, meta.vtype), true) ; break
+            case "set": setFromFirestore(value, meta.etype, (prop as SyncSet<any>)) ; break
+            case "map": mapFromFirestore(value, meta.vtype, (prop as SyncMap<string,any>)) ; break
+            default: break // nothing to sync for collection & queue props
+            }
           }
+        } else {
+          this.ref.set({})
         }
-      }
-      // mark the object as resolved once we get the first snapshot
-      if (this.state.current === "resolving") this.resolvedData()
-    })
-    this.state.whenOnce(state => state === "disposed", _ => unsub())
+        // mark the object as resolved once we get the first snapshot
+        if (this.state.current === "resolving") this.resolvedData()
+      })
+      this.state.whenOnce(state => state === "disposed", _ => unsub())
+    }
   }
 
   sendSync (sync :SyncMsg, persist :boolean) {
@@ -156,18 +161,18 @@ class FirebaseResolved extends Resolved {
       break
     case SyncType.SETADD:
       const addedValue = valueToFirestore(sync.elem, sync.etype)
-      this.ref.set({[meta.name]: FieldValue.arrayUnion(addedValue)}, {merge: true})
+      this.ref.update({[meta.name]: FieldValue.arrayUnion(addedValue)})
       break
     case SyncType.SETDEL:
       const deletedValue = valueToFirestore(sync.elem, sync.etype)
-      this.ref.set({[meta.name]: FieldValue.arrayRemove(deletedValue)}, {merge: true})
+      this.ref.update({[meta.name]: FieldValue.arrayRemove(deletedValue)})
       break
     case SyncType.MAPSET:
       const setValue = valueToFirestore(sync.value, sync.vtype)
-      this.ref.set({[`${meta.name}.${sync.key}`]: setValue}, {merge: true})
+      this.ref.update({[`${meta.name}.${sync.key}`]: setValue})
       break
     case SyncType.MAPDEL:
-      this.ref.set({[`${meta.name}.${sync.key}`]: FieldValue.delete}, {merge: true})
+      this.ref.update({[`${meta.name}.${sync.key}`]: FieldValue.delete})
       break
     }
   }
