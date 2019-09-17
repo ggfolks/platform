@@ -200,6 +200,14 @@ export const DefaultTheme = {
     label: {font: "$text", fill: "$black"},
     cursor: {stroke: "$black"},
   },
+  editablelabel: {
+    box: {
+      focused: {cursor: "text"},
+      hoverFocused: {cursor: "text"},
+    },
+    label: {font: "$text"},
+    cursor: {stroke: "$white"},
+  },
   dropdown: {
     box: {
       padding: [3, 8, 3, 8],

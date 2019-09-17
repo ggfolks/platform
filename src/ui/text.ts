@@ -371,6 +371,8 @@ export abstract class AbstractText extends Control {
   readonly label :Label
   readonly cursor :Cursor
 
+  private readonly _expandedBounds = rect.create()
+
   constructor (
     ctx :ElementContext,
     parent :Element,
@@ -465,8 +467,17 @@ export abstract class AbstractText extends Control {
     } else {
       return false
     }
+    if (binding !== 'copy') this.label.selection.update([0, 0])
     this.jiggle.update(!this.jiggle.current)
     return true
+  }
+
+  expandBounds (bounds :rect) :rect {
+    return rect.union(
+      this._expandedBounds,
+      this.contents.expandBounds(this.contents.bounds),
+      this.cursor.expandBounds(this.cursor.bounds),
+    )
   }
 
   protected get computeState () :string {
@@ -612,5 +623,40 @@ export class ColorText extends AbstractText {
 
   private _isValueValid (value :string) :boolean {
     return ColorPattern.test(value)
+  }
+}
+
+/** Defines configuration for [[EditableLabel]]. */
+export interface EditableLabelConfig extends AbstractTextConfig {
+  type :"editablelabel"
+  text :Spec<Mutable<string>>
+}
+
+const EditableLabelStyleScope = {id: "editablelabel", states: ControlStates}
+
+/** A label that one can edit by double-clicking. */
+export class EditableLabel extends AbstractText {
+
+  constructor (ctx :ElementContext, parent :Element, readonly config :EditableLabelConfig) {
+    super(ctx, parent, {...config, onEnter: () => this.blur()}, ctx.model.resolve(config.text))
+  }
+
+  get styleScope () { return EditableLabelStyleScope }
+
+  handlePointerDown (event :MouseEvent|TouchEvent, pos :vec2) :PointerInteraction|undefined {
+    return this.isFocused ? super.handlePointerDown(event, pos) : undefined
+  }
+
+  handleDoubleClick (event :MouseEvent, pos :vec2) :boolean {
+    if (this.isFocused) return false
+    this.focus()
+    const interaction = this.handlePointerDown(event, pos)
+    if (interaction) interaction.release(event, pos)
+    return true
+  }
+
+  protected lostFocus () {
+    super.lostFocus()
+    this.label.selection.update([0, 0])
   }
 }

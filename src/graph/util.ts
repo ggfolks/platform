@@ -1,7 +1,7 @@
 import {Clock} from "../core/clock"
 import {refEquals} from "../core/data"
 import {ChangeFn, Mutable, Value} from "../core/react"
-import {log, PMap} from "../core/util"
+import {PMap, log} from "../core/util"
 import {Graph, GraphConfig} from "./graph"
 import {EdgeMeta, InputEdgeMeta, inputEdge, outputEdge, property} from "./meta"
 import {InputEdge, Node, NodeConfig, NodeTypeRegistry} from "./node"
@@ -133,6 +133,7 @@ class ClockNode extends Node {
 /** An encapsulated graph. */
 abstract class SubgraphConfig implements NodeConfig {
   type = "subgraph"
+  title? :string
   graph :GraphConfig = {}
 }
 
@@ -140,8 +141,13 @@ export class Subgraph extends Node {
   readonly containedGraph :Graph
 
   private _containedOutputs :Map<string, InputEdge<any>> = new Map()
+  private _title :Mutable<string>
   private _inputsMeta :PMap<InputEdgeMeta> = {}
   private _outputsMeta :PMap<EdgeMeta> = {}
+
+  get title () :Value<string> {
+    return this._title
+  }
 
   get inputsMeta () {
     return this._inputsMeta
@@ -156,6 +162,7 @@ export class Subgraph extends Node {
 
     const subctx = Object.create(graph.ctx)
     subctx.subgraph = this
+    this._title = this.getProperty("title", config.type) as Mutable<string>
     for (const key in config.graph) {
       const value = config.graph[key]
       if (value.type === 'input') {

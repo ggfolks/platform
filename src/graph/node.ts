@@ -47,6 +47,11 @@ export abstract class Node implements Disposable {
 
   constructor (readonly graph :Graph, readonly id :string, readonly config :NodeConfig) {}
 
+  /** The node's title (usually just the type). */
+  get title () :Value<string> {
+    return Value.constant(this.config.type)
+  }
+
   /** The metadata for the node's viewable/editable properties. */
   get propertiesMeta () :PMap<PropertyMeta> {
     return getNodeMeta(this.config.type).properties
@@ -79,12 +84,13 @@ export abstract class Node implements Disposable {
     return this._defaultOutputKey
   }
 
-  /** Returns a reactive view of the specified property. */
-  getProperty<T> (name :string) :Mutable<T|undefined> {
+  /** Returns a reactive view of the specified property.
+    * @param [overrideDefault] an optional default to override the one in the metadata, if any. */
+  getProperty<T> (name :string, overrideDefault? :any) :Mutable<T|undefined> {
     let property = this._properties.get(name)
     if (!property) {
       const meta = this.propertiesMeta[name]
-      const defaultValue = meta && meta.defaultValue
+      const defaultValue = getValue(overrideDefault, meta && meta.defaultValue)
       let changeFn :ChangeFn<T|undefined> = Noop
       this._properties.set(name, property = Mutable.deriveMutable(
         dispatch => {

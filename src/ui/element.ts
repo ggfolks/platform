@@ -265,6 +265,22 @@ export abstract class Element implements Disposable {
     return false
   }
 
+  /** Requests that this element handle the supplied double click event if it contains the position.
+    * @param event the event forwarded from the browser.
+    * @param pos the position of the event relative to the root origin.
+    * @return whether or not the event was handled, and thus should not be further propagated. */
+  maybeHandleDoubleClick (event :MouseEvent, pos :vec2) :boolean {
+    return rect.contains(this.bounds, pos) && this.handleDoubleClick(event, pos)
+  }
+
+  /** Requests that this element handle the supplied double click event.
+    * @param event the event forwarded from the browser.
+    * @param pos the position of the event relative to the root origin.
+    * @return whether or not the event was handled, and thus should not be further propagated. */
+  handleDoubleClick (event :MouseEvent, pos :vec2) :boolean {
+    return false
+  }
+
   /** Finds the first child with the specified `type`. */
   findChild (type :string) :Element|undefined {
     return (this.config.type === type) ? this : undefined
@@ -602,7 +618,7 @@ export class Root extends Element {
   dispatchDoubleClickEvent (event :MouseEvent) {
     const pos = vec2.set(tmpv, event.offsetX-this.origin[0], event.offsetY-this.origin[1])
     if (rect.contains(this.bounds, pos)) event.cancelBubble = true
-    // TODO: allow contents to handle?
+    this.contents.maybeHandleDoubleClick(event, pos)
   }
 
   protected computePreferredSize (hintX :number, hintY :number, into :dim2) {
@@ -700,8 +716,15 @@ export class Control extends Element {
       if (fc !== this) {
         this._state.update(this.computeState)
         remover()
+        this.lostFocus()
       }
     })
+  }
+
+  /** Requests that this control lose input focus. */
+  blur () {
+    const root = this.root
+    if (root.focus.current === this) root.focus.update(undefined)
   }
 
   handleMouseEnter (event :MouseEvent, pos :vec2) { this._hovered.update(true) }
@@ -744,6 +767,8 @@ export class Control extends Element {
         )
       : "disabled"
   }
+
+  protected lostFocus () {}
 
   protected computePreferredSize (hintX :number, hintY :number, into :dim2) {
     dim2.copy(into, this.contents.preferredSize(hintX, hintY))

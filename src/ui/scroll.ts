@@ -65,6 +65,11 @@ export class ScrollView extends Control {
     return true
   }
 
+  handleDoubleClick (event :MouseEvent, pos :vec2) {
+    const transformedPos = this._transformPos(pos)
+    return this.contents.maybeHandleDoubleClick(event, transformedPos)
+  }
+  
   /** Zooms in or out by the specified delta. */
   zoom (delta :number) {
     this._updateScale(this._scale.current * (1.1 ** delta))

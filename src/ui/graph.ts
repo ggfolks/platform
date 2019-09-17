@@ -837,11 +837,25 @@ export class NodeView extends VGroup {
         ],
       })
     }
+    const title = ctx.model.resolve<Value<string>>("title")
     this.contents.push(
       ctx.elem.create(ctx, this, {
         type: "box",
         scopeId: "nodeHeader",
-        contents: {overrideParentState: "normal", type: "label", text: "type"},
+        contents: title instanceof Mutable
+          ? {
+            type: "editablelabel",
+            text: title,
+            contents: {
+              type: "box",
+              contents: {
+                type: "label",
+                overrideParentState: "normal",
+                scopeId: "nodeHeader",
+                text: title,
+              },
+            },
+          } : {type: "label", overrideParentState: "normal", text: title},
       }),
       ctx.elem.create(ctx, this, {
         type: "box",

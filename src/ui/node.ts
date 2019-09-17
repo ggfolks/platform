@@ -353,6 +353,7 @@ function createGraphModelData (graph :Graph, applyEdit :(edit :NodeEdit) => void
           nodeModels.set(key, model = new Model({
             id: Value.constant(node.id),
             type: Value.constant(type),
+            title: node.title,
             position: createPropertyValue("position"),
             ...subgraphElement,
             propertyKeys: Value.constant(Object.keys(node.propertiesMeta)),

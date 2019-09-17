@@ -32,6 +32,15 @@ abstract class Group extends Element {
     }
     return false
   }
+  maybeHandleDoubleClick (event :MouseEvent, pos :vec2) {
+    return rect.contains(this.expandBounds(this.bounds), pos) && this.handleDoubleClick(event, pos)
+  }
+  handleDoubleClick (event :MouseEvent, pos :vec2) :boolean {
+    for (const cc of this.contents) {
+      if (cc.maybeHandleDoubleClick(event, pos)) return true
+    }
+    return false
+  }
 
   findChild (type :string) :Element|undefined {
     const self = super.findChild(type)
@@ -116,6 +125,13 @@ export abstract class AbsGroup extends Group {
   handleWheel (event :WheelEvent, pos :vec2) {
     for (let ii = this.contents.length - 1; ii >= 0; ii--) {
       if (this.contents[ii].maybeHandleWheel(event, pos)) return true
+    }
+    return false
+  }
+
+  handleDoubleClick (event :MouseEvent, pos :vec2) {
+    for (let ii = this.contents.length - 1; ii >= 0; ii--) {
+      if (this.contents[ii].maybeHandleDoubleClick(event, pos)) return true
     }
     return false
   }

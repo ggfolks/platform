@@ -141,6 +141,12 @@ export class Box extends Element {
   handleWheel (event :WheelEvent, pos :vec2) {
     return this.contents.maybeHandleWheel(event, pos)
   }
+  maybeHandleDoubleClick (event :MouseEvent, pos :vec2) {
+    return rect.contains(this.expandBounds(this.bounds), pos) && this.handleDoubleClick(event, pos)
+  }
+  handleDoubleClick (event :MouseEvent, pos :vec2) {
+    return this.contents.maybeHandleDoubleClick(event, pos)
+  }
 
   dispose () {
     super.dispose()
