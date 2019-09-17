@@ -152,9 +152,8 @@ export const DefaultTheme = {
     menu: {
       hovered: {},
       hoverFocused: {},
-      minWidth: 150,
     },
-    menuitem: {minWidth: 150},
+    menuitem: {},
     shortcut: {font: "$menu", fill: "$mediumGray"},
     graphview: {
       selectBackground: "$graphViewSelect",
