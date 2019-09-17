@@ -127,13 +127,8 @@ export class DataStore {
 
   upSync (auth :Auth, obj :DObject, msg :SyncMsg) {
     const name = obj.metas[msg.idx].name
-    if (obj.canRead(name, auth) || !obj.canWrite(name, auth)) obj.applySync(msg, false)
-    else this.authFail(`Write rejected [auth=${auth}, obj=${obj}, prop=${name}]`)
-  }
-
-  protected authFail (msg :string) :never {
-    log.warn(msg)
-    throw new Error(`Access denied.`)
+    if (obj.canRead(name, auth) && obj.canWrite(name, auth)) obj.applySync(msg, false)
+    else log.warn("Write rejected", "auth", auth, "obj", obj, "prop", name)
   }
 
   protected createResolved (path :Path, otype :DObjectType<any>) :Resolved {
@@ -143,8 +138,42 @@ export class DataStore {
 
 export type SessionConfig = {store :DataStore, authers :PMap<AuthValidator>}
 
+class Subscription {
+  readonly object :DObject
+  readonly unsub :Remover
+  readonly pendSync :SyncMsg[] = []
+  active = false
+
+  constructor (readonly sess :Session, readonly oid :number, res :Resolved) {
+    this.object = res.object
+    const rsub = res.subscribe({auth: sess.auth, sendSync: msg => sess.sendDown({...msg, oid})})
+    this.unsub = rsub.onValue(res => {
+      if (res instanceof Error) sess.sendDown({type: DownType.SUBERR, oid, cause: res.message})
+      else {
+        this.active = true
+        sess.sendDown({type: DownType.SUBOBJ, oid, obj: res})
+        sess.store.postMeta(res, {type: "subscribed", id: sess.auth.id})
+        // apply any pending sync messages
+        for (const msg of this.pendSync) this.upSync(msg)
+        this.pendSync.length = 0
+      }
+    })
+  }
+
+  upSync (msg :SyncMsg) {
+    if (this.active) this.sess.store.upSync(this.sess.auth, this.object, msg)
+    else this.pendSync.push(msg)
+  }
+
+  dispose () {
+    this.unsub()
+    if (this.active) this.sess.store.postMeta(
+      this.object, {type: "unsubscribed", id: this.sess.auth.id})
+  }
+}
+
 export abstract class Session {
-  private readonly subscrips = new Map<number, {object :DObject, release :Remover}>()
+  private readonly subscrips = new Map<number, Subscription>()
   private readonly encoder = new Encoder()
   private readonly resolver = {
     get: (oid :number) => {
@@ -154,8 +183,8 @@ export abstract class Session {
     }
   }
   private _auth :Auth|undefined = undefined
-  private readonly store :DataStore
   private readonly authers :PMap<AuthValidator>
+  readonly store :DataStore
 
   constructor (config :SessionConfig) {
     this.store = config.store
@@ -194,7 +223,8 @@ export abstract class Session {
   }
 
   dispose () {
-    for (const sub of this.subscrips.values()) sub.release()
+    for (const sub of this.subscrips.values()) sub.dispose()
+    this.subscrips.clear()
   }
 
   protected handleMsg (msg :UpMsg) {
@@ -212,25 +242,16 @@ export abstract class Session {
       }
       break
     case UpType.SUB:
-      const res = this.store.resolve(msg.path), oid = msg.oid
-      const rsub = res.subscribe({auth: this.auth, sendSync: msg => this.sendDown({...msg, oid})})
-      const unsub = rsub.onValue(res => {
-        if (res instanceof Error) this.sendDown({type: DownType.SUBERR, oid, cause: res.message})
-        else {
-          this.subscrips.set(oid, {object: res, release: () => {
-            unsub()
-            this.store.postMeta(res, {type: "unsubscribed", id: this.auth.id})
-            this.subscrips.delete(oid)
-          }})
-          this.sendDown({type: DownType.SUBOBJ, oid, obj: res})
-          this.store.postMeta(res, {type: "subscribed", id: this.auth.id})
-        }
-      })
+      const oid = msg.oid
+      this.subscrips.set(oid, new Subscription(this, oid, this.store.resolve(msg.path)))
       break
 
     case UpType.UNSUB:
       const sub = this.subscrips.get(msg.oid)
-      if (sub) sub.release()
+      if (sub) {
+        this.subscrips.delete(msg.oid)
+        sub.dispose()
+      }
       break
 
     case UpType.POST:
@@ -239,7 +260,7 @@ export abstract class Session {
 
     default:
       const ssub = this.subscrips.get(msg.oid)
-      if (ssub) this.store.upSync(this.auth, ssub.object, msg)
+      if (ssub) ssub.upSync(msg)
       else log.warn("Dropping sync message, no subscription", "sess", this, "msg", msg)
     }
   }
