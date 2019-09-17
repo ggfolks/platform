@@ -28,12 +28,19 @@ async function refreshFirebaseSession (user :firebase.User) {
   const db = firebase.firestore()
   const sessref = db.collection("sessions").doc(user.uid)
   const sess = await sessref.get()
+  function setAuth (id :UUID, token :string) {
+    sessionAuth.update({source: "firebase", id, token: makeToken(user.uid, token)})
+    if (haveLocalStorage) localStorage.setItem("_lastsess", token)
+  }
+  // TODO: when we create a token immediately, it doesn't have time to propagate through the
+  // Firebase datastore in time for the server to see it, so auth is rejected at first; maybe we can
+  // just punt on this because this is all going to change when we have real auth
   if (sess.exists) {
     const data = sess.data() || {}, tokens = data.tokens || {}
     // prune expired sessions
     const now = new Date().getTime(), expired = now - TOKEN_EXPIRE, usable = now - TOKEN_USABLE
     let token = ""
-    for (const atoken of tokens) {
+    for (const atoken in tokens) {
       const started = (tokens[atoken] as Timestamp).toMillis()
       if (started < expired) delete tokens[atoken]
       // reuse our last known session token if it's not expired or about to expire
@@ -44,15 +51,15 @@ async function refreshFirebaseSession (user :firebase.User) {
       tokens[token] = FieldValue.serverTimestamp()
     }
     sessref.update({tokens})
-    sessionAuth.update({source: "firebase", id: data.id, token: makeToken(user.uid, token)})
+    setAuth(data.id, token)
   } else {
     const id = uuidv1(), token = uuidv4()
-    sessref.update({
+    sessref.set({
       id,
       created: FieldValue.serverTimestamp(),
       tokens: {[token]: FieldValue.serverTimestamp()}
-    })
-    sessionAuth.update({source: "firebase", id, token: makeToken(user.uid, token)})
+    }, {merge: true})
+    setAuth(id, token)
   }
 }
 
@@ -98,7 +105,8 @@ export class FirebaseAuthValidator implements AuthValidator {
           if (data) {
             const tokens = Object.keys(data.tokens || {})
             if (tokens.includes(fbtoken)) disp({id, isGuest: false, isSystem: false})
-            else log.warn("Invalid/missing auth token", "id", id, "fbid", fbid, "token", token)
+            else log.warn("Invalid/missing auth token", "id", id, "fbid", fbid,
+                          "token", fbtoken, "tokens", tokens)
           }
         },
         error => log.warn("Failed to resolve session doc", "id", id, error)
