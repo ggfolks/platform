@@ -26,8 +26,7 @@ const makeToken = (fbid :string, hash :UUID) => `${fbid}:${hash}`
 
 async function refreshFirebaseSession (user :firebase.User) {
   const db = firebase.firestore()
-  const sessref = db.collection("sessions").doc(user.uid)
-  const sess = await sessref.get()
+  const authref = db.collection("auth").doc(user.uid)
   function setAuth (id :UUID, token :string) {
     sessionAuth.update({source: "firebase", id, token: makeToken(user.uid, token)})
     if (haveLocalStorage) localStorage.setItem("_lastsess", token)
@@ -35,8 +34,9 @@ async function refreshFirebaseSession (user :firebase.User) {
   // TODO: when we create a token immediately, it doesn't have time to propagate through the
   // Firebase datastore in time for the server to see it, so auth is rejected at first; maybe we can
   // just punt on this because this is all going to change when we have real auth
-  if (sess.exists) {
-    const data = sess.data() || {}, tokens = data.tokens || {}
+  const authdoc = await authref.get()
+  if (authdoc.exists) {
+    const data = authdoc.data() || {}, tokens = data.tokens || {}
     // prune expired sessions
     const now = new Date().getTime(), expired = now - TOKEN_EXPIRE, usable = now - TOKEN_USABLE
     let token = ""
@@ -50,11 +50,11 @@ async function refreshFirebaseSession (user :firebase.User) {
       token = uuidv4()
       tokens[token] = FieldValue.serverTimestamp()
     }
-    sessref.update({tokens})
+    authref.update({tokens})
     setAuth(data.id, token)
   } else {
     const id = uuidv1(), token = uuidv4()
-    sessref.set({
+    authref.set({
       id,
       created: FieldValue.serverTimestamp(),
       tokens: {[token]: FieldValue.serverTimestamp()}
@@ -98,8 +98,8 @@ export class FirebaseAuthValidator implements AuthValidator {
         return NoopRemover
       }
       const fbid = token.substring(0, cidx), fbtoken = token.substring(cidx+1)
-      const sessref = this.db.collection("sessions").doc(fbid)
-      sessref.get().then(
+      const authref = this.db.collection("auth").doc(fbid)
+      authref.get().then(
         doc => {
           const data = doc.data()
           if (data) {
