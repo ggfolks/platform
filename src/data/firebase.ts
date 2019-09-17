@@ -69,8 +69,8 @@ function valueToFirestore (value :any, vtype :ValueType) :any {
   case "string": return value as string
   case "timestamp": return Timestamp.fromMillis(value)
   case "uuid": return value as UUID // UUID is string in JS and Firestore
-  case "data": return dataFromFirestore(value)
-  case "record": return recordFromFirestore(value)
+  case "data": return dataToFirestore(value)
+  case "record": return recordToFirestore(value)
   }
 }
 
@@ -90,8 +90,8 @@ function valueFromFirestore (value :any, vtype :ValueType) :any {
   case "string": return value as string
   case "timestamp": return (value as Timestamp).toMillis()
   case "uuid": return value as string // UUID is a string in JS and Firestore
-  case "data": return dataToFirestore(value)
-  case "record": return recordToFirestore(value)
+  case "data": return dataFromFirestore(value)
+  case "record": return recordFromFirestore(value)
   }
 }
 
