@@ -24,6 +24,11 @@ const addFloat32 = (e :Encoder, v :number) => { const p = e.pos ; e.prepAdd(4).s
 const addFloat64 = (e :Encoder, v :number) => { const p = e.pos ; e.prepAdd(8).setFloat64(p, v) }
 
 function addString (enc :Encoder, text :string) {
+  if (text.length === 0) {
+    addSize16(enc, 0)
+    return
+  }
+
   // if the string is too long before encoding, it will definitely be too long after
   if (text.length > 65535) throw new Error(
     `String length cannot exceed 64k when converted to UTF-8 (length: ${text.length})`)
@@ -133,7 +138,9 @@ const getFloat32 = (dec :Decoder) => dec.data.getFloat32(dec.prepGet(4))
 const getFloat64 = (dec :Decoder) => dec.data.getFloat64(dec.prepGet(8))
 
 function getString (dec :Decoder) {
-  const bytes = getSize16(dec), offset = dec.prepGet(bytes)
+  const bytes = getSize16(dec)
+  if (bytes === 0) return ""
+  const offset = dec.prepGet(bytes)
   return dec.decoder.decode(dec.source.subarray(offset, offset+bytes))
 }
 
