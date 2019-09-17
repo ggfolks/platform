@@ -300,16 +300,16 @@ class Log extends Node {
 }
 
 /** Extracts a property of the (object) input. */
-abstract class PropertyConfig implements NodeConfig {
-  type = "property"
+abstract class GetPropertyConfig implements NodeConfig {
+  type = "getProperty"
   @property() name = ""
   @inputEdge("object") input = undefined
   @outputEdge("any") output = undefined
 }
 
-class Property extends Node {
+class GetProperty extends Node {
 
-  constructor (graph :Graph, id :string, readonly config :PropertyConfig) {
+  constructor (graph :Graph, id :string, readonly config :GetPropertyConfig) {
     super(graph, id, config)
   }
 
@@ -371,7 +371,7 @@ export function registerUtilNodes (registry :NodeTypeRegistry) {
     input: Input,
     output: Output,
     log: Log,
-    property: Property,
+    getProperty: GetProperty,
     string: StringNode,
   })
   registry.registerNodeTypes(undefined, {
