@@ -141,17 +141,20 @@ class UINode extends Node {
       function getCategoryKeys (category :CategoryNode) :Source<string[]> {
         return category.children.keysSource().map<string[]>(Array.from)
       }
-      function getCategoryData (category :CategoryNode) :ModelProvider {
+      function getCategoryData (
+        category :CategoryNode,
+        createConfig :(name :string) => NodeConfig,
+      ) :ModelProvider {
         return mapProvider(category.children, (value, key) => {
           if (value.current instanceof CategoryNode) return {
             name: Value.constant(key),
             submenu: Value.constant(true),
             keys: getCategoryKeys(value.current),
-            data: getCategoryData(value.current),
+            data: getCategoryData(value.current, createConfig),
           }
           return {
             name: Value.constant(key),
-            action: () => nodeCreator.current({[key as string]: {type: (key as string)}}),
+            action: () => nodeCreator.current({[key as string]: createConfig(key as string)}),
           } as ModelData
         })
       }
@@ -162,8 +165,14 @@ class UINode extends Node {
           root.dispose()
           disposer.dispose()
         },
-        categoryKeys: getCategoryKeys(ctx.types.root),
-        categoryData: getCategoryData(ctx.types.root),
+        typeCategoryKeys: getCategoryKeys(ctx.types.root),
+        typeCategoryData: getCategoryData(ctx.types.root, name => ({type: name})),
+        subgraphCategoryKeys: getCategoryKeys(ctx.subgraphs.root),
+        subgraphCategoryData: getCategoryData(ctx.subgraphs.root, name => ({
+          type: "subgraph",
+          title: name,
+          graph: ctx.subgraphs.createConfig(name),
+        })),
         selection,
         nodeCreator,
         nodeEditor,

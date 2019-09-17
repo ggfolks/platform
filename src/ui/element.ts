@@ -10,6 +10,7 @@ import {Spec, StyleContext} from "./style"
 const tmpr = rect.create(), tmpv = vec2.create(), tmpd = dim2.create()
 export const trueValue = Value.constant(true)
 export const falseValue = Value.constant(false)
+const defScale = new Scale(window.devicePixelRatio)
 const defHintSize = Value.constant(dim2.fromValues(64000, 32000))
 const defMinSize = Value.constant(dim2.fromValues(0, 0))
 
@@ -345,7 +346,7 @@ const RootState = Value.constant(RootStates[0])
 /** Defines configuration for [[Root]] elements. */
 export interface RootConfig extends ElementConfig {
   type :"root"
-  scale :Scale
+  scale? :Scale
   autoSize? :boolean
   hintSize? :Spec<Value<dim2>>
   minSize? :Spec<Value<dim2>>
@@ -381,6 +382,7 @@ export class Root extends Element {
   private readonly _clock = new Emitter<Clock>()
   private readonly _sizeChange = new Emitter<Root>()
   private readonly _unclaimedKeyEvent = new Emitter<KeyboardEvent>()
+  private readonly _scale :Scale
   private readonly _hintSize :Value<dim2>
   private readonly _minSize :Value<dim2>
   private readonly _origin = vec2.create()
@@ -396,8 +398,11 @@ export class Root extends Element {
     const canvas = this.canvasElem.getContext("2d")
     if (canvas) this.canvas = canvas
     else throw new Error(`Canvas rendering context not supported?`)
+    this._scale = config.scale ? config.scale : defScale
     this._hintSize = config.hintSize ? ctx.model.resolve(config.hintSize) : defHintSize
+    this.invalidateOnChange(this._hintSize)
     this._minSize = config.minSize ? ctx.model.resolve(config.minSize) : defMinSize
+    this.invalidateOnChange(this._minSize)
     this.contents = ctx.elem.create(ctx, this, config.contents)
   }
 
@@ -451,16 +456,13 @@ export class Root extends Element {
     return remover
   }
 
-  setSize (size :dim2) :HTMLCanvasElement {
+  setSize (size :dim2) {
     this.setBounds(rect.set(tmpr, 0, 0, size[0], size[1]))
-    this.validate()
-    this.render(this.canvas, this._bounds)
-    return this.canvasElem
   }
 
-  sizeToFit (maxX :number = 64000, maxY :number = 32000) :HTMLCanvasElement {
+  sizeToFit (maxX :number = 64000, maxY :number = 32000) {
     this.computePreferredSize(maxX, maxY, tmpd)
-    return this.setSize(tmpd)
+    this.setSize(tmpd)
   }
 
   update (clock :Clock) :boolean {
@@ -581,7 +583,7 @@ export class Root extends Element {
   }
 
   private _updateElementsOver (event :MouseEvent, pos :vec2) {
-    const sf = this.config.scale.factor
+    const sf = this._scale.factor
     this.canvas.save()
     this.canvas.scale(sf, sf)
     this.contents.applyToContaining(this.canvas, pos, addToElementsOver)
@@ -631,7 +633,7 @@ export class Root extends Element {
 
   protected revalidate () {
     super.revalidate()
-    const canvas = this.canvasElem, toPixel = this.config.scale
+    const canvas = this.canvasElem, toPixel = this._scale
     const scaledWidth = Math.ceil(toPixel.scaled(this.width))
     const scaledHeight = Math.ceil(toPixel.scaled(this.height))
     if (canvas.width !== scaledWidth || canvas.height !== scaledHeight) {
@@ -645,7 +647,7 @@ export class Root extends Element {
   }
 
   protected rerender (canvas :CanvasRenderingContext2D, region :rect) {
-    const sf = this.config.scale.factor
+    const sf = this._scale.factor
     canvas.save()
     canvas.scale(sf, sf)
     if (debugDirty) {

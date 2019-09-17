@@ -1,10 +1,10 @@
 import {Clock} from "../core/clock"
-import {refEquals} from "../core/data"
+import {dataCopy, refEquals} from "../core/data"
 import {ChangeFn, Mutable, Value} from "../core/react"
 import {PMap, log} from "../core/util"
 import {Graph, GraphConfig} from "./graph"
 import {EdgeMeta, InputEdgeMeta, inputEdge, outputEdge, property} from "./meta"
-import {InputEdge, Node, NodeConfig, NodeTypeRegistry} from "./node"
+import {CategoryNode, InputEdge, Node, NodeConfig, NodeTypeRegistry} from "./node"
 
 /** Switches to true after a number of seconds have passed. */
 abstract class TimeoutConfig implements NodeConfig {
@@ -203,6 +203,41 @@ export class Subgraph extends Node {
       edge = this._containedOutputs.get(name)
     }
     return this.containedGraph.getValue(edge, defaultValue)
+  }
+}
+
+/** Maintains a registry of common subgraphs. */
+export class SubgraphRegistry {
+  readonly root = new CategoryNode("")
+  private _configs :Map<string, GraphConfig> = new Map()
+
+  constructor (...regs :((registry :SubgraphRegistry) => void)[]) {
+    for (const reg of regs) {
+      reg(this)
+    }
+  }
+
+  /** Registers a group of subgraph configs.
+    * @param categories the category path under which to list the subgraphs, or undefined to avoid
+    * listing.
+    * @param subgraphs the map from subgraph names to graph configs.
+    */
+  registerSubgraphs (
+    categories :string[]|undefined,
+    subgraphs :{ [name :string]: GraphConfig },
+  ) {
+    const category = categories && this.root.getCategoryNode(categories)
+    for (const name in subgraphs) {
+      if (category) category.addLeafNode(name)
+      this._configs.set(name, subgraphs[name])
+    }
+  }
+
+  /** Creates and returns a copy of the graph config corresponding to the specified name. */
+  createConfig (name :string) :GraphConfig {
+    const config = this._configs.get(name)
+    if (!config) throw new Error("Unknown subgraph: " + name)
+    return dataCopy(config)
   }
 }
 

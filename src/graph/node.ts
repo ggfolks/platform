@@ -4,7 +4,7 @@ import {MutableMap, RMap} from "../core/rcollect"
 import {Disposable, Disposer, Noop, NoopRemover, PMap, getValue} from "../core/util"
 import {Graph, getConstantOrValueNodeId} from "./graph"
 import {InputEdgeMeta, OutputEdgeMeta, PropertyMeta, getNodeMeta} from "./meta"
-import {Subgraph} from "./util"
+import {Subgraph, SubgraphRegistry} from "./util"
 
 /** Configuration shared by all [[Node]]s. */
 export interface NodeConfig {
@@ -32,6 +32,7 @@ export type OutputEdge<T> = undefined
 /** Base interface for node contexts. */
 export interface NodeContext {
   types :NodeTypeRegistry
+  subgraphs :SubgraphRegistry
   subgraph? :Subgraph
   // this allows NodeContext to contain "extra" stuff that TypeScript will ignore
   [extra :string] :any
@@ -307,13 +308,13 @@ export class CategoryNode extends RegistryNode {
     return category.getCategoryNode(categories.slice(1))
   }
 
-  addTypeNode (type :string) {
-    this._children.set(type, new TypeNode(type))
+  addLeafNode (name :string) {
+    this._children.set(name, new LeafNode(name))
   }
 }
 
-/** A node representing a single type (a leaf node). */
-export class TypeNode extends RegistryNode {}
+/** A node representing a single type. */
+export class LeafNode extends RegistryNode {}
 
 /** Maintains a mapping from string node types to constructors. */
 export class NodeTypeRegistry {
@@ -337,7 +338,7 @@ export class NodeTypeRegistry {
   ) {
     const category = categories && this.root.getCategoryNode(categories)
     for (const type in types) {
-      if (category) category.addTypeNode(type)
+      if (category) category.addLeafNode(type)
       this._constructors.set(type, types[type] as NodeConstructor<NodeConfig>)
     }
   }

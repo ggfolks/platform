@@ -37,8 +37,10 @@ export class GraphViewer extends VGroup {
   constructor (readonly ctx :ElementContext, parent :Element, readonly config :GraphViewerConfig) {
     super(ctx, parent, {...config, offPolicy: "stretch"})
     if (this.config.editable) this._editable = ctx.model.resolve(this.config.editable)
-    const categoryKeys = ctx.model.resolve<Source<string[]>>("categoryKeys")
-    const categoryData = ctx.model.resolve<ModelProvider>("categoryData")
+    const typeCategoryKeys = ctx.model.resolve<Source<string[]>>("typeCategoryKeys")
+    const typeCategoryData = ctx.model.resolve<ModelProvider>("typeCategoryData")
+    const subgraphCategoryKeys = ctx.model.resolve<Source<string[]>>("subgraphCategoryKeys")
+    const subgraphCategoryData = ctx.model.resolve<ModelProvider>("subgraphCategoryData")
     this._nodeCreator = ctx.model.resolve<Mutable<NodeCreator>>("nodeCreator")
     this._nodeEditor = ctx.model.resolve<Mutable<NodeEditor>>("nodeEditor")
     const remove = ctx.model.resolve<Action>("remove")
@@ -267,11 +269,16 @@ export class GraphViewer extends VGroup {
                 },
                 node: {
                   title: Value.constant("Node"),
-                  keys: categoryKeys,
-                  data: categoryData,
+                  keys: typeCategoryKeys,
+                  data: typeCategoryData,
+                },
+                subgraph: {
+                  title: Value.constant("Subgraph"),
+                  keys: subgraphCategoryKeys,
+                  data: subgraphCategoryData,
                 },
               }),
-              keys: Value.constant(["graph", "edit", "view", "node"]),
+              keys: Value.constant(["graph", "edit", "view", "node", "subgraph"]),
             },
             {
               type: "spacer",

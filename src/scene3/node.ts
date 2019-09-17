@@ -3,14 +3,17 @@ import {
   Material, Mesh, Object3D, Raycaster, Vector3,
 } from "three"
 
+import {dim2} from "../core/math"
 import {Subject, Value} from "../core/react"
 import {Noop, NoopRemover, PMap, getValue} from "../core/util"
 import {Graph} from "../graph/graph"
 import {InputEdgeMeta, inputEdge, outputEdge, property} from "../graph/meta"
 import {NodeTypeRegistry, WrappedValue} from "../graph/node"
+import {SubgraphRegistry} from "../graph/util"
 import {Component} from "../entity/entity"
 import {EntityComponentConfig, EntityComponentNode} from "../entity/node"
 import {PointerConfig} from "../input/node"
+import {windowSize} from "../scene2/gl"
 import {AnimationController, AnimationControllerConfig} from "./animation"
 import {HoverMap, loadGLTFAnimationClip} from "./entity"
 
@@ -360,5 +363,32 @@ export function registerScene3Nodes (registry :NodeTypeRegistry) {
     raycaster: RaycasterNode,
     updateVisible: UpdateVisibleNode,
     updateMaterialProperty: UpdateMaterialProperty,
+  })
+}
+
+/** Registers the subgraphs in this module with the supplied registry. */
+export function registerScene3Subgraphs (registry :SubgraphRegistry) {
+  registry.registerSubgraphs(["scene3"], {
+    doubleClickToInspect: {
+      doubleClick: {type: "doubleClick"},
+      hover: {type: "hover", component: "hovers"},
+      inspect: {type: "and", inputs: ["doubleClick", "hover"]},
+      ui: {
+        type: "ui",
+        input: "inspect",
+        root: {
+          type: "root",
+          autoSize: true,
+          hintSize: windowSize(window).map(
+            size => dim2.fromValues(Math.round(size[0] * 0.9), Math.round(size[1] * 0.9)),
+          ),
+          contents: {
+            type: "box",
+            contents: {type: "graphviewer", editable: Value.constant(true)},
+            style: {halign: "stretch", valign: "stretch", background: "$root"},
+          },
+        },
+      },
+    },
   })
 }

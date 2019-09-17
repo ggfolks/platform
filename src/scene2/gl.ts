@@ -1,7 +1,8 @@
+import {refEquals} from "../core/data"
 import {dim2, vec2} from "../core/math"
 import {Scale} from "../core/ui"
 import {Disposable} from "../core/util"
-import {Value, Mutable, Subject} from "../core/react"
+import {Value, Subject} from "../core/react"
 
 //
 // Basic GL machinery: shader programs, render targets, etc.
@@ -344,9 +345,19 @@ export class TextureRenderTarget implements RenderTarget, Disposable {
 
 /** Returns a value with the current size of `window`, which updates when the size changes. */
 export function windowSize (window :Window) :Value<dim2> {
-  const size = Mutable.local(dim2.fromValues(window.innerWidth, window.innerHeight), dim2.eq)
-  window.onresize = _ => size.update(dim2.fromValues(window.innerWidth, window.innerHeight))
-  return size
+  let size = dim2.fromValues(window.innerWidth, window.innerHeight)
+  return Value.deriveValue(
+    refEquals,
+    dispatch => {
+      const listener = () => {
+        const oldSize = size
+        dispatch(size = dim2.fromValues(window.innerWidth, window.innerHeight), oldSize)
+      }
+      window.addEventListener("resize", listener)
+      return () => window.removeEventListener("resize", listener)
+    },
+    () => size,
+  )
 }
 
 /** Configuration for the [[Renderer]]. */
