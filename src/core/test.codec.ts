@@ -1,9 +1,19 @@
+import {Vector3} from "three"
 import {Timestamp} from "../core/util"
 import {uuidv1} from "../core/uuid"
-import {Encoder, Decoder, ValueType, setTextCodec} from "./codec"
+import {Encoder, Decoder, ValueType, setTextCodec, registerCustomCodec} from "./codec"
 
 import {TextEncoder, TextDecoder} from "util"
 setTextCodec(() => new TextEncoder() as any, () => new TextDecoder() as any)
+
+registerCustomCodec<Vector3>(Vector3.prototype, (enc, vec) => {
+  enc.addValue(vec.x, "number")
+  enc.addValue(vec.y, "number")
+  enc.addValue(vec.z, "number")
+}, dec => new Vector3(
+  dec.getValue("number"),
+  dec.getValue("number"),
+  dec.getValue("number")))
 
 test("codec", () => {
   const enc = new Encoder()
@@ -26,7 +36,8 @@ test("codec", () => {
     ["I ♥︎ math.", "string"],
     ["€∞☛✔︎", "string"],
     [uuidv1(), "uuid"],
-    [Timestamp.now(), "timestamp"]
+    [Timestamp.now(), "timestamp"],
+    [{name: "bob", coords: new Vector3(1, 2, 3)}, "record"],
   ]
 
   for (const [v,t] of vts) enc.addValue(v, t)

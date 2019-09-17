@@ -188,12 +188,29 @@ function getValue (dec :Decoder, type :ValueType) :any {
 const dataEncoders :Map<number,DataEncoder<any>> = new Map()
 const dataDecoders :Map<number,DataDecoder<any>> = new Map()
 
-export function registerCodec<T> (encoder :DataEncoder<T>, decoder :DataDecoder<T>) {
+function registerCodec<T> (encoder :DataEncoder<T>, decoder :DataDecoder<T>) :number {
   const id = dataEncoders.size
   dataEncoders.set(id, encoder)
   dataDecoders.set(id, decoder)
+  return id
 }
 
+/** Registers a codec for a custom class. This must be called in the same order on the client and
+  * server during early initialization so that the same numeric id is assigned to the class. This
+  * allows the class to be stored in properties with type `data` or to be included in the POJOs used
+  * in `record` properties.
+  *
+  * (TODO: perhaps negotiate an id the first time an instance is sent?)
+  *
+  * @param proto the prototype for the class (i.e. `Vector3.prototype`).
+  * @param enc an encoder for instances of that class.
+  * @param dec a decoder for instances of that class.
+  */
+export function registerCustomCodec<T> (proto :Object, enc :DataEncoder<T>, dec :DataDecoder<T>) {
+  proto["__typeId"] = registerCodec(enc, dec)
+}
+
+// NOTE: the first 7 codecs must be added in an order that corresponds to dataTypeId below
 registerCodec<void>((e, v) => {}, d => undefined)
 registerCodec<boolean>(addBoolean, getBoolean)
 registerCodec<number>(addFloat64, getFloat64)
@@ -204,7 +221,7 @@ registerCodec<DataMap>(addDataMap, getDataMap)
 registerCodec<Record>(addRecord, getRecord)
 registerCodec<Data>(addData, getData)
 
-function dataTypeId (data :Data) {
+function dataTypeId (data :Data) :number {
   if (data === undefined) return 0
   else if (typeof data === "boolean") return 1
   else if (typeof data === "number") return 2
@@ -212,6 +229,7 @@ function dataTypeId (data :Data) {
   else if (Array.isArray(data)) return 4
   else if (isSet(data)) return 5
   else if (isMap(data)) return 6
+  else if ("__typeId" in data) return data["__typeId"] as number
   else return 7 // record
 }
 
