@@ -33,7 +33,7 @@ export const sessionAuth = Mutable.local<SessionAuth>(initialAuth())
 if (haveLocalStorage) {
   sessionAuth.onValue(auth => {
     if (auth.source === "guest") localStorage.setItem(authKey, JSON.stringify(auth))
-    else localStorage.delete(authKey)
+    else localStorage.removeItem(authKey)
   })
 }
 
