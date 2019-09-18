@@ -173,3 +173,34 @@ test("rmap projectValue", () => {
   map.delete("bob")
   expect(age.current).toBe(undefined)
 })
+
+test("rmap keysValue", () => {
+  const map = MutableMap.local<string,string>()
+  const keyHist :string[][] = []
+  const expectHist :string[][] = []
+  map.keysValue().onValue(iter => keyHist.push(Array.from(iter)))
+  expectHist.push([])
+  expect(keyHist).toStrictEqual(expectHist)
+
+  map.set("a", "")
+  expectHist.push(["a"])
+  expect(keyHist).toStrictEqual(expectHist)
+
+  const remove1 = map.keysValue().onChange((nkeys, okeys) => {
+    expect(Array.from(okeys)).toStrictEqual(["a"])
+    expect(Array.from(nkeys)).toStrictEqual(["a", "b"])
+    remove1()
+  })
+  map.set("b", "")
+  expectHist.push(["a", "b"])
+  expect(keyHist).toStrictEqual(expectHist)
+
+  const remove2 = map.keysValue().onChange((nkeys, okeys) => {
+    expect(Array.from(okeys)).toStrictEqual(["b", "a"]) // removed element is always last
+    expect(Array.from(nkeys)).toStrictEqual(["b"])
+    remove2()
+  })
+  map.delete("a")
+  expectHist.push(["b"])
+  expect(keyHist).toStrictEqual(expectHist)
+})

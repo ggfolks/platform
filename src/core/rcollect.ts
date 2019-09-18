@@ -74,7 +74,7 @@ export abstract class RList<E> extends Source<ReadonlyList<E>> implements Readon
   }
   map<U> (fn :(l:ReadonlyList<E>) => U) :Source<U> {
     return new Subject((lner, want) => {
-      if (want) lner(fn(this))
+      if (want && lner(fn(this)) === Remove) return NoopRemover
       return this.onChange(change => lner(fn(this)))
     })
   }
@@ -214,7 +214,7 @@ export abstract class RSet<E> extends Source<ReadonlySet<E>> implements Readonly
   }
   map<T> (fn :(m:ReadonlySet<E>) => T) :Source<T> {
     return new Subject((lner, want) => {
-      if (want) lner(fn(this.data))
+      if (want && lner(fn(this.data)) === Remove) return NoopRemover
       return this.onChange(_ => lner(fn(this.data)))
     })
   }
@@ -360,17 +360,18 @@ export abstract class RMap<K,V> extends Source<ReadonlyMap<K,V>> implements Read
     })
   }
 
-  /** Returns a reactive view of the keys of this map. The source will immediately contain the
-    * current keys and will emit a change when mappings are added or removed. The source will not
-    * change when an existing mapping is updated (as the keys will not have changed).
+  /** Returns a reactive view of the keys of this map. The value will emit a change when mappings
+    * are added or removed.
     *
     * Reactive views are not provided for [[values]] or [[entries]] because those change every time
     * anything in the map changes. Simply call `map(m => m.values())` for example. */
-  keysSource () :Source<IterableIterator<K>> {
-    return new Subject((lner, want) => {
-      if (want && lner(this.keys()) === Remove) return NoopRemover
-      return this.onChange(c => (c.type === "deleted" || c.prev === undefined) && lner(this.keys()))
-    })
+  keysValue () :Value<IterableIterator<K>> {
+    return Value.deriveValue(keyIteratorsEqual, disp => {
+      return this.onChange(c => {
+        if (c.type === "deleted") disp(this.keys(), iteratorPlus(this.keys(), c.key))
+        else if (c.prev === undefined) disp(this.keys(), iteratorExcept(this.keys(), c.key))
+      })
+    }, () => this.keys())
   }
 
   /** Registers `fn` to be notified of changes to this map.
@@ -388,9 +389,42 @@ export abstract class RMap<K,V> extends Source<ReadonlyMap<K,V>> implements Read
   }
   map<T> (fn :(m:ReadonlyMap<K,V>) => T) :Source<T> {
     return new Subject((lner, want) => {
-      if (want) lner(fn(this.data))
+      if (want && lner(fn(this.data)) === Remove) return NoopRemover
       return this.onChange(_ => lner(fn(this.data)))
     })
+  }
+}
+
+function iteratorExcept<K> (iter :IterableIterator<K>, omit :K) :IterableIterator<K> {
+  return {
+    next: () => {
+      let next = iter.next()
+      if (next.value === omit) next = iter.next()
+      return next
+    },
+    [Symbol.iterator]: () => iteratorExcept(iter[Symbol.iterator](), omit)
+  }
+}
+
+function iteratorPlus<K> (iter :IterableIterator<K>, add :K) :IterableIterator<K> {
+  let added = false
+  return {
+    next: () => {
+      if (added) return {done: true, value: undefined}
+      let next = iter.next()
+      if (!next.done) return next
+      added = true
+      return {value: add}
+    },
+    [Symbol.iterator]: () => iteratorPlus(iter[Symbol.iterator](), add)
+  }
+}
+
+function keyIteratorsEqual<K> (a :IterableIterator<K>, b :IterableIterator<K>) :boolean {
+  while (true) {
+    const anext = a.next(), bnext = b.next()
+    if (anext.done && bnext.done) return true
+    if (anext.value !== bnext.value) return false
   }
 }
 
