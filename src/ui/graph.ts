@@ -1,6 +1,6 @@
 import {dataCopy, dataEquals} from "../core/data"
 import {clamp, dim2, rect, vec2} from "../core/math"
-import {Mutable, Source, Value} from "../core/react"
+import {Mutable, Source, Subject, Value} from "../core/react"
 import {MutableSet} from "../core/rcollect"
 import {PMap, Remover} from "../core/util"
 import {GraphConfig, getConstantOrValueNodeId} from "../graph/graph"
@@ -9,7 +9,7 @@ import {Box} from "./box"
 import {Element, ElementConfig, ElementContext, PointerInteraction, Observer} from "./element"
 import {AbsConstraints, AbsGroup, AxisConfig, VGroup} from "./group"
 import {List} from "./list"
-import {Action, Model, ModelData, ModelKey, ModelProvider, Spec, dataProvider} from "./model"
+import {Action, Model, ModelData, ModelProvider, Spec, dataProvider} from "./model"
 import {InputValue, NodeCopier, NodeCreator, NodeEdit, NodeEditor} from "./node"
 import {ScrollView} from "./scroll"
 import {BackgroundConfig, BorderConfig, NoopDecor, addDecorationBounds} from "./style"
@@ -662,8 +662,8 @@ export class GraphView extends AbsGroup {
     for (let ii = 0; ii < keys.length; ii++) {
       const key = keys[ii]
       const model = models[ii]
-      const inputKeys = model.resolve("inputKeys" as Spec<Value<string[]>>)
-      const inputData = model.resolve("inputData" as Spec<ModelProvider>)
+      const inputKeys = model.resolve<Subject<string[]>>("inputKeys").getCurrentOrDefault([])
+      const inputData = model.resolve<ModelProvider>("inputData")
       const inputs :string[] = []
       const pushInput = (edge :InputEdge<any>) => {
         if (Array.isArray(edge)) {
@@ -678,11 +678,11 @@ export class GraphView extends AbsGroup {
           roots.delete(nodeId)
         }
       }
-      for (const inputKey of inputKeys.current) {
+      for (const inputKey of inputKeys) {
         // remove anything from roots that's used as an input
         const data = inputData.resolve(inputKey)
-        const value = data.resolve("value" as Spec<Value<InputValue>>)
-        const multiple = data.resolve("multiple" as Spec<Value<boolean>>)
+        const value = data.resolve<Value<InputValue>>("value")
+        const multiple = data.resolve<Value<boolean>>("multiple")
         if (multiple.current) {
           if (Array.isArray(value.current)) value.current.forEach(pushInput)
         } else {
@@ -731,10 +731,6 @@ export class NodeView extends VGroup {
       constraints.position = position
       parent.invalidate()
     }))
-    const hasProperties = ctx.model.resolve<Value<ModelKey[]>>("propertyKeys").current.length > 0
-    const hasInputs = ctx.model.resolve<Value<ModelKey[]>>("inputKeys").current.length > 0
-    const hasOutputs = ctx.model.resolve<Value<ModelKey[]>>("outputKeys").current.length > 0
-
     const updateState = () => this._state.update(this.computeState)
     this.disposer.add(this.hovered.onValue(updateState))
     this.disposer.add(getGraphViewer(this).selection.onValue(updateState))
@@ -754,91 +750,103 @@ export class NodeView extends VGroup {
         },
       })
     }
-    if (hasProperties) {
-      bodyContents.push({
-        type: "propertyview",
-        gap: 2,
-        scopeId: "nodeProperties",
-        offPolicy: "stretch",
-        editable: this._editable,
-        keys: "propertyKeys",
-        data: "propertyData",
-      })
-    }
-    if (hasInputs || hasOutputs) {
-      bodyContents.push({
-        type: "row",
-        gap: 5,
-        contents: [
-          {
-            type: "box",
-            scopeId: "nodeEdges",
-            constraints: {stretch: hasInputs},
-            style: {halign: "left"},
-            contents: {
-              type: "list",
-              tags: new Set(["inputs"]),
-              gap: 1,
-              offPolicy: "stretch",
-              element: {
-                type: "row",
-                contents: [
-                  {
-                    type: "terminal",
-                    direction: "input",
-                    value: "style",
-                    editable: this._editable,
-                    contents: {type: "row", contents: []},
-                  },
-                  {
-                    type: "box",
-                    scopeId: "nodeInput",
-                    contents: {type: "label", text: "name"},
-                    style: {halign: "left"},
-                    constraints: {stretch: true},
-                  },
-                ],
-              },
-              data: "inputData",
-              keys: "inputKeys",
+    const propertyKeys = ctx.model.resolve<Subject<string[]>>("propertyKeys")
+    const propertiesVisible = Mutable.local(false)
+    this.disposer.add(propertyKeys.onValue(value => propertiesVisible.update(value.length > 0)))
+    bodyContents.push({
+      type: "propertyview",
+      visible: propertiesVisible,
+      gap: 2,
+      scopeId: "nodeProperties",
+      offPolicy: "stretch",
+      editable: this._editable,
+      keys: "propertyKeys",
+      data: "propertyData",
+    })
+    const inputKeys = ctx.model.resolve<Subject<string[]>>("inputKeys")
+    const inputsVisible = Mutable.local(false)
+    this.disposer.add(inputKeys.onValue(value => inputsVisible.update(value.length > 0)))
+    const outputKeys = ctx.model.resolve<Subject<string[]>>("outputKeys")
+    const outputsVisible = Mutable.local(false)
+    this.disposer.add(outputKeys.onValue(value => outputsVisible.update(value.length > 0)))
+    const terminalsVisible = Value.join(inputsVisible, outputsVisible).map(
+      ([inputs, outputs]) => inputs || outputs,
+    )
+    bodyContents.push({
+      type: "row",
+      visible: terminalsVisible,
+      gap: 5,
+      contents: [
+        {
+          type: "box",
+          visible: inputsVisible,
+          scopeId: "nodeEdges",
+          constraints: {stretch: true},
+          style: {halign: "left"},
+          contents: {
+            type: "list",
+            tags: new Set(["inputs"]),
+            gap: 1,
+            offPolicy: "stretch",
+            element: {
+              type: "row",
+              contents: [
+                {
+                  type: "terminal",
+                  direction: "input",
+                  value: "style",
+                  editable: this._editable,
+                  contents: {type: "row", contents: []},
+                },
+                {
+                  type: "box",
+                  scopeId: "nodeInput",
+                  contents: {type: "label", text: "name"},
+                  style: {halign: "left"},
+                  constraints: {stretch: true},
+                },
+              ],
             },
+            data: "inputData",
+            keys: "inputKeys",
           },
-          {
-            type: "box",
-            scopeId: "nodeEdges",
-            constraints: {stretch: hasOutputs},
-            style: {halign: "right"},
-            contents: {
-              type: "list",
-              tags: new Set(["outputs"]),
-              gap: 1,
-              offPolicy: "stretch",
-              element: {
-                type: "row",
-                contents: [
-                  {
-                    type: "box",
-                    scopeId: "nodeOutput",
-                    contents: {type: "label", text: "name"},
-                    style: {halign: "right"},
-                    constraints: {stretch: true},
-                  },
-                  {
-                    type: "terminal",
-                    direction: "output",
-                    value: "style",
-                    editable: this._editable,
-                    contents: {type: "row", contents: []},
-                  },
-                ],
-              },
-              data: "outputData",
-              keys: "outputKeys",
+        },
+        {
+          type: "box",
+          visible: outputsVisible,
+          scopeId: "nodeEdges",
+          constraints: {stretch: true},
+          style: {halign: "right"},
+          contents: {
+            type: "list",
+            tags: new Set(["outputs"]),
+            gap: 1,
+            offPolicy: "stretch",
+            element: {
+              type: "row",
+              contents: [
+                {
+                  type: "box",
+                  scopeId: "nodeOutput",
+                  contents: {type: "label", text: "name"},
+                  style: {halign: "right"},
+                  constraints: {stretch: true},
+                },
+                {
+                  type: "terminal",
+                  direction: "output",
+                  value: "style",
+                  editable: this._editable,
+                  contents: {type: "row", contents: []},
+                },
+              ],
             },
-          }
-        ],
-      })
-    }
+            data: "outputData",
+            keys: "outputKeys",
+          },
+        }
+      ],
+    })
     const title = ctx.model.resolve<Value<string>>("title")
     this.contents.push(
       ctx.elem.create(ctx, this, {
@@ -983,10 +991,10 @@ const stylesUsed = new Set<Value<string>>()
 export class EdgeView extends Element {
   private _nodeId :Value<string>
   private _editable :Value<boolean>
-  private _inputKeys :Value<string[]>
+  private _inputKeys :string[] = []
   private _defaultOutputKey :Value<string>
   private _inputData :ModelProvider
-  private _inputs :Value<InputValue[]>
+  private _inputs :InputValue[] = []
   private _outputData :ModelProvider
   private _edges :{from :vec2, to :OutputTo[]}[] = []
   private readonly _state = Mutable.local("normal")
@@ -1000,17 +1008,20 @@ export class EdgeView extends Element {
 
   constructor (ctx :ElementContext, parent :Element, readonly config :EdgeViewConfig) {
     super(ctx, parent, config)
-    this._nodeId = ctx.model.resolve("id" as Spec<Value<string>>)
+    this._nodeId = ctx.model.resolve<Value<string>>("id")
     this._editable = ctx.model.resolve(this.config.editable)
-    this._inputKeys = ctx.model.resolve("inputKeys" as Spec<Value<string[]>>)
-    this._defaultOutputKey = ctx.model.resolve("defaultOutputKey" as Spec<Value<string>>)
-    this._inputData = ctx.model.resolve("inputData" as Spec<ModelProvider>)
-    this._outputData = ctx.model.resolve("outputData" as Spec<ModelProvider>)
-    this.invalidateOnChange(this._inputs = this._inputKeys.switchMap(inputKeys => {
-      return Value.join(...inputKeys.map(inputKey => {
-        return this._inputData.resolve(inputKey).resolve("value" as Spec<Value<InputValue>>)
+    const inputKeys = ctx.model.resolve<Subject<string[]>>("inputKeys")
+    this.disposer.add(inputKeys.onValue(value => this._inputKeys = value))
+    this._defaultOutputKey = ctx.model.resolve<Value<string>>("defaultOutputKey")
+    this._inputData = ctx.model.resolve<ModelProvider>("inputData")
+    this._outputData = ctx.model.resolve<ModelProvider>("outputData")
+    const inputs = inputKeys.switchMap(inputKeys => {
+      return Subject.join(...inputKeys.map(inputKey => {
+        return this._inputData.resolve(inputKey).resolve<Value<InputValue>>("value").toSubject()
       }))
-    }))
+    })
+    this.invalidateOnChange(inputs)
+    this.disposer.add(inputs.onValue(value => this._inputs = value))
     this.disposer.add(this.state.onValue(state => {
       const style = this.style
       this._lineWidth.update(style.lineWidth === undefined ? 1 : style.lineWidth)
@@ -1119,17 +1130,15 @@ export class EdgeView extends Element {
     const min = vec2.fromValues(Infinity, Infinity)
     const max = vec2.fromValues(-Infinity, -Infinity)
 
-    const inputKeys = this._inputKeys.current
-    const inputs = this._inputs.current
     const view = this.requireParent as GraphView
     const offset = this._controlPointOffset.current
     nodesUsed.clear()
     nodesUsed.add(node)
     stylesUsed.clear()
-    for (let ii = 0; ii < inputKeys.length; ii++) {
-      const input = inputs[ii]
+    for (let ii = 0; ii < this._inputKeys.length; ii++) {
+      const input = this._inputs[ii]
       if (input === undefined || input === null) continue
-      const inputKey = inputKeys[ii]
+      const inputKey = this._inputKeys[ii]
       const source = inputList.contents[ii]
       const from = vec2.fromValues(source.x - view.x, source.y + source.height / 2 - view.y)
       vec2.set(offsetFrom, from[0] - offset, from[1])

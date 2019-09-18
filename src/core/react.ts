@@ -391,6 +391,13 @@ export class Subject<T> extends Source<T> {
 
   constructor (readonly _connect :(lner :ValueFn<T>, wantValue :boolean) => Remover) { super() }
 
+  /** Retrieves either the subject's current value or, if unavailable, the default provided. */
+  getCurrentOrDefault (defaultValue :T) :T {
+    let current = defaultValue
+    this.once(value => current = value)
+    return current
+  }
+
   /** Registers `fn` to be called only with new values whenever this subject changes, _not_ with the
     * current value.
     * @return a remover thunk (invoke with no args to unregister `fn`). */

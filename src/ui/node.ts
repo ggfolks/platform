@@ -338,15 +338,11 @@ function createGraphModelData (graph :Graph, applyEdit :(edit :NodeEdit) => void
             const subgraph = node as Subgraph
             subgraphElement.subgraph = createGraphModelData(subgraph.containedGraph, applyEdit)
           }
-          const propertyModels :Map<ModelKey, Model> = new Map()
-          const inputModels :Map<ModelKey, Model> = new Map()
-          const outputModels :Map<ModelKey, Model> = new Map()
-
-          function createPropertyValue (key :ModelKey, defaultValue :any = undefined) {
+          function createPropertyValue (key :ModelKey, defaultValue? :Value<any>) {
             const property = node.getProperty(key as string)
             return Mutable.deriveMutable(
               dispatch => property.onChange(dispatch),
-              () => getValue(property.current, defaultValue),
+              () => getValue(property.current, defaultValue && defaultValue.current),
               input => {
                 applyEdit({
                   edit: {
@@ -364,61 +360,35 @@ function createGraphModelData (graph :Graph, applyEdit :(edit :NodeEdit) => void
             title: node.title,
             position: createPropertyValue("position"),
             ...subgraphElement,
-            propertyKeys: Value.constant(Object.keys(node.propertiesMeta)),
-            inputKeys: Value.constant(Object.keys(node.inputsMeta)),
-            outputKeys: Value.constant(Object.keys(node.outputsMeta)),
+            propertyKeys: node.propertiesMeta.keysSource().map(Array.from),
+            inputKeys: node.inputsMeta.keysSource().map(Array.from),
+            outputKeys: node.outputsMeta.keysSource().map(Array.from),
             defaultOutputKey: Value.constant(node.defaultOutputKey),
-            propertyData: {
-              resolve: (key :ModelKey) => {
-                let model = propertyModels.get(key)
-                if (!model) {
-                  const propertiesMeta = node.propertiesMeta[key]
-                  propertyModels.set(key, model = new Model({
-                    name: Value.constant(key),
-                    type: Value.constant(propertiesMeta.type),
-                    constraints: Value.constant(propertiesMeta.constraints),
-                    value: createPropertyValue(key, propertiesMeta.defaultValue),
-                  }))
-                }
-                return model
-              },
-            },
-            inputData: {
-              resolve: (key :ModelKey) => {
-                let model = inputModels.get(key)
-                if (!model) {
-                  const multiple = node.inputsMeta[key].multiple
-                  const input = createPropertyValue(key)
-                  let style :Value<string>
-                  if (multiple) {
-                    style = input.switchMap(input => graph.getValues(input, 0)).map(
-                      values => getValueStyle(values[values.length - 1]),
-                    )
-                  } else {
-                    style = input.switchMap(input => graph.getValue(input, 0)).map(getValueStyle)
-                  }
-                  inputModels.set(key, model = new Model({
-                    name: Value.constant(key),
-                    multiple: Value.constant(multiple),
-                    value: input,
-                    style,
-                  }))
-                }
-                return model
-              },
-            },
-            outputData: {
-              resolve: (key :ModelKey) => {
-                let model = outputModels.get(key)
-                if (!model) {
-                  outputModels.set(key, model = new Model({
-                    name: Value.constant(key),
-                    style: node.getOutput(key as string, undefined).map(getValueStyle),
-                  }))
-                }
-                return model
-              },
-            },
+            propertyData: mapProvider(node.propertiesMeta, (value, key) => ({
+              name: Value.constant(key),
+              type: value.map(value => value.type),
+              constraints: value.map(value => value.constraints),
+              value: createPropertyValue(key, value.map(value => value.defaultValue)),
+            })),
+            inputData: mapProvider(node.inputsMeta, (value, key) => {
+              const multiple = value.map(value => value.multiple)
+              const input = createPropertyValue(key)
+              return {
+                name: Value.constant(key),
+                multiple,
+                value: input,
+                style: Value.join2(multiple, input).switchMap(([multiple, input]) => {
+                  if (!multiple) return graph.getValue(input, 0).map(getValueStyle)
+                  return graph.getValues(input, 0).map(
+                    values => getValueStyle(values[values.length - 1]),
+                  )
+                }),
+              }
+            }),
+            outputData: mapProvider(node.outputsMeta, (value, key) => ({
+              name: Value.constant(key),
+              style: node.getOutput(key as string, undefined).map(getValueStyle),
+            })),
           }))
         }
         return model

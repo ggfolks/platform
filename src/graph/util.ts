@@ -1,9 +1,10 @@
 import {Clock} from "../core/clock"
 import {dataCopy, refEquals} from "../core/data"
 import {ChangeFn, Mutable, Value} from "../core/react"
-import {PMap, log} from "../core/util"
+import {MutableMap} from "../core/rcollect"
+import {log} from "../core/util"
 import {Graph, GraphConfig} from "./graph"
-import {EdgeMeta, InputEdgeMeta, inputEdge, outputEdge, property} from "./meta"
+import {EdgeMeta, InputEdgeMeta, inputEdge, outputEdge, property, setEnumMeta} from "./meta"
 import {CategoryNode, InputEdge, Node, NodeConfig, NodeTypeRegistry} from "./node"
 
 /** Switches to true after a number of seconds have passed. */
@@ -142,8 +143,8 @@ export class Subgraph extends Node {
 
   private _containedOutputs :Map<string, InputEdge<any>> = new Map()
   private _title :Mutable<string>
-  private _inputsMeta :PMap<InputEdgeMeta> = {}
-  private _outputsMeta :PMap<EdgeMeta> = {}
+  private _inputsMeta = MutableMap.local<string, InputEdgeMeta>()
+  private _outputsMeta = MutableMap.local<string, EdgeMeta>()
 
   get title () :Value<string> {
     return this._title
@@ -166,11 +167,11 @@ export class Subgraph extends Node {
     for (const key in config.graph) {
       const value = config.graph[key]
       if (value.type === 'input') {
-        this._inputsMeta[value.name] = {type: "any"} // TODO: infer
+        this._inputsMeta.set(value.name, {type: "any"}) // TODO: infer
 
       } else if (value.type === 'output') {
         this._containedOutputs.set(value.name, value.input)
-        this._outputsMeta[value.name] = {type: "any"} // TODO: infer
+        this._outputsMeta.set(value.name, {type: "any"}) // TODO: infer
       }
     }
     this._disposer.add(this.containedGraph = new Graph(subctx, config.graph))
@@ -242,6 +243,39 @@ export class SubgraphRegistry {
       title: name,
       graph: dataCopy(graphConfig),
     }
+  }
+}
+
+/** The different property types available. */
+export type PropertyType = string
+const propertyTypes = ["number", "boolean", "string"]
+setEnumMeta("PropertyType", propertyTypes)
+
+/** Adds a list of types to the property type enum. */
+export function addPropertyTypes (...types :string[]) {
+  for (const type of types) {
+    if (propertyTypes.indexOf(type) === -1) propertyTypes.push(type)
+  }
+}
+
+/** A property of a subgraph. */
+abstract class PropertyConfig implements NodeConfig {
+  type = "property"
+  @property() name = ""
+  @property("PropertyType") propType = "number"
+  @outputEdge("any") output = undefined
+}
+
+class Property extends Node {
+
+  constructor (graph :Graph, id :string, readonly config :PropertyConfig) {
+    super(graph, id, config)
+  }
+
+  protected _createOutput (name :string, defaultValue :any) {
+    const subgraph = this.graph.ctx.subgraph
+    if (!subgraph) throw new Error("Property node used outside subgraph")
+    return subgraph.getProperty(this.config.name, defaultValue)
   }
 }
 
@@ -368,6 +402,7 @@ export function registerUtilNodes (registry :NodeTypeRegistry) {
     latch: Latch,
     clock: ClockNode,
     subgraph: Subgraph,
+    property: Property,
     input: Input,
     output: Output,
     log: Log,

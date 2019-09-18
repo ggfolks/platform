@@ -5,6 +5,7 @@ import {getValueStyleComponent} from "../core/ui"
 import {Graph} from "../graph/graph"
 import {inputEdge, inputEdges, outputEdge, property, setEnumMeta} from "../graph/meta"
 import {Operator, OperatorConfig, Node, NodeConfig, NodeTypeRegistry} from "../graph/node"
+import {addPropertyTypes} from "../graph/util"
 import {EntityComponentConfig, EntityComponentNode} from "../entity/node"
 import {TransformComponent} from "./entity"
 
@@ -60,6 +61,9 @@ setEnumMeta("CoordinateFrame", ["world", "local"])
 /** The different rotation orders available. */
 export type RotationOrder = "XYZ" | "XZY" | "YXZ" | "YZX" | "ZXY" | "ZYX"
 setEnumMeta("RotationOrder", ["XYZ", "XZY", "YXZ", "YZX", "ZXY", "ZYX"])
+
+// add our property types
+addPropertyTypes("Vector3", "Euler", "Color")
 
 /** Creates a set of Euler angles from individual components. */
 abstract class EulerConfig implements NodeConfig {

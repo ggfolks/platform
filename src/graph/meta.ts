@@ -1,3 +1,4 @@
+import {MutableMap} from "../core/rcollect"
 import {PMap} from "../core/util"
 import {NodeConfig} from "./node"
 
@@ -38,9 +39,9 @@ export interface OutputEdgeMeta extends EdgeMeta {
 
 /** The edge metadata for a node type. */
 export interface NodeMeta {
-  properties :PMap<PropertyMeta>
-  inputs :PMap<InputEdgeMeta>
-  outputs :PMap<OutputEdgeMeta>
+  properties :MutableMap<string, PropertyMeta>
+  inputs :MutableMap<string, InputEdgeMeta>
+  outputs :MutableMap<string, OutputEdgeMeta>
 }
 
 /** Marks the decorated field as a viewable/editable property. */
@@ -52,7 +53,7 @@ export function property (type? :string, constraints? :PropertyConstraints) {
       type = typeof defaultValue
       if (type === "object" && defaultValue !== null) type = defaultValue.constructor.name as string
     }
-    getNodeMeta(instance.type).properties[name] = {type, defaultValue, constraints}
+    getNodeMeta(instance.type).properties.set(name, {type, defaultValue, constraints})
   }
 }
 
@@ -60,7 +61,7 @@ export function property (type? :string, constraints? :PropertyConstraints) {
 export function inputEdge (type :string) {
   return (prototype :NodeConfig, name :string) => {
     let instance = new (prototype as any).constructor()
-    getNodeMeta(instance.type).inputs[name] = {type, multiple: false}
+    getNodeMeta(instance.type).inputs.set(name, {type, multiple: false})
   }
 }
 
@@ -68,7 +69,7 @@ export function inputEdge (type :string) {
 export function inputEdges (type :string) {
   return (prototype :NodeConfig, name :string) => {
     let instance = new (prototype as any).constructor()
-    getNodeMeta(instance.type).inputs[name] = {type, multiple: true}
+    getNodeMeta(instance.type).inputs.set(name, {type, multiple: true})
   }
 }
 
@@ -76,7 +77,7 @@ export function inputEdges (type :string) {
 export function outputEdge (type :string, isDefault :boolean = false) {
   return (prototype :NodeConfig, name :string) => {
     let instance = new (prototype as any).constructor()
-    getNodeMeta(instance.type).outputs[name] = {type, isDefault}
+    getNodeMeta(instance.type).outputs.set(name, {type, isDefault})
   }
 }
 
@@ -85,7 +86,11 @@ const nodeMeta :PMap<NodeMeta> = {}
 /** Returns the metadata for the specified node type. */
 export function getNodeMeta (type :string) :NodeMeta {
   let meta = nodeMeta[type]
-  if (!meta) meta = nodeMeta[type] = {properties: {}, inputs: {}, outputs: {}}
+  if (!meta) meta = nodeMeta[type] = {
+    properties: MutableMap.local(),
+    inputs: MutableMap.local(),
+    outputs: MutableMap.local(),
+  }
   return meta
 }
 

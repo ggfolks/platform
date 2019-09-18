@@ -5,7 +5,8 @@ import {
 
 import {dim2} from "../core/math"
 import {Subject, Value} from "../core/react"
-import {Noop, NoopRemover, PMap, getValue} from "../core/util"
+import {MutableMap} from "../core/rcollect"
+import {Noop, NoopRemover, getValue} from "../core/util"
 import {Graph} from "../graph/graph"
 import {InputEdgeMeta, inputEdge, outputEdge, property} from "../graph/meta"
 import {NodeTypeRegistry, WrappedValue} from "../graph/node"
@@ -159,7 +160,7 @@ abstract class AnimationControllerNodeConfig implements EntityComponentConfig {
 }
 
 class AnimationControllerNode extends EntityComponentNode<Component<AnimationMixer>> {
-  private _inputsMeta :PMap<InputEdgeMeta> = {}
+  private _inputsMeta = MutableMap.local<string, InputEdgeMeta>()
   private _animationController? :AnimationController
   private _output = new WrappedValue(Value.constant("default"), "default")
 
@@ -177,7 +178,7 @@ class AnimationControllerNode extends EntityComponentNode<Component<AnimationMix
         const transition = state.transitions[transitionKey]
         if (transition.condition) {
           const name = transition.condition.substring(transition.condition.indexOf("!") + 1)
-          this._inputsMeta[name] = {type: "boolean"}
+          this._inputsMeta.set(name, {type: "boolean"})
         }
       }
     }
@@ -187,7 +188,7 @@ class AnimationControllerNode extends EntityComponentNode<Component<AnimationMix
     const component = this._component
     if (!component) return
     const conditions = new Map<string, Value<boolean>>()
-    for (const inputKey in this._inputsMeta) {
+    for (const inputKey of this._inputsMeta.keys()) {
       conditions.set(inputKey, this.graph.getValue<boolean>(this.config[inputKey], false))
     }
     this._disposer.add(component.getValue(this._entityId).onValue(mixer => {

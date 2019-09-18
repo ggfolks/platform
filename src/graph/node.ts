@@ -1,7 +1,7 @@
 import {refEquals} from "../core/data"
 import {ChangeFn, Mutable, Value, addListener, dispatchChange} from "../core/react"
 import {MutableMap, RMap} from "../core/rcollect"
-import {Disposable, Disposer, Noop, NoopRemover, PMap, getValue} from "../core/util"
+import {Disposable, Disposer, Noop, NoopRemover, getValue} from "../core/util"
 import {Graph, getConstantOrValueNodeId} from "./graph"
 import {InputEdgeMeta, OutputEdgeMeta, PropertyMeta, getNodeMeta} from "./meta"
 import {Subgraph, SubgraphRegistry} from "./util"
@@ -54,17 +54,17 @@ export abstract class Node implements Disposable {
   }
 
   /** The metadata for the node's viewable/editable properties. */
-  get propertiesMeta () :PMap<PropertyMeta> {
+  get propertiesMeta () :RMap<string, PropertyMeta> {
     return getNodeMeta(this.config.type).properties
   }
 
   /** The metadata for the node's inputs. */
-  get inputsMeta () :PMap<InputEdgeMeta> {
+  get inputsMeta () :RMap<string, InputEdgeMeta> {
     return getNodeMeta(this.config.type).inputs
   }
 
   /** The metadata for the node's outputs. */
-  get outputsMeta () :PMap<OutputEdgeMeta> {
+  get outputsMeta () :RMap<string, OutputEdgeMeta> {
     return getNodeMeta(this.config.type).outputs
   }
 
@@ -72,9 +72,8 @@ export abstract class Node implements Disposable {
   get defaultOutputKey () :string {
     if (this._defaultOutputKey === undefined) {
       this._defaultOutputKey = ""
-      const outputs = this.outputsMeta
-      for (const outputKey in outputs) {
-        if (outputs[outputKey].isDefault) {
+      for (const [outputKey, outputMeta] of this.outputsMeta) {
+        if (outputMeta.isDefault) {
           this._defaultOutputKey = outputKey
           break
         }
@@ -90,7 +89,7 @@ export abstract class Node implements Disposable {
   getProperty<T> (name :string, overrideDefault? :any) :Mutable<T|undefined> {
     let property = this._properties.get(name)
     if (!property) {
-      const meta = this.propertiesMeta[name]
+      const meta = this.propertiesMeta.get(name)
       const defaultValue = getValue(overrideDefault, meta && meta.defaultValue)
       let changeFn :ChangeFn<T|undefined> = Noop
       this._properties.set(name, property = Mutable.deriveMutable(
@@ -167,10 +166,9 @@ export abstract class Node implements Disposable {
   /** Returns a JSON representation of this node. */
   toJSON () :NodeConfig {
     const json = Object.assign({}, this.config)
-    const inputsMeta = this.inputsMeta
-    for (const inputKey in inputsMeta) {
+    for (const [inputKey, inputMeta] of this.inputsMeta) {
       const value = json[inputKey]
-      if (inputsMeta[inputKey].multiple) {
+      if (inputMeta.multiple) {
         if (Array.isArray(value)) {
           json[inputKey] = value.map(inputToJSON)
         }
