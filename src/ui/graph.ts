@@ -991,10 +991,10 @@ const stylesUsed = new Set<Value<string>>()
 export class EdgeView extends Element {
   private _nodeId :Value<string>
   private _editable :Value<boolean>
-  private _inputKeys :string[] = []
+  private _inputKeys :Value<string[]>
   private _defaultOutputKey :Value<string>
   private _inputData :ModelProvider
-  private _inputs :InputValue[] = []
+  private _inputs :Value<InputValue[]>
   private _outputData :ModelProvider
   private _edges :{from :vec2, to :OutputTo[]}[] = []
   private readonly _state = Mutable.local("normal")
@@ -1010,18 +1010,15 @@ export class EdgeView extends Element {
     super(ctx, parent, config)
     this._nodeId = ctx.model.resolve<Value<string>>("id")
     this._editable = ctx.model.resolve(this.config.editable)
-    const inputKeys = ctx.model.resolve<Subject<string[]>>("inputKeys")
-    this.disposer.add(inputKeys.onValue(value => this._inputKeys = value))
+    this._inputKeys = ctx.model.resolve<Value<string[]>>("inputKeys")
     this._defaultOutputKey = ctx.model.resolve<Value<string>>("defaultOutputKey")
     this._inputData = ctx.model.resolve<ModelProvider>("inputData")
     this._outputData = ctx.model.resolve<ModelProvider>("outputData")
-    const inputs = inputKeys.switchMap(inputKeys => {
-      return Subject.join(...inputKeys.map(inputKey => {
-        return this._inputData.resolve(inputKey).resolve<Value<InputValue>>("value").toSubject()
+    this.invalidateOnChange(this._inputs = this._inputKeys.switchMap(inputKeys => {
+      return Value.join(...inputKeys.map(inputKey => {
+        return this._inputData.resolve(inputKey).resolve<Value<InputValue>>("value")
       }))
-    })
-    this.invalidateOnChange(inputs)
-    this.disposer.add(inputs.onValue(value => this._inputs = value))
+    }))
     this.disposer.add(this.state.onValue(state => {
       const style = this.style
       this._lineWidth.update(style.lineWidth === undefined ? 1 : style.lineWidth)
@@ -1135,10 +1132,12 @@ export class EdgeView extends Element {
     nodesUsed.clear()
     nodesUsed.add(node)
     stylesUsed.clear()
-    for (let ii = 0; ii < this._inputKeys.length; ii++) {
-      const input = this._inputs[ii]
+    const inputKeys = this._inputKeys.current
+    const inputs = this._inputs.current
+    for (let ii = 0; ii < inputKeys.length; ii++) {
+      const input = inputs[ii]
       if (input === undefined || input === null) continue
-      const inputKey = this._inputKeys[ii]
+      const inputKey = inputKeys[ii]
       const source = inputList.contents[ii]
       const from = vec2.fromValues(source.x - view.x, source.y + source.height / 2 - view.y)
       vec2.set(offsetFrom, from[0] - offset, from[1])
