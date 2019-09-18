@@ -2,7 +2,7 @@ import {dataCopy, dataEquals} from "../core/data"
 import {clamp, dim2, rect, vec2} from "../core/math"
 import {Mutable, Source, Subject, Value} from "../core/react"
 import {MutableSet} from "../core/rcollect"
-import {PMap, Remover} from "../core/util"
+import {PMap, Remover, getValue} from "../core/util"
 import {GraphConfig, getConstantOrValueNodeId} from "../graph/graph"
 import {InputEdge} from "../graph/node"
 import {Box} from "./box"
@@ -988,6 +988,8 @@ type OutputTo = [EdgeKeys, vec2, Value<string>]
 const nodesUsed = new Set<Element>()
 const stylesUsed = new Set<Value<string>>()
 
+const PICK_EXPANSION = 3
+
 export class EdgeView extends Element {
   private _nodeId :Value<string>
   private _editable :Value<boolean>
@@ -1048,9 +1050,10 @@ export class EdgeView extends Element {
     if (!(rect.contains(this.bounds, pos) && this.visible.current && this._edges.length)) return
     const view = this.requireParent as GraphView
     canvas.translate(view.x, view.y)
-    canvas.lineWidth = this._lineWidth.current
+    const lineWidth = this._lineWidth.current * PICK_EXPANSION
+    canvas.lineWidth = lineWidth
     canvas.globalAlpha = 0
-    const outlineWidth = this._outlineWidth.current
+    const outlineWidth = this._outlineWidth.current * PICK_EXPANSION
     const off = this._controlPointOffset.current
     let hoverKeys :EdgeKeys|undefined
     outerLoop: for (const edge of this._edges) {
@@ -1061,7 +1064,7 @@ export class EdgeView extends Element {
         if (outlineWidth && dataEquals(keys, this._hoverKeys.current)) {
           canvas.lineWidth = outlineWidth
           canvas.stroke()
-          canvas.lineWidth = this._lineWidth.current
+          canvas.lineWidth = lineWidth
         } else {
           canvas.stroke()
         }
@@ -1219,7 +1222,9 @@ export class EdgeView extends Element {
       }
     }
     if (min[0] <= max[0] && min[1] <= max[1]) {
-      const expand = Math.ceil(Math.max(this._lineWidth.current, this._outlineWidth.current) / 2)
+      const expand = Math.ceil(
+        PICK_EXPANSION * Math.max(this._lineWidth.current, this._outlineWidth.current) / 2,
+      )
       dim2.set(into, max[0] - min[0] + expand * 2, max[1] - min[1] + expand * 2)
       this.config.constraints = {position: [min[0] - expand, min[1] - expand]}
     } else {
@@ -1462,7 +1467,8 @@ export class Terminal extends Element {
 
   expandBounds (bounds :rect) :rect {
     const radius = this._radius.current
-    const outlineWidth = this._outlineWidth.current
+    const hoveredOutlineWidth = this.getStyle(this.config.style, "hovered").outlineWidth
+    const outlineWidth = this._outlineWidth.current + getValue(hoveredOutlineWidth, 0) * 2
     const halfOutlineWidth = Math.round(outlineWidth/2)
     const radiusWidth = 2 * radius + outlineWidth
     const halfRadiusWidth = radius + halfOutlineWidth
