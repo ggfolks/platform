@@ -138,8 +138,8 @@ class UINode extends Node {
         canUndo.update(true)
         canRedo.update(false)
       }
-      function getCategoryKeys (category :CategoryNode) :Source<string[]> {
-        return category.children.keysSource().map<string[]>(Array.from)
+      function getCategoryKeys (category :CategoryNode) :Value<string[]> {
+        return category.children.keysValue().map<string[]>(Array.from)
       }
       function getCategoryData (
         category :CategoryNode,
@@ -326,7 +326,7 @@ function createGraphModelData (graph :Graph, applyEdit :(edit :NodeEdit) => void
       graph.fromJSON(json)
       nodeModels.clear() // force update to node data
     }),
-    nodeKeys: graph.nodes.keysSource(),
+    nodeKeys: graph.nodes.keysValue(),
     nodeData: {
       resolve: (key :ModelKey) => {
         let model = nodeModels.get(key)
@@ -360,9 +360,9 @@ function createGraphModelData (graph :Graph, applyEdit :(edit :NodeEdit) => void
             title: node.title,
             position: createPropertyValue("position"),
             ...subgraphElement,
-            propertyKeys: node.propertiesMeta.keysSource().map(Array.from),
-            inputKeys: node.inputsMeta.keysSource().map(Array.from),
-            outputKeys: node.outputsMeta.keysSource().map(Array.from),
+            propertyKeys: node.propertiesMeta.keysValue().map(Array.from),
+            inputKeys: node.inputsMeta.keysValue().map(Array.from),
+            outputKeys: node.outputsMeta.keysValue().map(Array.from),
             defaultOutputKey: Value.constant(node.defaultOutputKey),
             propertyData: mapProvider(node.propertiesMeta, (value, key) => ({
               name: Value.constant(key),

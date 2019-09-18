@@ -662,7 +662,7 @@ export class GraphView extends AbsGroup {
     for (let ii = 0; ii < keys.length; ii++) {
       const key = keys[ii]
       const model = models[ii]
-      const inputKeys = model.resolve<Subject<string[]>>("inputKeys").getCurrentOrDefault([])
+      const inputKeys = model.resolve<Value<string[]>>("inputKeys").current
       const inputData = model.resolve<ModelProvider>("inputData")
       const inputs :string[] = []
       const pushInput = (edge :InputEdge<any>) => {
