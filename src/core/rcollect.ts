@@ -423,7 +423,7 @@ function iteratorPlus<K> (iter :IterableIterator<K>, add :K) :IterableIterator<K
 function keyIteratorsEqual<K> (a :IterableIterator<K>, b :IterableIterator<K>) :boolean {
   while (true) {
     const anext = a.next(), bnext = b.next()
-    if (anext.done && bnext.done) return true
+    if (anext.done || bnext.done) return anext.done == bnext.done
     if (anext.value !== bnext.value) return false
   }
 }
