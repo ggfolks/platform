@@ -2,9 +2,12 @@ import {Clock} from "../core/clock"
 import {dataCopy, refEquals} from "../core/data"
 import {ChangeFn, Mutable, Value} from "../core/react"
 import {MutableMap} from "../core/rcollect"
-import {log} from "../core/util"
+import {PMap, log} from "../core/util"
 import {Graph, GraphConfig} from "./graph"
-import {EdgeMeta, InputEdgeMeta, inputEdge, outputEdge, property, setEnumMeta} from "./meta"
+import {
+  EdgeMeta, InputEdgeMeta, PropertyMeta, inputEdge,
+  outputEdge, property, setEnumMeta,
+} from "./meta"
 import {CategoryNode, InputEdge, Node, NodeConfig, NodeTypeRegistry} from "./node"
 
 /** Switches to true after a number of seconds have passed. */
@@ -141,13 +144,18 @@ abstract class SubgraphConfig implements NodeConfig {
 export class Subgraph extends Node {
   readonly containedGraph :Graph
 
-  private _containedOutputs :Map<string, InputEdge<any>> = new Map()
+  private _containedOutputs :Map<string, Value<InputEdge<any>>> = new Map()
   private _title :Mutable<string>
+  private _propertiesMeta = MutableMap.local<string, PropertyMeta>()
   private _inputsMeta = MutableMap.local<string, InputEdgeMeta>()
   private _outputsMeta = MutableMap.local<string, EdgeMeta>()
 
   get title () :Value<string> {
     return this._title
+  }
+
+  get propertiesMeta () {
+    return this._propertiesMeta
   }
 
   get inputsMeta () {
@@ -164,17 +172,59 @@ export class Subgraph extends Node {
     const subctx = Object.create(graph.ctx)
     subctx.subgraph = this
     this._title = this.getProperty("title", config.type) as Mutable<string>
-    for (const key in config.graph) {
-      const value = config.graph[key]
-      if (value.type === 'input') {
-        this._inputsMeta.set(value.name, {type: "any"}) // TODO: infer
-
-      } else if (value.type === 'output') {
-        this._containedOutputs.set(value.name, value.input)
-        this._outputsMeta.set(value.name, {type: "any"}) // TODO: infer
+    this._disposer.add(this.containedGraph = new Graph(subctx, config.graph))
+    // we don't bother with disposers for the values that we listen to on the contained graph
+    // because the contained graph will never outlive this node
+    const maybeSetMeta = (node :Node) => {
+      let currentName :string|undefined
+      switch (node.config.type) {
+        case "property":
+          Value
+            .join(node.getProperty<string>("name"), node.getProperty<string>("propType"))
+            .onValue(([name, propType]) => {
+              if (currentName !== undefined) this._propertiesMeta.delete(currentName)
+              this._propertiesMeta.set(
+                currentName = name!,
+                {type: propType!, defaultValue: propertyDefaults[propType!]},
+              )
+            })
+          break
+        case "input":
+          node.getProperty<string>("name").onValue(name => {
+            if (currentName !== undefined) this._inputsMeta.delete(currentName)
+            this._inputsMeta.set(currentName = name!, {type: "any"}) // TODO: infer?
+          })
+          break
+        case "output":
+          node.getProperty<string>("name").onValue(name => {
+            if (currentName !== undefined) {
+              this._outputsMeta.delete(currentName)
+              this._containedOutputs.delete(currentName)
+            }
+            this._outputsMeta.set(currentName = name!, {type: "any"}) // TODO: infer?
+            this._containedOutputs.set(currentName, node.getProperty("input"))
+          })
+          break
       }
     }
-    this._disposer.add(this.containedGraph = new Graph(subctx, config.graph))
+    for (const node of this.containedGraph.nodes.values()) maybeSetMeta(node)
+    this.containedGraph.nodes.onChange(change => {
+      if (change.type === "set") {
+        maybeSetMeta(change.value)
+      } else { // change.type === "deleted"
+        let map :MutableMap<string, any>
+        switch (change.prev.config.type) {
+          case "property": map = this._propertiesMeta ; break
+          case "input": map = this._inputsMeta ; break
+          case "output":
+            map = this._outputsMeta
+            this._containedOutputs.delete(change.prev.config.name)
+            break
+          default: return
+        }
+        map.delete(change.prev.config.name)
+      }
+    })
     this._disposer.add(graph.clock.onValue(clock => this.containedGraph.update(clock)))
   }
 
@@ -195,15 +245,15 @@ export class Subgraph extends Node {
   }
 
   protected _createOutput (name :string, defaultValue :any) {
-    let edge :InputEdge<any>
+    let edge :Value<InputEdge<any>>|undefined
     if (name === undefined) {
       if (this._containedOutputs.size !== 1) throw new Error("No default output")
       edge = this._containedOutputs.values().next().value
     } else {
-      if (!this._containedOutputs.has(name)) throw new Error("Unknown output: " + name)
       edge = this._containedOutputs.get(name)
     }
-    return this.containedGraph.getValue(edge, defaultValue)
+    if (edge === undefined) throw new Error("Unknown output: " + name)
+    return edge.switchMap(edge => this.containedGraph.getValue(edge, defaultValue))
   }
 }
 
@@ -248,15 +298,18 @@ export class SubgraphRegistry {
 
 /** The different property types available. */
 export type PropertyType = string
-const propertyTypes = ["number", "boolean", "string"]
+const propertyTypes :string[] = []
+const propertyDefaults :PMap<any> = {}
 setEnumMeta("PropertyType", propertyTypes)
 
-/** Adds a list of types to the property type enum. */
-export function addPropertyTypes (...types :string[]) {
-  for (const type of types) {
+/** Adds a set of types (and their default values) to the property type enum. */
+export function addPropertyTypes (defaults :PMap<any>) {
+  for (const type in defaults) {
     if (propertyTypes.indexOf(type) === -1) propertyTypes.push(type)
+    propertyDefaults[type] = defaults[type]
   }
 }
+addPropertyTypes({number: 0, boolean: false, string: ""})
 
 /** A property of a subgraph. */
 abstract class PropertyConfig implements NodeConfig {

@@ -63,7 +63,7 @@ export type RotationOrder = "XYZ" | "XZY" | "YXZ" | "YZX" | "ZXY" | "ZYX"
 setEnumMeta("RotationOrder", ["XYZ", "XZY", "YXZ", "YZX", "ZXY", "ZYX"])
 
 // add our property types
-addPropertyTypes("Vector3", "Euler", "Color")
+addPropertyTypes({Vector3: new Vector3(), Euler: new Euler(), Color: new Color()})
 
 /** Creates a set of Euler angles from individual components. */
 abstract class EulerConfig implements NodeConfig {
