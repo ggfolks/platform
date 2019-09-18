@@ -1,14 +1,15 @@
-import {PMap, Remover, log} from "../core/util"
+import {PMap, NoopRemover, Remover, log} from "../core/util"
 import {UUID, UUID0, setRandomSource} from "../core/uuid"
 import {Record} from "../core/data"
 import {Mutable, Subject, Value} from "../core/react"
-import {RSet, MutableSet} from "../core/rcollect"
-import {Encoder, Decoder} from "../core/codec"
+import {MutableMap, MutableSet, RMap, RSet} from "../core/rcollect"
+import {Decoder} from "../core/codec"
 import {Auth, AuthValidator, guestValidator} from "../auth/auth"
-import {getPropMetas} from "./meta"
-import {DObject, DObjectType, DState, DQueueAddr, MetaMsg, Path,
-        findObjectType, pathToKey} from "./data"
-import {DownType, DownMsg, UpMsg, UpType, SyncMsg, decodeUp, encodeDown} from "./protocol"
+import {Named, IndexMeta, CollectionMeta, PropMeta,
+        collectionForIndex, getPropMetas, isPersist} from "./meta"
+import {DataSource, DObject, DObjectType, DState, DQueueAddr, MetaMsg, Path, PathMap,
+        findObjectType} from "./data"
+import {DownType, DownMsg, MsgEncoder, MsgDecoder, UpMsg, UpType, SyncMsg} from "./protocol"
 
 import WebSocket from "ws"
 
@@ -24,17 +25,14 @@ interface Subscriber {
   sendSync (msg :SyncMsg) :void
 }
 
-export class Resolved {
+export class Resolved implements DataSource {
   readonly state = Mutable.local<DState>("resolving")
   readonly subscribers :Subscriber[] = []
+  readonly views :ResolvedView[] = []
   readonly object :DObject
 
   constructor (readonly store :DataStore, path :Path, otype :DObjectType<any>) {
-    this.object = new otype({
-      state: store.state,
-      post: (queue, msg) => this.store.post(sysAuth, queue, msg),
-      sendSync: (obj, msg, persist) => this.sendSync(msg, persist)
-    }, path, this.state)
+    this.object = new otype(this, path, this.state)
   }
 
   subscribe (sub :Subscriber) :Subject<DObject|Error> {
@@ -54,27 +52,109 @@ export class Resolved {
     })
   }
 
+  resolvedData () {
+    if (this.state.current === "resolving") {
+      if (DebugLog) log.debug("Object resolved", "obj", this.object)
+      this.state.update("active")
+      this.store.postMeta(this.object, {type: "created"})
+    }
+  }
+
+  post (queue :DQueueAddr, msg :Record) { this.store.post(sysAuth, queue, msg) }
+
+  sendSync (obj :DObject, msg :SyncMsg) {
+    if (DebugLog) log.debug("sendSync", "obj", this.object, "msg", msg)
+    const meta = obj.metas[msg.idx]
+    for (const sub of this.subscribers) if (obj.canRead(meta.name, sub.auth)) sub.sendSync(msg)
+    for (const view of this.views) view.sendSync(obj, msg)
+    if (isPersist(meta)) this.store.persistSync(obj, msg)
+  }
+
+  dispose () {
+    this.state.update("disposed")
+  }
+}
+
+interface ViewSubscriber extends Subscriber {
+  objectAdded (obj :DObject) :void
+  objectDeleted (path :Path) :void
+}
+
+export type Resolver = (o:DObject) => void
+
+export class ResolvedView {
+  readonly state = Mutable.local<DState>("resolving")
+  readonly subscribers :ViewSubscriber[] = []
+  readonly objects = MutableMap.local<UUID, DObject>()
+  readonly cpath :Path
+
+  constructor (readonly store :DataStore, readonly ipath :Path, readonly imeta :Named<IndexMeta>,
+               readonly cmeta :Named<CollectionMeta>) {
+    this.cpath = ipath.slice(0, ipath.length-1).concat(cmeta.name)
+  }
+
+  subscribe (sub :ViewSubscriber) :[RMap<UUID, DObject>, Remover] {
+    // TODO: maybe we want to allow the parent object's canRead to dictate our ability to
+    // subscribe to a view? but that's kinda pointless because you can always subscribe to the
+    // individual objects, so their canSubscribe needs to do the job one way or another
+    this.subscribers.push(sub)
+    return [this.objects, () => {
+      const idx = this.subscribers.indexOf(sub)
+      if (idx >= 0) this.subscribers.splice(idx, 1)
+    }]
+  }
+
+  objectAdded (uuid :UUID, resolver :Resolver) {
+    const path = this.cpath.concat(uuid)
+    const resolved = this.store.resolve(path, resolver)
+    resolved.views.push(this)
+
+    const obj = resolved.object
+    if (obj.state.current !== "active") log.warn(
+      "Non-active object added to view?", "index", this.ipath, "okey", uuid,
+      "state", obj.state.current)
+    else for (const sub of this.subscribers) if (obj.canSubscribe(sub.auth)) sub.objectAdded(obj)
+  }
+
+  objectDeleted (id :UUID) {
+    const obj = this.objects.get(id)
+    if (obj) {
+      this.objects.delete(id)
+      for (const sub of this.subscribers) {
+        if (obj.canSubscribe(sub.auth)) sub.objectDeleted(obj.path)
+      }
+    } else log.warn("Unknown object deleted from view?", "index", this.ipath, "okey", id)
+  }
+
   resolveData () {
     // default implementation doesn't resolve anything
     this.resolvedData()
   }
 
   resolvedData () {
-    if (DebugLog) log.debug("Object resolved", "obj", this.object)
-    this.state.update("active")
-    this.store.postMeta(this.object, {type: "created"})
+    if (this.state.current === "resolving") {
+      if (DebugLog) log.debug("View resolved", "index", this.ipath)
+      this.state.update("active")
+    }
   }
 
-  sendSync (msg :SyncMsg, persist :boolean) {
-    if (DebugLog) log.debug("sendSync", "obj", this.object, "msg", msg)
-    const obj = this.object, name = obj.metas[msg.idx].name
-    for (const sub of this.subscribers) if (obj.canRead(name, sub.auth)) sub.sendSync(msg)
+  sendSync (object :DObject, msg :SyncMsg) {
+    if (DebugLog) log.debug("View.sendSync", "obj", object, "msg", msg)
+    const name = object.metas[msg.idx].name
+    for (const sub of this.subscribers) {
+      if (object.canSubscribe(sub.auth) && object.canRead(name, sub.auth)) sub.sendSync(msg)
+    }
+  }
+
+  dispose () {
+    this.state.update("disposed")
   }
 }
 
-export class DataStore {
-  // TODO: flush and unload objects with no subscribers after some idle timeout
-  private readonly resolved = new Map<string,Resolved>()
+export abstract class DataStore {
+  // TODO: flush and unload objects/views with no subscribers after some idle timeout
+  protected readonly objects = new PathMap<Resolved>()
+  protected readonly views = new PathMap<ResolvedView>()
 
   // the server datastore is always connected (unlike the client) (TODO: is this true, maybe there
   // will be times when the server datastore is also disconnected?)
@@ -82,16 +162,42 @@ export class DataStore {
 
   constructor (readonly rtype :DObjectType<any>) {}
 
-  resolve (path :Path) :Resolved {
-    const key = pathToKey(path), res = this.resolved.get(key)
+  getMetas (path :Path) :PropMeta[]|undefined {
+    const res = this.objects.get(path)
+    return res ? res.object.metas : undefined
+  }
+
+  resolve (path :Path, resolver? :Resolver) :Resolved {
+    const res = this.objects.get(path)
     if (res) return res
 
+    // TODO: check with the parent object that the caller is allowed to create (will need to pass
+    // auth into this method)
     if (DebugLog) log.debug("Creating object", "path", path)
-    // TODO: if we need to create a non-existent object, potentially check with the parent object
-    // that the resolver (will need to pass auth into this method) is allowed to create
-    const nres = this.createResolved(path, findObjectType(this.rtype, path))
-    this.resolved.set(key, nres)
-    nres.resolveData()
+
+    const otype = findObjectType(this.rtype, path)
+    const metas = getPropMetas(otype.prototype)
+    const nres = new Resolved(this, path, otype)
+    this.objects.set(path, nres)
+    if (metas.some(isPersist)) this.resolveData(nres, resolver)
+    else nres.resolvedData()
+    return nres
+  }
+
+  resolveView<O extends DObject> (path :Path) :ResolvedView {
+    const res = this.views.get(path)
+    if (res) return res
+
+    const ppath = path.slice(0, path.length-1), iname = path[path.length-1]
+    const ptype = findObjectType(this.rtype, ppath)
+    const pmetas = getPropMetas(ptype.prototype)
+    const imeta = pmetas.find(m => m.name == iname)
+    if (!imeta) throw new Error(`No index at path '${path}'`)
+    if (imeta.type !== "index") throw new Error(`Non-index property at path '${path}'`)
+    const cmeta = collectionForIndex(pmetas, imeta)
+    const nres = new ResolvedView(this, path, imeta, cmeta)
+    this.resolveViewData(nres)
+    this.views.set(path, nres)
     return nres
   }
 
@@ -111,8 +217,7 @@ export class DataStore {
 
   postMeta (obj :DObject, msg :MetaMsg) {
     if (DebugLog) log.debug("postMeta", "obj", obj, "msg", msg)
-    const metas = getPropMetas(Object.getPrototypeOf(obj))
-    const meta = metas.find(m => m.name === "metaq")
+    const meta = obj.metas.find(m => m.name === "metaq")
     if (!meta) return
     if (meta.type !== "queue") {
       log.warn("Expected 'queue' type for 'metaq' property", "type", meta.type, "obj", obj)
@@ -131,59 +236,74 @@ export class DataStore {
     else log.warn("Write rejected", "auth", auth, "obj", obj, "prop", name)
   }
 
-  protected createResolved (path :Path, otype :DObjectType<any>) :Resolved {
-    return new Resolved(this, path, otype)
+  abstract resolveData (res :Resolved, resolver? :Resolver) :void
+
+  abstract resolveViewData (res :ResolvedView) :void
+
+  abstract persistSync (obj :DObject, msg :SyncMsg) :void
+}
+
+export class MemoryDataStore extends DataStore {
+
+  resolveData (res :Resolved, resolver? :Resolver) { res.resolvedData() }
+  resolveViewData (res :ResolvedView) { res.resolvedData() }
+  persistSync (obj :DObject, msg :SyncMsg) {} // noop!
+}
+
+class ObjectRef {
+  refs = 1 // start reffed
+  constructor (readonly object :DObject) {}
+  ref () { this.refs += 1 }
+  unref () :boolean {
+    this.refs -= 1
+    return this.refs === 0
+  }
+}
+
+class ViewSub implements ViewSubscriber {
+  private readonly unsub :Remover
+
+  constructor (readonly sess :Session, readonly vid :number, res :ResolvedView) {
+    const [omap, unsub] = res.subscribe(this)
+    this.unsub = unsub
+    // send the initial objects in the view
+    const objs = []
+    for (const obj of omap.values()) {
+      sess.addObject(obj)
+      objs.push(obj)
+    }
+    this.sess.sendDown({type: DownType.VADD, vid, objs})
+  }
+
+  get auth () :Auth { return this.sess.auth }
+  sendSync (msg :SyncMsg) { this.sess.sendSync(msg) }
+
+  objectAdded (obj :DObject) {
+    this.sess.addObject(obj)
+    this.sess.sendDown({type: DownType.VADD, vid: this.vid, objs: [obj]})
+  }
+
+  objectDeleted (path :Path) {
+    this.sess.removeObject(path)
+    this.sess.sendDown({type: DownType.VDEL, vid: this.vid, path})
+  }
+
+  dispose () {
+    this.unsub()
   }
 }
 
 export type SessionConfig = {store :DataStore, authers :PMap<AuthValidator>}
 
-class Subscription {
-  readonly object :DObject
-  readonly unsub :Remover
-  readonly pendSync :SyncMsg[] = []
-  active = false
-
-  constructor (readonly sess :Session, readonly oid :number, res :Resolved) {
-    this.object = res.object
-    const rsub = res.subscribe({auth: sess.auth, sendSync: msg => sess.sendDown({...msg, oid})})
-    this.unsub = rsub.onValue(res => {
-      if (res instanceof Error) sess.sendDown({type: DownType.SUBERR, oid, cause: res.message})
-      else {
-        this.active = true
-        sess.sendDown({type: DownType.SUBOBJ, oid, obj: res})
-        sess.store.postMeta(res, {type: "subscribed", id: sess.auth.id})
-        // apply any pending sync messages
-        for (const msg of this.pendSync) this.upSync(msg)
-        this.pendSync.length = 0
-      }
-    })
-  }
-
-  upSync (msg :SyncMsg) {
-    if (this.active) this.sess.store.upSync(this.sess.auth, this.object, msg)
-    else this.pendSync.push(msg)
-  }
-
-  dispose () {
-    this.unsub()
-    if (this.active) this.sess.store.postMeta(
-      this.object, {type: "unsubscribed", id: this.sess.auth.id})
-  }
-}
-
-export abstract class Session {
-  private readonly subscrips = new Map<number, Subscription>()
-  private readonly encoder = new Encoder()
-  private readonly resolver = {
-    get: (oid :number) => {
-      const sub = this.subscrips.get(oid)
-      if (sub) return sub.object
-      else throw new Error(`Unknown object ${oid}`)
-    }
-  }
-  private _auth :Auth|undefined = undefined
+export abstract class Session implements Subscriber {
+  private readonly objects = new PathMap<ObjectRef>()
+  private readonly unsubs = new PathMap<Remover>()
+  private readonly viewsubs = new Map<number, ViewSub>()
+  private readonly encoder = new MsgEncoder()
+  private readonly decoder = new MsgDecoder()
   private readonly authers :PMap<AuthValidator>
+  private _auth :Auth|undefined = undefined
+
   readonly store :DataStore
 
   constructor (config :SessionConfig) {
@@ -199,7 +319,7 @@ export abstract class Session {
   recvMsg (msgData :Uint8Array) {
     let msg :UpMsg
     try {
-      msg = decodeUp(this.resolver, new Decoder(msgData))
+      msg = this.decoder.decodeUp(this.store, new Decoder(msgData))
     } catch (err) {
       log.warn("Failed to decode message", "sess", this, "data", msgData, err)
       return
@@ -211,20 +331,40 @@ export abstract class Session {
     }
   }
 
+  sendSync (msg :SyncMsg) { this.sendDown(msg) }
+
   sendDown (msg :DownMsg) {
     try {
-      encodeDown(this.auth, msg, this.encoder)
+      this.sendMsg(this.encoder.encodeDown(this.auth, msg))
     } catch (err) {
-      this.encoder.reset()
       log.warn("Failed to encode", "sess", this, "msg", msg, err)
       return
     }
-    this.sendMsg(this.encoder.finish())
+  }
+
+  addObject (obj :DObject) {
+    const oref = this.objects.get(obj.path)
+    if (oref) oref.ref()
+    else {
+      this.objects.set(obj.path, new ObjectRef(obj))
+      this.store.postMeta(obj, {type: "subscribed", id: this.auth.id})
+    }
+  }
+
+  removeObject (path :Path) {
+    const oref = this.objects.get(path)
+    if (!oref) log.warn("No ref for removed object?", "sess", this, "path", path)
+    else if (oref.unref()) {
+      this.store.postMeta(oref.object, {type: "unsubscribed", id: this.auth.id})
+      this.objects.delete(path)
+    }
   }
 
   dispose () {
-    for (const sub of this.subscrips.values()) sub.dispose()
-    this.subscrips.clear()
+    this.unsubs.forEach(unsub => unsub())
+    this.unsubs.clear()
+    this.viewsubs.forEach(view => view.dispose())
+    this.viewsubs.clear()
   }
 
   protected handleMsg (msg :UpMsg) {
@@ -242,16 +382,28 @@ export abstract class Session {
         console.dir(this.authers)
       }
       break
+
     case UpType.SUB:
-      const oid = msg.oid
-      this.subscrips.set(oid, new Subscription(this, oid, this.store.resolve(msg.path)))
+      this.subscribe(msg.path)
       break
 
     case UpType.UNSUB:
-      const sub = this.subscrips.get(msg.oid)
-      if (sub) {
-        this.subscrips.delete(msg.oid)
-        sub.dispose()
+      const unsub = this.unsubs.get(msg.path)
+      if (unsub) {
+        this.unsubs.delete(msg.path)
+        unsub()
+      }
+      break
+
+    case UpType.VSUB:
+      const vid = msg.vid
+      this.viewsubs.set(vid, new ViewSub(this, vid, this.store.resolveView(msg.path)))
+      break
+    case UpType.VUNSUB:
+      const vsub = this.viewsubs.get(msg.vid)
+      if (vsub) {
+        this.viewsubs.delete(msg.vid)
+        vsub.dispose()
       }
       break
 
@@ -260,14 +412,42 @@ export abstract class Session {
       break
 
     default:
-      const ssub = this.subscrips.get(msg.oid)
-      if (ssub) ssub.upSync(msg)
+      const ref = this.objects.get(msg.path)
+      if (ref) {
+        const obj = ref.object
+        switch (obj.state.current) {
+        case "resolving":
+          obj.state.whenOnce(s => s === "active", _ => this.store.upSync(this.auth, obj, msg))
+          break
+        case "active":
+          this.store.upSync(this.auth, obj, msg)
+          break
+        default:
+          log.warn("Dropping sync message for inactive object", "sess", this,
+                   "state", obj.state.current, "msg", msg)
+          break
+        }
+      }
       else log.warn("Dropping sync message, no subscription", "sess", this, "msg", msg)
     }
   }
 
   toString () {
     return `${this._auth ? this._auth.id : "<unauthed>"}`
+  }
+
+  protected subscribe (path :Path) {
+    const res = this.store.resolve(path)
+    let unref = NoopRemover
+    const unsub = res.subscribe(this).onValue(res => {
+      if (res instanceof Error) this.sendDown({type: DownType.SERR, path, cause: res.message})
+      else {
+        this.addObject(res)
+        unref = () => this.removeObject(path)
+        this.sendDown({type: DownType.SOBJ, obj: res})
+      }
+    })
+    this.unsubs.set(path, () => { unsub() ; unref() })
   }
 
   protected abstract sendMsg (msg :Uint8Array) :void

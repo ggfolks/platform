@@ -1,10 +1,11 @@
 import {Remover} from "../core/util"
-import {UUID} from "../core/uuid"
+import {UUID, UUID0} from "../core/uuid"
 import {Data, Record, dataEquals, refEquals} from "../core/data"
 import {ChangeFn, Eq, Mutable, Value, ValueFn, addListener, dispatchChange} from "../core/react"
 import {MutableSet, MutableMap} from "../core/rcollect"
 import {Auth} from "../auth/auth"
-import {PropMeta, ValueMeta, SetMeta, MapMeta, getPropMetas} from "./meta"
+import {WhereClause, OrderClause, PropMeta, CollectionMeta, ValueMeta, SetMeta, MapMeta,
+        collectionForIndex, getPropMetas} from "./meta"
 import {SyncMsg, SyncType} from "./protocol"
 
 // re-export Auth to make life easier for modules that define DObjects & DQueues & handlers
@@ -24,10 +25,8 @@ export class DMutable<T> extends Mutable<T> {
       const ov = current
       if (!eq(ov, value)) {
         dispatchChange(listeners, current = value, ov)
-        if (!fromSync) {
-          const {vtype, persist} = meta
-          owner.noteWrite({type: SyncType.VALSET, idx, vtype, value}, persist)
-        }
+        if (!fromSync) owner.noteWrite(
+          {type: SyncType.VALSET, path: owner.path, idx, vtype: meta.vtype, value})
       }
     }
     return new DMutable(eq, lner => addListener(listeners, lner), () => current, update)
@@ -51,10 +50,8 @@ class DMutableSet<E> extends MutableSet<E> {
     this.data.add(elem)
     if (this.data.size !== size) {
       this.notifyAdd(elem)
-      if (!fromSync) {
-        const {etype, persist} = this.meta
-        this.owner.noteWrite({type: SyncType.SETADD, idx: this.idx, elem, etype}, persist)
-      }
+      if (!fromSync) this.owner.noteWrite(
+        {type: SyncType.SETADD, path: this.owner.path, idx: this.idx, elem, etype: this.meta.etype})
     }
     return this
   }
@@ -62,10 +59,8 @@ class DMutableSet<E> extends MutableSet<E> {
   delete (elem :E, fromSync? :boolean) :boolean {
     if (!this.data.delete(elem)) return false
     this.notifyDelete(elem)
-    if (!fromSync) {
-      const {etype, persist} = this.meta
-      this.owner.noteWrite({type: SyncType.SETDEL, idx: this.idx, elem, etype}, persist)
-    }
+    if (!fromSync) this.owner.noteWrite(
+      {type: SyncType.SETDEL, path: this.owner.path, idx: this.idx, elem, etype: this.meta.etype})
     return true
   }
 }
@@ -80,8 +75,8 @@ class DMutableMap<K,V> extends MutableMap<K,V> {
     data.set(key, value)
     this.notifySet(key, value, prev)
     if (!fromSync) {
-      const {owner, idx} = this, {ktype, vtype, persist} = this.meta
-      owner.noteWrite({type: SyncType.MAPSET, idx, key, value, ktype, vtype}, persist)
+      const {owner, idx} = this, {ktype, vtype} = this.meta
+      owner.noteWrite({type: SyncType.MAPSET, path: owner.path, idx, key, value, ktype, vtype})
     }
     return this
   }
@@ -91,8 +86,8 @@ class DMutableMap<K,V> extends MutableMap<K,V> {
     if (!data.delete(key)) return false
     this.notifyDelete(key, prev as V)
     if (!fromSync) {
-      const {owner, idx} = this, {ktype, persist} = this.meta
-      owner.noteWrite({type: SyncType.MAPDEL, idx, key, ktype}, persist)
+      const {owner, idx} = this
+      owner.noteWrite({type: SyncType.MAPDEL, path: owner.path, idx, key, ktype: this.meta.ktype})
     }
     return true
   }
@@ -102,12 +97,94 @@ class DMutableMap<K,V> extends MutableMap<K,V> {
   * property names, odd path elements are object collection keys (UUIDs). */
 export type Path = Array<string | UUID>
 
-/** Converts `path` to a string suitable for use in a map. */
-export const pathToKey = (path :Path) => path.join(":")
+function checkPath (path :Path) :Path {
+  if (path === undefined) throw new Error(`Illegal undefined path`)
+  return path
+}
+
+/** Maintains a mapping from `Path` objects to arbitrary values (of the same type). */
+export class PathMap<T> {
+  private value :T|undefined = undefined
+  private children :{[key :string] :PathMap<T>}|undefined = undefined
+
+  /** Sets the mapping for `path` to `value`. */
+  set (path :Path, value :T) { this._add(checkPath(path), 0, value) }
+
+  /** Looks and returns the mapping for `path`, or `undefined` if no mapping exists. */
+  get (path :Path) :T|undefined { return this._get(checkPath(path), 0) }
+
+  /** Looks up and returns the mapping for `path`, throws an error if no mapping exists. */
+  require (path :Path) :T {
+    const result = this._get(checkPath(path), 0)
+    if (!result) throw new Error(`Missing value for ${path}`)
+    return result
+  }
+
+  /** Deletes the mapping for `path`.
+    * @return the previous value of the mapping. */
+  delete (path :Path) :T|undefined { return this._delete(checkPath(path), 0) }
+
+  /** Removes all mappings from this map. */
+  clear () {
+    this.value = undefined
+    this.children = undefined
+  }
+
+  /** Applies `op` to all values in the map. Note: if `op` mutates the map, no guarantees are made
+    * as to whether `op` is applied or not to added or removed values. */
+  forEach (op :(v:T) => void) {
+    const {value, children} = this
+    if (value) op(value)
+    if (children) for (const key in children) children[key].forEach(op)
+  }
+
+  private _add (path :Path, pos :number, value :T) {
+    if (pos === path.length) this.value = value
+    else {
+      const children = this.children || (this.children = {})
+      const childmap = children[path[pos]] || (children[path[pos]] = new PathMap<T>())
+      childmap._add(path, pos+1, value)
+    }
+  }
+
+  private _get (path :Path, pos :number) :T|undefined {
+    if (pos === path.length) return this.value
+    else if (!this.children) return undefined
+    else {
+      const childmap = this.children[path[pos]]
+      return childmap ? childmap._get(path, pos+1) : undefined
+    }
+  }
+
+  private _delete (path :Path, pos :number) :T|undefined {
+    if (pos === path.length) {
+      const ovalue = this.value
+      this.value = undefined
+      return ovalue
+    }
+    else if (!this.children) return undefined
+    else {
+      const childmap = this.children[path[pos]]
+      return childmap ? childmap._delete(path, pos+1) : undefined
+    }
+  }
+}
+
+/** Defines an index on a collection of objects. */
+export class DIndex<O extends DObject> {
+
+  constructor (readonly owner :DObject, readonly name :string, readonly index :number,
+               readonly collection :CollectionMeta, readonly where :WhereClause[],
+               readonly order :OrderClause[]) {}
+
+  get path () :Path { return this.owner.path.concat(this.name) }
+}
 
 export class DCollection<O extends DObject> {
 
   constructor (readonly owner :DObject, readonly name :string, readonly otype :DObjectType<O>) {}
+
+  get path () :Path { return this.owner.path.concat(this.name) }
 
   pathTo (key :UUID) :Path { return this.owner.path.concat([this.name, key]) }
 }
@@ -150,14 +227,11 @@ export type DState = "resolving" | "failed" | "active" | "disconnected" | "dispo
 
 export interface DataSource {
 
-  /** The connectedness state of this data source. */
-  state :Value<DState>
-
   post (queue :DQueueAddr, msg :Record) :void
   // TODO: optional auth for server entities that want to post to further queues with same creds?
   // TODO: variants that wait for the message to be processed? also return channels?
 
-  sendSync (obj :DObject, msg :SyncMsg, persist :boolean) :void
+  sendSync (obj :DObject, msg :SyncMsg) :void
 }
 
 function metaMismatch (meta :PropMeta, expect :string) :never {
@@ -186,7 +260,7 @@ export abstract class DObject {
     readonly state :Value<DState>) {}
 
   /** This object's key in its owning collection. */
-  get key () { return this.path[this.path.length-1] }
+  get key () :UUID { return this.path.length > 0 ? this.path[this.path.length-1] : UUID0 }
 
   /** This object's disposedness state. */
   get disposed () :Value<boolean> { return this.state.map(ds => ds === "disposed") }
@@ -207,7 +281,7 @@ export abstract class DObject {
     * and `canRead` tests. */
   canCreate (prop :string, auth :Auth) :boolean { return auth.isSystem }
 
-  noteWrite (msg :SyncMsg, persist :boolean) { this.source.sendSync(this, msg, persist) }
+  noteWrite (msg :SyncMsg) { this.source.sendSync(this, msg) }
 
   applySync (msg :SyncMsg, fromSync :boolean) {
     const prop = this[this.metas[msg.idx].name]
@@ -234,22 +308,28 @@ export abstract class DObject {
 
   protected set<E> () :MutableSet<E> {
     const index = this.metaIdx++, meta = this.metas[index]
-    return (meta.type === "set") ? new DMutableSet(this, index, meta) : metaMismatch(meta, "set")
+    return (meta.type !== "set") ? metaMismatch(meta, "set") : new DMutableSet(this, index, meta)
   }
 
   protected map<K,V> () :MutableMap<K,V> {
     const index = this.metaIdx++, meta = this.metas[index]
-    return (meta.type === "map") ? new DMutableMap(this, index, meta) : metaMismatch(meta, "map")
+    return (meta.type !== "map") ? metaMismatch(meta, "map") : new DMutableMap(this, index, meta)
   }
 
   protected collection<O extends DObject> () {
     const index = this.metaIdx++, meta = this.metas[index]
-    return (meta.type === "collection") ? new DCollection<O>(this, meta.name, meta.otype) :
-      metaMismatch(meta, "collection")
+    return (meta.type !== "collection") ? metaMismatch(meta, "collection") : new DCollection<O>(
+      this, meta.name, meta.otype)
+  }
+
+  protected index<O extends DObject> () {
+    const index = this.metaIdx++, meta = this.metas[index]
+    return (meta.type !== "index") ? metaMismatch(meta, "index") : new DIndex<O>(
+      this, meta.name, index, collectionForIndex(this.metas, meta), meta.where, meta.order)
   }
 
   protected queue<M extends Record> () {
     const index = this.metaIdx++, meta = this.metas[index]
-    return (meta.type === "queue") ? new DQueue(this, index) : metaMismatch(meta, "queue")
+    return (meta.type !== "queue") ? metaMismatch(meta, "queue") : new DQueue(this, index)
   }
 }

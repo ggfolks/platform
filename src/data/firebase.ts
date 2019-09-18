@@ -3,6 +3,8 @@ import "firebase/firestore"
 
 type Firestore = firebase.firestore.Firestore
 type DocRef = firebase.firestore.DocumentReference
+type DocSnap = firebase.firestore.DocumentSnapshot
+type ColRef = firebase.firestore.CollectionReference
 type Timestamp = firebase.firestore.Timestamp
 type Blob = firebase.firestore.Blob
 const Timestamp = firebase.firestore.Timestamp
@@ -10,22 +12,33 @@ const FieldValue = firebase.firestore.FieldValue
 const Blob = firebase.firestore.Blob
 
 import {TextEncoder, TextDecoder} from "util"
+import {log} from "../core/util"
 import {Data, Record} from "../core/data"
 import {UUID} from "../core/uuid"
 import {Encoder, Decoder, SyncSet, SyncMap, ValueType, setTextCodec} from "../core/codec"
 import {SyncMsg, SyncType} from "./protocol"
-import {DObjectType, DMutable, Path} from "./data"
-import {isPersist} from "./meta"
-import {DataStore, Resolved} from "./server"
+import {DObject, DMutable, Path} from "./data"
+import {DataStore, Resolved, Resolver, ResolvedView} from "./server"
 
 setTextCodec(() => new TextEncoder() as any, () => new TextDecoder() as any)
 
-function pathToRef (db :Firestore, path :Path) :DocRef {
-  if (path.length < 2 || path.length % 2 != 0) throw new Error(`Can't make ref for ${path}`)
+function pathToDocRef (db :Firestore, path :Path) :DocRef {
+  if (path.length < 2 || path.length % 2 != 0) throw new Error(`Can't make doc ref for ${path}`)
   let ref = db.collection(path[0]).doc(path[1])
   let idx = 2
   while (idx < path.length) {
     ref = ref.collection(path[idx]).doc(path[idx+1])
+    idx += 2
+  }
+  return ref
+}
+
+function pathToColRef (db :Firestore, path :Path) :ColRef {
+  if (path.length < 1 || path.length % 2 != 1) throw new Error(`Can't make col ref for ${path}`)
+  let ref = db.collection(path[0])
+  let idx = 1
+  while (idx < path.length) {
+    ref = ref.doc(path[idx]).collection(path[idx+1])
     idx += 2
   }
   return ref
@@ -116,73 +129,94 @@ function mapFromFirestore<V> (data :any, vtype :ValueType, into :SyncMap<string,
   for (let ii = 0; ii < keys.length; ii += 1) into.set(keys[ii], vals[ii], true)
 }
 
-class FirebaseResolved extends Resolved {
-  readonly ref :DocRef
-
-  constructor (db :Firestore, store :DataStore, path :Path, otype :DObjectType<any>) {
-    super(store, path, otype)
-    this.ref = pathToRef(db, path)
-  }
-
-  resolveData () {
-    const hasPersist = this.object.metas.some(isPersist)
-    if (!hasPersist) this.resolvedData()
-    else {
-      const unsub = this.ref.onSnapshot(snap => {
-        if (snap.exists) {
-          for (const meta of this.object.metas) {
-            const value = snap.get(meta.name)
-            if (value === undefined) continue // TEMP: todo, handle undefined `value` props
-            const prop = this.object[meta.name]
-            switch (meta.type) {
-            case "value": (prop as DMutable<any>).update(
-                valueFromFirestore(value, meta.vtype), true) ; break
-            case "set": setFromFirestore(value, meta.etype, (prop as SyncSet<any>)) ; break
-            case "map": mapFromFirestore(value, meta.vtype, (prop as SyncMap<string,any>)) ; break
-            default: break // nothing to sync for collection & queue props
-            }
-          }
-        } else {
-          this.ref.set({})
-        }
-        // mark the object as resolved once we get the first snapshot
-        if (this.state.current === "resolving") this.resolvedData()
-      })
-      this.state.whenOnce(state => state === "disposed", _ => unsub())
+function applySnap (snap :DocSnap, object :DObject) {
+  for (const meta of object.metas) {
+    const value = snap.get(meta.name)
+    if (value === undefined) continue // TEMP: todo, handle undefined `value` props
+    const prop = object[meta.name]
+    switch (meta.type) {
+    case "value": (prop as DMutable<any>).update(
+        valueFromFirestore(value, meta.vtype), true) ; break
+    case "set": setFromFirestore(value, meta.etype, (prop as SyncSet<any>)) ; break
+    case "map": mapFromFirestore(value, meta.vtype, (prop as SyncMap<string,any>)) ; break
+    default: break // nothing to sync for collection & queue props
     }
   }
+}
 
-  sendSync (sync :SyncMsg, persist :boolean) {
-    super.sendSync(sync, persist)
-    if (!persist) return
-    const meta = this.object.metas[sync.idx]
-    switch (sync.type) {
-    case SyncType.VALSET:
-      this.ref.set({[meta.name]: valueToFirestore(sync.value, sync.vtype)}, {merge: true})
-      break
-    case SyncType.SETADD:
-      const addedValue = valueToFirestore(sync.elem, sync.etype)
-      this.ref.update({[meta.name]: FieldValue.arrayUnion(addedValue)})
-      break
-    case SyncType.SETDEL:
-      const deletedValue = valueToFirestore(sync.elem, sync.etype)
-      this.ref.update({[meta.name]: FieldValue.arrayRemove(deletedValue)})
-      break
-    case SyncType.MAPSET:
-      const setValue = valueToFirestore(sync.value, sync.vtype)
-      this.ref.update({[`${meta.name}.${sync.key}`]: setValue})
-      break
-    case SyncType.MAPDEL:
-      this.ref.update({[`${meta.name}.${sync.key}`]: FieldValue.delete()})
-      break
-    }
+function syncToDoc (object :DObject, sync :SyncMsg, ref :DocRef) {
+  const meta = object.metas[sync.idx]
+  switch (sync.type) {
+  case SyncType.VALSET:
+    ref.set({[meta.name]: valueToFirestore(sync.value, sync.vtype)}, {merge: true})
+    break
+  case SyncType.SETADD:
+    const addedValue = valueToFirestore(sync.elem, sync.etype)
+    ref.update({[meta.name]: FieldValue.arrayUnion(addedValue)})
+    break
+  case SyncType.SETDEL:
+    const deletedValue = valueToFirestore(sync.elem, sync.etype)
+    ref.update({[meta.name]: FieldValue.arrayRemove(deletedValue)})
+    break
+  case SyncType.MAPSET:
+    const setValue = valueToFirestore(sync.value, sync.vtype)
+    ref.update({[`${meta.name}.${sync.key}`]: setValue})
+    break
+  case SyncType.MAPDEL:
+    ref.update({[`${meta.name}.${sync.key}`]: FieldValue.delete()})
+    break
   }
 }
 
 export class FirebaseDataStore extends DataStore {
   readonly db = firebase.firestore()
+  readonly refs = new Map<UUID, DocRef>()
 
-  protected createResolved (path :Path, otype :DObjectType<any>) :Resolved {
-    return new FirebaseResolved(this.db, this, path, otype)
+  resolveData (res :Resolved, resolver? :Resolver) {
+    const ref = pathToDocRef(this.db, res.object.path)
+    if (resolver) {
+      resolver(res.object)
+      res.resolvedData()
+    } else {
+      const unlisten = ref.onSnapshot(snap => {
+        if (snap.exists) applySnap(snap, res.object)
+        else ref.set({})
+        res.resolvedData()
+      })
+      res.object.state.whenOnce(s => s === "disposed", _ => unlisten())
+    }
+    this.refs.set(res.object.key, ref)
+  }
+
+  resolveViewData (res :ResolvedView) {
+    const cref = pathToColRef(this.db, res.cpath)
+    // TODO: refine query based on res.imeta
+    const unlisten = cref.onSnapshot(snap => {
+      for (const change of snap.docChanges()) {
+        const doc = change.doc
+        log.debug("View snap", "type", change.type, "id", doc.id)
+        switch (change.type) {
+        case "added":
+          res.objectAdded(doc.id, obj => applySnap(doc, obj))
+          break
+        case "modified":
+          const ores = this.objects.get(res.cpath.concat(doc.id))
+          if (ores) applySnap(doc, ores.object)
+          else log.warn("Missing object for view update", "vpath", res.ipath, "uuid", doc.id)
+          break
+        case "removed":
+          res.objectDeleted(doc.id)
+          break
+        }
+      }
+      res.resolvedData()
+    })
+    res.state.whenOnce(s => s === "disposed", _ => unlisten())
+  }
+
+  persistSync (obj :DObject, msg :SyncMsg) {
+    const ref = this.refs.get(obj.key)
+    if (ref) syncToDoc(obj, msg, ref)
+    else log.warn("Missing ref for sync persist", "obj", obj)
   }
 }

@@ -2,10 +2,12 @@ import {Disposable, Remover, log} from "../core/util"
 import {UUID, UUID0} from "../core/uuid"
 import {Record} from "../core/data"
 import {Emitter, Mutable, Stream, Subject, Value} from "../core/react"
-import {Encoder, Decoder} from "../core/codec"
+import {RMap, MutableMap} from "../core/rcollect"
+import {Decoder} from "../core/codec"
 import {SessionAuth, sessionAuth} from "../auth/auth"
-import {DataSource, DObject, DObjectType, DState, DQueueAddr, Path, pathToKey} from "./data"
-import {DownMsg, DownType, UpMsg, UpType, encodeUp, decodeDown} from "./protocol"
+import {DataSource, DIndex, DObject, DObjectType, DState, DQueueAddr, Path, PathMap} from "./data"
+import {DownMsg, DownType, SyncMsg, SyncType, UpMsg, UpType,
+        MsgEncoder, MsgDecoder} from "./protocol"
 
 const DebugLog = false
 
@@ -26,7 +28,6 @@ export type Connector = (client :Client, addr :Address) => Connection
 
 export type Resolved<T> = [T, Remover]
 
-type ObjectInfo = {object :DObject, state :Mutable<DState>}
 type Resolver<T> = () => Resolved<T>
 function objectRef<T extends DObject> (object :T, release :Remover) :Resolver<T> {
   let refs = 0
@@ -36,20 +37,40 @@ function objectRef<T extends DObject> (object :T, release :Remover) :Resolver<T>
   }
 }
 
-export class Client implements Disposable {
+type ViewInfo = {
+  otype :DObjectType<DObject>
+  path :Path,
+  state :Mutable<DState>
+  objects :MutableMap<UUID, DObject>
+  dispose :() => void
+}
+
+export class Client implements DataSource, Disposable {
   private readonly conns = new Map<Address, Connection>()
-  private readonly objects = new Map<number,ObjectInfo>()
-  private readonly resolved = new Map<string,Resolver<DObject>>()
-  private readonly encoder = new Encoder()
+  private readonly objects = new PathMap<DObject>()
+  private readonly states = new PathMap<Mutable<DState>>()
+  private readonly views = new Map<number,ViewInfo>()
+  private readonly resolved = new PathMap<Resolver<DObject>>()
+  private readonly encoder = new MsgEncoder()
+  private readonly decoder = new MsgDecoder()
   private readonly _errors = new Emitter<string>()
   private readonly _serverAuth = Mutable.local(UUID0)
-  private nextOid = 1
+  private nextVid = 1
 
   private readonly resolver = {
-    get: (oid :number) => {
-      const obj = this.objects.get(oid)
-      if (obj) return obj.object
-      else throw new Error(`Unknown object [oid=${oid}]`)
+    getMetas: (path :Path) => {
+      const obj = this.objects.get(path)
+      return obj ? obj.metas : undefined
+    },
+    getObject: (path :Path) => this.objects.require(path),
+    makeViewObject: (qid :number, id :UUID) => {
+      const qinfo = this.views.get(qid)
+      if (!qinfo) throw new Error(`Unknown query [qid=${qid}]`)
+      const path = qinfo.path.concat(id)
+      const state = Mutable.local<DState>("resolving")
+      const object = new qinfo.otype(this, path, this.objectState(path, state))
+      this.objects.set(path, object)
+      return object
     }
   }
 
@@ -64,53 +85,66 @@ export class Client implements Disposable {
   get errors () :Stream<string> { return this._errors }
 
   resolve<T extends DObject> (path :Path, otype :DObjectType<T>) :Resolved<T> {
-    const key = pathToKey(path), status = this.resolved.get(key)
-    if (status) return (status as Resolver<T>)()
+    const res = this.resolved.get(path)
+    if (res) return (res as Resolver<T>)()
 
-    const oid = this.nextOid
-    this.nextOid = oid+1
-    const source :DataSource = {
-      state: Value.switch(this.connFor(path).map(c => c.state.map(cstateToDState)).
-                          fold(Value.constant<DState>("resolving"), (os, ns) => ns)),
-      // resolve: (path, otype) => this.resolve(path, otype),
-      post: (queue, msg) => this.post(queue, msg),
-      sendSync: (obj, req) => this.sendUp(obj.path, {...req, oid})
+    const state = Mutable.local<DState>("resolving")
+    const object = new otype(this, path, this.objectState(path, state))
+    const nres = objectRef(object, () => {
+      if (DebugLog) log.debug("Unsubscribing", "path", path)
+      this.sendUp(path, {type: UpType.UNSUB, path})
+      this.resolved.delete(path)
+      this.objects.delete(path)
+      state.update("disposed")
+    })
+    this.resolved.set(path, nres)
+    this.objects.set(path, object)
+    this.states.set(path, state)
+
+    if (DebugLog) log.debug("Subscribing", "path", path)
+    this.sendUp(path, {type: UpType.SUB, path})
+    return nres()
+  }
+
+  // TODO: limit, startKey, etc.
+  resolveView<T extends DObject> (index :DIndex<T>) :Resolved<RMap<UUID,T>> {
+    const path = index.path
+    const state = Mutable.local<DState>("resolving")
+    const objects = MutableMap.local<UUID, DObject>()
+
+    const vid = this.nextVid
+    this.nextVid = vid+1
+
+    const dispose = () => {
+      this.sendUp(path, {type: UpType.VUNSUB, vid})
+      for (const vobj of objects.values()) {
+        const obj = this.objects.get(vobj.path)
+        if (obj) {
+          this.objects.delete(vobj.path)
+          // TODO: transition object state to disposed...
+        }
+      }
+      state.update("disposed")
+      this.views.delete(vid)
     }
 
-    const sstate = source.state, ostate = Mutable.local<DState>("resolving")
-    const state = Value.join2(sstate, ostate).map(([ss, os]) => ss === "disconnected" ? ss : os)
-    const object = new otype(source, path, state)
-    const nstatus = objectRef(object, () => {
-      if (DebugLog) log.debug("Unsubscribing", "path", path, "oid", oid)
-      this.sendUp(path, {type: UpType.UNSUB, oid})
-      this.resolved.delete(key)
-      this.objects.delete(oid)
-      ostate.update("disposed")
-    })
-    this.resolved.set(key, nstatus)
-    this.objects.set(oid, {object, state: ostate})
-
-    if (DebugLog) log.debug("Subscribing", "path", path, "oid", oid)
-    this.sendUp(path, {type: UpType.SUB, path, oid})
-    return nstatus()
+    const vinfo = {otype: index.collection.otype, path, state, objects, dispose}
+    this.views.set(vid, vinfo)
+    if (DebugLog) log.debug("Subscribing to index", "path", path, "vid", vid)
+    this.sendUp(path, {type: UpType.VSUB, path, index: index.index, vid})
+    return [objects as any, dispose]
   }
 
   post (queue :DQueueAddr, msg :Record) {
     this.sendUp(queue.path, {type: UpType.POST, queue, msg})
   }
 
+  sendSync (obj :DObject, req :SyncMsg) {
+    this.sendUp(obj.path, req)
+  }
+
   recvMsg (data :Uint8Array) {
-    let msg :DownMsg
-    try {
-      msg = decodeDown(this.resolver, new Decoder(data))
-    } catch (err) {
-      // if we get a sync message for an unknown object, ignore it; our UNSUB message can cross paths
-      // in flight with sync messages from the server and it would be pointless extra work to keep
-      // receiving and applying syncs until we know that our UNSUB has been received by the server
-      if (!err.message.startsWith("Unknown object")) log.warn(
-        "Failed to decode down msg", "size", data.length, err)
-      return
-    }
+    const msg = this.decoder.decodeDown(this.resolver, new Decoder(data))
     try {
       this.handleDown(msg)
     } catch (err) {
@@ -120,15 +154,59 @@ export class Client implements Disposable {
 
   handleDown (msg :DownMsg) {
     if (DebugLog) log.debug("handleDown", "msg", msg)
-    if (msg.type === DownType.AUTHED) this._serverAuth.update(msg.id)
-    else {
-      const info = this.objects.get(msg.oid)
-      if (!info) this.reportError(log.format("Message for unknown object", "msg", msg))
-      else if (msg.type === DownType.SUBOBJ) info.state.update("active")
-      else if (msg.type === DownType.SUBERR) {
-        info.state.update("failed")
-        this.reportError(log.format("Subscribe failed", "obj", info.object, "cause", msg.cause))
-      } else info.object.applySync(msg, true)
+    switch (msg.type) {
+    case DownType.AUTHED:
+      this._serverAuth.update(msg.id)
+      break
+
+    case DownType.VADD:
+    case DownType.VDEL:
+    case DownType.VERR:
+      const vinfo = this.views.get(msg.vid)
+      if (!vinfo) this.reportError(log.format("Message for unknown view", "msg", msg))
+      else if (msg.type === DownType.VADD) {
+        for (const obj of msg.objs) vinfo.objects.set(obj.key, obj)
+      }
+      else if (msg.type === DownType.VDEL) {
+        const obj = this.objects.get(msg.path)
+        if (obj) {
+          this.objects.delete(msg.path)
+          vinfo.objects.delete(obj.key)
+          // TODO: transition object to disposed?
+        } else {
+          this.reportError(log.format("Missing object for VDEL", "vpath", vinfo.path,
+                                      "opath", msg.path))
+        }
+      }
+      else if (msg.type === DownType.VERR) {
+        vinfo.state.update("failed")
+        this.reportError(log.format("Query failed", "vpath", vinfo.path, "cause", msg.cause))
+      }
+      break
+
+    case DownType.SOBJ:
+      const sstate = this.states.get(msg.obj.path)
+      if (sstate) sstate.update("active")
+      else this.reportError(log.format("Message for unknown object", "msg", msg))
+      break
+
+    case DownType.SERR:
+      const estate = this.states.get(msg.path)
+      if (estate) {
+        estate.update("failed")
+        this.reportError(log.format("Subscribe failed", "obj", this.objects.get(msg.path),
+                                    "cause", msg.cause))
+      } else this.reportError(log.format("Message for unknown object", "msg", msg))
+      break
+
+    case SyncType.DECERR:
+      log.warn("Failed to decode sync message", "err", msg)
+      break
+
+    default:
+      const obj = this.objects.get(msg.path)
+      if (obj) obj.applySync(msg, true)
+      else this.reportError(log.format("Message for unknown object", "msg", msg))
     }
   }
 
@@ -142,6 +220,12 @@ export class Client implements Disposable {
   }
 
   // TODO: when do we dispose connections?
+
+  protected objectState (path :Path, ostate :Value<DState>) :Value<DState> {
+    const sstate = Value.switch(this.connFor(path).map(c => c.state.map(cstateToDState)).
+                                fold(Value.constant<DState>("resolving"), (os, ns) => ns))
+    return Value.join2(sstate, ostate).map(([ss, os]) => ss === "disconnected" ? ss : os)
+  }
 
   protected connFor (path :Path) :Subject<Connection> {
     const {locator, conns, connector} = this
@@ -173,13 +257,8 @@ export class Client implements Disposable {
       log.warn("Can't send message on closed connection", "conn", conn, "msg", msg)
     } else {
       conn.state.whenOnce(st => st === "connected", _ => {
-        try {
-          encodeUp(msg, this.encoder)
-          conn.sendMsg(this.encoder.finish())
-        } catch (err) {
-          this.encoder.reset()
-          log.warn("Failed to encode message", "msg", msg, err)
-        }
+        try { conn.sendMsg(this.encoder.encodeUp(msg)) }
+        catch (err) { log.warn("Failed to encode message", "msg", msg, err) }
       })
     }
   }

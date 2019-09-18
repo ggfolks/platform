@@ -1,13 +1,13 @@
 import {UUID, UUID0, uuidv1} from "../core/uuid"
 import {Disposer, Timestamp, log} from "../core/util"
 import {Mutable, Subject, Value} from "../core/react"
-import {Encoder, Decoder, setTextCodec} from "../core/codec"
+import {Decoder, setTextCodec} from "../core/codec"
 import {guestValidator} from "../auth/auth"
-import {getPropMetas, dobject, dmap, dvalue, dcollection, dqueue} from "./meta"
+import {getPropMetas, dobject, dmap, dvalue, dcollection, dindex, dqueue, orderBy} from "./meta"
 import {Auth, DObject, DState, MetaMsg, Path, findObjectType} from "./data"
-import {addObject, getObject} from "./protocol"
+import {MsgEncoder, MsgDecoder} from "./protocol"
 import {Address, Client, Connection, CState, Resolved} from "./client"
-import {DataStore, Session, SessionConfig} from "./server"
+import {MemoryDataStore, Session, SessionConfig} from "./server"
 
 import {TextEncoder, TextDecoder} from "util"
 setTextCodec(() => new TextEncoder() as any, () => new TextDecoder() as any)
@@ -208,6 +208,9 @@ export class RootObject extends DObject {
   @dcollection(RoomObject)
   rooms = this.collection<RoomObject>()
 
+  @dindex("users", [], [orderBy("lastLogin", "desc")])
+  latestUsers = this.index<UserObject>()
+
   @dqueue(handleChatReq)
   chatq = this.queue<ChatReq>()
 
@@ -258,7 +261,7 @@ test("metas", () => {
   expect(rmetas[0]).toEqual({
     type: "map", name: "publicRooms", index: 0, ktype: "uuid", vtype: "record", persist: false})
   expect(rmetas[1]).toEqual({type: "collection", name: "users", index: 1, otype: UserObject})
-  expect(rmetas[3]).toEqual({type: "queue", name: "chatq", index: 3, handler: handleChatReq})
+  expect(rmetas[4]).toEqual({type: "queue", name: "chatq", index: 4, handler: handleChatReq})
 
   const umetas = getPropMetas(UserObject.prototype)
   expect(umetas[0]).toEqual({
@@ -276,7 +279,7 @@ test("metas", () => {
 const sysauth = {id: UUID0, isGuest: false, isSystem: true}
 
 test("access", () => {
-  const store = new DataStore(RootObject)
+  const store = new MemoryDataStore(RootObject)
   const auth1 = {id: uuidv1(), isGuest: false, isSystem: false}
   const auth2 = {id: uuidv1(), isGuest: false, isSystem: false}
 
@@ -294,7 +297,7 @@ test("access", () => {
 })
 
 test("codec", () => {
-  const store = new DataStore(RootObject), roomId = uuidv1()
+  const store = new MemoryDataStore(RootObject), roomId = uuidv1()
   const res = store.resolve(["rooms", roomId]), room = res.object as RoomObject
 
   const id1 = uuidv1(), id2 = uuidv1()
@@ -308,15 +311,17 @@ test("codec", () => {
   room.messages.set(2, {sender: id2, sent: now-3*60*1000, text: "Hiya Testy."})
   room.messages.set(3, {sender: id1, sent: now-1*60*1000, text: "How's the elves?"})
 
-  const enc = new Encoder()
-  addObject(sysauth, room, enc)
+  const enc = new MsgEncoder()
+  enc.addObject(sysauth, room)
 
-  const msg = enc.finish()
+  const msg = enc.encoder.finish()
   const dec = new Decoder(msg)
+  const mdec = new MsgDecoder()
   const state = Value.constant<DState>("active")
-  const droom = getObject(dec, 0, {
-    get: oid => new RoomObject(
-      {state, post: (queue, msg) => {}, sendSync: (obj, msg) => {}}, ["rooms", roomId], state)
+  const droom = mdec.getObject(dec, [], {
+    getMetas: id => getPropMetas(RoomObject.prototype),
+    getObject: id => new RoomObject(
+      {post: (queue, msg) => {}, sendSync: (obj, msg) => {}}, ["rooms", roomId], state)
   }) as RoomObject
 
   expect(droom.owner.current).toEqual(room.owner.current)
@@ -386,7 +391,7 @@ class TestConnection extends Connection {
 test("subscribe-auth", () => {
   const testAddr = {host: "test", port: 0, path: "/"}
   const testLocator = (path :Path) => Subject.constant(testAddr)
-  const testStore = new DataStore(RootObject)
+  const testStore = new MemoryDataStore(RootObject)
   const sconfig = {store: testStore, authers: {guest: guestValidator}}
 
   const ida = uuidv1(), idb = uuidv1()
@@ -414,7 +419,7 @@ test("subscribe-auth", () => {
 test("subscribe-post", done => {
   const testAddr = {host: "test", port: 0, path: "/"}
   const testLocator = (path :Path) => Subject.constant(testAddr)
-  const testStore = new DataStore(RootObject)
+  const testStore = new MemoryDataStore(RootObject)
   const sconfig = {store: testStore, authers: {guest: guestValidator}}
 
   const ida = uuidv1(), idb = uuidv1()
