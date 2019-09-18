@@ -1,7 +1,7 @@
 import {refEquals} from "../core/data"
 import {dim2, vec2} from "../core/math"
 import {Scale, getValueStyle} from "../core/ui"
-import {Mutable, Source, Value} from "../core/react"
+import {Mutable, Value} from "../core/react"
 import {MutableSet} from "../core/rcollect"
 import {Disposer, PMap, getValue} from "../core/util"
 import {Graph, GraphConfig} from "../graph/graph"

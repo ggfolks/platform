@@ -410,11 +410,14 @@ function iteratorPlus<K> (iter :IterableIterator<K>, add :K) :IterableIterator<K
   let added = false
   return {
     next: () => {
-      if (added) return {done: true, value: undefined}
+      if (added) {
+        const value = undefined as unknown
+        return {done: true, value: value as K}
+      }
       let next = iter.next()
       if (!next.done) return next
       added = true
-      return {value: add}
+      return {done: false, value: add}
     },
     [Symbol.iterator]: () => iteratorPlus(iter[Symbol.iterator](), add)
   }
