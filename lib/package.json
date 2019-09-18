@@ -45,7 +45,7 @@
     "firebase": "^6.6.1",
     "firebase-admin": "^8.5.0",
     "gl-matrix": "^3.0.0",
-    "three": "^0.106.2",
+    "three": "^0.108.0",
     "ws": "^7.1.2"
   },
   "devDependencies": {
