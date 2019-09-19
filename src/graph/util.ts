@@ -235,6 +235,10 @@ export class Subgraph extends Node {
     this._disposer.add(graph.clock.onValue(clock => this.containedGraph.update(clock)))
   }
 
+  reconnect () {
+    // no-op; we handle everything dynamically
+  }
+
   connect () {
     this.containedGraph.connect()
   }
