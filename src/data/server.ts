@@ -341,10 +341,7 @@ export abstract class Session implements Subscriber, ViewSubscriber {
         this.sendDown({type: DownType.AUTHED, id: msg.id})
         log.info("Session authed", "sess", this, "source", msg.source)
       })
-      else {
-        log.warn("Session authed with invalid auth source", "sess", this, "source", msg.source)
-        console.dir(this.authers)
-      }
+      else log.warn("Session authed with invalid auth source", "sess", this, "msg", msg)
       break
 
     case UpType.SUB:

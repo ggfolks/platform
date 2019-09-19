@@ -245,7 +245,6 @@ export class FirebaseDataStore extends DataStore {
         log.debug("View snap", "type", change.type, "path", res.tpath, "id", doc.id)
         switch (change.type) {
         case "added":
-          log.debug("added", "data", doc.data())
           sets.push({key: doc.id, data: recordFromFirestore(doc.data())})
           break
         case "modified":
