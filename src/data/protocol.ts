@@ -18,22 +18,26 @@ type MapDelMsg = {type :SyncType.MAPDEL, path :Path, idx :number, key :any, ktyp
 type DecErrMsg = {type :SyncType.DECERR, otype :SyncType, path :Path, idx :number, cause :string}
 export type SyncMsg = ValSetMsg | SetAddMsg | SetDelMsg | MapSetMsg | MapDelMsg | DecErrMsg
 
-export const enum UpType   { /* SyncType is 0-4 */ AUTH = 5, SUB, UNSUB, VSUB, VUNSUB, POST }
+export const enum UpType   {
+  /* SyncType is 0-4 */ AUTH = 5, SUB, UNSUB, VSUB, VUNSUB, TADD, TSET, TDEL, POST }
 export type UpMsg = {type :UpType.AUTH, source :string, id :UUID, token :string}
                   | {type :UpType.SUB, path :Path}
                   | {type :UpType.UNSUB, path :Path}
-                  | {type :UpType.VSUB, path :Path, index :number, vid :number}
-                  | {type :UpType.VUNSUB, vid :number}
+                  | {type :UpType.VSUB, path :Path}
+                  | {type :UpType.VUNSUB, path :Path}
+                  | {type :UpType.TADD, path :Path, key :UUID, data :Record}
+                  | {type :UpType.TSET, path :Path, key :UUID, data :Record, merge :boolean}
+                  | {type :UpType.TDEL, path :Path, key :UUID}
                   | {type :UpType.POST, queue :DQueueAddr, msg :Record}
                   | SyncMsg
 
-export const enum DownType { /* SyncType is 0-4 */ AUTHED = 5, SOBJ, SERR, VADD, VDEL, VERR }
+export const enum DownType { /* SyncType is 0-4 */ AUTHED = 5, SOBJ, SERR, VSET, VDEL, VERR }
 export type DownMsg = {type :DownType.AUTHED, id :UUID}
                     | {type :DownType.SOBJ, obj :DObject}
                     | {type :DownType.SERR, path :Path, cause :string}
-                    | {type :DownType.VADD, vid :number, objs :DObject[]}
-                    | {type :DownType.VDEL, vid :number, path :Path}
-                    | {type :DownType.VERR, vid :number, cause :string}
+                    | {type :DownType.VSET, path :Path, recs :{key :UUID, data :Record}[]}
+                    | {type :DownType.VDEL, path :Path, key :UUID}
+                    | {type :DownType.VERR, path :Path, cause :string}
                     | SyncMsg
 
 function addPath (path :Path, enc :Encoder) {
@@ -69,23 +73,27 @@ export class MsgEncoder {
         enc.addValue(upm.token, "string")
         break
       case UpType.SUB:
+      case UpType.UNSUB:
+      case UpType.VSUB:
+      case UpType.VUNSUB:
         this.encodePath(upm.path)
         break
-      case UpType.UNSUB:
+      case UpType.TADD:
+      case UpType.TSET:
+      case UpType.TDEL:
         this.encodePath(upm.path)
+        enc.addValue(upm.key, "uuid")
+        if (upm.type !== UpType.TDEL) {
+          enc.addValue(upm.data, "record")
+        }
+        if (upm.type === UpType.TSET) {
+          enc.addValue(upm.merge, "boolean")
+        }
         break
       case UpType.POST:
         this.encodePath(upm.queue.path)
         enc.addValue(upm.queue.index, "size8")
         enc.addValue(upm.msg, "record")
-        break
-      case UpType.VSUB:
-        this.encodePath(upm.path)
-        enc.addValue(upm.index, "size8")
-        enc.addValue(upm.vid, "size32")
-        break
-      case UpType.VUNSUB:
-        enc.addValue(upm.vid, "size32")
         break
       default:
         this.encodeSync(upm)
@@ -115,20 +123,20 @@ export class MsgEncoder {
         this.encodePath(dnm.path)
         enc.addValue(dnm.cause, "string")
         break
-      case DownType.VADD:
-        enc.addValue(dnm.vid, "size32")
-        enc.addValue(dnm.objs.length, "size32")
-        for (const obj of dnm.objs) {
-          this.encodePath(obj.path)
-          this.addObject(rcpt, obj)
+      case DownType.VSET:
+        this.encodePath(dnm.path)
+        enc.addValue(dnm.recs.length, "size32")
+        for (const rec of dnm.recs) {
+          enc.addValue(rec.key, "uuid")
+          enc.addValue(rec.data, "record")
         }
         break
       case DownType.VDEL:
-        enc.addValue(dnm.vid, "size32")
         this.encodePath(dnm.path)
+        enc.addValue(dnm.key, "uuid")
         break
       case DownType.VERR:
-        enc.addValue(dnm.vid, "size32")
+        this.encodePath(dnm.path)
         enc.addValue(dnm.cause, "string")
         break
       default:
@@ -202,9 +210,6 @@ export interface SyncResolver {
 export interface GetResolver extends SyncResolver {
   getObject (path :Path) :DObject
 }
-export interface ViewResolver extends GetResolver {
-  makeViewObject (vid :number, id :UUID) :DObject
-}
 
 export class MsgDecoder {
   private idToPath = new Map<number, Path>()
@@ -214,26 +219,30 @@ export class MsgDecoder {
     if (DebugLog) log.debug("decodeUp", "type", type)
     switch (type) {
     case UpType.AUTH:
-      return {type, source: dec.getValue("string"),
-      id: dec.getValue("uuid"), token: dec.getValue("string")}
+      return {type, source: dec.getValue("string"), id: dec.getValue("uuid"),
+              token: dec.getValue("string")}
     case UpType.SUB:
-      return {type, path: this.decodePath(dec)}
     case UpType.UNSUB:
+    case UpType.VSUB:
+    case UpType.VUNSUB:
       return {type, path: this.decodePath(dec)}
+    case UpType.TADD:
+      return {type, path: this.decodePath(dec), key: dec.getValue("uuid"),
+              data :dec.getValue("record")}
+    case UpType.TSET:
+      return {type, path: this.decodePath(dec), key: dec.getValue("uuid"),
+              data :dec.getValue("record"), merge :dec.getValue("boolean")}
+    case UpType.TDEL:
+      return {type, path: this.decodePath(dec), key: dec.getValue("uuid")}
     case UpType.POST:
       const queue = {path: this.decodePath(dec), index: dec.getValue("size8")}
       return {type, queue, msg: dec.getValue("record")}
-    case UpType.VSUB:
-      return {type, path: this.decodePath(dec), index: dec.getValue("size8"),
-              vid: dec.getValue("size32")}
-    case UpType.VUNSUB:
-      return {type, vid: dec.getValue("size32")}
     default:
       return this.decodeSync(resolver, type, dec)
     }
   }
 
-  decodeDown (resolver :ViewResolver, dec :Decoder) :DownMsg {
+  decodeDown (resolver :GetResolver, dec :Decoder) :DownMsg {
     const type = dec.getValue("int8")
     if (DebugLog) log.debug("decodeDown", "type", type)
     switch (type) {
@@ -243,18 +252,16 @@ export class MsgDecoder {
       return {type, obj: this.getObject(dec, this.decodePath(dec), resolver)}
     case DownType.SERR:
       return {type, path: this.decodePath(dec), cause :dec.getValue("string")}
-    case DownType.VADD:
-      const vid = dec.getValue("size32"), objs = []
+    case DownType.VSET:
+      const path = this.decodePath(dec), recs = []
       for (let ii = 0, ll = dec.getValue("size32"); ii < ll; ii += 1) {
-        const id = dec.getValue("uuid"), obj = resolver.makeViewObject(vid, id)
-        this.getObject(dec, obj.path, resolver)
-        objs.push(obj)
+        recs.push({key: dec.getValue("uuid"), data: dec.getValue("record")})
       }
-      return {type, vid, objs}
+      return {type, path, recs}
     case DownType.VDEL:
-      return {type, vid: dec.getValue("size32"), path: this.decodePath(dec)}
+      return {type, path: this.decodePath(dec), key: dec.getValue("uuid")}
     case DownType.VERR:
-      return {type, vid: dec.getValue("size32"), cause :dec.getValue("string")}
+      return {type, path: this.decodePath(dec), cause :dec.getValue("string")}
     default:
       return this.decodeSync(resolver, type, dec)
     }

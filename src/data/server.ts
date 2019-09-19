@@ -5,8 +5,7 @@ import {Mutable, Subject, Value} from "../core/react"
 import {MutableMap, MutableSet, RMap, RSet} from "../core/rcollect"
 import {Decoder} from "../core/codec"
 import {Auth, AuthValidator, guestValidator} from "../auth/auth"
-import {Named, IndexMeta, CollectionMeta, PropMeta,
-        collectionForIndex, getPropMetas, isPersist} from "./meta"
+import {Named, PropMeta, TableMeta, ViewMeta, tableForView, getPropMetas, isPersist} from "./meta"
 import {DataSource, DObject, DObjectType, DState, DQueueAddr, MetaMsg, Path, PathMap,
         findObjectType} from "./data"
 import {DownType, DownMsg, MsgEncoder, MsgDecoder, UpMsg, UpType, SyncMsg} from "./protocol"
@@ -28,7 +27,6 @@ interface Subscriber {
 export class Resolved implements DataSource {
   readonly state = Mutable.local<DState>("resolving")
   readonly subscribers :Subscriber[] = []
-  readonly views :ResolvedView[] = []
   readonly object :DObject
 
   constructor (readonly store :DataStore, path :Path, otype :DObjectType<any>) {
@@ -66,83 +64,63 @@ export class Resolved implements DataSource {
     if (DebugLog) log.debug("sendSync", "obj", this.object, "msg", msg)
     const meta = obj.metas[msg.idx]
     for (const sub of this.subscribers) if (obj.canRead(meta.name, sub.auth)) sub.sendSync(msg)
-    for (const view of this.views) view.sendSync(obj, msg)
     if (isPersist(meta)) this.store.persistSync(obj, msg)
   }
+
+  createRecord (path :Path, key :UUID, data :Record) { this.store.createRecord(path, key, data) }
+  updateRecord (path :Path, key :UUID, data :Record, merge :boolean) {
+    this.store.updateRecord(path, key, data, merge) }
+  deleteRecord (path :Path, key :UUID) { this.store.deleteRecord(path, key) }
 
   dispose () {
     this.state.update("disposed")
   }
 }
 
-interface ViewSubscriber extends Subscriber {
-  objectAdded (obj :DObject) :void
-  objectDeleted (path :Path) :void
+interface ViewSubscriber {
+  auth :Auth
+  recordSet (tpath :Path, recs :{key :UUID, data :Record}[]) :void
+  recordDelete (tpath :Path, key :UUID) :void
 }
-
-export type Resolver = (o:DObject) => void
 
 export class ResolvedView {
   readonly state = Mutable.local<DState>("resolving")
   readonly subscribers :ViewSubscriber[] = []
-  readonly objects = MutableMap.local<UUID, DObject>()
-  readonly cpath :Path
+  readonly records = MutableMap.local<UUID, Record>()
+  readonly tpath :Path
 
-  constructor (readonly store :DataStore, readonly ipath :Path, readonly imeta :Named<IndexMeta>,
-               readonly cmeta :Named<CollectionMeta>) {
-    this.cpath = ipath.slice(0, ipath.length-1).concat(cmeta.name)
+  constructor (readonly store :DataStore, readonly vpath :Path, readonly vmeta :Named<ViewMeta>,
+               readonly tmeta :Named<TableMeta>) {
+    this.tpath = vpath.slice(0, vpath.length-1).concat(tmeta.name)
   }
 
-  subscribe (sub :ViewSubscriber) :[RMap<UUID, DObject>, Remover] {
+  subscribe (sub :ViewSubscriber) :[RMap<UUID, Record>, Remover] {
     // TODO: maybe we want to allow the parent object's canRead to dictate our ability to
     // subscribe to a view? but that's kinda pointless because you can always subscribe to the
     // individual objects, so their canSubscribe needs to do the job one way or another
     this.subscribers.push(sub)
-    return [this.objects, () => {
+    return [this.records, () => {
       const idx = this.subscribers.indexOf(sub)
       if (idx >= 0) this.subscribers.splice(idx, 1)
     }]
   }
 
-  objectAdded (uuid :UUID, resolver :Resolver) {
-    const path = this.cpath.concat(uuid)
-    const resolved = this.store.resolve(path, resolver)
-    resolved.views.push(this)
-
-    const obj = resolved.object
-    if (obj.state.current !== "active") log.warn(
-      "Non-active object added to view?", "index", this.ipath, "okey", uuid,
-      "state", obj.state.current)
-    else for (const sub of this.subscribers) if (obj.canSubscribe(sub.auth)) sub.objectAdded(obj)
+  recordSet (recs :{key :UUID, data :Record}[]) {
+    for (const rec of recs) this.records.set(rec.key, rec.data)
+    // TODO: what sort of access control do we want?
+    for (const sub of this.subscribers) sub.recordSet(this.vpath, recs)
   }
 
-  objectDeleted (id :UUID) {
-    const obj = this.objects.get(id)
-    if (obj) {
-      this.objects.delete(id)
-      for (const sub of this.subscribers) {
-        if (obj.canSubscribe(sub.auth)) sub.objectDeleted(obj.path)
-      }
-    } else log.warn("Unknown object deleted from view?", "index", this.ipath, "okey", id)
+  recordDelete (key :UUID) {
+    this.records.delete(key)
+    // TODO: what sort of access control do we want?
+    for (const sub of this.subscribers) sub.recordDelete(this.vpath, key)
   }
 
-  resolveData () {
-    // default implementation doesn't resolve anything
-    this.resolvedData()
-  }
-
-  resolvedData () {
+  resolvedRecords () {
     if (this.state.current === "resolving") {
-      if (DebugLog) log.debug("View resolved", "index", this.ipath)
+      if (DebugLog) log.debug("View resolved", "path", this.vpath)
       this.state.update("active")
-    }
-  }
-
-  sendSync (object :DObject, msg :SyncMsg) {
-    if (DebugLog) log.debug("View.sendSync", "obj", object, "msg", msg)
-    const name = object.metas[msg.idx].name
-    for (const sub of this.subscribers) {
-      if (object.canSubscribe(sub.auth) && object.canRead(name, sub.auth)) sub.sendSync(msg)
     }
   }
 
@@ -150,6 +128,8 @@ export class ResolvedView {
     this.state.update("disposed")
   }
 }
+
+export type Resolver = (o:DObject) => void
 
 export abstract class DataStore {
   // TODO: flush and unload objects/views with no subscribers after some idle timeout
@@ -188,14 +168,14 @@ export abstract class DataStore {
     const res = this.views.get(path)
     if (res) return res
 
-    const ppath = path.slice(0, path.length-1), iname = path[path.length-1]
+    const ppath = path.slice(0, path.length-1), vname = path[path.length-1]
     const ptype = findObjectType(this.rtype, ppath)
     const pmetas = getPropMetas(ptype.prototype)
-    const imeta = pmetas.find(m => m.name == iname)
-    if (!imeta) throw new Error(`No index at path '${path}'`)
-    if (imeta.type !== "index") throw new Error(`Non-index property at path '${path}'`)
-    const cmeta = collectionForIndex(pmetas, imeta)
-    const nres = new ResolvedView(this, path, imeta, cmeta)
+    const vmeta = pmetas.find(m => m.name == vname)
+    if (!vmeta) throw new Error(`No view at path '${path}'`)
+    if (vmeta.type !== "view") throw new Error(`Non-view property at path '${path}'`)
+    const tmeta = tableForView(pmetas, vmeta)
+    const nres = new ResolvedView(this, path, vmeta, tmeta)
     this.resolveViewData(nres)
     this.views.set(path, nres)
     return nres
@@ -230,6 +210,16 @@ export abstract class DataStore {
     }
   }
 
+  createRecord (path :Path, key :UUID, data :Record) {
+    // TEMP: nothing by default
+  }
+  updateRecord (path :Path, key :UUID, data :Record, merge :boolean) {
+    // TEMP: nothing by default
+  }
+  deleteRecord (path :Path, key :UUID) {
+    // TEMP: nothing by default
+  }
+
   upSync (auth :Auth, obj :DObject, msg :SyncMsg) {
     const name = obj.metas[msg.idx].name
     if (obj.canRead(name, auth) && obj.canWrite(name, auth)) obj.applySync(msg, false)
@@ -246,7 +236,7 @@ export abstract class DataStore {
 export class MemoryDataStore extends DataStore {
 
   resolveData (res :Resolved, resolver? :Resolver) { res.resolvedData() }
-  resolveViewData (res :ResolvedView) { res.resolvedData() }
+  resolveViewData (res :ResolvedView) { res.resolvedRecords() }
   persistSync (obj :DObject, msg :SyncMsg) {} // noop!
 }
 
@@ -260,45 +250,12 @@ class ObjectRef {
   }
 }
 
-class ViewSub implements ViewSubscriber {
-  private readonly unsub :Remover
-
-  constructor (readonly sess :Session, readonly vid :number, res :ResolvedView) {
-    const [omap, unsub] = res.subscribe(this)
-    this.unsub = unsub
-    // send the initial objects in the view
-    const objs = []
-    for (const obj of omap.values()) {
-      sess.addObject(obj)
-      objs.push(obj)
-    }
-    this.sess.sendDown({type: DownType.VADD, vid, objs})
-  }
-
-  get auth () :Auth { return this.sess.auth }
-  sendSync (msg :SyncMsg) { this.sess.sendSync(msg) }
-
-  objectAdded (obj :DObject) {
-    this.sess.addObject(obj)
-    this.sess.sendDown({type: DownType.VADD, vid: this.vid, objs: [obj]})
-  }
-
-  objectDeleted (path :Path) {
-    this.sess.removeObject(path)
-    this.sess.sendDown({type: DownType.VDEL, vid: this.vid, path})
-  }
-
-  dispose () {
-    this.unsub()
-  }
-}
-
 export type SessionConfig = {store :DataStore, authers :PMap<AuthValidator>}
 
-export abstract class Session implements Subscriber {
+export abstract class Session implements Subscriber, ViewSubscriber {
   private readonly objects = new PathMap<ObjectRef>()
   private readonly unsubs = new PathMap<Remover>()
-  private readonly viewsubs = new Map<number, ViewSub>()
+  private readonly vunsubs = new PathMap<Remover>()
   private readonly encoder = new MsgEncoder()
   private readonly decoder = new MsgDecoder()
   private readonly authers :PMap<AuthValidator>
@@ -342,6 +299,13 @@ export abstract class Session implements Subscriber {
     }
   }
 
+  recordSet (path :Path, recs :{key :UUID, data :Record}[]) {
+    this.sendDown({type: DownType.VSET, path, recs})
+  }
+  recordDelete (path :Path, key :UUID) {
+    this.sendDown({type: DownType.VDEL, path, key})
+  }
+
   addObject (obj :DObject) {
     const oref = this.objects.get(obj.path)
     if (oref) oref.ref()
@@ -363,8 +327,8 @@ export abstract class Session implements Subscriber {
   dispose () {
     this.unsubs.forEach(unsub => unsub())
     this.unsubs.clear()
-    this.viewsubs.forEach(view => view.dispose())
-    this.viewsubs.clear()
+    this.vunsubs.forEach(vunsub => vunsub())
+    this.vunsubs.clear()
   }
 
   protected handleMsg (msg :UpMsg) {
@@ -386,7 +350,6 @@ export abstract class Session implements Subscriber {
     case UpType.SUB:
       this.subscribe(msg.path)
       break
-
     case UpType.UNSUB:
       const unsub = this.unsubs.get(msg.path)
       if (unsub) {
@@ -396,15 +359,20 @@ export abstract class Session implements Subscriber {
       break
 
     case UpType.VSUB:
-      const vid = msg.vid
-      this.viewsubs.set(vid, new ViewSub(this, vid, this.store.resolveView(msg.path)))
+      this.subscribeView(msg.path)
       break
     case UpType.VUNSUB:
-      const vsub = this.viewsubs.get(msg.vid)
-      if (vsub) {
-        this.viewsubs.delete(msg.vid)
-        vsub.dispose()
+      const vunsub = this.vunsubs.get(msg.path)
+      if (vunsub) {
+        this.vunsubs.delete(msg.path)
+        vunsub()
       }
+      break
+
+    case UpType.TADD:
+    case UpType.TSET:
+    case UpType.TDEL:
+      // TODO
       break
 
     case UpType.POST:
@@ -448,6 +416,15 @@ export abstract class Session implements Subscriber {
       }
     })
     this.unsubs.set(path, () => { unsub() ; unref() })
+  }
+
+  protected subscribeView (path :Path) {
+    const res = this.store.resolveView(path)
+    const [rmap, unsub] = res.subscribe(this)
+    this.vunsubs.set(path, unsub)
+    const recs = []
+    for (const [key,data] of rmap.entries()) recs.push({key, data})
+    this.sendDown({type: DownType.VSET, path, recs})
   }
 
   protected abstract sendMsg (msg :Uint8Array) :void

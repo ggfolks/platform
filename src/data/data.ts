@@ -4,8 +4,8 @@ import {Data, Record, dataEquals, refEquals} from "../core/data"
 import {ChangeFn, Eq, Mutable, Value, ValueFn, addListener, dispatchChange} from "../core/react"
 import {MutableSet, MutableMap} from "../core/rcollect"
 import {Auth} from "../auth/auth"
-import {WhereClause, OrderClause, PropMeta, CollectionMeta, ValueMeta, SetMeta, MapMeta,
-        collectionForIndex, getPropMetas} from "./meta"
+import {WhereClause, OrderClause, PropMeta, ValueMeta, SetMeta, MapMeta, CollectionMeta, TableMeta,
+        tableForView, getPropMetas} from "./meta"
 import {SyncMsg, SyncType} from "./protocol"
 
 // re-export Auth to make life easier for modules that define DObjects & DQueues & handlers
@@ -189,6 +189,37 @@ export class DCollection<O extends DObject> {
   pathTo (key :UUID) :Path { return this.owner.path.concat([this.name, key]) }
 }
 
+export class DTable<R extends Record> {
+
+  constructor (readonly owner :DObject, readonly name :string) {}
+
+  get path () :Path { return this.owner.path.concat(this.name) }
+
+  pathTo (key :UUID) :Path { return this.owner.path.concat([this.name, key]) }
+
+  /** Creates a new record in this table with `key` and initial `data`. */
+  create (key :UUID, data :Record) { this.owner.source.createRecord(this.path, key, data) }
+
+  /** Updates the record in this table at `key` with `data`.
+    * @param merge if `true` (the default) `data` may contain only a subset of the record's fields
+    * and they will be merged with the existing record. */
+  update (key :UUID, data :Record, merge = true) {
+    this.owner.source.updateRecord(this.path, key, data, merge) }
+
+  /** Deletes the record at `key` from this table. */
+  delete (key :UUID) { this.owner.source.deleteRecord(this.path, key) }
+}
+
+/** Defines a view of the records of a table. */
+export class DView<R extends Record> {
+
+  constructor (readonly owner :DObject, readonly name :string, readonly index :number,
+               readonly table :TableMeta, readonly where :WhereClause[],
+               readonly order :OrderClause[]) {}
+
+  get path () :Path { return this.owner.path.concat(this.name) }
+}
+
 export type DQueueAddr = { path :Path, index :number }
 
 export class DQueue<M extends Record> {
@@ -227,11 +258,20 @@ export type DState = "resolving" | "failed" | "active" | "disconnected" | "dispo
 
 export interface DataSource {
 
+  /** Posts `msg` to the queue at the address `queue`. */
   post (queue :DQueueAddr, msg :Record) :void
   // TODO: optional auth for server entities that want to post to further queues with same creds?
   // TODO: variants that wait for the message to be processed? also return channels?
 
+  /** Sends a sync request for `obj`. This is only used internally. */
   sendSync (obj :DObject, msg :SyncMsg) :void
+
+  /** Creates record in the table at `path` with key `key` and `data`. */
+  createRecord (path :Path, key :UUID, data :Record) :void
+  /** Updates record with `key` in the table at `path` with `data`. */
+  updateRecord (path :Path, key :UUID, data :Record, merge :boolean) :void
+  /** Deletes record with `key` in the table at `path`. */
+  deleteRecord (path :Path, key :UUID) :void
 }
 
 function metaMismatch (meta :PropMeta, expect :string) :never {
@@ -322,10 +362,15 @@ export abstract class DObject {
       this, meta.name, meta.otype)
   }
 
-  protected index<O extends DObject> () {
+  protected table<R extends Record> () {
     const index = this.metaIdx++, meta = this.metas[index]
-    return (meta.type !== "index") ? metaMismatch(meta, "index") : new DIndex<O>(
-      this, meta.name, index, collectionForIndex(this.metas, meta), meta.where, meta.order)
+    return (meta.type !== "table") ? metaMismatch(meta, "table") : new DTable<R>(this, meta.name)
+  }
+
+  protected view<R extends Record> () {
+    const index = this.metaIdx++, meta = this.metas[index]
+    return (meta.type !== "view") ? metaMismatch(meta, "view") : new DView<R>(
+      this, meta.name, index, tableForView(this.metas, meta), meta.where, meta.order)
   }
 
   protected queue<M extends Record> () {

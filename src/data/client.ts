@@ -5,7 +5,7 @@ import {Emitter, Mutable, Stream, Subject, Value} from "../core/react"
 import {RMap, MutableMap} from "../core/rcollect"
 import {Decoder} from "../core/codec"
 import {SessionAuth, sessionAuth} from "../auth/auth"
-import {DataSource, DIndex, DObject, DObjectType, DState, DQueueAddr, Path, PathMap} from "./data"
+import {DataSource, DView, DObject, DObjectType, DState, DQueueAddr, Path, PathMap} from "./data"
 import {DownMsg, DownType, SyncMsg, SyncType, UpMsg, UpType,
         MsgEncoder, MsgDecoder} from "./protocol"
 
@@ -38,10 +38,9 @@ function objectRef<T extends DObject> (object :T, release :Remover) :Resolver<T>
 }
 
 type ViewInfo = {
-  otype :DObjectType<DObject>
   path :Path,
   state :Mutable<DState>
-  objects :MutableMap<UUID, DObject>
+  records :MutableMap<UUID, Record>
   dispose :() => void
 }
 
@@ -49,11 +48,10 @@ export class Client implements DataSource, Disposable {
   private readonly conns = new Map<Address, Connection>()
   private readonly objects = new PathMap<DObject>()
   private readonly states = new PathMap<Mutable<DState>>()
-  private readonly views = new Map<number,ViewInfo>()
+  private readonly views = new PathMap<ViewInfo>()
   private readonly resolved = new PathMap<Resolver<DObject>>()
   private readonly _errors = new Emitter<string>()
   private readonly _serverAuth = Mutable.local(UUID0)
-  private nextVid = 1
 
   readonly resolver = {
     getMetas: (path :Path) => {
@@ -61,15 +59,6 @@ export class Client implements DataSource, Disposable {
       return obj ? obj.metas : undefined
     },
     getObject: (path :Path) => this.objects.require(path),
-    makeViewObject: (qid :number, id :UUID) => {
-      const qinfo = this.views.get(qid)
-      if (!qinfo) throw new Error(`Unknown query [qid=${qid}]`)
-      const path = qinfo.path.concat(id)
-      const state = Mutable.local<DState>("resolving")
-      const object = new qinfo.otype(this, path, this.objectState(path, state))
-      this.objects.set(path, object)
-      return object
-    }
   }
 
   constructor (readonly locator :Locator,
@@ -86,6 +75,7 @@ export class Client implements DataSource, Disposable {
     const res = this.resolved.get(path)
     if (res) return (res as Resolver<T>)()
 
+    if (DebugLog) log.debug("Resolving", "path", path, "otype", otype)
     const state = Mutable.local<DState>("resolving")
     const object = new otype(this, path, this.objectState(path, state))
     const nres = objectRef(object, () => {
@@ -99,38 +89,37 @@ export class Client implements DataSource, Disposable {
     this.objects.set(path, object)
     this.states.set(path, state)
 
-    if (DebugLog) log.debug("Subscribing", "path", path)
     this.sendUp(path, {type: UpType.SUB, path})
     return nres()
   }
 
   // TODO: limit, startKey, etc.
-  resolveView<T extends DObject> (index :DIndex<T>) :Resolved<RMap<UUID,T>> {
-    const path = index.path
+  resolveView<T extends Record> (view :DView<T>) :Resolved<RMap<UUID,T>> {
+    const path = view.path
     const state = Mutable.local<DState>("resolving")
-    const objects = MutableMap.local<UUID, DObject>()
-
-    const vid = this.nextVid
-    this.nextVid = vid+1
+    const records = MutableMap.local<UUID, Record>()
 
     const dispose = () => {
-      this.sendUp(path, {type: UpType.VUNSUB, vid})
-      for (const vobj of objects.values()) {
-        const obj = this.objects.get(vobj.path)
-        if (obj) {
-          this.objects.delete(vobj.path)
-          // TODO: transition object state to disposed...
-        }
-      }
+      this.sendUp(path, {type: UpType.VUNSUB, path})
       state.update("disposed")
-      this.views.delete(vid)
+      this.views.delete(path)
     }
 
-    const vinfo = {otype: index.collection.otype, path, state, objects, dispose}
-    this.views.set(vid, vinfo)
-    if (DebugLog) log.debug("Subscribing to index", "path", path, "vid", vid)
-    this.sendUp(path, {type: UpType.VSUB, path, index: index.index, vid})
-    return [objects as any, dispose]
+    const vinfo = {path, state, records, dispose}
+    this.views.set(path, vinfo)
+    if (DebugLog) log.debug("Subscribing to view", "path", path)
+    this.sendUp(path, {type: UpType.VSUB, path})
+    return [records as any, dispose] // coerce Record => T
+  }
+
+  createRecord (path :Path, key :UUID, data :Record) {
+    this.sendUp(path, {type: UpType.TADD, path, key, data})
+  }
+  updateRecord (path :Path, key :UUID, data :Record, merge :boolean) {
+    this.sendUp(path, {type: UpType.TSET, path, key, data, merge})
+  }
+  deleteRecord (path :Path, key :UUID) {
+    this.sendUp(path, {type: UpType.TDEL, path, key})
   }
 
   post (queue :DQueueAddr, msg :Record) {
@@ -142,60 +131,49 @@ export class Client implements DataSource, Disposable {
   }
 
   handleDown (msg :DownMsg) {
-    if (DebugLog) log.debug("handleDown", "msg", msg)
-    switch (msg.type) {
-    case DownType.AUTHED:
-      this._serverAuth.update(msg.id)
-      break
+    try {
+      if (DebugLog) log.debug("handleDown", "msg", msg)
+      switch (msg.type) {
+      case DownType.AUTHED:
+        this._serverAuth.update(msg.id)
+        break
 
-    case DownType.VADD:
-    case DownType.VDEL:
-    case DownType.VERR:
-      const vinfo = this.views.get(msg.vid)
-      if (!vinfo) this.reportError(log.format("Message for unknown view", "msg", msg))
-      else if (msg.type === DownType.VADD) {
-        for (const obj of msg.objs) vinfo.objects.set(obj.key, obj)
-      }
-      else if (msg.type === DownType.VDEL) {
-        const obj = this.objects.get(msg.path)
-        if (obj) {
-          this.objects.delete(msg.path)
-          vinfo.objects.delete(obj.key)
-          // TODO: transition object to disposed?
-        } else {
-          this.reportError(log.format("Missing object for VDEL", "vpath", vinfo.path,
-                                      "opath", msg.path))
-        }
-      }
-      else if (msg.type === DownType.VERR) {
-        vinfo.state.update("failed")
-        this.reportError(log.format("Query failed", "vpath", vinfo.path, "cause", msg.cause))
-      }
-      break
+      case DownType.VSET:
+        const svinfo = this.views.require(msg.path)
+        for (const rec of msg.recs) svinfo.records.set(rec.key, rec.data)
+        break
+      case DownType.VDEL:
+        const dvinfo = this.views.require(msg.path)
+        dvinfo.records.delete(msg.key)
+        break
+      case DownType.VERR:
+        const evinfo = this.views.require(msg.path)
+        evinfo.state.update("failed")
+        this.reportError(log.format("Query failed", "vpath", evinfo.path, "cause", msg.cause))
+        break
 
-    case DownType.SOBJ:
-      const sstate = this.states.get(msg.obj.path)
-      if (sstate) sstate.update("active")
-      else this.reportError(log.format("Message for unknown object", "msg", msg))
-      break
-
-    case DownType.SERR:
-      const estate = this.states.get(msg.path)
-      if (estate) {
+      case DownType.SOBJ:
+        const sstate = this.states.require(msg.obj.path)
+        sstate.update("active")
+        break
+      case DownType.SERR:
+        const estate = this.states.require(msg.path)
         estate.update("failed")
         this.reportError(log.format("Subscribe failed", "obj", this.objects.get(msg.path),
                                     "cause", msg.cause))
-      } else this.reportError(log.format("Message for unknown object", "msg", msg))
-      break
+        break
 
-    case SyncType.DECERR:
-      log.warn("Failed to decode sync message", "err", msg)
-      break
+      case SyncType.DECERR:
+        log.warn("Failed to decode sync message", "err", msg)
+        break
 
-    default:
-      const obj = this.objects.get(msg.path)
-      if (obj) obj.applySync(msg, true)
-      else this.reportError(log.format("Message for unknown object", "msg", msg))
+      default:
+        const obj = this.objects.require(msg.path)
+        obj.applySync(msg, true)
+      }
+
+    } catch (error) {
+      log.warn("Failed to handle down msg", "msg", msg, error)
     }
   }
 
@@ -298,9 +276,13 @@ class WSConnection extends Connection {
 
   constructor (client :Client, addr :Address) {
     super(client)
+    if (DebugLog) log.debug("Connecting", "addr", addr)
     const ws = this.ws = new WebSocket(addrToURL(addr))
     ws.binaryType = "arraybuffer"
-    ws.addEventListener("open", ev => this.state.update("connected"))
+    ws.addEventListener("open", ev => {
+      this.state.update("connected")
+      if (DebugLog) log.debug("Connected", "addr", addr)
+    })
     ws.addEventListener("message", ev => this.recvMsg(new Uint8Array(ev.data)))
     ws.addEventListener("error", ev => {
       client.reportError(log.format("WebSocket error", "url", ws.url, "ev", ev))

@@ -4,15 +4,16 @@ import "firebase/firestore"
 type Firestore = firebase.firestore.Firestore
 type DocRef = firebase.firestore.DocumentReference
 type DocSnap = firebase.firestore.DocumentSnapshot
+type DocData = firebase.firestore.DocumentData
 type ColRef = firebase.firestore.CollectionReference
-type Timestamp = firebase.firestore.Timestamp
+type FTimestamp = firebase.firestore.Timestamp
 type Blob = firebase.firestore.Blob
-const Timestamp = firebase.firestore.Timestamp
+const FTimestamp = firebase.firestore.Timestamp
 const FieldValue = firebase.firestore.FieldValue
 const Blob = firebase.firestore.Blob
 
 import {TextEncoder, TextDecoder} from "util"
-import {log} from "../core/util"
+import {Timestamp, log} from "../core/util"
 import {Data, Record} from "../core/data"
 import {UUID} from "../core/uuid"
 import {Encoder, Decoder, SyncSet, SyncMap, ValueType, setTextCodec} from "../core/codec"
@@ -46,22 +47,22 @@ function pathToColRef (db :Firestore, path :Path) :ColRef {
 
 const encoder = new Encoder()
 
-function dataToFirestore (value :Data) :Blob {
+function dataToBlob (value :Data) :Blob {
   encoder.addValue(value, "data")
   return Blob.fromUint8Array(encoder.finish()) // TODO: clone Uint8Array?
 }
 
-function dataFromFirestore (value :Blob) :Data {
+function dataFromBlob (value :Blob) :Data {
   const decoder = new Decoder(value.toUint8Array())
   return decoder.getValue("data") as Data
 }
 
-function recordToFirestore (value :Record) :Blob {
+function recordToBlob (value :Record) :Blob {
   encoder.addValue(value, "record")
   return Blob.fromUint8Array(encoder.finish()) // TODO: clone Uint8Array?
 }
 
-function recordFromFirestore (value :Blob) :Record {
+function recordFromBlob (value :Blob) :Record {
   const decoder = new Decoder(value.toUint8Array())
   return decoder.getValue("record") as Record
 }
@@ -83,10 +84,10 @@ function valueToFirestore (value :any, vtype :ValueType) :any {
   case "float64":
   case "number": return value as number
   case "string": return value as string
-  case "timestamp": return Timestamp.fromMillis(value)
+  case "timestamp": return FTimestamp.fromMillis(value.millis)
   case "uuid": return value as UUID // UUID is string in JS and Firestore
-  case "data": return dataToFirestore(value)
-  case "record": return recordToFirestore(value)
+  case "data": return dataToBlob(value)
+  case "record": return recordToBlob(value)
   }
 }
 
@@ -104,10 +105,10 @@ function valueFromFirestore (value :any, vtype :ValueType) :any {
   case "float64":
   case "number": return value as number
   case "string": return value as string
-  case "timestamp": return (value as Timestamp).toMillis()
+  case "timestamp": return new Timestamp((value as FTimestamp).toMillis())
   case "uuid": return value as string // UUID is a string in JS and Firestore
-  case "data": return dataFromFirestore(value)
-  case "record": return recordFromFirestore(value)
+  case "data": return dataFromBlob(value)
+  case "record": return recordFromBlob(value)
   }
 }
 
@@ -168,9 +169,55 @@ function syncToDoc (object :DObject, sync :SyncMsg, ref :DocRef) {
   }
 }
 
+function needsConvert (data :Object) {
+  for (const key in data) {
+    const value = data[key]
+    if (value instanceof Timestamp || value instanceof FTimestamp) return true
+  }
+  return false
+}
+
+function dataToFirestore (value :any) :any {
+  if (value instanceof Timestamp) return FTimestamp.fromMillis(value.millis)
+  else return value
+}
+function dataFromFirestore (value :any) :any {
+  if (value instanceof FTimestamp) return new Timestamp((value as FTimestamp).toMillis())
+  else return value
+}
+function recordToFirestore (data :Record) :Object {
+  if (!needsConvert(data)) return data
+  const fire = {}
+  for (const key in data) {
+    fire[key] = dataToFirestore(data[key])
+  }
+  return fire
+}
+function recordFromFirestore (data :DocData) :Record {
+  if (!needsConvert(data)) return data
+  const rec = {}
+  for (const key in data) {
+    rec[key] = dataFromFirestore(data[key])
+  }
+  return rec
+}
+
 export class FirebaseDataStore extends DataStore {
   readonly db = firebase.firestore()
   readonly refs = new Map<UUID, DocRef>()
+
+  createRecord (path :Path, key :UUID, data :Record) {
+    const ref = pathToColRef(this.db, path).doc(key)
+    ref.set(recordToFirestore(data))
+  }
+  updateRecord (path :Path, key :UUID, data :Record, merge :boolean) {
+    const ref = pathToColRef(this.db, path).doc(key)
+    merge ? ref.set(data) : ref.update(recordToFirestore(data))
+  }
+  deleteRecord (path :Path, key :UUID) {
+    const ref = pathToColRef(this.db, path).doc(key)
+    ref.delete()
+  }
 
   resolveData (res :Resolved, resolver? :Resolver) {
     const ref = pathToDocRef(this.db, res.object.path)
@@ -189,27 +236,28 @@ export class FirebaseDataStore extends DataStore {
   }
 
   resolveViewData (res :ResolvedView) {
-    const cref = pathToColRef(this.db, res.cpath)
-    // TODO: refine query based on res.imeta
+    const cref = pathToColRef(this.db, res.tpath)
+    // TODO: refine query based on res.vmeta
     const unlisten = cref.onSnapshot(snap => {
+      const sets = []
       for (const change of snap.docChanges()) {
         const doc = change.doc
-        log.debug("View snap", "type", change.type, "id", doc.id)
+        log.debug("View snap", "type", change.type, "path", res.tpath, "id", doc.id)
         switch (change.type) {
         case "added":
-          res.objectAdded(doc.id, obj => applySnap(doc, obj))
+          log.debug("added", "data", doc.data())
+          sets.push({key: doc.id, data: recordFromFirestore(doc.data())})
           break
         case "modified":
-          const ores = this.objects.get(res.cpath.concat(doc.id))
-          if (ores) applySnap(doc, ores.object)
-          else log.warn("Missing object for view update", "vpath", res.ipath, "uuid", doc.id)
+          sets.push({key: doc.id, data: recordFromFirestore(doc.data())})
           break
         case "removed":
-          res.objectDeleted(doc.id)
+          res.recordDelete(doc.id)
           break
         }
       }
-      res.resolvedData()
+      if (sets.length > 0) res.recordSet(sets)
+      res.resolvedRecords()
     })
     res.state.whenOnce(s => s === "disposed", _ => unlisten())
   }

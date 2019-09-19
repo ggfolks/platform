@@ -3,7 +3,7 @@ import {KeyType, ValueType} from "../core/codec"
 import {DHandler, DObject, DObjectType} from "./data"
 
 //
-// Index configuration
+// View configuration
 
 export type WhereOp = "<" | "<=" | "==" | ">=" | ">" | "array-contains"
 export type Order = "asc" | "desc"
@@ -27,10 +27,10 @@ export type ValueMeta = {type: "value", vtype: ValueType, persist :boolean}
 export type SetMeta = {type: "set", etype: KeyType, persist :boolean}
 export type MapMeta = {type: "map", ktype: KeyType, vtype: ValueType, persist :boolean}
 export type CollectionMeta = {type: "collection", otype: DObjectType<any>}
-export type IndexMeta = {type: "index", collection :string, where :WhereClause[],
-                         order :OrderClause[]}
+export type TableMeta = {type: "table"}
+export type ViewMeta = {type: "view", table :string, where :WhereClause[], order :OrderClause[]}
 export type QueueMeta = {type: "queue", handler :DHandler<any,any>}
-export type Meta = ValueMeta | SetMeta | MapMeta | CollectionMeta | IndexMeta | QueueMeta
+export type Meta = ValueMeta | SetMeta | MapMeta | CollectionMeta | TableMeta | ViewMeta | QueueMeta
 
 export type Named<T> = T & {name :string, index :number}
 export type PropMeta = Named<Meta>
@@ -44,16 +44,16 @@ export function isPersist (meta :Meta) {
   }
 }
 
-export function collectionForIndex (
-  metas :PropMeta[], index :Named<IndexMeta>
-) :Named<CollectionMeta> {
-  const collection = metas.find(m => m.type === "collection" && m.name === index.collection)
-  if (!collection) throw new Error(
-    `Index (${index.name}) refers to unknown collection (${index.collection}). ` +
-      `Indices must be declared after the collection they index.`)
-  if (collection.type !== "collection") throw new Error(
-    `Index (${index.name}) refers to non-collection property (${index.collection}).`)
-  return collection
+export function tableForView (
+  metas :PropMeta[], view :Named<ViewMeta>
+) :Named<TableMeta> {
+  const table = metas.find(m => m.type === "table" && m.name === view.table)
+  if (!table) throw new Error(
+    `View (${view.name}) refers to unknown table (${view.table}). ` +
+      `Views must be declared after the table they index.`)
+  if (table.type !== "table") throw new Error(
+    `View (${view.name}) refers to non-table property (${view.table}).`)
+  return table
 }
 
 export function getPropMetas (proto :Function|Object) :PropMeta[] {
@@ -84,7 +84,9 @@ export const dmap = (ktype :KeyType, vtype :ValueType, persist = false) =>
   propAdder({type: "map", ktype, vtype, persist})
 export const dcollection = (otype :DObjectType<any>) =>
   propAdder({type: "collection", otype})
-export const dindex = (collection :string, where :WhereClause[], order :OrderClause[] = []) =>
-  propAdder({type: "index", collection, where, order})
+export const dtable = () =>
+  propAdder({type: "table"})
+export const dview = (table :string, where :WhereClause[], order :OrderClause[] = []) =>
+  propAdder({type: "view", table, where, order})
 export const dqueue = <O extends DObject,M extends Record>(handler :DHandler<O,M>) =>
   propAdder({type: "queue", handler})

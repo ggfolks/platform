@@ -3,8 +3,8 @@ import {Disposer, Timestamp, log} from "../core/util"
 import {Mutable, Subject, Value} from "../core/react"
 import {Decoder, setTextCodec} from "../core/codec"
 import {guestValidator} from "../auth/auth"
-import {getPropMetas, dobject, dmap, dvalue, dcollection, dindex, dqueue, orderBy} from "./meta"
-import {Auth, DObject, DState, MetaMsg, Path, findObjectType} from "./data"
+import {getPropMetas, dobject, dmap, dvalue, dcollection, dqueue} from "./meta"
+import {Auth, DataSource, DObject, DState, MetaMsg, Path, findObjectType} from "./data"
 import {MsgEncoder, MsgDecoder} from "./protocol"
 import {Address, Client, Connection, CState, Resolved} from "./client"
 import {MemoryDataStore, Session, SessionConfig} from "./server"
@@ -208,8 +208,8 @@ export class RootObject extends DObject {
   @dcollection(RoomObject)
   rooms = this.collection<RoomObject>()
 
-  @dindex("users", [], [orderBy("lastLogin", "desc")])
-  latestUsers = this.index<UserObject>()
+  // @dindex("users", [], [orderBy("lastLogin", "desc")])
+  // latestUsers = this.index<UserObject>()
 
   @dqueue(handleChatReq)
   chatq = this.queue<ChatReq>()
@@ -261,7 +261,7 @@ test("metas", () => {
   expect(rmetas[0]).toEqual({
     type: "map", name: "publicRooms", index: 0, ktype: "uuid", vtype: "record", persist: false})
   expect(rmetas[1]).toEqual({type: "collection", name: "users", index: 1, otype: UserObject})
-  expect(rmetas[4]).toEqual({type: "queue", name: "chatq", index: 4, handler: handleChatReq})
+  expect(rmetas[3]).toEqual({type: "queue", name: "chatq", index: 3, handler: handleChatReq})
 
   const umetas = getPropMetas(UserObject.prototype)
   expect(umetas[0]).toEqual({
@@ -296,6 +296,14 @@ test("access", () => {
   expect(user.canWrite("lastLogin", sysauth)).toEqual(true)
 })
 
+const noopSource :DataSource = {
+  post: (queue, msg) => {},
+  sendSync: (obj, msg) => {},
+  createRecord: (path, key, data) => {},
+  updateRecord: (path, key, data, merge) => {},
+  deleteRecord: (path, key) => {},
+}
+
 test("codec", () => {
   const store = new MemoryDataStore(RootObject), roomId = uuidv1()
   const res = store.resolve(["rooms", roomId]), room = res.object as RoomObject
@@ -307,9 +315,9 @@ test("codec", () => {
   room.occupants.set(id2, {username: "Sandy Clause"})
   room.nextMsgId.update(4)
   const now = Timestamp.now()
-  room.messages.set(1, {sender: id1, sent: now-5*60*1000, text: "Yo Sandy!"})
-  room.messages.set(2, {sender: id2, sent: now-3*60*1000, text: "Hiya Testy."})
-  room.messages.set(3, {sender: id1, sent: now-1*60*1000, text: "How's the elves?"})
+  room.messages.set(1, {sender: id1, sent: now.minus(5, Timestamp.MINUTES), text: "Yo Sandy!"})
+  room.messages.set(2, {sender: id2, sent: now.minus(3, Timestamp.MINUTES), text: "Hiya Testy."})
+  room.messages.set(3, {sender: id1, sent: now.minus(1, Timestamp.MINUTES), text: "How's the elves?"})
 
   const enc = new MsgEncoder()
   enc.addObject(sysauth, room)
@@ -320,8 +328,7 @@ test("codec", () => {
   const state = Value.constant<DState>("active")
   const droom = mdec.getObject(dec, [], {
     getMetas: id => getPropMetas(RoomObject.prototype),
-    getObject: id => new RoomObject(
-      {post: (queue, msg) => {}, sendSync: (obj, msg) => {}}, ["rooms", roomId], state)
+    getObject: id => new RoomObject(noopSource, ["rooms", roomId], state)
   }) as RoomObject
 
   expect(droom.owner.current).toEqual(room.owner.current)
