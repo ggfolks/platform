@@ -369,6 +369,52 @@ export function registerScene3Nodes (registry :NodeTypeRegistry) {
 
 /** Registers the subgraphs in this module with the supplied registry. */
 export function registerScene3Subgraphs (registry :SubgraphRegistry) {
+  const draggable = {
+    hover: {type: "hover", component: "hovers"},
+    drag: {
+      type: "Vector3.multiplyScalar",
+      vector: ["hover", "worldMovement"],
+      scalar: ["hover", "pressed"],
+    },
+    grabbed: {type: "output", name: "grabbed", input: ["hover", "pressed"]},
+    translate: {type: "translate", component: "trans", frame: "world", input: "drag"},
+  }
+  const fallable = {
+    transform: {type: "readTransform", component: "trans"},
+    offsetPosition: {
+      type: "Vector3.add",
+      inputs: [["transform", "position"], new Vector3(0, 1, 0)],
+    },
+    raycaster: {
+      type: "raycaster",
+      component: "obj",
+      frame: "world",
+      origin: "offsetPosition",
+      direction: new Vector3(0, -1, 0),
+    },
+    height: {type: "property", name: "height"},
+    heightPlusOne: {type: "add", inputs: [1, "height"]},
+    offset: {type: "subtract", inputs: ["heightPlusOne", ["raycaster", "distance"]]},
+    clock: {type: "clock"},
+    aboveGround: {type: "lessThan", x: "offset", y: -0.0001},
+    grabbed: {type: "input", name: "grabbed"},
+    notGrabbed: {type: "not", input: "grabbed"},
+    falling: {type: "and", inputs: ["aboveGround", "notGrabbed"]},
+    dv: {type: "multiply", inputs: ["clock", -9.8]},
+    baseVelocity: {type: "add", inputs: ["velocity", "dv"]},
+    jump: {type: "input", name: "jump"},
+    velocity: {
+      type: "conditional",
+      condition: "falling",
+      ifTrue: "baseVelocity",
+      ifFalse: "jump",
+    },
+    fall: {type: "multiply", inputs: ["clock", "velocity"]},
+    delta: {type: "max", inputs: ["offset", "fall"]},
+    translation: {type: "Vector3", y: "delta"},
+    translate: {type: "translate", component: "trans", input: "translation"},
+    aboveGroundOutput: {type: "output", name: "aboveGround", input: "aboveGround"},
+  }
   registry.registerSubgraphs(["scene3"], {
     doubleClickToInspect: {
       doubleClick: {type: "doubleClick"},
@@ -391,15 +437,19 @@ export function registerScene3Subgraphs (registry :SubgraphRegistry) {
         },
       },
     },
-    pointerDraggable: {
-      hover: {type: "hover", component: "hovers"},
-      drag: {
-        type: "Vector3.multiplyScalar",
-        vector: ["hover", "worldMovement"],
-        scalar: ["hover", "pressed"],
+    pointerDraggable: draggable,
+    fallable,
+    draggableFallable: {
+      draggable: {type: "subgraph", title: "draggable", graph: draggable},
+      fallable: {
+        type: "subgraph",
+        title: "fallable",
+        grabbed: ["draggable", "grabbed"],
+        jump: 0,
+        height: 0,
+        graph: fallable,
       },
-      grabbed: {type: "output", name: "grabbed", input: ["hover", "pressed"]},
-      translate: {type: "translate", component: "trans", frame: "world", input: "drag"},
+      aboveGround: {type: "output", name: "aboveGround", input: ["fallable", "aboveGround"]},
     },
   })
 }

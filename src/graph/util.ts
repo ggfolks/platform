@@ -284,11 +284,13 @@ export class SubgraphRegistry {
     }
   }
 
-  /** Creates and returns a new node config for a subgraph of the specified registered name. */
-  createNodeConfig (name :string) :NodeConfig {
+  /** Creates and returns a new node config for a subgraph of the specified registered name.
+    * @param [props] optional additional properties to add to the node config. */
+  createNodeConfig (name :string, props? :PMap<any>) :NodeConfig {
     const graphConfig = this._graphConfigs.get(name)
     if (!graphConfig) throw new Error("Unknown subgraph: " + name)
     return {
+      ...props,
       type: "subgraph",
       title: name,
       graph: dataCopy(graphConfig),
