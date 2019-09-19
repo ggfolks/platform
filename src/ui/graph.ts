@@ -424,7 +424,7 @@ export class GraphView extends AbsGroup {
 
   constructor (ctx :ElementContext, parent :Element, readonly config :GraphViewConfig) {
     super(ctx, parent, config)
-    const data = ctx.model.resolve("nodeData" as Spec<ModelProvider>)
+    const data = ctx.model.resolve<ModelProvider>("nodeData")
     let models :Model[] | null = []
     const editable = ctx.model.resolve(this.config.editable)
     const nodeKeys = ctx.model.resolve<Source<IterableIterator<string>>>("nodeKeys")
@@ -1043,7 +1043,7 @@ export class EdgeView extends Element {
   }
 
   getOutputStyle (key :string) {
-    return this._outputData.resolve(key).resolve("style" as Spec<Value<string>>)
+    return this._outputData.resolve(key).resolve<Value<string>>("style")
   }
 
   applyToContaining (canvas :CanvasRenderingContext2D, pos :vec2, op :(element :Element) => void) {
@@ -1089,8 +1089,8 @@ export class EdgeView extends Element {
     const [inputKey, targetId, outputKey] = keys
     // sever the connection
     const input = this._inputData.resolve(inputKey)
-    const multiple = input.resolve("multiple" as Spec<Value<boolean>>)
-    const value = input.resolve("value" as Spec<Mutable<InputValue>>)
+    const multiple = input.resolve<Value<boolean>>("multiple")
+    const value = input.resolve<Mutable<InputValue>>("value")
     if (multiple.current) {
       for (let ii = 0; ii < value.current.length; ii++) {
         const element = value.current[ii]
@@ -1186,8 +1186,8 @@ export class EdgeView extends Element {
         return true
       }
       const inputModel = this._inputData.resolve(inputKey)
-      const multiple = inputModel.resolve("multiple" as Spec<Value<boolean>>)
-      const value = inputModel.resolve("value" as Spec<Mutable<InputValue>>)
+      const multiple = inputModel.resolve<Value<boolean>>("multiple")
+      const value = inputModel.resolve<Mutable<InputValue>>("value")
       if (multiple.current) {
         if (Array.isArray(input)) {
           let newInput = input
@@ -1330,12 +1330,12 @@ export class Terminal extends Element {
 
   constructor (ctx :ElementContext, parent :Element, readonly config :TerminalConfig) {
     super(ctx, parent, config)
-    this._name = ctx.model.resolve("name" as Spec<Value<string>>)
+    this._name = ctx.model.resolve<Value<string>>("name")
     this._value = ctx.model.resolve(config.value)
     this._editable = ctx.model.resolve(config.editable)
     if (config.direction === "input") {
-      this._multiple = ctx.model.resolve("multiple" as Spec<Value<boolean>>)
-      this._connections = ctx.model.resolve("value" as Spec<Mutable<InputValue>>)
+      this._multiple = ctx.model.resolve<Value<boolean>>("multiple")
+      this._connections = ctx.model.resolve<Mutable<InputValue>>("value")
     }
     this.disposer.add(this._value.onValue(() => this.dirty()))
     const updateState = () => this._state.update(this.computeState)
