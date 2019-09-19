@@ -92,10 +92,12 @@ export class Graph implements Disposable {
     }
     if (Array.isArray(input)) {
       const [nodeId, outputName] = input
-      return this._nodes.require(nodeId).getOutput(outputName, defaultValue)
+      const node = this._nodes.get(nodeId)
+      return node ? node.getOutput(outputName, defaultValue) : Value.constant(defaultValue)
     }
     if (typeof input === "string") {
-      return this._nodes.require(input).getOutput(undefined, defaultValue)
+      const node = this._nodes.get(input)
+      return node ? node.getOutput(undefined, defaultValue) : Value.constant(defaultValue)
     }
     if (input instanceof Value) {
       const id = getValueNodeId(input)
