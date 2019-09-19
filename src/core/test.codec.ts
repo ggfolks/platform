@@ -37,7 +37,7 @@ test("codec", () => {
     ["€∞☛✔︎", "string"],
     [uuidv1(), "uuid"],
     [Timestamp.now(), "timestamp"],
-    [{name: "bob", coords: new Vector3(1, 2, 3)}, "record"],
+    [{name: "bob", coords: new Vector3(1, 2, 3), time: Timestamp.now()}, "record"],
   ]
 
   for (const [v,t] of vts) enc.addValue(v, t)

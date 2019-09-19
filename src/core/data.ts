@@ -1,3 +1,4 @@
+import {Timestamp} from "./util"
 
 export interface DataArray extends Array<Data> {}
 export interface DataSet extends Set<Data> {}
@@ -5,7 +6,8 @@ export type DataMapKey = number | string
 export interface DataMap extends Map<DataMapKey,Data> {}
 export interface Record { [key :string] :Data }
 
-export type Data = void | boolean | number | string | DataArray | DataSet | DataMap | Record
+export type Data =
+  void | boolean | number | string | Timestamp | DataArray | DataSet | DataMap | Record
 
 export function isSet (value :Data) :boolean {
   return (value instanceof Set) || (
@@ -24,7 +26,7 @@ export function isMap (value :Data) :boolean {
  * valued properties.
  */
 export function dataCopy<T extends Data> (value :T) :T {
-  if (typeof value !== "object" || value === null) {
+  if (typeof value !== "object" || value === null || value instanceof Timestamp) {
     return value
   }
 
@@ -103,6 +105,7 @@ export function dataEquals (a :Data, b :Data) :boolean {
     return true
   }
   if (Array.isArray(b) || isSet(b) || isMap(b)) return false
+  if (a instanceof Timestamp && b instanceof Timestamp) return a.millis === b.millis
   for (const key in a) if (a.hasOwnProperty(key) && !dataEquals(a[key], b[key])) return false
   for (const key in b) if (b.hasOwnProperty(key) && !a.hasOwnProperty(key)) return false
   return true

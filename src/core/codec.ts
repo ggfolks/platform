@@ -1,4 +1,4 @@
-import {log} from "./util"
+import {Timestamp, log} from "./util"
 import {UUID, uuidToString, uuidFromString} from "./uuid"
 import {Data, DataArray, DataMap, DataMapKey, DataSet, Record, isMap, isSet} from "./data"
 
@@ -76,6 +76,10 @@ function addString (enc :Encoder, text :string) {
   }
 }
 
+function addTimestamp (enc :Encoder, stamp :Timestamp) {
+  addFloat64(enc, stamp.millis)
+}
+
 function addUUID (enc :Encoder, uuid :UUID) {
   const p = enc.pos
   enc.prepAdd(16)
@@ -147,6 +151,10 @@ function getString (dec :Decoder) {
   if (bytes === 0) return ""
   const offset = dec.prepGet(bytes)
   return dec.decoder.decode(dec.source.subarray(offset, offset+bytes))
+}
+
+function getTimestamp (dec :Decoder) {
+  return new Timestamp(getFloat64(dec))
 }
 
 function getUUID (dec :Decoder) {
@@ -222,7 +230,7 @@ export function registerCustomCodec<T> (proto :Object, enc :DataEncoder<T>, dec 
   proto["__typeId"] = registerCodec(enc, dec)
 }
 
-// NOTE: the first 7 codecs must be added in an order that corresponds to dataTypeId below
+// NOTE: the first 8 codecs must be added in an order that corresponds to dataTypeId below
 registerCodec<void>((e, v) => {}, d => undefined)
 registerCodec<boolean>(addBoolean, getBoolean)
 registerCodec<number>(addFloat64, getFloat64)
@@ -230,6 +238,7 @@ registerCodec<string>(addString, getString)
 registerCodec<DataArray>((e, v) => addDataIterable(e, v, v.length), d => getDataArray(d))
 registerCodec<DataSet>((e, v) => addDataIterable(e, v, v.size), d => new Set(getDataArray(d)))
 registerCodec<DataMap>(addDataMap, getDataMap)
+registerCodec<Timestamp>(addTimestamp, getTimestamp)
 registerCodec<Record>(addRecord, getRecord)
 registerCodec<Data>(addData, getData)
 
@@ -241,8 +250,9 @@ function dataTypeId (data :Data) :number {
   else if (Array.isArray(data)) return 4
   else if (isSet(data)) return 5
   else if (isMap(data)) return 6
+  else if (data instanceof Timestamp) return 7
   else if ("__typeId" in data) return data["__typeId"] as number
-  else return 7 // record
+  else return 8 // record
 }
 
 function requireEncoder<T> (typeId :number) :DataEncoder<T> {
@@ -270,22 +280,22 @@ function valuesTypeId (iter :Iterable<Data>) :number {
 // General encoding/decoding APIs
 
 const valueCodecs :{[key :string]: [DataEncoder<any>, DataDecoder<any>]} = {
-  undefined: [addVoid,    getVoid],
-  boolean  : [addBoolean, getBoolean],
-  int8     : [addInt8,    getInt8],
-  int16    : [addInt16,   getInt16],
-  int32    : [addInt32,   getInt32],
-  size8    : [addSize8,   getSize8],
-  size16   : [addSize16,  getSize16],
-  size32   : [addSize32,  getSize32],
-  float32  : [addFloat32, getFloat32],
-  float64  : [addFloat64, getFloat64],
-  number   : [addFloat64, getFloat64],
-  string   : [addString,  getString],
-  timestamp: [addFloat64, getFloat64], // TODO
-  uuid     : [addUUID,    getUUID],
-  data     : [addData,    getData],
-  record   : [addRecord,  getRecord]
+  undefined: [addVoid,      getVoid],
+  boolean  : [addBoolean,   getBoolean],
+  int8     : [addInt8,      getInt8],
+  int16    : [addInt16,     getInt16],
+  int32    : [addInt32,     getInt32],
+  size8    : [addSize8,     getSize8],
+  size16   : [addSize16,    getSize16],
+  size32   : [addSize32,    getSize32],
+  float32  : [addFloat32,   getFloat32],
+  float64  : [addFloat64,   getFloat64],
+  number   : [addFloat64,   getFloat64],
+  string   : [addString,    getString],
+  timestamp: [addTimestamp, getTimestamp],
+  uuid     : [addUUID,      getUUID],
+  data     : [addData,      getData],
+  record   : [addRecord,    getRecord]
 }
 
 // hacky crap to work around Jest weirdness

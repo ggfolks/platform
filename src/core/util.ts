@@ -117,11 +117,38 @@ export class BitSet {
   }
 }
 
-export type Timestamp = number
+type Interval = {millisPer :number}
 
-export const Timestamp = {
-  now: () => Date.now() // TODO: fancier timestamp?
+/** Represents an instant in time. */
+export class Timestamp {
+
+  static readonly MILLIS  = {millisPer: 1}
+  static readonly SECONDS = {millisPer: 1000}
+  static readonly MINUTES = {millisPer: 60*1000}
+  static readonly HOURS   = {millisPer: 60*60*1000}
+  static readonly DAYS    = {millisPer: 24*60*60*1000}
+
+  /** Creates a timestamp with the current time. */
+  static now () { return new Timestamp(Date.now()) }
+
+  // TODO: should we use seconds + nanos like Firebase?
+  constructor (readonly millis :number) {}
+
+  /** Returns a new timestamp which is `count` `interval`s later than `this`. */
+  plus (count :number, interval :Interval) :Timestamp {
+    return new Timestamp(this.millis + interval.millisPer * count)
+  }
+
+  /** Returns a new timestamp which is `count` `interval`s earlier than `this`. */
+  minus (count :number, interval :Interval) :Timestamp {
+    return new Timestamp(this.millis + interval.millisPer * count)
+  }
 }
+// TODO: support some sentinel value that means "use a server timestamp when we decode"
+
+// TODO: support setting an offset from client local time then have the data subsystem calibrarte
+// this client's clock with the server clock so that timestamps created on the client are more
+// accurate
 
 // TODO: replace JSON.stringify with dataToString
 // TODO: allow log filtering (>= level), capture & rerouting
