@@ -452,4 +452,51 @@ export function registerScene3Subgraphs (registry :SubgraphRegistry) {
       aboveGround: {type: "output", name: "aboveGround", input: ["fallable", "aboveGround"]},
     },
   })
+
+  registry.registerSubgraphs(["scene3", "camera"], {
+    dragToRotate: {
+      hover: {type: "hover", component: "hovers"},
+      viewMovement: {type: "Vector3.split", input: ["hover", "viewMovement"]},
+      pitchDelta: {type: "multiply", inputs: [["hover", "pressed"], ["viewMovement", "y"], -1]},
+      yawDelta: {type: "multiply", inputs: [["hover", "pressed"], ["viewMovement", "x"], 1]},
+      pitch: {type: "accumulate", min: -Math.PI/2, max: Math.PI/2, input: "pitchDelta"},
+      yaw: {type: "accumulate", input: "yawDelta"},
+      rotation: {type: "Euler", order: "ZYX", x: "pitch", y: "yaw"},
+      updateRotation: {type: "updateRotation", component: "trans", input: "rotation"},
+    },
+    wasdMovement: {
+      w: {type: "key", code: 87},
+      a: {type: "key", code: 65},
+      s: {type: "key", code: 83},
+      d: {type: "key", code: 68},
+      forwardBack: {type: "subtract", inputs: ["s", "w"]},
+      leftRight: {type: "subtract", inputs: ["d", "a"]},
+      stride: {type: "Vector3", x: "leftRight", z: "forwardBack"},
+      clock: {type: "clock"},
+      speed: {type: "property", name: "speed"},
+      delta: {type: "multiply", inputs: ["clock", "speed"]},
+      translation: {type: "Vector3.multiplyScalar", vector: "stride", scalar: "delta"},
+      transform: {type: "readTransform", component: "trans"},
+      rotated: {
+        type: "Vector3.applyQuaternion",
+        vector: "translation",
+        quaternion: ["transform", "quaternion"],
+      },
+      projected: {type: "Vector3.projectOnPlane", input: "rotated"},
+      translate: {type: "translate", component: "trans", frame: "world", input: "projected"},
+    },
+    spaceToJump: {
+      space: {type: "key", code: 32},
+      speed: {type: "property", name: "speed"},
+      jump: {type: "multiply", inputs: ["space", "speed"]},
+      fallable: {
+        type: "subgraph",
+        title: "fallable",
+        grabbed: false,
+        jump: "jump",
+        height: 1,
+        graph: fallable,
+      },
+    },
+  })
 }

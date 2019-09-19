@@ -268,6 +268,30 @@ class Vector3ApplyEuler extends Node {
   }
 }
 
+/** Applies a quaternion rotation to a vector. */
+abstract class Vector3ApplyQuaternionConfig implements NodeConfig {
+  type = "Vector3.applyQuaternion"
+  @inputEdge("Vector3") vector = undefined
+  @inputEdge("Quaternion") quaternion = undefined
+  @outputEdge("Vector3") output = undefined
+}
+
+class Vector3ApplyQuaternion extends Node {
+
+  constructor (graph :Graph, id :string, readonly config :Vector3ApplyQuaternionConfig) {
+    super(graph, id, config)
+  }
+
+  protected _createOutput () {
+    return Value
+      .join2(
+        this.graph.getValue(this.config.vector, new Vector3()),
+        this.graph.getValue(this.config.quaternion, new Quaternion()),
+      )
+      .map(([vector, quaternion]) => vector.clone().applyQuaternion(quaternion))
+  }
+}
+
 /** Projects a vector onto a plane. */
 abstract class Vector3ProjectOnPlaneConfig implements NodeConfig {
   type = "Vector3.projectOnPlane"
@@ -588,6 +612,7 @@ export function registerSpaceNodes (registry :NodeTypeRegistry) {
     "Vector3.split": Vector3Split,
     "Vector3.add": Vector3Add,
     "Vector3.applyEuler": Vector3ApplyEuler,
+    "Vector3.applyQuaternion": Vector3ApplyQuaternion,
     "Vector3.projectOnPlane": Vector3ProjectOnPlane,
     "Vector3.multiplyScalar": Vector3MultiplyScalar,
     "Vector3.angleBetween": Vector3AngleBetween,
