@@ -2,7 +2,7 @@ import {Clock} from "../core/clock"
 import {dataCopy, refEquals} from "../core/data"
 import {ChangeFn, Mutable, Value} from "../core/react"
 import {MutableMap} from "../core/rcollect"
-import {PMap, log} from "../core/util"
+import {PMap, getValue, log} from "../core/util"
 import {Graph, GraphConfig} from "./graph"
 import {
   EdgeMeta, InputEdgeMeta, PropertyMeta, inputEdge,
@@ -180,12 +180,19 @@ export class Subgraph extends Node {
       switch (node.config.type) {
         case "property":
           Value
-            .join(node.getProperty<string>("name"), node.getProperty<string>("propType"))
-            .onValue(([name, propType]) => {
+            .join(
+              node.getProperty<string>("name"),
+              node.getProperty<string>("propType"),
+              node.getProperty<any>("defaultValue"),
+            )
+            .onValue(([name, propType, defaultValue]) => {
               if (currentName !== undefined) this._propertiesMeta.delete(currentName)
               this._propertiesMeta.set(
                 currentName = name!,
-                {type: propType!, defaultValue: propertyDefaults[propType!]},
+                {
+                  type: propType!,
+                  defaultValue: getValue(defaultValue, propertyDefaults[propType!]),
+                },
               )
             })
           break
@@ -318,6 +325,7 @@ abstract class PropertyConfig implements NodeConfig {
   type = "property"
   @property() name = ""
   @property("PropertyType") propType = "number"
+  defaultValue = undefined // TODO: editing this will depend on the propType
   @outputEdge("any") output = undefined
 }
 
@@ -327,10 +335,10 @@ class Property extends Node {
     super(graph, id, config)
   }
 
-  protected _createOutput (name :string, defaultValue :any) {
+  protected _createOutput () {
     const subgraph = this.graph.ctx.subgraph
     if (!subgraph) throw new Error("Property node used outside subgraph")
-    return subgraph.getProperty(this.config.name, defaultValue)
+    return subgraph.getProperty(this.config.name)
   }
 }
 

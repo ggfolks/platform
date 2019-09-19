@@ -415,7 +415,7 @@ export function registerScene3Subgraphs (registry :SubgraphRegistry) {
     translate: {type: "translate", component: "trans", input: "translation"},
     aboveGroundOutput: {type: "output", name: "aboveGround", input: "aboveGround"},
   }
-  registry.registerSubgraphs(["scene3"], {
+  registry.registerSubgraphs(["scene3", "object"], {
     doubleClickToInspect: {
       doubleClick: {type: "doubleClick"},
       hover: {type: "hover", component: "hovers"},
@@ -451,6 +451,26 @@ export function registerScene3Subgraphs (registry :SubgraphRegistry) {
       },
       aboveGround: {type: "output", name: "aboveGround", input: ["fallable", "aboveGround"]},
     },
+    leftRightArrowsRotate: {
+      left: {type: "key", code: 37},
+      right: {type: "key", code: 39},
+      leftRight: {type: "subtract", inputs: ["left", "right"]},
+      speed: {type: "property", name: "speed", defaultValue: 2},
+      clock: {type: "clock"},
+      leftRightDelta: {type: "multiply", inputs: ["leftRight", "speed", "clock"]},
+      rotation: {type: "Euler", y: "leftRightDelta"},
+      rotate: {type: "rotate", component: "trans", input: "rotation"},
+    },
+    forwardBackArrowsMove: {
+      forward: {type: "key", code: 38},
+      back: {type: "key", code: 40},
+      forwardBack: {type: "subtract", inputs: ["forward", "back"]},
+      speed: {type: "property", name: "speed", defaultValue: 2},
+      clock: {type: "clock"},
+      forwardBackDelta: {type: "multiply", inputs: ["forwardBack", "speed", "clock"]},
+      translation: {type: "Vector3", z: "forwardBackDelta"},
+      translate: {type: "translate", component: "trans", input: "translation"},
+    },
   })
 
   registry.registerSubgraphs(["scene3", "camera"], {
@@ -473,7 +493,7 @@ export function registerScene3Subgraphs (registry :SubgraphRegistry) {
       leftRight: {type: "subtract", inputs: ["d", "a"]},
       stride: {type: "Vector3", x: "leftRight", z: "forwardBack"},
       clock: {type: "clock"},
-      speed: {type: "property", name: "speed"},
+      speed: {type: "property", name: "speed", defaultValue: 10},
       delta: {type: "multiply", inputs: ["clock", "speed"]},
       translation: {type: "Vector3.multiplyScalar", vector: "stride", scalar: "delta"},
       transform: {type: "readTransform", component: "trans"},
@@ -487,7 +507,7 @@ export function registerScene3Subgraphs (registry :SubgraphRegistry) {
     },
     spaceToJump: {
       space: {type: "key", code: 32},
-      speed: {type: "property", name: "speed"},
+      speed: {type: "property", name: "speed", defaultValue: 3},
       jump: {type: "multiply", inputs: ["space", "speed"]},
       fallable: {
         type: "subgraph",
