@@ -18,6 +18,7 @@ import {Data, Record} from "../core/data"
 import {UUID} from "../core/uuid"
 import {Encoder, Decoder, SyncSet, SyncMap, ValueType, setTextCodec} from "../core/codec"
 import {SyncMsg, SyncType} from "./protocol"
+import {isPersist} from "./meta"
 import {DObject, DMutable, Path} from "./data"
 import {DataStore, Resolved, Resolver, ResolvedView} from "./server"
 
@@ -132,6 +133,7 @@ function mapFromFirestore<V> (data :any, vtype :ValueType, into :SyncMap<string,
 
 function applySnap (snap :DocSnap, object :DObject) {
   for (const meta of object.metas) {
+    if (!isPersist(meta)) continue
     const value = snap.get(meta.name)
     if (value === undefined) continue // TEMP: todo, handle undefined `value` props
     const prop = object[meta.name]
@@ -242,7 +244,7 @@ export class FirebaseDataStore extends DataStore {
       const sets = []
       for (const change of snap.docChanges()) {
         const doc = change.doc
-        log.debug("View snap", "type", change.type, "path", res.tpath, "id", doc.id)
+        // log.debug("View snap", "type", change.type, "path", res.tpath, "id", doc.id)
         switch (change.type) {
         case "added":
           sets.push({key: doc.id, data: recordFromFirestore(doc.data())})
