@@ -366,7 +366,7 @@ class ClientHandler extends Session {
 
   sendMsg (data :Uint8Array) {
     const cdata = data.slice()
-    this.queue.push(() => this.conn.client.recvMsg(cdata))
+    this.queue.push(() => this.conn.recvMsg(cdata))
   }
 }
 
@@ -376,11 +376,11 @@ class TestConnection extends Connection {
 
   constructor (readonly client :Client, addr :Address, config :SessionConfig,
                readonly runq :RunQueue) {
-    super()
+    super(client)
     this.handler = new ClientHandler(config, this, runq)
   }
 
-  sendMsg (data :Uint8Array) {
+  sendRawMsg (data :Uint8Array) {
     const cdata = data.slice()
     this.runq.push(() => this.handler.recvMsg(cdata))
   }

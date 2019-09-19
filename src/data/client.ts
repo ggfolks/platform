@@ -51,13 +51,11 @@ export class Client implements DataSource, Disposable {
   private readonly states = new PathMap<Mutable<DState>>()
   private readonly views = new Map<number,ViewInfo>()
   private readonly resolved = new PathMap<Resolver<DObject>>()
-  private readonly encoder = new MsgEncoder()
-  private readonly decoder = new MsgDecoder()
   private readonly _errors = new Emitter<string>()
   private readonly _serverAuth = Mutable.local(UUID0)
   private nextVid = 1
 
-  private readonly resolver = {
+  readonly resolver = {
     getMetas: (path :Path) => {
       const obj = this.objects.get(path)
       return obj ? obj.metas : undefined
@@ -141,15 +139,6 @@ export class Client implements DataSource, Disposable {
 
   sendSync (obj :DObject, req :SyncMsg) {
     this.sendUp(obj.path, req)
-  }
-
-  recvMsg (data :Uint8Array) {
-    const msg = this.decoder.decodeDown(this.resolver, new Decoder(data))
-    try {
-      this.handleDown(msg)
-    } catch (err) {
-      log.warn("Failed to handle down msg", "msg", msg, err)
-    }
   }
 
   handleDown (msg :DownMsg) {
@@ -253,14 +242,7 @@ export class Client implements DataSource, Disposable {
 
   protected sendUpVia (conn :Connection, path :Path, msg :UpMsg) {
     if (DebugLog) log.debug("sendUp", "path", path, "msg", msg);
-    if (conn.state.current === "closed") {
-      log.warn("Can't send message on closed connection", "conn", conn, "msg", msg)
-    } else {
-      conn.state.whenOnce(st => st === "connected", _ => {
-        try { conn.sendMsg(this.encoder.encodeUp(msg)) }
-        catch (err) { log.warn("Failed to encode message", "msg", msg, err) }
-      })
-    }
+    conn.sendMsg(msg)
   }
 }
 
@@ -275,8 +257,38 @@ function cstateToDState (cstate :CState) :DState {
 }
 
 export abstract class Connection {
+  private readonly encoder = new MsgEncoder()
+  private readonly decoder = new MsgDecoder()
+
+  constructor (readonly client :Client) {}
+
   abstract state :Value<CState>
-  abstract sendMsg (msg :Uint8Array) :void
+
+  sendMsg (msg :UpMsg) {
+    switch (this.state.current) {
+    case "closed":
+      log.warn("Can't send on closed connection", "conn", this, "msg", msg)
+      break
+    case "connected":
+      try { this.sendRawMsg(this.encoder.encodeUp(msg)) }
+      catch (err) { log.warn("Failed to encode message", "msg", msg, err) }
+      break
+    default:
+      this.state.whenOnce(st => st === "connected", _ => this.sendMsg(msg))
+      break
+    }
+  }
+
+  recvMsg (data :Uint8Array) {
+    const msg = this.decoder.decodeDown(this.client.resolver, new Decoder(data))
+    try {
+      this.client.handleDown(msg)
+    } catch (err) {
+      log.warn("Failed to handle down msg", "msg", msg, err)
+    }
+  }
+
+  abstract sendRawMsg (msg :Uint8Array) :void
   abstract close () :void
 }
 
@@ -285,15 +297,11 @@ class WSConnection extends Connection {
   readonly state = Mutable.local("connecting" as CState)
 
   constructor (client :Client, addr :Address) {
-    super()
+    super(client)
     const ws = this.ws = new WebSocket(addrToURL(addr))
     ws.binaryType = "arraybuffer"
-    ws.addEventListener("open", ev => {
-      this.state.update("connected")
-    })
-    ws.addEventListener("message", ev => {
-      client.recvMsg(new Uint8Array(ev.data))
-    })
+    ws.addEventListener("open", ev => this.state.update("connected"))
+    ws.addEventListener("message", ev => this.recvMsg(new Uint8Array(ev.data)))
     ws.addEventListener("error", ev => {
       client.reportError(log.format("WebSocket error", "url", ws.url, "ev", ev))
       this.state.update("closed")
@@ -303,7 +311,7 @@ class WSConnection extends Connection {
     })
   }
 
-  sendMsg (msg :Uint8Array) { this.ws.send(msg) }
+  sendRawMsg (msg :Uint8Array) { this.ws.send(msg) }
   close () { this.ws.close() }
   toString() { return this.ws.url }
 }
