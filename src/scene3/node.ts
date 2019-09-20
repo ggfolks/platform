@@ -156,7 +156,7 @@ abstract class AnimationControllerNodeConfig implements EntityComponentConfig {
   type = "animationController"
   config :AnimationControllerConfig = {states: {default: {}}}
   @property() component = ""
-  @outputEdge("string") state = undefined
+  @outputEdge("string", true) state = undefined
 }
 
 class AnimationControllerNode extends EntityComponentNode<Component<AnimationMixer>> {
