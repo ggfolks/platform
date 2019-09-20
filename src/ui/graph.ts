@@ -1519,7 +1519,9 @@ export class Terminal extends Element {
     addControlPoint(offsetEndX, this._endpoint[1] - halfLineWidth)
     addControlPoint(this._endpoint[0] - halfRadiusWidth, this._endpoint[1] - halfRadiusWidth)
     if (this.sign !== Math.sign(this._endpoint[0] - this.x)) {
-      const offsetY = rect.bottom(getNodeView(this.parent).bounds) + controlPointOffset
+      const offsetY =
+        Math.max(rect.bottom(getNodeView(this.parent).bounds), this._endpoint[1]) +
+        controlPointOffset
       addControlPoint(offsetStartX, offsetY)
       addControlPoint(offsetEndX, offsetY)
     }
@@ -1556,7 +1558,9 @@ export class Terminal extends Element {
           this._endpoint[1],
         )
       } else {
-        const offsetY = rect.bottom(getNodeView(this.parent).bounds) + controlPointOffset
+        const offsetY =
+          Math.max(rect.bottom(getNodeView(this.parent).bounds), this._endpoint[1]) +
+          controlPointOffset
         canvas.bezierCurveTo(
           offsetStartX,
           this.y,
