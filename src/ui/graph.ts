@@ -1,5 +1,5 @@
 import {dataCopy, dataEquals} from "../core/data"
-import {clamp, dim2, rect, vec2} from "../core/math"
+import {dim2, rect, vec2} from "../core/math"
 import {Mutable, Source, Subject, Value} from "../core/react"
 import {MutableSet} from "../core/rcollect"
 import {PMap, Remover, getValue} from "../core/util"
@@ -983,7 +983,7 @@ const offsetFrom = vec2.create()
 const offsetTo = vec2.create()
 
 type EdgeKeys = [string, string, string]
-type OutputTo = [EdgeKeys, vec2, Value<string>]
+type OutputTo = [EdgeKeys, vec2, vec2|undefined, Value<string>]
 
 const nodesUsed = new Set<Element>()
 const stylesUsed = new Set<Value<string>>()
@@ -1057,10 +1057,17 @@ export class EdgeView extends Element {
     const off = this._controlPointOffset.current
     let hoverKeys :EdgeKeys|undefined
     outerLoop: for (const edge of this._edges) {
-      for (const [keys, to] of edge.to) {
+      for (const [keys, to, mid] of edge.to) {
         canvas.beginPath()
         canvas.moveTo(edge.from[0], edge.from[1])
-        canvas.bezierCurveTo(edge.from[0] - off, edge.from[1], to[0] + off, to[1], to[0], to[1])
+        const offsetStartX = edge.from[0] - off
+        const offsetEndX = to[0] + off
+        if (mid) {
+          canvas.bezierCurveTo(offsetStartX, edge.from[1], offsetStartX, mid[1], mid[0], mid[1])
+          canvas.bezierCurveTo(offsetEndX, mid[1], offsetEndX, to[1], to[0], to[1])
+        } else {
+          canvas.bezierCurveTo(offsetStartX, edge.from[1], offsetEndX, to[1], to[0], to[1])
+        }
         if (outlineWidth && dataEquals(keys, this._hoverKeys.current)) {
           canvas.lineWidth = outlineWidth
           canvas.stroke()
@@ -1171,6 +1178,15 @@ export class EdgeView extends Element {
             target.x + target.width - view.x,
             target.y + target.height / 2 - view.y,
           )
+          let midPos :vec2|undefined
+          if (toPos[0] > from[0]) {
+            midPos = vec2.fromValues(
+              (from[0] + toPos[0]) / 2 - view.x,
+              Math.max(rect.bottom(targetNode.bounds), rect.bottom(node.bounds)) + offset - view.y,
+            )
+            vec2.min(min, min, midPos)
+            vec2.max(max, max, midPos)
+          }
           const style = targetEdges.getOutputStyle(outputKey)
           stylesUsed.add(style)
           if (!this._styleRemovers.has(style)) {
@@ -1178,7 +1194,7 @@ export class EdgeView extends Element {
             this._styleRemovers.set(style, remover)
             this.disposer.add(remover)
           }
-          to.push([[inputKey, targetId, outputKey], toPos, style])
+          to.push([[inputKey, targetId, outputKey], toPos, midPos, style])
           vec2.set(offsetTo, toPos[0] + offset, toPos[1])
           vec2.min(min, min, toPos)
           vec2.max(max, max, offsetTo)
@@ -1270,11 +1286,18 @@ export class EdgeView extends Element {
     const outlineWidth = this._outlineWidth.current
     const off = this._controlPointOffset.current
     for (const edge of this._edges) {
-      for (const [keys, to, style] of edge.to) {
+      for (const [keys, to, mid, style] of edge.to) {
         canvas.strokeStyle = style.current
         canvas.beginPath()
         canvas.moveTo(edge.from[0], edge.from[1])
-        canvas.bezierCurveTo(edge.from[0] - off, edge.from[1], to[0] + off, to[1], to[0], to[1])
+        const offsetStartX = edge.from[0] - off
+        const offsetEndX = to[0] + off
+        if (mid) {
+          canvas.bezierCurveTo(offsetStartX, edge.from[1], offsetStartX, mid[1], mid[0], mid[1])
+          canvas.bezierCurveTo(offsetEndX, mid[1], offsetEndX, to[1], to[0], to[1])
+        } else {
+          canvas.bezierCurveTo(offsetStartX, edge.from[1], offsetEndX, to[1], to[0], to[1])
+        }
         if (outlineWidth && dataEquals(keys, this._hoverKeys.current)) {
           canvas.lineWidth = outlineWidth
           canvas.globalAlpha = this._outlineAlpha.current
@@ -1483,39 +1506,24 @@ export class Terminal extends Element {
     const controlPointOffset = this.edgeControlPointOffset
     const lineWidth = Math.max(this.edgeLineWidth, this.edgeOutlineWidth)
     const halfLineWidth = Math.round(lineWidth/2)
-    rect.union(
-      expandedBounds,
-      expandedBounds,
-      rect.set(
-        endpointBounds,
-        this.x + controlPointOffset * this.sign - halfLineWidth,
-        this.y - halfLineWidth,
-        radiusWidth,
-        radiusWidth,
-      ),
-    )
-    rect.union(
-      expandedBounds,
-      expandedBounds,
-      rect.set(
-        endpointBounds,
-        this._endpoint[0] - controlPointOffset * this.sign - halfLineWidth,
-        this._endpoint[1] - halfLineWidth,
-        radiusWidth,
-        radiusWidth,
-      ),
-    )
-    return rect.union(
-      expandedBounds,
-      expandedBounds,
-      rect.set(
-        endpointBounds,
-        this._endpoint[0] - halfRadiusWidth,
-        this._endpoint[1] - halfRadiusWidth,
-        radiusWidth,
-        radiusWidth,
-      ),
-    )
+    const addControlPoint = (x :number, y :number) => {
+      rect.union(
+        expandedBounds,
+        expandedBounds,
+        rect.set(endpointBounds, x, y, radiusWidth, radiusWidth),
+      )
+    }
+    const offsetStartX = this.x + controlPointOffset * this.sign - halfLineWidth
+    addControlPoint(offsetStartX, this.y - halfLineWidth)
+    const offsetEndX = this._endpoint[0] - controlPointOffset * this.sign - halfLineWidth
+    addControlPoint(offsetEndX, this._endpoint[1] - halfLineWidth)
+    addControlPoint(this._endpoint[0] - halfRadiusWidth, this._endpoint[1] - halfRadiusWidth)
+    if (this.sign !== Math.sign(this._endpoint[0] - this.x)) {
+      const offsetY = rect.bottom(getNodeView(this.parent).bounds) + controlPointOffset
+      addControlPoint(offsetStartX, offsetY)
+      addControlPoint(offsetEndX, offsetY)
+    }
+    return expandedBounds
   }
 
   protected get computeState () :string {
@@ -1536,16 +1544,36 @@ export class Terminal extends Element {
       const controlPointOffset = this.edgeControlPointOffset
       canvas.beginPath()
       canvas.moveTo(this.x, this.y)
-      const min = Math.min(this.x, this._endpoint[0])
-      const max = Math.max(this.x, this._endpoint[0])
-      canvas.bezierCurveTo(
-        clamp(this.x + controlPointOffset * this.sign, min, max),
-        this.y,
-        clamp(this._endpoint[0] - controlPointOffset * this.sign, min, max),
-        this._endpoint[1],
-        this._endpoint[0],
-        this._endpoint[1],
-      )
+      const offsetStartX = this.x + controlPointOffset * this.sign
+      const offsetEndX = this._endpoint[0] - controlPointOffset * this.sign
+      if (this.sign === Math.sign(this._endpoint[0] - this.x)) {
+        canvas.bezierCurveTo(
+          offsetStartX,
+          this.y,
+          offsetEndX,
+          this._endpoint[1],
+          this._endpoint[0],
+          this._endpoint[1],
+        )
+      } else {
+        const offsetY = rect.bottom(getNodeView(this.parent).bounds) + controlPointOffset
+        canvas.bezierCurveTo(
+          offsetStartX,
+          this.y,
+          offsetStartX,
+          offsetY,
+          (offsetStartX + offsetEndX) / 2,
+          offsetY,
+        )
+        canvas.bezierCurveTo(
+          offsetEndX,
+          offsetY,
+          offsetEndX,
+          this._endpoint[1],
+          this._endpoint[0],
+          this._endpoint[1],
+        )
+      }
       const outlineWidth = this.edgeOutlineWidth
       if (outlineWidth) {
         canvas.lineWidth = outlineWidth
@@ -1578,4 +1606,11 @@ export class Terminal extends Element {
       canvas.globalAlpha = 1
     }
   }
+}
+
+function getNodeView (parent :Element|undefined) {
+  for (let ancestor = parent; ancestor; ancestor = ancestor.parent) {
+    if (ancestor instanceof NodeView) return ancestor
+  }
+  throw new Error("Element used outside NodeView")
 }
