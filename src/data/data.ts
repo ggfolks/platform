@@ -356,25 +356,25 @@ export abstract class DObject {
     return (meta.type !== "map") ? metaMismatch(meta, "map") : new DMutableMap(this, index, meta)
   }
 
-  protected collection<O extends DObject> () {
+  protected collection<O extends DObject> () :DCollection<O> {
     const index = this.metaIdx++, meta = this.metas[index]
     return (meta.type !== "collection") ? metaMismatch(meta, "collection") : new DCollection<O>(
       this, meta.name, meta.otype)
   }
 
-  protected table<R extends Record> () {
+  protected table<R extends Record> () :DTable<R> {
     const index = this.metaIdx++, meta = this.metas[index]
     return (meta.type !== "table") ? metaMismatch(meta, "table") : new DTable<R>(this, meta.name)
   }
 
-  protected view<R extends Record> () {
+  protected view<R extends Record> () :DView<R> {
     const index = this.metaIdx++, meta = this.metas[index]
     return (meta.type !== "view") ? metaMismatch(meta, "view") : new DView<R>(
       this, meta.name, index, tableForView(this.metas, meta), meta.where, meta.order)
   }
 
-  protected queue<M extends Record> () {
+  protected queue<M extends Record> () :DQueue<M> {
     const index = this.metaIdx++, meta = this.metas[index]
-    return (meta.type !== "queue") ? metaMismatch(meta, "queue") : new DQueue(this, index)
+    return (meta.type !== "queue") ? metaMismatch(meta, "queue") : new DQueue<M>(this, index)
   }
 }
