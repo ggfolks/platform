@@ -71,35 +71,27 @@ class Add extends Operator<number> {
   }
 }
 
-/** Subtract/negate operator. */
-abstract class SubtractConfig implements OperatorConfig<number> {
+/** Subtract/negate operator; computes a - b. */
+abstract class SubtractConfig implements NodeConfig  {
   type = "subtract"
-  @inputEdges("number") inputs = undefined
+  @inputEdge("number") a = undefined
+  @inputEdge("number") b = undefined
   @outputEdge("number") output = undefined
 }
 
-class Subtract extends Operator<number> {
+class Subtract extends Node {
 
   constructor (graph :Graph, id :string, readonly config :SubtractConfig) {
     super(graph, id, config)
   }
 
-  protected get _defaultInputValue () :number {
-    return 0
-  }
-
-  protected _apply (values :number[]) :number {
-    if (values.length === 0) {
-      return 0
-    }
-    if (values.length === 1) {
-      return -values[0]
-    }
-    let difference = values[0]
-    for (let ii = 1; ii < values.length; ii++) {
-      difference -= values[ii]
-    }
-    return difference
+  protected _createOutput () {
+    return Value
+      .join(
+        this.graph.getValue(this.config.a, 0),
+        this.graph.getValue(this.config.b, 0),
+      )
+      .map(([a, b]) => a - b)
   }
 }
 
