@@ -45,8 +45,9 @@ export abstract class Node implements Disposable {
   private _outputs :Map<string, Value<any>> = new Map()
   private _wrappedOutputs :Map<string, WrappedValue<any>> = new Map()
   private _defaultOutputKey? :string
+  private _originalConfig? :NodeConfig
 
-  constructor (readonly graph :Graph, readonly id :string, readonly config :NodeConfig) {}
+  constructor (readonly graph :Graph, readonly id :string, public config :NodeConfig) {}
 
   /** The node's title (usually just the type). */
   get title () :Value<string> {
@@ -99,6 +100,11 @@ export abstract class Node implements Disposable {
         },
         () => getValue(this.config[name], defaultValue),
         (value :T|undefined) => {
+          if (this._originalConfig === undefined) {
+            // on first property edit, make a shallow copy of the config
+            this._originalConfig = this.config
+            this.config = Object.assign({}, this.config)
+          }
           const baseValue = this.config[name]
           const oldValue = getValue(baseValue, defaultValue)
           if (value === undefined || value === null) {

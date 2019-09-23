@@ -1,5 +1,5 @@
 import {Clock} from "../core/clock"
-import {dataCopy, refEquals} from "../core/data"
+import {refEquals} from "../core/data"
 import {ChangeFn, Mutable, Value} from "../core/react"
 import {MutableMap} from "../core/rcollect"
 import {PMap, getValue, log} from "../core/util"
@@ -304,7 +304,7 @@ export class SubgraphRegistry {
       ...props,
       type: "subgraph",
       title: name,
-      graph: dataCopy(graphConfig),
+      graph: graphConfig,
     }
   }
 }
