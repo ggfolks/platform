@@ -989,6 +989,7 @@ const nodesUsed = new Set<Element>()
 const stylesUsed = new Set<Value<string>>()
 
 const PICK_EXPANSION = 3
+const DEFAULT_CONTROL_POINT_OFFSET = 30
 
 export class EdgeView extends Element {
   private _nodeId :Value<string>
@@ -1001,7 +1002,7 @@ export class EdgeView extends Element {
   private _edges :{from :vec2, to :OutputTo[]}[] = []
   private readonly _state = Mutable.local("normal")
   private readonly _lineWidth = this.observe(1)
-  private readonly _controlPointOffset = this.observe(40)
+  private readonly _controlPointOffset = this.observe(DEFAULT_CONTROL_POINT_OFFSET)
   private readonly _outlineWidth = this.observe(0)
   private readonly _outlineAlpha = this.observe(1)
   private _hoverKeys :Observer<EdgeKeys|undefined> = this.observe(undefined)
@@ -1025,7 +1026,9 @@ export class EdgeView extends Element {
       const style = this.style
       this._lineWidth.update(style.lineWidth === undefined ? 1 : style.lineWidth)
       this._controlPointOffset.update(
-        style.controlPointOffset === undefined ? 40 : style.controlPointOffset,
+        style.controlPointOffset === undefined
+          ? DEFAULT_CONTROL_POINT_OFFSET
+          : style.controlPointOffset,
       )
       this._outlineWidth.update(style.outlineWidth === undefined ? 0 : style.outlineWidth)
       this._outlineAlpha.update(style.outlineAlpha === undefined ? 1 : style.outlineAlpha)
@@ -1054,12 +1057,13 @@ export class EdgeView extends Element {
     canvas.lineWidth = lineWidth
     canvas.globalAlpha = 0
     const outlineWidth = this._outlineWidth.current * PICK_EXPANSION
-    const off = this._controlPointOffset.current
+    const controlPointOffset = this._controlPointOffset.current
     let hoverKeys :EdgeKeys|undefined
     outerLoop: for (const edge of this._edges) {
       for (const [keys, to, mid] of edge.to) {
         canvas.beginPath()
         canvas.moveTo(edge.from[0], edge.from[1])
+        const off = Math.min(Math.abs(edge.from[0] - to[0]), controlPointOffset)
         const offsetStartX = edge.from[0] - off
         const offsetEndX = to[0] + off
         if (mid) {
@@ -1148,8 +1152,9 @@ export class EdgeView extends Element {
       const input = inputs[ii]
       if (input === undefined || input === null) continue
       const inputKey = inputKeys[ii]
-      const source = inputList.contents[ii]
-      const from = vec2.fromValues(source.x - view.x, source.y + source.height / 2 - view.y)
+      const sourceList = inputList.contents[ii]
+      const source = sourceList.findChild("terminal") as Terminal
+      const from = vec2.fromValues(source.x - source.radius - view.x, source.y - view.y)
       vec2.set(offsetFrom, from[0] - offset, from[1])
       vec2.min(min, min, offsetFrom)
       vec2.max(max, max, from)
@@ -1172,12 +1177,10 @@ export class EdgeView extends Element {
         const outputList = targetNode.findTaggedChild("outputs") as List
         const targetEdges = this._requireEdges(targetId) as EdgeView
         if (!outputKey) outputKey = targetEdges.getDefaultOutputKey()
-        const target = outputList.getElement(outputKey)
+        const targetList = outputList.getElement(outputKey)
+        const target = targetList && targetList.findChild("terminal") as Terminal
         if (target) {
-          const toPos = vec2.fromValues(
-            target.x + target.width - view.x,
-            target.y + target.height / 2 - view.y,
-          )
+          const toPos = vec2.fromValues(target.x + target.radius - view.x, target.y - view.y)
           let midPos :vec2|undefined
           if (toPos[0] > from[0]) {
             midPos = vec2.fromValues(
@@ -1284,12 +1287,13 @@ export class EdgeView extends Element {
     canvas.translate(view.x, view.y)
     canvas.lineWidth = this._lineWidth.current
     const outlineWidth = this._outlineWidth.current
-    const off = this._controlPointOffset.current
+    const controlPointOffset = this._controlPointOffset.current
     for (const edge of this._edges) {
       for (const [keys, to, mid, style] of edge.to) {
         canvas.strokeStyle = style.current
         canvas.beginPath()
         canvas.moveTo(edge.from[0], edge.from[1])
+        const off = Math.min(Math.abs(edge.from[0] - to[0]), controlPointOffset)
         const offsetStartX = edge.from[0] - off
         const offsetEndX = to[0] + off
         if (mid) {
@@ -1374,6 +1378,7 @@ export class Terminal extends Element {
     }))
   }
 
+  get radius () { return this._radius.current }
   get style () :TerminalStyle { return this.getStyle(this.config.style, this.state.current) }
   get styleScope () { return TerminalStyleScope }
   get state () :Value<string> { return this._state }
@@ -1385,7 +1390,7 @@ export class Terminal extends Element {
     const style = this.style
     return style.edge && style.edge.controlPointOffset !== undefined
       ? style.edge.controlPointOffset
-      : 40
+      : DEFAULT_CONTROL_POINT_OFFSET
   }
   get edgeLineWidth () {
     const style = this.style
