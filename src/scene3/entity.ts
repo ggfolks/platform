@@ -119,6 +119,12 @@ const worldMovement = new Vector3()
 const viewPosition = new Vector3()
 const viewMovement = new Vector3()
 
+/** The canonical id of the object component. */
+export const CanonicalObjectId = "obj"
+
+/** The canonical id of the hovers component. */
+export const CanonicalHoversId = "hovers"
+
 /** Manages a group of scene nodes based on [[TransformComponent]] for 3D transform and a scene
  * object component. Users of this system must call [[SceneSystem.update]] on every frame. */
 export class SceneSystem extends System {
@@ -360,6 +366,9 @@ export class Hover {
 
 /** Maps hover identifiers to hover objects. */
 export type HoverMap = Map<number, Hover>
+
+/** The canonical id of the animation mixer component. */
+export const CanonicalMixerId = "mixer"
 
 /** Manages AnimationMixer instances for animated objects. */
 export class AnimationSystem extends System {

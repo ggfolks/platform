@@ -46,7 +46,9 @@ export class EntityComponentNode<T extends Component<any>> extends EntityNode {
 
   protected get _component () {
     const ctx = this.graph.ctx as EntityNodeContext
-    return ctx.domain.components[this.config.component] as T|undefined
+    let id = this.config.component
+    if (id === undefined) id = this.propertiesMeta.require("component").defaultValue
+    return ctx.domain.components[id] as T|undefined
   }
 }
 

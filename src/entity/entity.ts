@@ -620,6 +620,9 @@ export class System {
   }
 }
 
+/** The canonical id of the graph component. */
+export const CanonicalGraphId = "graph"
+
 /** Handles entities with behavior graphs. */
 export class GraphSystem extends System {
   private _ctx :EntityNodeContext

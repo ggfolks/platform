@@ -23,10 +23,13 @@ const SZ = 9
 const oldValue = new Float32Array(DefaultTransform.length)
 const newValue = new Float32Array(DefaultTransform.length)
 
+/** The canonical id of the transform component. */
+export const CanonicalTransformId = "trans"
+
 /** A 3D transform for an entity. Includes position, quaternion, and scale. */
 export class TransformComponent extends Float32ArrayComponent {
 
-  constructor (id :string, batchBits :number = 8) { super(id, DefaultTransform, batchBits) }
+  constructor (id = CanonicalTransformId, batchBits = 8) { super(id, DefaultTransform, batchBits) }
 
   /** Sets the position of entity `id` to `position`. */
   updatePosition (id :ID, position :Vector3) {

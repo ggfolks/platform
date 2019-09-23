@@ -16,12 +16,14 @@ import {EntityComponentConfig, EntityComponentNode} from "../entity/node"
 import {PointerConfig} from "../input/node"
 import {windowSize} from "../scene2/gl"
 import {AnimationController, AnimationControllerConfig} from "./animation"
-import {HoverMap, loadGLTFAnimationClip} from "./entity"
+import {
+  CanonicalHoversId, CanonicalMixerId, CanonicalObjectId, HoverMap, loadGLTFAnimationClip,
+} from "./entity"
 
 /** Emits information about a single hover point. */
 abstract class HoverConfig implements EntityComponentConfig, PointerConfig {
   type = "hover"
-  @property() component = ""
+  @property() component = CanonicalHoversId
   @property() index = 0
   @property() count = 1
   @outputEdge("Vector3") worldPosition = undefined
@@ -76,7 +78,7 @@ class Hover extends EntityComponentNode<Component<HoverMap>> {
 /** Controls an animation action on the entity. */
 abstract class AnimationActionConfig implements EntityComponentConfig {
   type = "animationAction"
-  @property() component = ""
+  @property() component = CanonicalMixerId
   @property() url = ""
   @property() repetitions = Number.POSITIVE_INFINITY
   @property() clampWhenFinished = false
@@ -155,7 +157,7 @@ class AnimationActionNode extends EntityComponentNode<Component<AnimationMixer>>
 abstract class AnimationControllerNodeConfig implements EntityComponentConfig {
   type = "animationController"
   config :AnimationControllerConfig = {states: {default: {}}}
-  @property() component = ""
+  @property() component = CanonicalMixerId
   @outputEdge("string", true) state = undefined
 }
 
@@ -214,7 +216,7 @@ class AnimationControllerNode extends EntityComponentNode<Component<AnimationMix
 /** Casts a ray into the scene. */
 abstract class RaycasterConfig implements EntityComponentConfig {
   type = "raycaster"
-  @property() component = ""
+  @property() component = CanonicalObjectId
   @property("CoordinateFrame") frame = "local"
   @inputEdge("Vector3") origin = undefined
   @inputEdge("Vector3") direction = undefined
@@ -285,7 +287,7 @@ class RaycasterNode extends EntityComponentNode<Component<Object3D>> {
 /** Update the visibility of an Object3D. */
 abstract class UpdateVisibleConfig implements EntityComponentConfig {
   type = "updateVisible"
-  @property() component = ""
+  @property() component = CanonicalObjectId
   @inputEdge("boolean") input = undefined
 }
 
@@ -308,7 +310,7 @@ class UpdateVisibleNode extends EntityComponentNode<Component<Object3D>> {
 /** Updates a single material property. */
 abstract class UpdateMaterialPropertyConfig implements EntityComponentConfig {
   type = "updateMaterialProperty"
-  @property() component = ""
+  @property() component = CanonicalObjectId
   @property() name = "color"
   @inputEdge("any") input = undefined
 }
@@ -370,24 +372,23 @@ export function registerScene3Nodes (registry :NodeTypeRegistry) {
 /** Registers the subgraphs in this module with the supplied registry. */
 export function registerScene3Subgraphs (registry :SubgraphRegistry) {
   const draggable = {
-    hover: {type: "hover", component: "hovers"},
+    hover: {type: "hover"},
     drag: {
       type: "Vector3.multiplyScalar",
       vector: ["hover", "worldMovement"],
       scalar: ["hover", "pressed"],
     },
     grabbed: {type: "output", name: "grabbed", input: ["hover", "pressed"]},
-    translate: {type: "translate", component: "trans", frame: "world", input: "drag"},
+    translate: {type: "translate", frame: "world", input: "drag"},
   }
   const fallable = {
-    transform: {type: "readTransform", component: "trans"},
+    transform: {type: "readTransform"},
     offsetPosition: {
       type: "Vector3.add",
       inputs: [["transform", "position"], new Vector3(0, 1, 0)],
     },
     raycaster: {
       type: "raycaster",
-      component: "obj",
       frame: "world",
       origin: "offsetPosition",
       direction: new Vector3(0, -1, 0),
@@ -412,13 +413,13 @@ export function registerScene3Subgraphs (registry :SubgraphRegistry) {
     fall: {type: "multiply", inputs: ["clock", "velocity"]},
     delta: {type: "max", inputs: ["offset", "fall"]},
     translation: {type: "Vector3", y: "delta"},
-    translate: {type: "translate", component: "trans", input: "translation"},
+    translate: {type: "translate", input: "translation"},
     aboveGroundOutput: {type: "output", name: "aboveGround", input: "aboveGround"},
   }
   registry.registerSubgraphs(["scene3", "object"], {
     doubleClickToInspect: {
       doubleClick: {type: "doubleClick"},
-      hover: {type: "hover", component: "hovers"},
+      hover: {type: "hover"},
       inspect: {type: "and", inputs: ["doubleClick", "hover"]},
       ui: {
         type: "ui",
@@ -459,7 +460,7 @@ export function registerScene3Subgraphs (registry :SubgraphRegistry) {
       clock: {type: "clock"},
       leftRightDelta: {type: "multiply", inputs: ["leftRight", "speed", "clock"]},
       rotation: {type: "Euler", y: "leftRightDelta"},
-      rotate: {type: "rotate", component: "trans", input: "rotation"},
+      rotate: {type: "rotate", input: "rotation"},
     },
     forwardBackArrowsMove: {
       forward: {type: "key", code: 38},
@@ -469,20 +470,20 @@ export function registerScene3Subgraphs (registry :SubgraphRegistry) {
       clock: {type: "clock"},
       forwardBackDelta: {type: "multiply", inputs: ["forwardBack", "speed", "clock"]},
       translation: {type: "Vector3", z: "forwardBackDelta"},
-      translate: {type: "translate", component: "trans", input: "translation"},
+      translate: {type: "translate", input: "translation"},
     },
   })
 
   registry.registerSubgraphs(["scene3", "camera"], {
     dragToRotate: {
-      hover: {type: "hover", component: "hovers"},
+      hover: {type: "hover"},
       viewMovement: {type: "Vector3.split", input: ["hover", "viewMovement"]},
       pitchDelta: {type: "multiply", inputs: [["hover", "pressed"], ["viewMovement", "y"], -1]},
       yawDelta: {type: "multiply", inputs: [["hover", "pressed"], ["viewMovement", "x"], 1]},
       pitch: {type: "accumulate", min: -Math.PI/2, max: Math.PI/2, input: "pitchDelta"},
       yaw: {type: "accumulate", input: "yawDelta"},
       rotation: {type: "Euler", order: "ZYX", x: "pitch", y: "yaw"},
-      updateRotation: {type: "updateRotation", component: "trans", input: "rotation"},
+      updateRotation: {type: "updateRotation", input: "rotation"},
     },
     wasdMovement: {
       w: {type: "key", code: 87},
@@ -496,14 +497,14 @@ export function registerScene3Subgraphs (registry :SubgraphRegistry) {
       speed: {type: "property", name: "speed", defaultValue: 10},
       delta: {type: "multiply", inputs: ["clock", "speed"]},
       translation: {type: "Vector3.multiplyScalar", vector: "stride", scalar: "delta"},
-      transform: {type: "readTransform", component: "trans"},
+      transform: {type: "readTransform"},
       rotated: {
         type: "Vector3.applyQuaternion",
         vector: "translation",
         quaternion: ["transform", "quaternion"],
       },
       projected: {type: "Vector3.projectOnPlane", input: "rotated"},
-      translate: {type: "translate", component: "trans", frame: "world", input: "projected"},
+      translate: {type: "translate", frame: "world", input: "projected"},
     },
     spaceToJump: {
       space: {type: "key", code: 32},

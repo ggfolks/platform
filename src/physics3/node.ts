@@ -7,12 +7,12 @@ import {outputEdge, property} from "../graph/meta"
 import {NodeTypeRegistry} from "../graph/node"
 import {Component, ID} from "../entity/entity"
 import {EntityComponentConfig, EntityComponentNode} from "../entity/node"
-import {UserDataBody} from "./entity"
+import {CanonicalBodyId, UserDataBody} from "./entity"
 
 /** Fires upon collision with another entity. */
 abstract class CollidedConfig implements EntityComponentConfig {
   type = "collided"
-  @property() component = ""
+  @property() component = CanonicalBodyId
   @outputEdge("ID | undefined") entity = undefined
 }
 

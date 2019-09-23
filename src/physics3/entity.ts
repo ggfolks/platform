@@ -66,6 +66,9 @@ class BroaderBroadphase extends NaiveBroadphase {
   }
 }
 
+/** The canonical id of the Body component. */
+export const CanonicalBodyId = "body"
+
 /** Manages a group of physical bodies. Users of this system must call [[PhysicsSystem.update]] on
  * every frame. */
 export class PhysicsSystem extends System {

@@ -7,7 +7,7 @@ import {inputEdge, inputEdges, outputEdge, property, setEnumMeta} from "../graph
 import {Operator, OperatorConfig, Node, NodeConfig, NodeTypeRegistry} from "../graph/node"
 import {addPropertyTypes} from "../graph/util"
 import {EntityComponentConfig, EntityComponentNode} from "../entity/node"
-import {TransformComponent} from "./entity"
+import {CanonicalTransformId, TransformComponent} from "./entity"
 
 // patch in toString functions
 Vector3.prototype.toString = function() { return `(${this.x}, ${this.y}, ${this.z})` }
@@ -401,7 +401,7 @@ function createRandomDirection () {
 /** Rotates by an amount determined by the inputs. */
 abstract class RotateConfig implements EntityComponentConfig {
   type = "rotate"
-  @property() component = ""
+  @property() component = CanonicalTransformId
   @property("CoordinateFrame") frame = "local"
   @inputEdge("Euler") input = undefined
 }
@@ -430,7 +430,7 @@ class Rotate extends EntityComponentNode<TransformComponent> {
 /** Translates by an amount determined by the inputs. */
 abstract class TranslateConfig implements EntityComponentConfig {
   type = "translate"
-  @property() component = ""
+  @property() component = CanonicalTransformId
   @property("CoordinateFrame") frame = "local"
   @inputEdge("Vector3") input = undefined
 }
@@ -462,7 +462,7 @@ class Translate extends EntityComponentNode<TransformComponent> {
 /** Reads an entity's transform. */
 abstract class ReadTransformConfig implements EntityComponentConfig {
   type = "readTransform"
-  @property() component = ""
+  @property() component = CanonicalTransformId
   @outputEdge("Vector3") position = undefined
   @outputEdge("Quaternion") quaternion = undefined
   @outputEdge("Vector3") scale = undefined
@@ -502,7 +502,7 @@ class ReadTransform extends EntityComponentNode<TransformComponent> {
 /** Sets an entity's position. */
 abstract class UpdatePositionConfig implements EntityComponentConfig {
   type = "updatePosition"
-  @property() component = ""
+  @property() component = CanonicalTransformId
   @inputEdge("Vector3") input = undefined
 }
 
@@ -526,7 +526,7 @@ class UpdatePosition extends EntityComponentNode<TransformComponent> {
 /** Sets an entity's rotation. */
 abstract class UpdateRotationConfig implements EntityComponentConfig {
   type = "updateRotation"
-  @property() component = ""
+  @property() component = CanonicalTransformId
   @inputEdge("Euler") input = undefined
 }
 
@@ -551,7 +551,7 @@ class UpdateRotation extends EntityComponentNode<TransformComponent> {
 /** Sets an entity's scale. */
 abstract class UpdateScaleConfig implements EntityComponentConfig {
   type = "updateScale"
-  @property() component = ""
+  @property() component = CanonicalTransformId
   @inputEdge("Vector3") input = undefined
 }
 
@@ -575,7 +575,7 @@ class UpdateScale extends EntityComponentNode<TransformComponent> {
 /** Transforms a point from world space to the local space of the entity. */
 abstract class WorldToLocalConfig implements EntityComponentConfig {
   type = "worldToLocal"
-  @property() component = ""
+  @property() component = CanonicalTransformId
   @inputEdge("Vector3") input = undefined
   @outputEdge("Vector3") output = undefined
 }
