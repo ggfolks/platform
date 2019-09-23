@@ -95,11 +95,11 @@ class Not extends Node {
   }
 }
 
-/** Outputs x === y. */
+/** Outputs a === b. */
 abstract class EqualsConfig implements NodeConfig {
   type = "equals"
-  @inputEdge("any") x = undefined
-  @inputEdge("any") y = undefined
+  @inputEdge("any") a = undefined
+  @inputEdge("any") b = undefined
   @outputEdge("boolean") output = undefined
 }
 
@@ -112,18 +112,18 @@ class Equals extends Node {
   protected _createOutput () {
     return Value
       .join(
-        this.graph.getValue<any>(this.config.x, undefined),
-        this.graph.getValue<any>(this.config.y, undefined),
+        this.graph.getValue<any>(this.config.a, undefined),
+        this.graph.getValue<any>(this.config.b, undefined),
       )
-      .map(([x, y]) => x === y)
+      .map(([a, b]) => a === b)
   }
 }
 
-/** Outputs x < y. */
+/** Outputs a < b. */
 abstract class LessThanConfig implements NodeConfig {
   type = "lessThan"
-  @inputEdge("number") x = undefined
-  @inputEdge("number") y = undefined
+  @inputEdge("number") a = undefined
+  @inputEdge("number") b = undefined
   @outputEdge("boolean") output = undefined
 }
 
@@ -136,18 +136,18 @@ class LessThan extends Node {
   protected _createOutput () {
     return Value
       .join(
-        this.graph.getValue(this.config.x, 0),
-        this.graph.getValue(this.config.y, 0),
+        this.graph.getValue(this.config.a, 0),
+        this.graph.getValue(this.config.b, 0),
       )
-      .map(([x, y]) => x < y)
+      .map(([a, b]) => a < b)
   }
 }
 
-/** Outputs x > y. */
+/** Outputs a > b. */
 abstract class GreaterThanConfig implements NodeConfig {
   type = "greaterThan"
-  @inputEdge("number") x = undefined
-  @inputEdge("number") y = undefined
+  @inputEdge("number") a = undefined
+  @inputEdge("number") b = undefined
   @outputEdge("boolean") output = undefined
 }
 
@@ -160,10 +160,10 @@ class GreaterThan extends Node {
   protected _createOutput () {
     return Value
       .join(
-        this.graph.getValue(this.config.x, 0),
-        this.graph.getValue(this.config.y, 0),
+        this.graph.getValue(this.config.a, 0),
+        this.graph.getValue(this.config.b, 0),
       )
-      .map(([x, y]) => x > y)
+      .map(([a, b]) => a > b)
   }
 }
 

@@ -396,7 +396,7 @@ export function registerScene3Subgraphs (registry :SubgraphRegistry) {
     heightPlusOne: {type: "add", inputs: [1, "height"]},
     offset: {type: "subtract", inputs: ["heightPlusOne", ["raycaster", "distance"]]},
     clock: {type: "clock"},
-    aboveGround: {type: "lessThan", x: "offset", y: -0.0001},
+    aboveGround: {type: "lessThan", a: "offset", b: -0.0001},
     grabbed: {type: "input", name: "grabbed"},
     notGrabbed: {type: "not", input: "grabbed"},
     falling: {type: "and", inputs: ["aboveGround", "notGrabbed"]},

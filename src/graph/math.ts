@@ -282,11 +282,11 @@ class Max extends Operator<number> {
   }
 }
 
-/** Computes a step function (0 if x < edge, else 1). */
+/** Computes a step function (0 if a < edge, else 1). */
 abstract class StepConfig implements NodeConfig {
   type = "step"
   @inputEdge("number") edge = undefined
-  @inputEdge("number") x = undefined
+  @inputEdge("number") a = undefined
   @outputEdge("number") output = undefined
 }
 
@@ -300,9 +300,9 @@ class Step extends Node {
     return Value
       .join(
         this.graph.getValue(this.config.edge, 0),
-        this.graph.getValue(this.config.x, 0),
+        this.graph.getValue(this.config.a, 0),
       )
-      .map(([edge, x]) => x < edge ? 0 : 1)
+      .map(([edge, a]) => a < edge ? 0 : 1)
   }
 }
 
