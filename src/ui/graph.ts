@@ -1513,12 +1513,13 @@ export class Terminal extends Element {
         rect.set(endpointBounds, x, y, radiusWidth, radiusWidth),
       )
     }
-    const offsetStartX = this.x + controlPointOffset * this.sign - halfLineWidth
+    const startX = bounds[0] + radius * this.sign
+    const offsetStartX = startX + controlPointOffset * this.sign - halfLineWidth
     addControlPoint(offsetStartX, this.y - halfLineWidth)
     const offsetEndX = this._endpoint[0] - controlPointOffset * this.sign - halfLineWidth
     addControlPoint(offsetEndX, this._endpoint[1] - halfLineWidth)
     addControlPoint(this._endpoint[0] - halfRadiusWidth, this._endpoint[1] - halfRadiusWidth)
-    if (this.sign !== Math.sign(this._endpoint[0] - this.x)) {
+    if (this.sign !== Math.sign(this._endpoint[0] - startX)) {
       const offsetY =
         Math.max(rect.bottom(getNodeView(this.parent).bounds), this._endpoint[1]) +
         controlPointOffset
@@ -1542,13 +1543,17 @@ export class Terminal extends Element {
     const style = this._value.current
     canvas.strokeStyle = style
     canvas.fillStyle = style
+    const startX = this.x + this._radius.current * this.sign
     if (this._endpoint) {
-      const controlPointOffset = this.edgeControlPointOffset
+      const controlPointOffset = Math.min(
+        Math.abs(startX - this._endpoint[0]),
+        this.edgeControlPointOffset,
+      )
       canvas.beginPath()
-      canvas.moveTo(this.x, this.y)
-      const offsetStartX = this.x + controlPointOffset * this.sign
+      canvas.moveTo(startX, this.y)
+      const offsetStartX = startX + controlPointOffset * this.sign
       const offsetEndX = this._endpoint[0] - controlPointOffset * this.sign
-      if (this.sign === Math.sign(this._endpoint[0] - this.x)) {
+      if (this.sign === Math.sign(this._endpoint[0] - startX)) {
         canvas.bezierCurveTo(
           offsetStartX,
           this.y,
@@ -1589,7 +1594,7 @@ export class Terminal extends Element {
       canvas.stroke()
       canvas.lineWidth = 1
     }
-    this._drawTerminal(canvas, this.x + this._radius.current * this.sign, this.y)
+    this._drawTerminal(canvas, startX, this.y)
     if (this._endpoint) {
       this._drawTerminal(canvas, this._endpoint[0], this._endpoint[1])
     }
