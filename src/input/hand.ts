@@ -5,7 +5,7 @@ import {Mouse} from "./mouse"
 import {Touchpad} from "./touchpad"
 
 /** The ID we use for the mouse pointer, which should never be a touch identifier. */
-const MOUSE_ID = 0
+const MOUSE_ID = -999
 
 const position = vec2.create()
 const movement = vec2.create()
