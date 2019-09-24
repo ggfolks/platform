@@ -5,7 +5,7 @@ import {
   AbstractDropdown, AbstractDropdownConfig, AbstractDropdownItem,
   AbstractDropdownItemConfig,
 } from "./dropdown"
-import {Element, ElementContext, trueValue} from "./element"
+import {Element, ElementContext, trueValue, blankValue} from "./element"
 import {HGroup} from "./group"
 import {AbstractList, AbstractListConfig, syncListContents} from "./list"
 import {Action, ModelProvider, Spec} from "./model"
@@ -191,28 +191,27 @@ const codeReplacements = {Delete: "Del", Escape: "Esc", Equal: "=", Minus: "-"}
 export class Shortcut extends AbstractLabel {
 
   constructor (ctx :ElementContext, parent :Element, readonly config :ShortcutConfig) {
-    super(
-      ctx,
-      parent,
-      config,
-      ctx.model.resolve(config.command, Value.constant("")).map((command :string) => {
-        const commandKeys = getCommandKeys(command)
-        if (commandKeys.length === 0) return ""
-        const [flags, code] = commandKeys[0]
-        let str = ""
-        if (flags & CtrlMask) str += "Ctrl+"
-        if (flags & AltMask) str += "Alt+"
-        if (flags & ShiftMask) str += "Shift+"
-        if (flags & MetaMask) str += "Meta+"
-        // only show the first mapping
-        return str + (
-          code.startsWith("Key")
-            ? code.substring(3)
-            : code.startsWith("Digit")
-            ? code.substring(5)
-            : codeReplacements[code] || code
-        )
-      }),
-    )
+    super(ctx, parent, config)
+  }
+
+  protected resolveText (ctx :ElementContext, config :ShortcutConfig) {
+    return ctx.model.resolve(config.command, blankValue).map((command :string) => {
+      const commandKeys = getCommandKeys(command)
+      if (commandKeys.length === 0) return ""
+      const [flags, code] = commandKeys[0]
+      let str = ""
+      if (flags & CtrlMask) str += "Ctrl+"
+      if (flags & AltMask) str += "Alt+"
+      if (flags & ShiftMask) str += "Shift+"
+      if (flags & MetaMask) str += "Meta+"
+      // only show the first mapping
+      return str + (
+        code.startsWith("Key")
+        ? code.substring(3)
+        : code.startsWith("Digit")
+        ? code.substring(5)
+        : codeReplacements[code] || code
+      )
+    })
   }
 }

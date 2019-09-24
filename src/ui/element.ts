@@ -922,9 +922,17 @@ export class Host implements Disposable {
 /** A host that simply appends canvases to an HTML element (which should be positioned). */
 export class HTMLHost extends Host {
   private readonly _lastOrigins :vec2[] = []
+  private readonly _unroots = new Map<Root,Remover>()
+  private readonly _textOverlay :HTMLInputElement
+  private _clearText = NoopRemover
 
   constructor (private readonly _container :HTMLElement) {
     super()
+    const text = this._textOverlay = document.createElement("input")
+    text.style.position = "absolute"
+    text.style.background = "none"
+    text.style.border = "none"
+    text.style.outline = "none"
   }
 
   update (clock :Clock) {
@@ -952,6 +960,22 @@ export class HTMLHost extends Host {
     style.pointerEvents = "none"
     this._updatePosition(root)
     this._lastOrigins[index] = vec2.clone(root.origin)
+    const unviz = root.visible.onValue(
+      viz => root.canvasElem.style.visibility = viz ? "visible" : "hidden")
+    const unfocus = root.focus.onValue(focus => {
+      const text = this._textOverlay
+      if (focus && focus.config.type === "text") {
+        this._clearText = (focus as any).configInput(text) // avoid importing Text here
+        this._container.appendChild(text)
+        text.focus() // for mobile (has to happen while handling touch event)
+        setTimeout(() => text.focus(), 1) // for desktop (fails if done immediately, yay!)
+      } else if (text.parentNode) {
+        this._container.removeChild(text)
+        this._clearText()
+        this._clearText = NoopRemover
+      }
+    });
+    this._unroots.set(root, () => { unviz(); unfocus() })
   }
 
   protected _updatePosition (root :Root) {
@@ -963,5 +987,8 @@ export class HTMLHost extends Host {
   protected rootRemoved (root :Root, index :number) {
     this._container.removeChild(root.canvasElem)
     this._lastOrigins.splice(index, 1)
+    const unroot = this._unroots.get(root)
+    unroot && unroot()
+    this._unroots.delete(root)
   }
 }

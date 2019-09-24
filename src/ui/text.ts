@@ -1,12 +1,13 @@
 import {dim2, vec2, rect} from "../core/math"
 import {refEquals} from "../core/data"
-import {PMap, getValue} from "../core/util"
+import {Remover, PMap, getValue} from "../core/util"
 import {Mutable, Subject, Value} from "../core/react"
 import {Control, ControlConfig, ControlStates, Element, ElementConfig, ElementContext,
-        PointerInteraction} from "./element"
-import {Spec, FontConfig, Paint, PaintConfig, DefaultPaint, ShadowConfig,
-        Span, EmptySpan} from "./style"
+        PointerInteraction, falseValue, blankValue} from "./element"
+import {Spec, FontConfig, Paint, PaintConfig, DefaultPaint, ShadowConfig, Span, EmptySpan,
+        insetsToCSS} from "./style"
 import {Action, NoopAction} from "./model"
+import {Box} from "./box"
 
 const tmpr = rect.create()
 
@@ -32,16 +33,13 @@ export abstract class AbstractLabel extends Element {
   readonly selection = Mutable.localData<[number,number]>([0,0])
   readonly span = this.observe(EmptySpan)
   readonly selFill = this.observe<Paint|undefined>(undefined)
+  readonly text :Value<string>
   private selOff = 0
   private selWid = 0
 
-  constructor (
-    ctx :ElementContext,
-    parent :Element,
-    readonly config :AbstractLabelConfig,
-    readonly text :Value<string>,
-  ) {
+  constructor (ctx :ElementContext, parent :Element, readonly config :AbstractLabelConfig) {
     super(ctx, parent, config)
+    this.text = this.resolveText(ctx, config)
     this.invalidateOnChange(this.selection)
     this.state.onValue(state => {
       const style = this.getStyle(this.config.style, state)
@@ -56,6 +54,8 @@ export abstract class AbstractLabel extends Element {
       else this.selFill.observe(ctx.style.resolvePaint(style.selection.fill))
     })
   }
+
+  protected abstract resolveText (ctx :ElementContext, config :AbstractLabelConfig) :Value<string>
 
   protected computePreferredSize (hintX :number, hintY :number, into :dim2) {
     dim2.copy(into, this.span.current.size)
@@ -105,8 +105,10 @@ export interface LabelConfig extends AbstractLabelConfig {
 export class Label extends AbstractLabel {
 
   constructor (ctx :ElementContext, parent :Element, readonly config :LabelConfig) {
-    super(ctx, parent, config, ctx.model.resolve(config.text, Value.constant("")))
+    super(ctx, parent, config)
   }
+  protected resolveText (ctx :ElementContext, config :LabelConfig) {
+    return ctx.model.resolve(config.text, blankValue) }
 }
 
 async function readClipText () :Promise<string|undefined> {
@@ -365,6 +367,7 @@ const TextStyleScope = {id: "text", states: [...ControlStates, "invalid"]}
 /** Base class for text edit elements. */
 export abstract class AbstractText extends Control {
   private readonly jiggle = Mutable.local(false)
+  private readonly shadowed = Mutable.local(false)
   private readonly textState :TextState
   private readonly onEnter :Action
   readonly coffset = Mutable.local(0)
@@ -379,7 +382,7 @@ export abstract class AbstractText extends Control {
     readonly config :AbstractTextConfig,
     readonly text :Mutable<string>,
   ) {
-    super(ctx, parent, changeConfigText(config, text))
+    super(ctx, parent, config)
     this.invalidateOnChange(this.coffset)
     this.onEnter = config.onEnter ? ctx.model.resolve(config.onEnter) : NoopAction
 
@@ -390,13 +393,17 @@ export abstract class AbstractText extends Control {
     if (label) this.label = label as Label
     else throw new Error(`Text control must have Label child [config=${JSON.stringify(config)}].`)
 
+    const inj = this.injector<LabelConfig>(label)
+    inj.inject("text", this.text)
+    inj.inject("visible", this.shadowed.map(s => !s))
+
     // hide the cursor when the label has a selection
     const hasSel = this.label.selection.map(([ss, se]) => se > ss)
     // we include jiggle here so that we can reset the clock fold on demand when the user clicks the
     // mouse even when we're already focused
-    const blinking = Value.join3(this.root.focus, hasSel, this.jiggle).switchMap(
-      ([focus, hasSel, jiggle]) => {
-        if (focus !== this || hasSel) return Value.constant(false)
+    const blinking = Value.join<any>(this.root.focus, hasSel, this.shadowed, this.jiggle).switchMap(
+      ([focus, hasSel, shadowed, jiggle]) => {
+        if (focus !== this || hasSel || shadowed) return falseValue
         else {
           const blinkPeriod = this.cursor.config.blinkPeriod || DefaultBlinkPeriod
           return this.root.clock.fold(0, (acc, c) => acc+c.dt, refEquals).
@@ -446,6 +453,7 @@ export abstract class AbstractText extends Control {
   handleKeyEvent (event :KeyboardEvent) {
     if (event.type !== "keydown") return false
     const supportsChar = typeof event.char === "string"
+    if (this.shadowed.current) return true
     const isPrintable = (
       (supportsChar && event.char !== "") || // new hotness
       (event.key.length === 1) // old and busted
@@ -480,6 +488,45 @@ export abstract class AbstractText extends Control {
     )
   }
 
+  configInput (input :HTMLInputElement) :Remover {
+    const root = this.root, ibounds = this.bounds
+    const unsizer = this.valid.when(v => v, v => {
+      const fx = root.origin[0] + ibounds[0], fy = root.origin[1] + ibounds[1]
+      input.style.left = `${fx}px`
+      input.style.top = `${fy}px`
+      input.style.width = `${ibounds[2]}px`
+      input.style.height = `${ibounds[3]}px`
+      input.value = this.textState.text.current
+    })
+
+    // TODO: we should perhaps use the bounds of the box instead of the bounds of the text,
+    // in case someone is doing something extra tricky...
+    const box = this.findChild("box")
+    if (box) {
+      const bstyle = (box as Box).style
+      if (bstyle.padding) input.style.padding = insetsToCSS(bstyle.padding)
+      if (bstyle.margin) input.style.margin = insetsToCSS(bstyle.margin)
+    }
+    this.label.span.current.syncStyle(input.style)
+
+    const onInput = (event :Event) => this.textState.text.update(input.value)
+    input.addEventListener("input", onInput)
+    const onKey = (event :KeyboardEvent) => {
+      if (event.code === "Enter") this.onEnter()
+      // TODO: move focus on Tab/Shift-Tab when we support that
+      event.cancelBubble = true
+    }
+    input.addEventListener("keydown", onKey)
+    this.shadowed.update(true)
+
+    return () => {
+      input.removeEventListener("input", onInput)
+      input.removeEventListener("keydown", onKey)
+      this.shadowed.update(false)
+      unsizer()
+    }
+  }
+
   protected get computeState () :string {
     return this.inputValid ? super.computeState : "invalid"
   }
@@ -507,14 +554,6 @@ export abstract class AbstractText extends Control {
     super.rerender(canvas, region)
     this.cursor.render(canvas, region)
   }
-}
-
-function changeConfigText (config :AbstractTextConfig, text :Mutable<string>) :AbstractTextConfig {
-  const newConfig = Object.assign({}, config)
-  newConfig.contents = Object.assign({}, config.contents)
-  newConfig.contents.contents = Object.assign({}, config.contents.contents)
-  newConfig.contents.contents.text = text
-  return newConfig
 }
 
 /** Defines configuration for [[Text]]. */
