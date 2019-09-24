@@ -395,9 +395,10 @@ class TestConnection extends Connection {
   close () { this.handler.dispose() }
 }
 
+const testAddr = {host: "test", port: 0, secure: false, path: "/"}
+const testLocator = (path :Path) => Subject.constant(testAddr)
+
 test("subscribe-auth", () => {
-  const testAddr = {host: "test", port: 0, path: "/"}
-  const testLocator = (path :Path) => Subject.constant(testAddr)
   const testStore = new MemoryDataStore(RootObject)
   const sconfig = {store: testStore, authers: {guest: guestValidator}}
 
@@ -424,8 +425,6 @@ test("subscribe-auth", () => {
 })
 
 test("subscribe-post", done => {
-  const testAddr = {host: "test", port: 0, path: "/"}
-  const testLocator = (path :Path) => Subject.constant(testAddr)
   const testStore = new MemoryDataStore(RootObject)
   const sconfig = {store: testStore, authers: {guest: guestValidator}}
 
