@@ -20,6 +20,10 @@ export function addrToURL (addr :Address) :string {
   return `${pcol}:${addr.host}:${addr.port}/${addr.path}`
 }
 
+function addrToKey (addr :Address) :string {
+  return `${addr.secure ? "s/" : ""}${addr.host}:${addr.port}/${addr.path}`
+}
+
 /** Resolves the address of the server that hosts the object at `path`. */
 export type Locator = (path :Path) => Subject<Address>
 
@@ -53,7 +57,7 @@ type ViewInfo = {
 }
 
 export class Client implements DataSource, Disposable {
-  private readonly conns = new Map<Address, Connection>()
+  private readonly conns = new Map<string, Connection>()
   private readonly objects = new PathMap<DObject>()
   private readonly states = new PathMap<Mutable<DState>>()
   private readonly views = new PathMap<ViewInfo>()
@@ -167,8 +171,8 @@ export class Client implements DataSource, Disposable {
       case DownType.SERR:
         const estate = this.states.require(msg.path)
         estate.update("failed")
-        this.reportError(log.format("Subscribe failed", "obj", this.objects.get(msg.path),
-                                    "cause", msg.cause))
+        this.reportError(log.format("Subscribe failed", "path", msg.path,
+                                    "obj", this.objects.get(msg.path), "cause", msg.cause))
         break
 
       case SyncType.DECERR:
@@ -205,10 +209,11 @@ export class Client implements DataSource, Disposable {
   protected connFor (path :Path) :Subject<Connection> {
     const {locator, conns, connector} = this
     return locator(path).map(addr => {
-      const conn = conns.get(addr)
+      const key = addrToKey(addr)
+      const conn = conns.get(key)
       if (conn) return conn
       const nconn = connector(this, addr)
-      conns.set(addr, nconn)
+      conns.set(key, nconn)
       // send our auth info as the first message to this connection and again if it ever changes
       const unauth = this.auth.onValue(auth => {
         this.sendUpVia(nconn, [], {type: UpType.AUTH, ...auth})
@@ -216,7 +221,7 @@ export class Client implements DataSource, Disposable {
       // when the connection closes, clean up after it
       nconn.state.when(cs => cs === "closed", _ => {
         unauth()
-        conns.delete(addr)
+        conns.delete(key)
       })
       return nconn
     })
@@ -284,7 +289,7 @@ class WSConnection extends Connection {
 
   constructor (client :Client, addr :Address) {
     super(client)
-    if (DebugLog) log.debug("Connecting", "addr", addr)
+    log.info("Connecting", "addr", addr)
     const ws = this.ws = new WebSocket(addrToURL(addr))
     ws.binaryType = "arraybuffer"
     ws.addEventListener("open", ev => {
