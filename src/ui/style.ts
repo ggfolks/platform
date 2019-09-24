@@ -99,6 +99,39 @@ function requireScratch2D () :CanvasRenderingContext2D {
 }
 
 //
+// Insets
+
+/** Padding and margin are either specified as a single value for all four sides, or as individual
+  * values: `[top, right, bottom, left]`. */
+export type Insets = number | [number,number,number,number]
+
+export function insetWidth (insets :Insets) :number {
+  return typeof insets === 'number' ? (2*insets) : (insets[1] + insets[3])
+}
+export function insetHeight (insets :Insets) :number {
+  return typeof insets === 'number' ? (2*insets) : (insets[0] + insets[2])
+}
+export function insetRect (insets :Insets, source :rect, dest :rect) :rect {
+  let top :number, right :number, bottom :number, left :number
+  if (typeof insets === 'number') {
+    left = insets ; right = insets ; top = insets ; bottom = insets
+  } else {
+    top = insets[0] ; right = insets[1] ; bottom = insets[2], left = insets[3]
+  }
+  dest[0] = source[0] + left
+  dest[1] = source[1] + top
+  dest[2] = source[2] - left - right
+  dest[3] = source[3] - top - bottom
+  return dest
+}
+
+/** Returns a CSS string that represents `insets`. */
+export function insetsToCSS (insets :Insets) {
+  return typeof insets === 'number' ? `${insets}` :
+    `${insets[0]} ${insets[1]} ${insets[2]} ${insets[3]}`
+}
+
+//
 // Paint: color/gradient/pattern filling and stroking
 
 // TODO: also allow JS array [a,r,g,b]? (Color is a float32array)
@@ -165,6 +198,7 @@ export type PaintConfig = ColorPaintConfig
 /** Configures a canvas to paint using a color, gradient or pattern. */
 export abstract class Paint {
 
+  abstract prepCSS (css :CSSStyleDeclaration) :void
   abstract prepStroke (canvas :CanvasRenderingContext2D) :void
   abstract prepFill (canvas :CanvasRenderingContext2D) :void
 }
@@ -195,6 +229,9 @@ function makeCSSColor (config? :ColorConfig) :string {
 class ColorPaint extends Paint {
   constructor (readonly color :string) { super() }
 
+  prepCSS (css :CSSStyleDeclaration) {
+    css.color = this.color
+  }
   prepStroke (canvas :CanvasRenderingContext2D) {
     canvas.strokeStyle = this.color
   }
@@ -220,6 +257,9 @@ class GradientPaint extends Paint {
       ([frac, color]) => this.gradient.addColorStop(frac, ctx.resolveColor(color)))
   }
 
+  prepCSS (css :CSSStyleDeclaration) {
+    console.warn('TODO: how to sync gradient to CSS color') // TODO
+  }
   prepStroke (canvas :CanvasRenderingContext2D) {
     canvas.strokeStyle = this.gradient
   }
@@ -242,6 +282,9 @@ class PatternPaint extends Paint {
     else throw new Error(`Failed to create pattern? [config=${JSON.stringify(config)}]`)
   }
 
+  prepCSS (css :CSSStyleDeclaration) {
+    console.warn('TODO: how to sync pattern to CSS color') // TODO
+  }
   prepStroke (canvas :CanvasRenderingContext2D) {
     canvas.strokeStyle = this.pattern
   }
@@ -515,6 +558,13 @@ export class Span {
     const maxA = Math.round(canvas.measureText(this.text.substring(0, maxO)).width)
     this.resetCanvas(canvas)
     return (maxA-advance < advance-minA) ? maxO : minO
+  }
+
+  syncStyle (css :CSSStyleDeclaration) {
+    css.font = toCanvasFont(this.font)
+    if (this.fill) this.fill.prepCSS(css)
+    else css.color = ""
+    // TODO: stroke, shadow?
   }
 
   private prepCanvas (canvas :CanvasRenderingContext2D) {
