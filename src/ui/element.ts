@@ -953,6 +953,11 @@ export class HTMLHost extends Host {
     for (const root of this.roots) this._container.removeChild(root.canvasElem)
   }
 
+  handleKeyEvent (event :KeyboardEvent) {
+    // don't dispatch key eevents to the root while we have a text overlay
+    if (!this._textOverlay.parentNode) super.handleKeyEvent(event)
+  }
+
   protected rootAdded (root :Root, index :number) {
     this._container.appendChild(root.canvasElem)
     const style = root.canvasElem.style

@@ -453,7 +453,6 @@ export abstract class AbstractText extends Control {
   handleKeyEvent (event :KeyboardEvent) {
     if (event.type !== "keydown") return false
     const supportsChar = typeof event.char === "string"
-    if (this.shadowed.current) return true
     const isPrintable = (
       (supportsChar && event.char !== "") || // new hotness
       (event.key.length === 1) // old and busted
@@ -511,17 +510,16 @@ export abstract class AbstractText extends Control {
 
     const onInput = (event :Event) => this.textState.text.update(input.value)
     input.addEventListener("input", onInput)
-    const onKey = (event :KeyboardEvent) => {
-      if (event.code === "Enter") this.onEnter()
-      // TODO: move focus on Tab/Shift-Tab when we support that
-      event.cancelBubble = true
+    const onPress = (event :KeyboardEvent) => {
+      if (event.key === "Enter") this.onEnter()
+      // TODO: move focus on Tab/Shift-Tab when we support that (may need to do that in keydown)
     }
-    input.addEventListener("keydown", onKey)
+    input.addEventListener("keypress", onPress)
     this.shadowed.update(true)
 
     return () => {
       input.removeEventListener("input", onInput)
-      input.removeEventListener("keydown", onKey)
+      input.removeEventListener("keypress", onPress)
       this.shadowed.update(false)
       unsizer()
     }
