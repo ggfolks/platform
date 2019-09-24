@@ -10,6 +10,7 @@ import {Spec, StyleContext} from "./style"
 const tmpr = rect.create(), tmpv = vec2.create(), tmpd = dim2.create()
 export const trueValue = Value.constant(true)
 export const falseValue = Value.constant(false)
+export const blankValue = Value.constant("")
 const defScale = new Scale(window.devicePixelRatio)
 const defHintSize = Value.constant(dim2.fromValues(64000, 32000))
 const defMinSize = Value.constant(dim2.fromValues(0, 0))
@@ -86,6 +87,10 @@ export interface ElementConfig {
 export type StyleScope = {
   id :string
   states :string[]
+}
+
+interface Injector<C extends ElementConfig> {
+  inject<K extends keyof C> (key :K, value :C[K]) :void
 }
 
 const mergedBounds = rect.create()
@@ -300,6 +305,15 @@ export abstract class Element implements Disposable {
     return `${this.constructor.name}@${this._bounds}`
   }
 
+  /** Returns an injector that can be used to override resolved properties in a child. _NOTE:_ the
+    * properties must be named _exactly_ the same in the child's config and in the child object. For
+    * example `ElementConfig.visible` is resolved to `Element.visible`. Following this pattern (and
+    * this slightly cumbersome two part injection process) ensures that we can do this terrible
+    * terrible hackery in a somewhat type-safe way. Be careful! */
+  protected injector<C extends ElementConfig> (child :Element) :Injector<C> {
+    return {inject: (key, value) => { (child as any)[key] = value }}
+  }
+
   protected getStyle<S> (styles :PMap<S>, state :string) :S {
     const style = styles[state]
     if (style) return style
@@ -476,7 +490,7 @@ export class Root extends Element {
       this.setBounds(rect.set(tmpr, 0, 0, width, height))
     }
     const changed = this.validate() || !rect.isEmpty(this._dirtyRegion)
-    changed && this.render(this.canvas, this._dirtyRegion)
+    if (changed) this.render(this.canvas, this._dirtyRegion)
     return changed
   }
 

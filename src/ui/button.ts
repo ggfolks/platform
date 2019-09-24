@@ -83,8 +83,13 @@ export class Toggle extends Control {
     this.checked = ctx.model.resolve(config.checked)
     this.invalidateOnChange(this.checked)
     this.onClick = config.onClick ? ctx.model.resolve(config.onClick) : NoopAction
-    if (config.checkedContents) this.checkedContents = ctx.elem.create(
-      ctx, this, adjustViz(config.checkedContents, config.checked))
+    if (config.checkedContents) {
+      this.checkedContents = ctx.elem.create(
+        ctx, this, adjustViz(config.checkedContents, config.checked))
+      // since we have a special checked contents element, bind visibility of our "not" checked
+      // (normal) contents to the opposite of our checked value
+      this.injector<ToggleConfig>(this.contents).inject("visible", this.checked.map(c => !c))
+    }
   }
 
   findChild (type :string) :Element|undefined {
@@ -119,14 +124,6 @@ export class Toggle extends Control {
       },
       cancel: () => {}
     }
-  }
-
-  protected createContents (ctx :ElementContext) :Element {
-    const {contents, checked, checkedContents} = this.config
-    // if we have a special checked contents element, then bind visibility of our "not" checked
-    // contents to the opposite of our checked value
-    const unchecked = ctx.model.resolve(checked).map(c => !c)
-    return ctx.elem.create(ctx, this, checkedContents ? adjustViz(contents, unchecked) : contents)
   }
 
   protected computePreferredSize (hintX :number, hintY :number, into :dim2) {
