@@ -1,3 +1,5 @@
+import {Value} from "../core/react"
+import {getValue} from "../core/util"
 import {Graph} from "./graph"
 import {inputEdge, outputEdge, property} from "./meta"
 import {InputEdge, Node, NodeConfig, NodeTypeRegistry} from "./node"
@@ -113,6 +115,73 @@ class Sawtooth extends Wave {
   }
 }
 
+/** An ADSR envelope generator. */
+abstract class EnvelopeConfig implements NodeConfig {
+  type = "envelope"
+  @property("number", {min: 0, wheelStep: 0.01}) attack = 0.1
+  @property("number", {min: 0, wheelStep: 0.01}) decay = 0.1
+  @property("number", {min: 0, max: 1, wheelStep: 0.01}) sustain = 0.5
+  @property("number", {min: 0, wheelStep: 0.01}) release = 0.1
+  @inputEdge("boolean") trigger = undefined
+  @outputEdge("number") output = undefined
+}
+
+class Envelope extends Node {
+  private _phase = 0
+  private _level = 0
+  private _armed = true
+
+  constructor (graph :Graph, id :string, readonly config :EnvelopeConfig) {
+    super(graph, id, config)
+  }
+
+  protected _createOutput () {
+    const attack = getValue(this.config.attack, 0.1)
+    const decay = getValue(this.config.decay, 0.1)
+    const sustain = getValue(this.config.sustain, 0.5)
+    const release = getValue(this.config.release, 0.1)
+    return Value
+      .join2(
+        this.graph.clock.fold({dt: 0}, (value, clock) => ({dt: clock.dt})),
+        this.graph.getValue(this.config.trigger, false),
+      )
+      .map(([clock, trigger]) => {
+        if (trigger) {
+          if (this._armed) {
+            this._armed = false
+            this._phase = 1
+            this._level = 0
+          }
+        } else this._armed = true
+        switch (this._phase) {
+          case 1: // attacking
+            this._level += clock.dt / attack
+            if (this._level < 1) return this._level
+            this._level = 1
+            this._phase = 2
+            // fall through to decay processing
+          case 2: // decaying
+            this._level -= clock.dt * (1 - sustain) / decay
+            if (this._level > sustain) return this._level
+            this._level = sustain
+            this._phase = 3
+            // fall through to sustain processing
+          case 3: // sustaining
+            if (trigger) return this._level
+            this._phase = 4
+            // fall through to release processing
+          case 4: // releasing
+            this._level -= clock.dt * sustain / release
+            if (this._level > 0) return this._level
+            this._phase = 0
+            // fall through to pre-attack processing
+          default:
+            return 0
+        }
+      })
+  }
+}
+
 /** Registers the nodes in this module with the supplied registry. */
 export function registerSignalNodes (registry :NodeTypeRegistry) {
   registry.registerNodeTypes(["signal"], {
@@ -120,5 +189,6 @@ export function registerSignalNodes (registry :NodeTypeRegistry) {
     square: Square,
     triangle: Triangle,
     sawtooth: Sawtooth,
+    envelope: Envelope,
   })
 }
