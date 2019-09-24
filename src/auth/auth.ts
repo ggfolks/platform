@@ -28,7 +28,7 @@ function initialAuth () :SessionAuth {
 /** The current authentication information for this client. External auth providers should update
   * this value when they obtain auth information. Services that require auth information should
   * listen to this value to hear about current and future auth states. */
-export const sessionAuth = Mutable.local<SessionAuth>(initialAuth())
+export const sessionAuth = Mutable.localData<SessionAuth>(initialAuth())
 
 /** Resets the session to a guest session, reusing this client's preferred guest id if possible. */
 export function resetAuth () {

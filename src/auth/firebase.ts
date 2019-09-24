@@ -20,7 +20,11 @@ const TOKEN_EXPIRE = 7*DAY_MILLIS
 const TOKEN_USABLE = 6*DAY_MILLIS
 
 const haveLocalStorage = typeof localStorage !== "undefined"
-let lastSess = haveLocalStorage ? localStorage.getItem("_lastsess") : null
+function readLastSession () {
+  const info = (localStorage.getItem("_lastsess") || "").split(":", 3)
+  return (info.length == 3) ? info : [null, null, null]
+}
+const [lastId, lastFBId, lastToken] = haveLocalStorage ? readLastSession() : [null, null, null]
 
 const makeToken = (fbid :string, hash :UUID) => `${fbid}:${hash}`
 
@@ -29,9 +33,9 @@ async function refreshFirebaseSession (user :firebase.User) {
   const authref = db.collection("auth").doc(user.uid)
   function setAuth (id :UUID, token :string) {
     sessionAuth.update({source: "firebase", id, token: makeToken(user.uid, token)})
-    if (haveLocalStorage) localStorage.setItem("_lastsess", token)
+    if (haveLocalStorage) localStorage.setItem("_lastsess", `${id}:${user.uid}:${token}`)
   }
-  // console.log(`Syncing FB auth [who=${user.uid}]`)
+  log.debug("Updating session with FB auth", "id", user.uid)
   // TODO: when we create a token immediately, it doesn't have time to propagate through the
   // Firebase datastore in time for the server to see it, so auth is rejected at first; maybe we can
   // just punt on this because this is all going to change when we have real auth
@@ -40,13 +44,16 @@ async function refreshFirebaseSession (user :firebase.User) {
     const data = authdoc.data() || {}, tokens = data.tokens || {}
     // prune expired sessions
     const now = new Date().getTime(), expired = now - TOKEN_EXPIRE, usable = now - TOKEN_USABLE
-    let token = ""
+    let token = "", changed = false
     try {
       for (const atoken in tokens) {
         const started = (tokens[atoken] as Timestamp).toMillis()
-        if (started < expired) delete tokens[atoken]
+        if (started < expired) {
+          changed = true
+          delete tokens[atoken]
+        }
         // reuse our last known session token if it's not expired or about to expire
-        else if (started > usable && (token === "" || atoken == lastSess)) token = atoken
+        else if (started > usable && (token === "" || atoken == lastToken)) token = atoken
       }
     } catch (error) {
       log.warn("Choked checking session tokens", "tokens", tokens, error)
@@ -54,12 +61,14 @@ async function refreshFirebaseSession (user :firebase.User) {
     if (token === "") {
       token = uuidv4()
       tokens[token] = FieldValue.serverTimestamp()
-      log.info("Creating new auth token", "token", token)
+      changed = true
+      log.debug("Creating new session token", "token", token)
     }
-    authref.update({tokens})
+    if (changed) authref.update({tokens})
     setAuth(data.id, token)
   } else {
     const id = uuidv1(), token = uuidv4()
+    log.debug("Creating new id and session token", "token", token)
     authref.set({
       id,
       created: FieldValue.serverTimestamp(),
@@ -71,9 +80,15 @@ async function refreshFirebaseSession (user :firebase.User) {
 
 /** Listens for Firebase auth changes & creates tfw sessions based on the Firebase auth. */
 export function initFirebaseAuth () {
+  // if we have saved session credentials, try using them right away
+  if (lastId != null && lastFBId != null && lastToken != null) {
+    log.debug("Reusing session", "id", lastId, "fbid", lastFBId, "token", lastToken)
+    sessionAuth.update({source: "firebase", id: lastId, token: makeToken(lastFBId, lastToken)})
+  }
   firebase.auth().onAuthStateChanged(user => {
     currentUser.update(user)
     if (user) refreshFirebaseSession(user)
+    else if (sessionAuth.current.source === "firebase") resetAuth()
   })
 }
 
@@ -84,11 +99,7 @@ export async function showGoogleLogin () {
     await firebase.auth().signInWithPopup(provider)
   } catch (error) {
     // TODO: some means of reporting auth errors?
-    var errorCode = error.code
-    var errorMessage = error.message
-    var email = error.email
-    var credential = error.credential
-    console.log(`Auth error ${errorCode} / ${errorMessage} / ${email} / ${credential}`)
+    log.warn("Auth error", "code", error.code, "msg", error.message, "cred", error.credential)
   }
 }
 

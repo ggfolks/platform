@@ -260,6 +260,7 @@ export abstract class Session implements Subscriber, ViewSubscriber {
   private readonly encoder = new MsgEncoder()
   private readonly decoder = new MsgDecoder()
   private readonly authers :PMap<AuthValidator>
+  private readonly pending :UpMsg[] = []
   private _auth :Auth|undefined = undefined
 
   readonly store :DataStore
@@ -334,6 +335,14 @@ export abstract class Session implements Subscriber, ViewSubscriber {
 
   protected handleMsg (msg :UpMsg) {
     if (DebugLog) log.debug("handleMsg", "sess", this, "msg", msg)
+
+    // defer processing messages until we're authed
+    if (msg.type !== UpType.AUTH && !this._auth) {
+      // TODO: if pending grows too large, disconnect client?
+      this.pending.push(msg)
+      return
+    }
+
     switch (msg.type) {
     case UpType.AUTH:
       const auther = this.authers[msg.source]
@@ -341,6 +350,8 @@ export abstract class Session implements Subscriber, ViewSubscriber {
         this._auth = auth
         this.sendDown({type: DownType.AUTHED, id: msg.id})
         log.info("Session authed", "sess", this, "source", msg.source)
+        for (const msg of this.pending) this.handleMsg(msg)
+        this.pending.length = 0
       })
       else log.warn("Session authed with invalid auth source", "sess", this, "msg", msg)
       break
