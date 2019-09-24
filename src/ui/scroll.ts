@@ -113,8 +113,8 @@ export class Panner extends TransformedContainer {
     this.invalidateOnChange(this._scale)
   }
 
-  get offset () { return this._offset.current }
-  get scale () { return this._scale.current }
+  get offset () { return this._offset ? this._offset.current : vec2zero }
+  get scale () { return this._scale ? this._scale.current : 1 }
 
   handleWheel (event :WheelEvent, pos :vec2) {
     const transformedPos = this._transformPos(pos)
