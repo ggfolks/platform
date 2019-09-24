@@ -11,7 +11,7 @@ import {AbsConstraints, AbsGroup, AxisConfig, VGroup} from "./group"
 import {List} from "./list"
 import {Action, Model, ModelData, ModelProvider, Spec, dataProvider} from "./model"
 import {InputValue, NodeCopier, NodeCreator, NodeEdit, NodeEditor} from "./node"
-import {ScrollView} from "./scroll"
+import {Panner} from "./scroll"
 import {BackgroundConfig, BorderConfig, NoopDecor, addDecorationBounds} from "./style"
 
 /** A navigable graph viewer. */
@@ -254,16 +254,16 @@ export class GraphViewer extends VGroup {
                   shortcutKeys: Value.constant(["zoomIn", "zoomOut", "zoomReset", "zoomToFit"]),
                   shortcutData: dataProvider({
                     zoomIn: {
-                      action: this._createScrollViewAction(scrollView => scrollView.zoom(1)),
+                      action: this._createPannerAction(panner => panner.zoom(1)),
                     },
                     zoomOut: {
-                      action: this._createScrollViewAction(scrollView => scrollView.zoom(-1)),
+                      action: this._createPannerAction(panner => panner.zoom(-1)),
                     },
                     zoomReset: {
-                      action: this._createScrollViewAction(scrollView => scrollView.resetZoom()),
+                      action: this._createPannerAction(panner => panner.resetZoom()),
                     },
                     zoomToFit: {
-                      action: this._createScrollViewAction(scrollView => scrollView.zoomToFit()),
+                      action: this._createPannerAction(panner => panner.zoomToFit()),
                     },
                   }),
                 },
@@ -307,7 +307,7 @@ export class GraphViewer extends VGroup {
         style: {halign: "stretch"},
       }),
       ctx.elem.create(ctx, this, {
-        type: "scrollview",
+        type: "panner",
         contents: {type: "graphview", editable: this._editable},
         constraints: {stretch: true},
       }),
@@ -350,8 +350,8 @@ export class GraphViewer extends VGroup {
     this._nodeEditor.update(model.resolve<Value<NodeEditor>>("editNodes").current)
   }
 
-  private _createScrollViewAction (op :(scrollView :ScrollView) => void) :Action {
-    return () => op(this.contents[1] as ScrollView)
+  private _createPannerAction (op :(panner :Panner) => void) :Action {
+    return () => op(this.contents[1] as Panner)
   }
 
   private _createModelAction (op :(model :Model) => void) :Action {
@@ -383,7 +383,7 @@ export class GraphViewer extends VGroup {
 
   private _createElement (model :Model) :Element {
     return this.ctx.elem.create({...this.ctx, model}, this, {
-      type: "scrollview",
+      type: "panner",
       contents: {type: "graphview", editable: this._editable},
       constraints: {stretch: true},
     })

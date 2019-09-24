@@ -2,20 +2,20 @@ import {clamp, dim2, rect, vec2, vec2zero} from "../core/math"
 import {Mutable} from "../core/react"
 import {Control, ControlConfig, Element, ElementContext, PointerInteraction} from "./element"
 
-/** Provides a scrolling window onto its contents. */
-export interface ScrollViewConfig extends ControlConfig {
-  type :"scrollview"
+export interface PannerConfig extends ControlConfig {
+  type :"panner"
 }
 
 const transformedPos = vec2.create()
 const transformedRegion = rect.create()
 
-export class ScrollView extends Control {
+/** Provides a pannable, zoomable window onto its contents. */
+export class Panner extends Control {
   private readonly _offset = Mutable.local(vec2.create())
   private readonly _scale = Mutable.local(1)
   private _laidOut = false
 
-  constructor (ctx :ElementContext, parent :Element, readonly config :ScrollViewConfig) {
+  constructor (ctx :ElementContext, parent :Element, readonly config :PannerConfig) {
     super(ctx, parent, config)
     this.invalidateOnChange(this._offset)
     this.invalidateOnChange(this._scale)
@@ -69,7 +69,7 @@ export class ScrollView extends Control {
     const transformedPos = this._transformPos(pos)
     return this.contents.maybeHandleDoubleClick(event, transformedPos)
   }
-  
+
   /** Zooms in or out by the specified delta. */
   zoom (delta :number) {
     this._updateScale(this._scale.current * (1.1 ** delta))
