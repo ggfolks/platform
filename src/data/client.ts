@@ -12,11 +12,11 @@ import {DownMsg, DownType, SyncMsg, SyncType, UpMsg, UpType,
 const DebugLog = false
 
 /** Uniquely identifies a data server; provides the info needed to establish a connection to it. */
-export type Address = {host :string, port :number, path :string}
+export type Address = {host :string, port :number, secure: boolean, path :string}
 
 /** Converts `addr` to a WebSocket URL. */
 export function addrToURL (addr :Address) :string {
-  const pcol = addr.host === "localhost" ? "ws" : "wss"
+  const pcol = addr.secure ? "ws" : "wss"
   return `${pcol}:${addr.host}:${addr.port}/${addr.path}`
 }
 
