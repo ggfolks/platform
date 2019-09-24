@@ -149,6 +149,7 @@ function applySnap (snap :DocSnap, object :DObject) {
 
 function syncToDoc (object :DObject, sync :SyncMsg, ref :DocRef) {
   const meta = object.metas[sync.idx]
+  log.debug("syncToDoc", "path", object.path, "type", sync.type, "name", meta.name)
   switch (sync.type) {
   case SyncType.VALSET:
     ref.set({[meta.name]: valueToFirestore(sync.value, sync.vtype)}, {merge: true})
@@ -210,14 +211,17 @@ export class FirebaseDataStore extends DataStore {
 
   createRecord (path :Path, key :UUID, data :Record) {
     const ref = pathToColRef(this.db, path).doc(key)
+    log.debug("createRecord", "path", path, "key", key)
     ref.set(recordToFirestore(data))
   }
   updateRecord (path :Path, key :UUID, data :Record, merge :boolean) {
     const ref = pathToColRef(this.db, path).doc(key)
+    log.debug("updateRecord", "path", path, "key", key)
     merge ? ref.set(data) : ref.update(recordToFirestore(data))
   }
   deleteRecord (path :Path, key :UUID) {
     const ref = pathToColRef(this.db, path).doc(key)
+    log.debug("deleteRecord", "path", path, "key", key)
     ref.delete()
   }
 
