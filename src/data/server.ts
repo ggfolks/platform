@@ -1,7 +1,7 @@
 import {PMap, NoopRemover, Remover, log} from "../core/util"
 import {UUID, UUID0, setRandomSource} from "../core/uuid"
 import {Record} from "../core/data"
-import {Mutable, Subject, Value} from "../core/react"
+import {Stream, Emitter, Mutable, Subject, Value} from "../core/react"
 import {MutableMap, MutableSet, RMap, RSet} from "../core/rcollect"
 import {Decoder} from "../core/codec"
 import {Auth, AuthValidator, guestValidator} from "../auth/auth"
@@ -10,6 +10,7 @@ import {DataSource, DObject, DObjectType, DState, DQueueAddr, MetaMsg, Path, Pat
         findObjectType} from "./data"
 import {DownType, DownMsg, MsgEncoder, MsgDecoder, UpMsg, UpType, SyncMsg} from "./protocol"
 
+import * as http from "http"
 import WebSocket from "ws"
 
 import * as crypto from "crypto"
@@ -429,6 +430,7 @@ export abstract class Session implements Subscriber, ViewSubscriber {
 
 type ServerConfig = {
   port? :number
+  httpServer? :http.Server
 }
 
 type SessionState = "connecting" | "open" | "closed"
@@ -501,18 +503,16 @@ export class Server {
   private readonly _state = Mutable.local("initializing" as ServerState)
 
   readonly authers :PMap<AuthValidator>
+  /** Emits errors reported by the underlying web socket server. */
+  readonly errors :Stream<Error> = new Emitter()
 
   constructor (readonly store :DataStore,
                authers :PMap<AuthValidator> = {},
                config :ServerConfig = {}) {
     this.authers = {...authers, guest: guestValidator}
-    // TODO: eventually we'll piggy back on a separate web server
-    const port = config.port || 8080
-    const wss = this.wss = new WebSocket.Server({port})
-    wss.on("listening", () => {
-      this._state.update("listening")
-      log.info("Listening for connections", "port", port)
-    })
+    const wscfg = config.httpServer ? {server: config.httpServer} : {port: config.port || 8080}
+    const wss = this.wss = new WebSocket.Server(wscfg)
+    wss.on("listening", () => this._state.update("listening"))
     wss.on("connection", (ws, req) => {
       ws.binaryType = "arraybuffer"
       // if we have an x-forwarded-for header, use that to get the client's IP
@@ -523,7 +523,7 @@ export class Server {
       this._sessions.add(sess)
       sess.state.when(ss => ss === "closed", () => this._sessions.delete(sess))
     })
-    wss.on("error", error => log.warn("Server error", error)) // TODO: ?
+    wss.on("error", error => (this.errors as Emitter<Error>).emit(error))
   }
 
   get sessions () :RSet<Session> { return this._sessions }
