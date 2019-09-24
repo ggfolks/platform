@@ -33,7 +33,7 @@ export type Connector = (client :Client, addr :Address) => Connection
 export type Resolved<T> = [T, Remover]
 
 export function addrFromLocation (path :string) :Address {
-  const secure = window.location.protocol === "https"
+  const secure = window.location.protocol === "https:"
   const host = window.location.hostname
   const port = window.location.port === "3000" ? 8080 : // for local test server
     parseInt(window.location.port || (secure ? "443" : "80"))
