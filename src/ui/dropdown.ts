@@ -6,7 +6,7 @@ import {
   ControlConfig, Element, ElementConfig, ElementContext,
   PointerInteraction, falseValue, trueValue,
 } from "./element"
-import {List} from "./list"
+import {VList} from "./list"
 import {Action, ModelKey, ModelProvider, Spec} from "./model"
 
 /** Defines the styles that apply to [[Dropdown]]. */
@@ -27,7 +27,7 @@ const listBounds = rect.create()
 
 /** Base class for Dropdown, Menu, and MenuItem. */
 export abstract class AbstractDropdown extends AbstractButton {
-  protected _list? :List
+  protected _list? :VList
   private readonly _combinedBounds = rect.create()
 
   get list () { return this._list }
@@ -87,12 +87,12 @@ export abstract class AbstractDropdown extends AbstractButton {
       return
     }
     this._list = this._ctx.elem.create(this._ctx, this, {
-      type: "list",
+      type: "vlist",
       offPolicy: "stretch",
       element: this.config.element,
       data: this.config.data,
       keys: this.config.keys,
-    }) as List
+    }) as VList
     this.invalidate()
   }
 

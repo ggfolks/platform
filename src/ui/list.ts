@@ -3,7 +3,7 @@ import {NoopRemover, Remover} from "../core/util"
 import {ModelKey, ModelProvider} from "./model"
 import {Element, ElementConfig, ElementContext} from "./element"
 import {Spec} from "./style"
-import {AxisConfig, VGroup} from "./group"
+import {AxisConfig, HGroup, VGroup} from "./group"
 
 /** Base interface for list-like elements. */
 export interface AbstractListConfig extends AxisConfig {
@@ -12,9 +12,10 @@ export interface AbstractListConfig extends AxisConfig {
   keys :Spec<Source<ModelKey[]>>
 }
 
-/** Defines configuration for [[List]] elements. */
-export interface ListConfig extends AbstractListConfig {
-  type :"list"
+
+/** Defines configuration for [[HList]] elements. */
+export interface HListConfig extends AbstractListConfig {
+  type :"hlist"
 }
 
 /** Interface used by list-like elements. */
@@ -23,20 +24,32 @@ export interface AbstractList {
   contents :Element[]
 }
 
-/** A list displays a dynamic list of elements, each instantiated from a sub-model and a list
-  * element template. The elements are arrayed along a vertical axis like a [[Group]]. */
-export class List extends VGroup implements AbstractList {
+/** An hlist displays a dynamic list of elements, each instantiated from a sub-model and a list
+  * element template. The elements are arrayed along a horizontal axis like a [[Row]]. */
+export class HList extends HGroup implements AbstractList {
   readonly elements = new Map<ModelKey,Element>()
   readonly contents :Element[] = []
 
-  constructor (ctx :ElementContext, parent :Element, readonly config :ListConfig) {
+  constructor (ctx :ElementContext, parent :Element, readonly config :HListConfig) {
     super(ctx, parent, config)
     this.disposer.add(syncListContents(ctx, this))
   }
+}
 
-  /** Returns the element associated with the given key, if any. */
-  getElement (key :ModelKey) {
-    return this.elements.get(key)
+/** Defines configuration for [[VList]] elements. */
+export interface VListConfig extends AbstractListConfig {
+  type :"vlist"
+}
+
+/** A vlist displays a dynamic list of elements, each instantiated from a sub-model and a list
+  * element template. The elements are arrayed along a vertical axis like a [[Column]]. */
+export class VList extends VGroup implements AbstractList {
+  readonly elements = new Map<ModelKey,Element>()
+  readonly contents :Element[] = []
+
+  constructor (ctx :ElementContext, parent :Element, readonly config :VListConfig) {
+    super(ctx, parent, config)
+    this.disposer.add(syncListContents(ctx, this))
   }
 }
 

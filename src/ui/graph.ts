@@ -8,7 +8,7 @@ import {InputEdge} from "../graph/node"
 import {Box} from "./box"
 import {Element, ElementConfig, ElementContext, PointerInteraction, Observer} from "./element"
 import {AbsConstraints, AbsGroup, AxisConfig, VGroup} from "./group"
-import {List} from "./list"
+import {VList} from "./list"
 import {Action, Model, ModelData, ModelProvider, Spec, dataProvider} from "./model"
 import {InputValue, NodeCopier, NodeCreator, NodeEdit, NodeEditor} from "./node"
 import {Panner} from "./scroll"
@@ -784,7 +784,7 @@ export class NodeView extends VGroup {
           constraints: {stretch: true},
           style: {halign: "left"},
           contents: {
-            type: "list",
+            type: "vlist",
             tags: new Set(["inputs"]),
             gap: 1,
             offPolicy: "stretch",
@@ -818,7 +818,7 @@ export class NodeView extends VGroup {
           constraints: {stretch: true},
           style: {halign: "right"},
           contents: {
-            type: "list",
+            type: "vlist",
             tags: new Set(["outputs"]),
             gap: 1,
             offPolicy: "stretch",
@@ -1123,8 +1123,8 @@ export class EdgeView extends Element {
     // pass the buck to the output terminal
     const view = this.requireParent as GraphView
     const node = view.elements.get(targetId)!.node
-    const outputs = node.findTaggedChild("outputs") as List
-    const terminal = outputs.getElement(outputKey)!.findChild("terminal") as Terminal
+    const outputs = node.findTaggedChild("outputs") as VList
+    const terminal = outputs.elements.get(outputKey)!.findChild("terminal") as Terminal
     return terminal.handlePointerDown(event, pos)
   }
 
@@ -1135,7 +1135,7 @@ export class EdgeView extends Element {
   protected computePreferredSize (hintX :number, hintY :number, into :dim2) {
     // find corresponding node
     const node = this._getValidatedNode(this._nodeId.current)!
-    const inputList = node.findTaggedChild("inputs") as List
+    const inputList = node.findTaggedChild("inputs") as VList
 
     this._edges.length = 0
     const min = vec2.fromValues(Infinity, Infinity)
@@ -1174,10 +1174,10 @@ export class EdgeView extends Element {
         const targetNode = this._getValidatedNode(targetId)
         if (!targetNode) return false
         nodesUsed.add(targetNode)
-        const outputList = targetNode.findTaggedChild("outputs") as List
+        const outputList = targetNode.findTaggedChild("outputs") as VList
         const targetEdges = this._requireEdges(targetId) as EdgeView
         if (!outputKey) outputKey = targetEdges.getDefaultOutputKey()
-        const targetList = outputList.getElement(outputKey)
+        const targetList = outputList.elements.get(outputKey)
         const target = targetList && targetList.findChild("terminal") as Terminal
         if (target) {
           const toPos = vec2.fromValues(target.x + target.radius - view.x, target.y - view.y)
