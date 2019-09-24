@@ -31,6 +31,7 @@ async function refreshFirebaseSession (user :firebase.User) {
     sessionAuth.update({source: "firebase", id, token: makeToken(user.uid, token)})
     if (haveLocalStorage) localStorage.setItem("_lastsess", token)
   }
+  // console.log(`Syncing FB auth [who=${user.uid}]`)
   // TODO: when we create a token immediately, it doesn't have time to propagate through the
   // Firebase datastore in time for the server to see it, so auth is rejected at first; maybe we can
   // just punt on this because this is all going to change when we have real auth
@@ -40,15 +41,20 @@ async function refreshFirebaseSession (user :firebase.User) {
     // prune expired sessions
     const now = new Date().getTime(), expired = now - TOKEN_EXPIRE, usable = now - TOKEN_USABLE
     let token = ""
-    for (const atoken in tokens) {
-      const started = (tokens[atoken] as Timestamp).toMillis()
-      if (started < expired) delete tokens[atoken]
-      // reuse our last known session token if it's not expired or about to expire
-      else if (started > usable && atoken == lastSess) token = atoken
+    try {
+      for (const atoken in tokens) {
+        const started = (tokens[atoken] as Timestamp).toMillis()
+        if (started < expired) delete tokens[atoken]
+        // reuse our last known session token if it's not expired or about to expire
+        else if (started > usable && (token === "" || atoken == lastSess)) token = atoken
+      }
+    } catch (error) {
+      log.warn("Choked checking session tokens", "tokens", tokens, error)
     }
     if (token === "") {
       token = uuidv4()
       tokens[token] = FieldValue.serverTimestamp()
+      log.info("Creating new auth token", "token", token)
     }
     authref.update({tokens})
     setAuth(data.id, token)
