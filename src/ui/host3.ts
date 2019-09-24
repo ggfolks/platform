@@ -13,6 +13,7 @@ import {
   WebGLRenderer,
 } from "three"
 
+import {Remover} from "../core/util"
 import {Host, Root} from "./element"
 
 const DefaultPlaneBufferGeometry = new PlaneBufferGeometry()
@@ -20,6 +21,7 @@ const DefaultPlaneBufferGeometry = new PlaneBufferGeometry()
 export class Host3 extends Host {
   readonly group = new Group()
 
+  private _unroot = new Map<Root,Remover>()
   private _meshes :Mesh[] = []
 
   protected rootAdded (root :Root, index :number) {
@@ -61,8 +63,10 @@ export class Host3 extends Host {
   }
 
   protected rootUpdated (root :Root, index :number) {
-    const material = this._meshes[index].material as MeshBasicMaterial
+    const mesh = this._meshes[index]
+    const material = mesh.material as MeshBasicMaterial
     (material.map as CanvasTexture).needsUpdate = true
+    this._unroot.set(root, root.visible.onValue(viz => mesh.visible = viz))
   }
 
   protected rootRemoved (root :Root, index :number) {
@@ -72,5 +76,10 @@ export class Host3 extends Host {
     const material = mesh.material as MeshBasicMaterial
     material.dispose();
     (material.map as CanvasTexture).dispose()
+    const unroot = this._unroot.get(root)
+    if (unroot) {
+      this._unroot.delete(root)
+      unroot()
+    }
   }
 }

@@ -14,7 +14,7 @@ export class Host2 extends Host {
     for (let ii = 0, ll = this.roots.length; ii < ll; ii += 1) {
       const root = this.roots[ii]
       const tex = this.textures[ii]
-      surf.draw(tex, root.origin, tex.size)
+      if (root.visible.current) surf.draw(tex, root.origin, tex.size)
     }
   }
 
