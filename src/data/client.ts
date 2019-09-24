@@ -289,7 +289,7 @@ class WSConnection extends Connection {
 
   constructor (client :Client, addr :Address) {
     super(client)
-    log.info("Connecting", "addr", addr)
+    log.info("Connecting", "addr", addrToURL(addr))
     const ws = this.ws = new WebSocket(addrToURL(addr))
     ws.binaryType = "arraybuffer"
     ws.addEventListener("open", ev => {
