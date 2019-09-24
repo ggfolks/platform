@@ -16,7 +16,7 @@ export type Address = {host :string, port :number, secure: boolean, path :string
 
 /** Converts `addr` to a WebSocket URL. */
 export function addrToURL (addr :Address) :string {
-  const pcol = addr.secure ? "ws" : "wss"
+  const pcol = addr.secure ? "wss" : "ws"
   return `${pcol}:${addr.host}:${addr.port}/${addr.path}`
 }
 
