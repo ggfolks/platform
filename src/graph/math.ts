@@ -1,13 +1,7 @@
 import {Mutable, Value} from "../core/react"
 import {Graph} from "./graph"
 import {inputEdge, inputEdges, outputEdge, property} from "./meta"
-import {
-  Node,
-  NodeConfig,
-  NodeTypeRegistry,
-  OperatorConfig,
-  Operator,
-} from "./node"
+import {Node, NodeConfig, NodeTypeRegistry, OperatorConfig, Operator} from "./node"
 
 /** Outputs a constant number. */
 abstract class NumberConfig implements NodeConfig {
