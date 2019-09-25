@@ -1,19 +1,28 @@
 const textCorner = 2
 const checkBoxCorner = 2
+const tabCorner = [5, 5, 0, 0]
+const nodeHeaderCorner = [5, 5, 0, 0]
+const nodeBodyCorner = [0, 0, 5, 5]
+const menuCorner = [5, 5, 0, 0]
+const dropdownCorner = 5
+const nodeButtonCorner = 5
+
+const family = "Helvetica, sans-serif"
 
 /** A default set of styles to use as a base. */
 export const DefaultStyles = {
   colors: {},
   shadows: {},
   fonts: {
-    base: {family: "Helvetica, sans-serif", size: 24},
-    menu: {family: "Helvetica, sans-serif", size: 16},
-    nodeTitle: {family: "Helvetica, sans-serif", size: 16},
-    nodeButton: {family: "Helvetica, sans-serif", size: 14},
-    nodeProperty: {family: "Helvetica, sans-serif", size: 14},
-    dropdown: {family: "Helvetica, sans-serif", size: 14},
-    text: {family: "Helvetica, sans-serif", size: 14},
-    edgeName: {family: "Helvetica, sans-serif", size: 14},
+    base: {family, size: 24},
+    menu: {family, size: 16},
+    tab: {family, size: 16},
+    nodeTitle: {family, size: 16},
+    nodeButton: {family, size: 14},
+    nodeProperty: {family, size: 14},
+    dropdown: {family, size: 14},
+    text: {family, size: 14},
+    edgeName: {family, size: 14},
   },
   paints: {
     white: {type: "color", color: "#FFFFFF"},
@@ -28,108 +37,40 @@ export const DefaultStyles = {
     textFocused: {stroke: {type: "color", color: "#D0D0D0"}, cornerRadius: textCorner},
     textInvalid: {stroke: {type: "color", color: "#FF0000"}, cornerRadius: textCorner},
     checkBox: {stroke: {type: "color", color: "#999999"}, cornerRadius: checkBoxCorner},
-    graphViewSelect: {
-      stroke: {type: "color", color: "#808080"},
-    },
-    nodeHeader: {
-      stroke: {type: "color", color: "#000000"},
-      cornerRadius: [5, 5, 0, 0],
-    },
-    nodeHeaderHovered: {
-      stroke: {type: "color", color: "#303030"},
-      cornerRadius: [5, 5, 0, 0],
-    },
-    nodeHeaderSelected: {
-      stroke: {type: "color", color: "#808080"},
-      cornerRadius: [5, 5, 0, 0],
-    },
-    nodeBody: {
-      stroke: {type: "color", color: "#000000"},
-      cornerRadius: [0, 0, 5, 5],
-    },
-    nodeBodyHovered: {
-      stroke: {type: "color", color: "#303030"},
-      cornerRadius: [0, 0, 5, 5],
-    },
-    nodeBodySelected: {
-      stroke: {type: "color", color: "#808080"},
-      cornerRadius: [0, 0, 5, 5],
-    },
+    tabNormal: {stroke: {type: "color", color: "#808080"}, cornerRadius: tabCorner},
+    tabHovered: {stroke: {type: "color", color: "#D0D0D0"}, cornerRadius: tabCorner},
+    tabSelected: {stroke: {type: "color", color: "#E0E0E0"}, cornerRadius: tabCorner},
+    tabContent: {stroke: {type: "color", color: "#E0E0E0"}, width: [1, 0, 0, 0]},
+    graphViewSelect: {stroke: {type: "color", color: "#808080"}},
+    nodeHeader: {stroke: {type: "color", color: "#000000"}, cornerRadius: nodeHeaderCorner},
+    nodeHeaderHovered: {stroke: {type: "color", color: "#303030"}, cornerRadius: nodeHeaderCorner},
+    nodeHeaderSelected: {stroke: {type: "color", color: "#808080"}, cornerRadius: nodeHeaderCorner},
+    nodeBody: {stroke: {type: "color", color: "#000000"}, cornerRadius: nodeBodyCorner},
+    nodeBodyHovered: {stroke: {type: "color", color: "#303030"}, cornerRadius: nodeBodyCorner},
+    nodeBodySelected: {stroke: {type: "color", color: "#808080"}, cornerRadius: nodeBodyCorner},
   },
   backgrounds: {
-    root: {
-      fill: {type: "color", color: "rgba(48, 48, 48, 0.5)"},
-    },
+    root: {fill: {type: "color", color: "rgba(48, 48, 48, 0.5)"}},
     text: {fill: {type: "color", color: "#FFFFFF"}, cornerRadius: textCorner},
-    dropdown: {
-      fill: {type: "color", color: "#303030"},
-      cornerRadius: 5,
-    },
-    dropdownHovered: {
-      fill: {type: "color", color: "#282828"},
-      cornerRadius: 5,
-    },
-    dropdownPressed: {
-      fill: {type: "color", color: "#202020"},
-      cornerRadius: 5,
-    },
-    dropdownitem: {
-      fill: {type: "color", color: "#303030"},
-    },
-    dropdownitemHovered: {
-      fill: {type: "color", color: "#282828"},
-    },
-    dropdownitemPressed: {
-      fill: {type: "color", color: "#202020"},
-    },
-    menu: {
-      fill: {type: "color", color: "#303030"},
-      cornerRadius: [5, 5, 0, 0],
-    },
-    menuHovered: {
-      fill: {type: "color", color: "#282828"},
-      cornerRadius: [5, 5, 0, 0],
-    },
-    menuPressed: {
-      fill: {type: "color", color: "#202020"},
-      cornerRadius: [5, 5, 0, 0],
-    },
-    menuitem: {
-      fill: {type: "color", color: "#303030"},
-    },
-    menuitemHovered: {
-      fill: {type: "color", color: "#282828"},
-    },
-    menuitemPressed: {
-      fill: {type: "color", color: "#202020"},
-    },
-    graphViewerHeader: {
-      fill: {type: "color", color: "#303030"},
-      cornerRadius: [5, 5, 0, 0],
-    },
-    graphViewSelect: {
-      fill: {type: "color", color: "rgba(64, 64, 64, 0.25)"},
-    },
-    nodeHeader: {
-      fill: {type: "color", color: "#404040"},
-      cornerRadius: [5, 5, 0, 0],
-    },
-    nodeBody: {
-      fill: {type: "color", color: "#606060"},
-      cornerRadius: [0, 0, 5, 5],
-    },
-    nodeButton: {
-      fill: {type: "color", color: "#404040"},
-      cornerRadius: 5,
-    },
-    nodeButtonHovered: {
-      fill: {type: "color", color: "#383838"},
-      cornerRadius: 5,
-    },
-    nodeButtonPressed: {
-      fill: {type: "color", color: "#303030"},
-      cornerRadius: 5,
-    },
+    dropdown: {fill: {type: "color", color: "#303030"}, cornerRadius: dropdownCorner},
+    dropdownHovered: {fill: {type: "color", color: "#282828"}, cornerRadius: dropdownCorner},
+    dropdownPressed: {fill: {type: "color", color: "#202020"}, cornerRadius: dropdownCorner},
+    dropdownitem: {fill: {type: "color", color: "#303030"}},
+    dropdownitemHovered: {fill: {type: "color", color: "#282828"}},
+    dropdownitemPressed: {fill: {type: "color", color: "#202020"}},
+    menu: {fill: {type: "color", color: "#303030"}, cornerRadius: menuCorner},
+    menuHovered: {fill: {type: "color", color: "#282828"}, cornerRadius: menuCorner},
+    menuPressed: {fill: {type: "color", color: "#202020"}, cornerRadius: menuCorner},
+    menuitem: {fill: {type: "color", color: "#303030"}},
+    menuitemHovered: {fill: {type: "color", color: "#282828"}},
+    menuitemPressed: {fill: {type: "color", color: "#202020"}},
+    graphViewerHeader: {fill: {type: "color", color: "#303030"}, cornerRadius: [5, 5, 0, 0]},
+    graphViewSelect: {fill: {type: "color", color: "rgba(64, 64, 64, 0.25)"}},
+    nodeHeader: {fill: {type: "color", color: "#404040"}, cornerRadius: nodeHeaderCorner},
+    nodeBody: {fill: {type: "color", color: "#606060"}, cornerRadius: nodeBodyCorner},
+    nodeButton: {fill: {type: "color", color: "#404040"}, cornerRadius: nodeButtonCorner},
+    nodeButtonHovered: {fill: {type: "color", color: "#383838"}, cornerRadius: nodeButtonCorner},
+    nodeButtonPressed: {fill: {type: "color", color: "#303030"}, cornerRadius: nodeButtonCorner},
   },
 }
 
@@ -185,6 +126,18 @@ export const DefaultTheme = {
   checkBoxChecked: {
     box: {border: "$checkBox", padding: [3, 5, 0, 5]},
     label: {font: "$nodeProperty"},
+  },
+  tab: {
+    box: {
+      padding: 5,
+      border: "$tabNormal",
+      hovered: {border: "$tabHovered"},
+      selected: {border: "$tabSelected"},
+    },
+    label: {font: "$tab"},
+  },
+  tabContent: {
+    box: {border: "$tabContent"},
   },
   text: {
     box: {

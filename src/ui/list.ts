@@ -12,7 +12,6 @@ export interface AbstractListConfig extends AxisConfig {
   keys :Spec<Source<ModelKey[]>>
 }
 
-
 /** Defines configuration for [[HList]] elements. */
 export interface HListConfig extends AbstractListConfig {
   type :"hlist"

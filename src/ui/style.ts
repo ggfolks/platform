@@ -1,8 +1,8 @@
-import {Noop, PMap, log} from "../core/util"
+import {Noop, PMap, getValue, log} from "../core/util"
 import {dim2, rect} from "../core/math"
 import {Color} from "../core/color"
 import {Subject} from "../core/react"
-import {makeRoundRectPath} from "./util"
+import {makeRoundRectPath, strokeArcPath, strokeLinePath} from "./util"
 
 // TODO?: ImageConfig = string | {source/path/url :string, scale :number} | ?
 
@@ -451,8 +451,8 @@ export function makeBackground (ctx :StyleContext, config :BackgroundConfig) :Su
 
 /** Defines a border rendered around a [[Box]]. */
 export interface BorderConfig {
-  /** The width of the line used to stroke this border. */
-  width? :number
+  /** The width or widths ([top, right, bottom, left]) of the line used to stroke this border. */
+  width? :number|number[]
   /** The paint used to stroke this border. */
   stroke :Spec<PaintConfig>
   /** The corner radius or radii ([ul, ur, lr, ll]) of the border. */
@@ -464,27 +464,48 @@ export interface BorderConfig {
 /** Creates a border based on the supplied `config`. */
 export function makeBorder (ctx :StyleContext, config :BorderConfig) :Subject<Decoration> {
   return ctx.resolvePaint(config.stroke).map(stroke => {
-    const lineWidth = config.width || 1
+    const lineWidth = getValue(config.width, 1)
+    const lineWidths = Array.isArray(lineWidth)
+      ? lineWidth
+      : [lineWidth, lineWidth, lineWidth, lineWidth]
     const cornerRadius = config.cornerRadius
     const shadow = ctx.resolveShadowOpt(config.shadow)
     return {
       size: [
-        Math.max(1, Math.max(-shadow.oy, 0) + shadow.blur),
-        Math.max(1, Math.max(shadow.ox, 0) + shadow.blur),
-        Math.max(1, Math.max(shadow.oy, 0) + shadow.blur),
-        Math.max(1, Math.max(-shadow.ox, 0) + shadow.blur),
+        Math.max(lineWidths[0], Math.max(-shadow.oy, 0) + shadow.blur),
+        Math.max(lineWidths[1], Math.max(shadow.ox, 0) + shadow.blur),
+        Math.max(lineWidths[2], Math.max(shadow.oy, 0) + shadow.blur),
+        Math.max(lineWidths[3], Math.max(-shadow.ox, 0) + shadow.blur),
       ],
       render: (canvas, size) => {
         const oldWidth = canvas.lineWidth
-        canvas.lineWidth = lineWidth
         stroke.prepStroke(canvas)
         const w = size[0], h = size[1]
         shadow.prep(canvas)
-        if (cornerRadius) {
-          makeRoundRectPath(canvas, 0, 0, w, h, cornerRadius)
-          canvas.stroke()
+        if (Array.isArray(lineWidth)) {
+          if (cornerRadius) {
+            const cornerRadii = Array.isArray(cornerRadius)
+              ? cornerRadius
+              : [cornerRadius, cornerRadius, cornerRadius, cornerRadius]
+            const midx = w/2, midy = h/2
+            strokeArcPath(canvas, 0, midy, 0, 0, midx, 0, cornerRadii[0], lineWidths[0])
+            strokeArcPath(canvas, midx, 0, w, 0, w, midy, cornerRadii[1], lineWidths[1])
+            strokeArcPath(canvas, w, midy, w, h, midx, h, cornerRadii[2], lineWidths[2])
+            strokeArcPath(canvas, midx, h, 0, h, 0, midy, cornerRadii[3], lineWidths[3])
+          } else {
+            strokeLinePath(canvas, 0, 0, w, 0, lineWidths[0])
+            strokeLinePath(canvas, w, 0, w, h, lineWidths[1])
+            strokeLinePath(canvas, w, h, 0, h, lineWidths[2])
+            strokeLinePath(canvas, 0, h, 0, 0, lineWidths[3])
+          }
         } else {
-          canvas.strokeRect(0, 0, w, h)
+          canvas.lineWidth = lineWidth
+          if (cornerRadius) {
+            makeRoundRectPath(canvas, 0, 0, w, h, cornerRadius)
+            canvas.stroke()
+          } else {
+            canvas.strokeRect(0, 0, w, h)
+          }
         }
         shadow.reset(canvas)
         canvas.lineWidth = oldWidth

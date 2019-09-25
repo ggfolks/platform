@@ -22,6 +22,7 @@ import * as L from "./list"
 import * as M from "./menu"
 import * as P from "./property"
 import * as S from "./scroll"
+import * as TA from "./tabs"
 import * as T from "./text"
 import * as X from "./box"
 
@@ -120,6 +121,8 @@ export class UI {
       case        "toggle": return new B.Toggle(ctx, parent, rconfig as B.ToggleConfig)
       case         "hlist": return new L.HList(ctx, parent, rconfig as L.HListConfig)
       case         "vlist": return new L.VList(ctx, parent, rconfig as L.VListConfig)
+      case           "tab": return new TA.Tab(ctx, parent, rconfig as TA.TabConfig)
+      case    "tabbedpane": return new TA.TabbedPane(ctx, parent, rconfig as TA.TabbedPaneConfig)
       case      "dropdown": return new D.Dropdown(ctx, parent, rconfig as D.DropdownConfig)
       case  "dropdownitem": return new D.DropdownItem(ctx, parent, rconfig as D.DropdownItemConfig)
       case       "menubar": return new M.MenuBar(ctx, parent, rconfig as M.MenuBarConfig)

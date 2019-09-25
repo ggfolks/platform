@@ -239,8 +239,40 @@ function mergeEdits (first :PMap<any>, second :PMap<any>) {
 }
 
 function createGraphModelData (graph :Graph, applyEdit :(edit :NodeEdit) => void) :ModelData {
+  const pageModels = new Map<ModelKey, Model>()
+  return {
+    pageKeys: Value.constant(["default"]),
+    pageData: {
+      resolve: (key :ModelKey) => {
+        let model = pageModels.get(key)
+        if (!model) {
+          pageModels.set(key, model = new Model(createPageModelData(
+            graph,
+            applyEdit,
+            key as string,
+          )))
+        }
+        return model
+      },
+    },
+    activePage: Mutable.local("default"),
+    toJSON: Value.constant(() => graph.toJSON()),
+    fromJSON: Value.constant((json :GraphConfig) => {
+      graph.fromJSON(json)
+      pageModels.clear() // force update to page data
+    }),
+  }
+}
+
+function createPageModelData (
+  graph :Graph,
+  applyEdit :(edit :NodeEdit) => void,
+  id :string,
+) :ModelData {
   const nodeModels = new Map<ModelKey, Model>()
   return {
+    id: Value.constant(id),
+    title: Value.constant(id),
     createNodes: Value.constant((config :GraphConfig) => {
       const add :GraphConfig = {}
       const ids = new Map<string, string>()
@@ -320,11 +352,6 @@ function createGraphModelData (graph :Graph, applyEdit :(edit :NodeEdit) => void
       const config = {}
       for (const id of ids) config[id] = graph.nodes.get(id)!.toJSON()
       return config
-    }),
-    toJSON: Value.constant(() => graph.toJSON()),
-    fromJSON: Value.constant((json :GraphConfig) => {
-      graph.fromJSON(json)
-      nodeModels.clear() // force update to node data
     }),
     nodeKeys: graph.nodes.keysValue(),
     nodeData: {

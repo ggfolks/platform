@@ -30,6 +30,7 @@ export class GraphViewer extends VGroup {
   private _editable = Value.constant(false)
   private _nodeCreator :Mutable<NodeCreator>
   private _nodeEditor :Mutable<NodeEditor>
+  private _nodeFunctionRemover? :Remover
   private _stack :Model[] = []
   private _poppable = Mutable.local(false)
   private _clearUndoStacks :Action
@@ -120,7 +121,7 @@ export class GraphViewer extends VGroup {
                     clearAll: {
                       name: Value.constant("Clear All"),
                       enabled: this._editable,
-                      action: this._createModelAction(model => {
+                      action: this._createPageModelAction(model => {
                         model.resolve<Action>("removeAllNodes")()
                       }),
                     },
@@ -179,7 +180,7 @@ export class GraphViewer extends VGroup {
                     sep2: {separator: Value.constant(true)},
                     selectAll: {
                       name: Value.constant("Select All"),
-                      action: this._createModelAction(model => {
+                      action: this._createPageModelAction(model => {
                         const nodeKeys = model.resolve<Source<IterableIterator<string>>>("nodeKeys")
                         nodeKeys.once(keys => {
                           for (const key of keys) this.selection.add(key)
@@ -199,7 +200,7 @@ export class GraphViewer extends VGroup {
                     },
                     cut: {
                       enabled: editableSelection,
-                      action: this._createModelAction(model => {
+                      action: this._createPageModelAction(model => {
                         clipboard.update(dataCopy(
                           model.resolve<Value<NodeCopier>>("copyNodes").current(this.selection),
                         ))
@@ -208,7 +209,7 @@ export class GraphViewer extends VGroup {
                     },
                     copy: {
                       enabled: haveSelection,
-                      action: this._createModelAction(model => {
+                      action: this._createPageModelAction(model => {
                         clipboard.update(dataCopy(
                           model.resolve<Value<NodeCopier>>("copyNodes").current(this.selection),
                         ))
@@ -218,13 +219,13 @@ export class GraphViewer extends VGroup {
                       enabled: Value.join2(clipboard, this._editable).map(
                         ([clipboard, editable]) => clipboard && editable,
                       ),
-                      action: this._createModelAction(model => {
+                      action: this._createPageModelAction(model => {
                         this._nodeCreator.current(dataCopy(clipboard.current!))
                       }),
                     },
                     delete: {
                       enabled: editableSelection,
-                      action: this._createModelAction(model => {
+                      action: this._createPageModelAction(model => {
                         this.applyEdit.current({selection: new Set(), remove: this.selection})
                       }),
                     },
@@ -306,11 +307,7 @@ export class GraphViewer extends VGroup {
         },
         style: {halign: "stretch"},
       }),
-      ctx.elem.create(ctx, this, {
-        type: "panner",
-        contents: {type: "graphview", editable: this._editable},
-        constraints: {stretch: true},
-      }),
+      this._createElement(ctx.model),
     )
     this._stack.push(ctx.model)
   }
@@ -341,23 +338,37 @@ export class GraphViewer extends VGroup {
 
   protected get defaultOffPolicy () :OffAxisPolicy { return "stretch" }
 
-  private _updateNodeFunctions (model :Model) {
-    const createNodes = model.resolve<Value<NodeCreator>>("createNodes").current
-    this._nodeCreator.update((config :GraphConfig) => {
-      const ids = createNodes(config)
-      const graphView = this.findChild("graphview") as GraphView
-      graphView.repositionNodes(ids)
-      return ids
-    })
-    this._nodeEditor.update(model.resolve<Value<NodeEditor>>("editNodes").current)
+  private _updateNodeFunctions (graphModel :Model) {
+    if (this._nodeFunctionRemover) {
+      this._nodeFunctionRemover()
+      this.disposer.remove(this._nodeFunctionRemover)
+    }
+    const pageData = graphModel.resolve<ModelProvider>("pageData")
+    const activePage = graphModel.resolve<Value<string>>("activePage")
+    this.disposer.add(this._nodeFunctionRemover = activePage.onValue(activePage => {
+      const pageModel = pageData.resolve(activePage)
+      const createNodes = pageModel.resolve<Value<NodeCreator>>("createNodes").current
+      this._nodeCreator.update((config :GraphConfig) => {
+        const ids = createNodes(config)
+        const graphView = this.findChild("graphview") as GraphView
+        graphView.repositionNodes(ids)
+        return ids
+      })
+      this._nodeEditor.update(pageModel.resolve<Value<NodeEditor>>("editNodes").current)
+    }))
   }
 
   private _createPannerAction (op :(panner :Panner) => void) :Action {
-    return () => op(this.contents[1] as Panner)
+    return () => op(this.contents[1].findChild("panner") as Panner)
   }
 
-  private _createModelAction (op :(model :Model) => void) :Action {
-    return () => op(this._stack[this._stack.length - 1])
+  private _createPageModelAction (op :(model :Model) => void) :Action {
+    return () => {
+      const graphModel = this._stack[this._stack.length - 1]
+      const pageData = graphModel.resolve<ModelProvider>("pageData")
+      const activePage = graphModel.resolve<Value<string>>("activePage")
+      op(pageData.resolve(activePage.current))
+    }
   }
 
   private _import () {
@@ -385,8 +396,20 @@ export class GraphViewer extends VGroup {
 
   private _createElement (model :Model) :Element {
     return this.ctx.elem.create(this.ctx.remodel(model), this, {
-      type: "panner",
-      contents: {type: "graphview", editable: this._editable},
+      type: "tabbedpane",
+      tabElement: {
+        type: "box",
+        contents: {type: "label", text: "title"},
+      },
+      contentElement: {
+        type: "panner",
+        contents: {type: "graphview", editable: this._editable},
+        constraints: {stretch: true},
+      },
+      data: "pageData",
+      keys: "pageKeys",
+      key: "id",
+      activeKey: "activePage",
       constraints: {stretch: true},
     })
   }
