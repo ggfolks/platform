@@ -130,6 +130,7 @@ export const DefaultTheme = {
   tab: {
     box: {
       padding: 5,
+      margin: [5, 5, 0, 5],
       border: "$tabNormal",
       hovered: {border: "$tabHovered"},
       selected: {border: "$tabSelected"},

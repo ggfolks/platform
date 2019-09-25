@@ -143,8 +143,8 @@ export class Box extends Element {
 
   protected computePreferredSize (hintX :number, hintY :number, into :dim2) {
     const {padding, margin} = this.style
-    const edgeWidth = insetWidth(padding || 0) - insetWidth(margin || 0)
-    const edgeHeight = insetHeight(padding || 0) - insetHeight(margin || 0)
+    const edgeWidth = insetWidth(padding || 0) + insetWidth(margin || 0)
+    const edgeHeight = insetHeight(padding || 0) + insetHeight(margin || 0)
     const psize = this.contents.preferredSize(hintX-edgeWidth, hintY-edgeHeight)
     dim2.set(into, psize[0] + edgeWidth, psize[1] + edgeHeight)
   }
