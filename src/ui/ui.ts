@@ -1,8 +1,8 @@
-import {PMap} from "../core/util"
+import {PMap, log} from "../core/util"
 import {Record} from "../core/data"
 import {makeConfig} from "../core/config"
 import {ImageResolver, StyleContext, StyleDefs} from "./style"
-import {Model} from "./model"
+import {Model, MissingModelElem} from "./model"
 import {
   Element,
   ElementConfig,
@@ -95,44 +95,53 @@ export class UI {
   }
 
   createElement (ctx :ElementContext, parent :Element, config :ElementConfig) :Element {
-    const rstyles = this.resolveStyles(
-      this.getElementScope(parent, config),
-      config.type,
-      config.style as Record,
-    )
-    const rconfig = {...config, style: rstyles} as any
-    switch (config.type) {
-    case           "box": return new X.Box(ctx, parent, rconfig as X.BoxConfig)
-    case       "control": return new E.Control(ctx, parent, rconfig as E.ControlConfig)
-    case           "row": return new G.Row(ctx, parent, rconfig as G.RowConfig)
-    case        "column": return new G.Column(ctx, parent, rconfig as G.ColumnConfig)
-    case     "abslayout": return new G.AbsLayout(ctx, parent, rconfig as G.AbsLayoutConfig)
-    case        "spacer": return new G.Spacer(ctx, parent, rconfig as G.SpacerConfig)
-    case         "image": return new I.Image(ctx, parent, rconfig as I.ImageConfig)
-    case         "label": return new T.Label(ctx, parent, rconfig as T.LabelConfig)
-    case        "cursor": return new T.Cursor(ctx, parent, rconfig as T.CursorConfig)
-    case          "text": return new T.Text(ctx, parent, rconfig as T.TextConfig)
-    case    "numbertext": return new T.NumberText(ctx, parent, rconfig as T.NumberTextConfig)
-    case     "colortext": return new T.ColorText(ctx, parent, rconfig as T.ColorTextConfig)
-    case "editablelabel": return new T.EditableLabel(ctx, parent, rconfig as T.EditableLabelConfig)
-    case        "button": return new B.Button(ctx, parent, rconfig as B.ButtonConfig)
-    case        "toggle": return new B.Toggle(ctx, parent, rconfig as B.ToggleConfig)
-    case         "hlist": return new L.HList(ctx, parent, rconfig as L.HListConfig)
-    case         "vlist": return new L.VList(ctx, parent, rconfig as L.VListConfig)
-    case      "dropdown": return new D.Dropdown(ctx, parent, rconfig as D.DropdownConfig)
-    case  "dropdownitem": return new D.DropdownItem(ctx, parent, rconfig as D.DropdownItemConfig)
-    case       "menubar": return new M.MenuBar(ctx, parent, rconfig as M.MenuBarConfig)
-    case          "menu": return new M.Menu(ctx, parent, rconfig as M.MenuConfig)
-    case      "menuitem": return new M.MenuItem(ctx, parent, rconfig as M.MenuItemConfig)
-    case      "shortcut": return new M.Shortcut(ctx, parent, rconfig as M.ShortcutConfig)
-    case        "panner": return new S.Panner(ctx, parent, rconfig as S.PannerConfig)
-    case   "graphviewer": return new GR.GraphViewer(ctx, parent, rconfig as GR.GraphViewerConfig)
-    case     "graphview": return new GR.GraphView(ctx, parent, rconfig as GR.GraphViewConfig)
-    case      "nodeview": return new GR.NodeView(ctx, parent, rconfig as GR.NodeViewConfig)
-    case  "propertyview": return new P.PropertyView(ctx, parent, rconfig as P.PropertyViewConfig)
-    case      "edgeview": return new GR.EdgeView(ctx, parent, rconfig as GR.EdgeViewConfig)
-    case      "terminal": return new GR.Terminal(ctx, parent, rconfig as GR.TerminalConfig)
-    default: throw new Error(`Unknown element type '${config.type}'.`)
+    try {
+      const rstyles = this.resolveStyles(
+        this.getElementScope(parent, config),
+        config.type,
+        config.style as Record,
+      )
+      const rconfig = {...config, style: rstyles} as any
+      switch (config.type) {
+      case           "box": return new X.Box(ctx, parent, rconfig as X.BoxConfig)
+      case       "control": return new E.Control(ctx, parent, rconfig as E.ControlConfig)
+      case           "row": return new G.Row(ctx, parent, rconfig as G.RowConfig)
+      case        "column": return new G.Column(ctx, parent, rconfig as G.ColumnConfig)
+      case     "abslayout": return new G.AbsLayout(ctx, parent, rconfig as G.AbsLayoutConfig)
+      case        "spacer": return new G.Spacer(ctx, parent, rconfig as G.SpacerConfig)
+      case         "image": return new I.Image(ctx, parent, rconfig as I.ImageConfig)
+      case         "label": return new T.Label(ctx, parent, rconfig as T.LabelConfig)
+      case        "cursor": return new T.Cursor(ctx, parent, rconfig as T.CursorConfig)
+      case          "text": return new T.Text(ctx, parent, rconfig as T.TextConfig)
+      case    "numbertext": return new T.NumberText(ctx, parent, rconfig as T.NumberTextConfig)
+      case     "colortext": return new T.ColorText(ctx, parent, rconfig as T.ColorTextConfig)
+      case "editablelabel": return new T.EditableLabel(ctx, parent, rconfig as T.EditableLabelConfig)
+      case        "button": return new B.Button(ctx, parent, rconfig as B.ButtonConfig)
+      case        "toggle": return new B.Toggle(ctx, parent, rconfig as B.ToggleConfig)
+      case         "hlist": return new L.HList(ctx, parent, rconfig as L.HListConfig)
+      case         "vlist": return new L.VList(ctx, parent, rconfig as L.VListConfig)
+      case      "dropdown": return new D.Dropdown(ctx, parent, rconfig as D.DropdownConfig)
+      case  "dropdownitem": return new D.DropdownItem(ctx, parent, rconfig as D.DropdownItemConfig)
+      case       "menubar": return new M.MenuBar(ctx, parent, rconfig as M.MenuBarConfig)
+      case          "menu": return new M.Menu(ctx, parent, rconfig as M.MenuConfig)
+      case      "menuitem": return new M.MenuItem(ctx, parent, rconfig as M.MenuItemConfig)
+      case      "shortcut": return new M.Shortcut(ctx, parent, rconfig as M.ShortcutConfig)
+      case        "panner": return new S.Panner(ctx, parent, rconfig as S.PannerConfig)
+      case   "graphviewer": return new GR.GraphViewer(ctx, parent, rconfig as GR.GraphViewerConfig)
+      case     "graphview": return new GR.GraphView(ctx, parent, rconfig as GR.GraphViewConfig)
+      case      "nodeview": return new GR.NodeView(ctx, parent, rconfig as GR.NodeViewConfig)
+      case  "propertyview": return new P.PropertyView(ctx, parent, rconfig as P.PropertyViewConfig)
+      case      "edgeview": return new GR.EdgeView(ctx, parent, rconfig as GR.EdgeViewConfig)
+      case      "terminal": return new GR.Terminal(ctx, parent, rconfig as GR.TerminalConfig)
+      default: throw new Error(`Unknown element type '${config.type}'.`)
+      }
+    } catch (error) {
+      log.warn(`Failed to create '${config.type}' element: ${error}`)
+      log.warn(`- path to element: ${parent.configPath.concat(config.type)}`)
+      if (error instanceof MissingModelElem) {
+        log.warn(`- path to model value: ${error.path} (missing @ ${error.pos})`)
+      }
+      return new E.ErrorViz(ctx, parent, {type: "error"})
     }
   }
 

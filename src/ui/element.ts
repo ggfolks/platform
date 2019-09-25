@@ -135,6 +135,13 @@ export abstract class Element implements Disposable {
       : this.requireParent.state
   }
 
+  /** Returns the path to this element in the root UI config. This is the list of the types of all
+    * elements from the root down to (and including) this element. This is used in debug messages to
+    * help the developer locate the element in the config when an error occurred creating it. */
+  get configPath () :string[] {
+    return this.parent ? this.parent.configPath.concat(this.config.type) : [this.config.type]
+  }
+
   setCursor (owner :Element, cursor :string) {
     this.requireParent.setCursor(owner, cursor)
   }
@@ -336,6 +343,24 @@ export abstract class Element implements Disposable {
   protected abstract computePreferredSize (hintX :number, hintY :number, into :dim2) :void
   protected abstract relayout () :void
   protected abstract rerender (canvas :CanvasRenderingContext2D, region :rect) :void
+}
+
+/** An element that acts as a placeholder for elements that failed to be created. */
+export class ErrorViz extends Element {
+
+  constructor (ctx :ElementContext, parent :Element, readonly config :ElementConfig) {
+    super(ctx, parent, config)
+  }
+
+  protected computePreferredSize (hintX :number, hintY :number, into :dim2) {
+    dim2.set(into, 20, 10)
+  }
+
+  protected relayout () {}
+  protected rerender (canvas :CanvasRenderingContext2D, region :rect) {
+    canvas.fillStyle = "red"
+    canvas.fillRect(this.x, this.y, this.width, this.height)
+  }
 }
 
 /** Encapsulates a mouse or touch interaction with an element. When the button is pressed over an

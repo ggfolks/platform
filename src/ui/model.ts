@@ -15,6 +15,11 @@ type ModelElem = ModelValue | ModelData
 /** Defines a POJO that contains model values. */
 export interface ModelData { [key :string] :ModelElem }
 
+export class MissingModelElem extends Error {
+  constructor (readonly path :string[], readonly pos :number) { super() }
+  get message () { return `Missing model element '${this.path[this.pos]}'` }
+}
+
 function find<V extends ModelValue> (
   data :ModelData,
   path :string[],
@@ -24,7 +29,7 @@ function find<V extends ModelValue> (
   const value = findOpt(data, path, pos)
   if (!value) {
     if (defaultValue) return defaultValue
-    else throw new Error(`Missing model element at pos ${pos} in ${path}`)
+    else throw new MissingModelElem(path, pos)
   }
   else return value as V
 }
