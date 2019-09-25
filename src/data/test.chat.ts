@@ -6,7 +6,7 @@ import {guestValidator} from "../auth/auth"
 import {getPropMetas, dobject, dmap, dvalue, dcollection, dqueue} from "./meta"
 import {Auth, DataSource, DObject, DState, MetaMsg, Path, findObjectType} from "./data"
 import {MsgEncoder, MsgDecoder} from "./protocol"
-import {Address, Client, Connection, CState, Resolved} from "./client"
+import {Client, Connection, CState, Resolved} from "./client"
 import {MemoryDataStore, Session, SessionConfig} from "./server"
 
 import {TextEncoder, TextDecoder} from "util"
@@ -381,7 +381,7 @@ class TestConnection extends Connection {
   private readonly handler :ClientHandler
   readonly state = Value.constant("connected" as CState)
 
-  constructor (readonly client :Client, addr :Address, config :SessionConfig,
+  constructor (readonly client :Client, addr :URL, config :SessionConfig,
                readonly runq :RunQueue) {
     super(client)
     this.handler = new ClientHandler(config, this, runq)
@@ -395,7 +395,7 @@ class TestConnection extends Connection {
   close () { this.handler.dispose() }
 }
 
-const testAddr = {host: "test", port: 0, secure: false, path: "/"}
+const testAddr = new URL("ws://test/")
 const testLocator = (path :Path) => Subject.constant(testAddr)
 
 test("subscribe-auth", () => {

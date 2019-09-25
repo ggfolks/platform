@@ -11,33 +11,22 @@ import {DownMsg, DownType, SyncMsg, SyncType, UpMsg, UpType,
 
 const DebugLog = false
 
-/** Uniquely identifies a data server; provides the info needed to establish a connection to it. */
-export type Address = {host :string, port :number, secure: boolean, path :string}
-
-/** Converts `addr` to a WebSocket URL. */
-export function addrToURL (addr :Address) :string {
-  const pcol = addr.secure ? "wss" : "ws"
-  return `${pcol}:${addr.host}:${addr.port}/${addr.path}`
-}
-
-function addrToKey (addr :Address) :string {
-  return `${addr.secure ? "s/" : ""}${addr.host}:${addr.port}/${addr.path}`
-}
-
 /** Resolves the address of the server that hosts the object at `path`. */
-export type Locator = (path :Path) => Subject<Address>
+export type Locator = (path :Path) => Subject<URL>
 
 /** Creates `Connection` instances for clients. */
-export type Connector = (client :Client, addr :Address) => Connection
+export type Connector = (client :Client, addr :URL) => Connection
 
 export type Resolved<T> = [T, Remover]
 
-export function addrFromLocation (path :string) :Address {
-  const secure = window.location.protocol === "https:"
-  const host = window.location.hostname
-  const port = window.location.port === "3000" ? 8080 : // for local test server
-    parseInt(window.location.port || (secure ? "443" : "80"))
-  return {host, port, secure, path: "data"}
+export function addrFromLocation (path :string) :URL {
+  const addr = new URL(window.location.href)
+  addr.protocol = (addr.protocol === "https:") ? "wss:" : "ws:"
+  if (addr.port === "3000") addr.port = "8080"
+  const locpath = addr.pathname
+  if (path.startsWith("/")) addr.pathname = path
+  else addr.pathname = locpath.substring(0, locpath.lastIndexOf("/")+1) + path
+  return addr
 }
 
 type Resolver<T> = () => Resolved<T>
@@ -209,7 +198,7 @@ export class Client implements DataSource, Disposable {
   protected connFor (path :Path) :Subject<Connection> {
     const {locator, conns, connector} = this
     return locator(path).map(addr => {
-      const key = addrToKey(addr)
+      const key = addr.toString()
       const conn = conns.get(key)
       if (conn) return conn
       const nconn = connector(this, addr)
@@ -287,10 +276,10 @@ class WSConnection extends Connection {
   private readonly ws :WebSocket
   readonly state = Mutable.local("connecting" as CState)
 
-  constructor (client :Client, addr :Address) {
+  constructor (client :Client, addr :URL) {
     super(client)
-    log.info("Connecting", "addr", addrToURL(addr))
-    const ws = this.ws = new WebSocket(addrToURL(addr))
+    log.info("Connecting", "addr", addr)
+    const ws = this.ws = new WebSocket(addr.href)
     ws.binaryType = "arraybuffer"
     ws.addEventListener("open", ev => {
       this.state.update("connected")
