@@ -29,9 +29,9 @@ export class Image extends Element {
 
   protected computePreferredSize (hintX :number, hintY :number, into :dim2) {
     const image = this.image.current
-    if (image instanceof HTMLImageElement) {
-      dim2.set(into, this.getWidth(image), this.getHeight(image))
-    }
+    if (image instanceof HTMLImageElement) dim2.set(
+      into, this.getWidth(image), this.getHeight(image))
+    else dim2.set(into, this.config.width || 0, this.config.height || 0)
   }
 
   protected relayout () {} // nothing needed
