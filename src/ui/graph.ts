@@ -7,7 +7,7 @@ import {GraphConfig, getConstantOrValueNodeId} from "../graph/graph"
 import {InputEdge} from "../graph/node"
 import {Box} from "./box"
 import {Element, ElementConfig, ElementContext, PointerInteraction, Observer} from "./element"
-import {AbsConstraints, AbsGroup, AxisConfig, VGroup} from "./group"
+import {AbsConstraints, AbsGroup, AxisConfig, VGroup, OffAxisPolicy} from "./group"
 import {VList} from "./list"
 import {Action, Model, ModelData, ModelProvider, Spec, dataProvider} from "./model"
 import {InputValue, NodeCopier, NodeCreator, NodeEdit, NodeEditor} from "./node"
@@ -35,7 +35,7 @@ export class GraphViewer extends VGroup {
   private _clearUndoStacks :Action
 
   constructor (readonly ctx :ElementContext, parent :Element, readonly config :GraphViewerConfig) {
-    super(ctx, parent, {...config, offPolicy: "stretch"})
+    super(ctx, parent, config)
     if (this.config.editable) this._editable = ctx.model.resolve(this.config.editable)
     const typeCategoryKeys = ctx.model.resolve<Source<string[]>>("typeCategoryKeys")
     const typeCategoryData = ctx.model.resolve<ModelProvider>("typeCategoryData")
@@ -65,7 +65,7 @@ export class GraphViewer extends VGroup {
             offPolicy: "stretch",
             contents: [
               {type: "label", text: "name"},
-              {type: "spacer", height: 0, constraints: {stretch: true}},
+              {type: "spacer", width: 15, constraints: {stretch: true}},
               {type: "label", text: Value.constant("▸"), visible: "submenu"},
               {type: "shortcut", command: "shortcut"},
             ],
@@ -282,7 +282,7 @@ export class GraphViewer extends VGroup {
             },
             {
               type: "spacer",
-              height: 0,
+              width: 10,
               constraints: {stretch: true},
             },
             {
@@ -338,6 +338,8 @@ export class GraphViewer extends VGroup {
     this._clearUndoStacks()
     this.invalidate()
   }
+
+  protected get defaultOffPolicy () :OffAxisPolicy { return "stretch" }
 
   private _updateNodeFunctions (model :Model) {
     const createNodes = model.resolve<Value<NodeCreator>>("createNodes").current

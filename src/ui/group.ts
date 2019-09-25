@@ -94,6 +94,8 @@ abstract class Group extends Element {
     // render in reverse order since we process events in forward
     for (let ii = this.contents.length - 1; ii >= 0; ii--) this.contents[ii].render(canvas, region)
   }
+
+  protected get defaultOffPolicy () :OffAxisPolicy { return "constrain" }
 }
 
 /** Layout constraints for absolutely-positioned elements. */
@@ -294,7 +296,7 @@ export abstract class VGroup extends Group {
   }
 
   protected relayout () {
-    const offPolicy = this.config.offPolicy || "constrain"
+    const offPolicy = this.config.offPolicy || this.defaultOffPolicy
     const gap = this.config.gap || 0
     const bounds = this._bounds
     const left = bounds[0], top = bounds[1], width = bounds[2], height = bounds[3]
@@ -342,7 +344,7 @@ export abstract class HGroup extends Group {
   }
 
   protected relayout () {
-    const offPolicy = this.config.offPolicy || "constrain"
+    const offPolicy = this.config.offPolicy || this.defaultOffPolicy
     const gap = this.config.gap || 0
     const bounds = this._bounds
     const left = bounds[0], top = bounds[1], width = bounds[2], height = bounds[3]
@@ -396,7 +398,7 @@ export class Spacer extends Element {
   }
 
   protected computePreferredSize (hintX :number, hintY :number, into :dim2) {
-    dim2.set(into, getValue(this.config.width, hintX), getValue(this.config.height, hintY))
+    dim2.set(into, getValue(this.config.width, 0), getValue(this.config.height, 0))
   }
 
   protected relayout () {}
