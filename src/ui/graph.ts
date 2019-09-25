@@ -384,7 +384,7 @@ export class GraphViewer extends VGroup {
   }
 
   private _createElement (model :Model) :Element {
-    return this.ctx.elem.create({...this.ctx, model}, this, {
+    return this.ctx.elem.create(this.ctx.remodel(model), this, {
       type: "panner",
       contents: {type: "graphview", editable: this._editable},
       constraints: {stretch: true},
@@ -453,7 +453,7 @@ export class GraphView extends AbsGroup {
           // if we encounter any valid positions, don't layout automatically
           if (position[0] > 0 || position[1] > 0) models = null
           if (models) models.push(model)
-          const subctx = {...ctx, model}
+          const subctx = ctx.remodel(model)
           elem = {
             node: ctx.elem.create(subctx, this, {
               type: "box",
@@ -860,12 +860,7 @@ export class NodeView extends VGroup {
             text: title,
             contents: {
               type: "box",
-              contents: {
-                type: "label",
-                overrideParentState: "normal",
-                scopeId: "nodeHeader",
-                text: title,
-              },
+              contents: {type: "label", overrideParentState: "normal", scopeId: "nodeHeader"},
             },
           } : {type: "label", overrideParentState: "normal", text: title},
       }),

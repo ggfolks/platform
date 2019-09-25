@@ -69,27 +69,27 @@ export interface ToggleConfig extends ControlConfig {
   checkedContents? :ElementConfig
 }
 
-function adjustViz (cfg :ElementConfig, visible :Spec<Value<boolean>>) :ElementConfig {
+function injectViz (cfg :ElementConfig, visible :Spec<Value<boolean>>) :ElementConfig {
   return {...cfg, visible}
 }
 
 export class Toggle extends Control {
-  readonly checked :Value<boolean>
   readonly onClick :Action
   readonly checkedContents? :Element
 
-  constructor (ctx :ElementContext, parent :Element, readonly config :ToggleConfig) {
-    super(ctx, parent, config)
-    this.checked = ctx.model.resolve(config.checked)
+  constructor (ctx :ElementContext, parent :Element,
+               readonly config :ToggleConfig,
+               readonly checked :Value<boolean> = ctx.model.resolve(config.checked)) {
+    super(ctx, parent,
+          // if we have a special checked contents element, bind visibility of our "not" checked
+          // (normal) contents to the opposite of our checked value
+          config.checkedContents ?
+          {...config, contents: injectViz(config.contents, checked.map(c => !c))} :
+          config)
     this.invalidateOnChange(this.checked)
     this.onClick = config.onClick ? ctx.model.resolve(config.onClick) : NoopAction
-    if (config.checkedContents) {
-      this.checkedContents = ctx.elem.create(
-        ctx, this, adjustViz(config.checkedContents, config.checked))
-      // since we have a special checked contents element, bind visibility of our "not" checked
-      // (normal) contents to the opposite of our checked value
-      this.injector<ToggleConfig>(this.contents).inject("visible", this.checked.map(c => !c))
-    }
+    if (config.checkedContents) this.checkedContents = ctx.elem.create(
+      ctx, this, injectViz(config.checkedContents, checked))
   }
 
   findChild (type :string) :Element|undefined {

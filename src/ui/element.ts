@@ -59,13 +59,34 @@ export interface ElementFactory {
 }
 
 /** Gives elements access to their enclosing context. */
-export type ElementContext = {
-  /** Used to obtain model data for elements. */
-  model :Model
-  /** Used to resolve styles for elements. */
-  style :StyleContext
-  /** Used to create new elements. */
-  elem :ElementFactory
+export class ElementContext {
+
+  constructor (
+    /** Used to obtain model data for elements. */
+    readonly model :Model,
+    /** Used to resolve styles for elements. */
+    readonly style :StyleContext,
+    /** Used to create new elements. */
+    readonly elem :ElementFactory) {}
+
+  /** Creates a new element context with the supplied `model`. */
+  remodel (model :Model) :ElementContext { return new ElementContext(model, this.style, this.elem) }
+
+  /** Creates an element context that will inject the supplied element configuration overrides. This
+    * enables composite elements to inject specific values into their contained children without
+    * having to take control over the configuration entirely. In general we wish to allow the end
+    * user to decide how a particular composite element is arranged (maybe you want an `icon` next
+    * to the `label` inside your `text` element), but we still need to reach in and apply custom
+    * configuration to the `label` element inside the `text` element. */
+  inject (rewrites :{[key :string] :Object}) :ElementContext {
+    return new ElementContext(this.model, this.style, {
+      create: (ctx, parent, config) => {
+        const rewrite = rewrites[config.type]
+        const rconfig = rewrite ? Object.assign(Object.assign({}, config), rewrite) : config
+        return this.elem.create(ctx, parent, rconfig)
+      }
+    })
+  }
 }
 
 /** Configuration shared by all [[Element]]s. */
@@ -87,10 +108,6 @@ export interface ElementConfig {
 export type StyleScope = {
   id :string
   states :string[]
-}
-
-interface Injector<C extends ElementConfig> {
-  inject<K extends keyof C> (key :K, value :C[K]) :void
 }
 
 const mergedBounds = rect.create()
@@ -310,15 +327,6 @@ export abstract class Element implements Disposable {
 
   toString () {
     return `${this.constructor.name}@${this._bounds}`
-  }
-
-  /** Returns an injector that can be used to override resolved properties in a child. _NOTE:_ the
-    * properties must be named _exactly_ the same in the child's config and in the child object. For
-    * example `ElementConfig.visible` is resolved to `Element.visible`. Following this pattern (and
-    * this slightly cumbersome two part injection process) ensures that we can do this terrible
-    * terrible hackery in a somewhat type-safe way. Be careful! */
-  protected injector<C extends ElementConfig> (child :Element) :Injector<C> {
-    return {inject: (key, value) => { (child as any)[key] = value }}
   }
 
   protected getStyle<S> (styles :PMap<S>, state :string) :S {
@@ -735,7 +743,7 @@ export class Control extends Element {
       this.disposer.add(this.enabled.onValue(updateState))
     }
     this.disposer.add(this._hovered.onValue(updateState))
-    this.contents = this.createContents(ctx)
+    this.contents = ctx.elem.create(ctx, this, this.config.contents)
   }
 
   get styleScope () :StyleScope { return {id: "control", states: ControlStates} }
@@ -794,10 +802,6 @@ export class Control extends Element {
   dispose () {
     super.dispose()
     this.contents.dispose()
-  }
-
-  protected createContents (ctx :ElementContext) :Element {
-    return ctx.elem.create(ctx, this, this.config.contents)
   }
 
   protected get computeState () :string {

@@ -41,7 +41,7 @@ export class PropertyView extends VGroup {
         if (!elem) {
           const model = propertyData.resolve(key)
           elem = ctx.elem.create(
-            {...ctx, model},
+            ctx.remodel(model),
             this,
             createPropertyElementConfig(model, editable),
           )

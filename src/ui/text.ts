@@ -3,7 +3,7 @@ import {refEquals} from "../core/data"
 import {Remover, PMap, getValue} from "../core/util"
 import {Mutable, Subject, Value} from "../core/react"
 import {Control, ControlConfig, ControlStates, Element, ElementConfig, ElementContext,
-        PointerInteraction, falseValue, blankValue} from "./element"
+        PointerInteraction, falseValue} from "./element"
 import {Spec, FontConfig, Paint, PaintConfig, DefaultPaint, ShadowConfig, Span, EmptySpan,
         insetsToCSS} from "./style"
 import {Action, NoopAction} from "./model"
@@ -108,7 +108,7 @@ export class Label extends AbstractLabel {
     super(ctx, parent, config)
   }
   protected resolveText (ctx :ElementContext, config :LabelConfig) {
-    return ctx.model.resolve(config.text, blankValue) }
+    return ctx.model.resolve(config.text) }
 }
 
 async function readClipText () :Promise<string|undefined> {
@@ -367,7 +367,6 @@ const TextStyleScope = {id: "text", states: [...ControlStates, "invalid"]}
 /** Base class for text edit elements. */
 export abstract class AbstractText extends Control {
   private readonly jiggle = Mutable.local(false)
-  private readonly shadowed = Mutable.local(false)
   private readonly textState :TextState
   private readonly onEnter :Action
   readonly coffset = Mutable.local(0)
@@ -381,8 +380,9 @@ export abstract class AbstractText extends Control {
     parent :Element,
     readonly config :AbstractTextConfig,
     readonly text :Mutable<string>,
+    private readonly shadowed = Mutable.local(false)
   ) {
-    super(ctx, parent, config)
+    super(ctx.inject({label: {text, visible: shadowed.map(s => !s)}}), parent, config)
     this.invalidateOnChange(this.coffset)
     this.onEnter = config.onEnter ? ctx.model.resolve(config.onEnter) : NoopAction
 
@@ -392,10 +392,6 @@ export abstract class AbstractText extends Control {
     const label = this.contents.findChild("label")
     if (label) this.label = label as Label
     else throw new Error(`Text control must have Label child [config=${JSON.stringify(config)}].`)
-
-    const inj = this.injector<LabelConfig>(label)
-    inj.inject("text", this.text)
-    inj.inject("visible", this.shadowed.map(s => !s))
 
     // hide the cursor when the label has a selection
     const hasSel = this.label.selection.map(([ss, se]) => se > ss)

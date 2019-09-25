@@ -91,7 +91,7 @@ export class UI {
   }
 
   createRoot (config :RootConfig, model :Model) :Root {
-    return new Root({model, style: this.style, elem: this.elem}, config)
+    return new Root(new ElementContext(model, this.style, this.elem), config)
   }
 
   createElement (ctx :ElementContext, parent :Element, config :ElementConfig) :Element {

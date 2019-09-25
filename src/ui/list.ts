@@ -74,7 +74,7 @@ export function syncListContents (ctx :ElementContext, list :Element & AbstractL
     for (const key of keys) {
       let elem = elements.get(key)
       if (!elem) {
-        elem = ctx.elem.create({...ctx, model: data.resolve(key)}, list, config.element)
+        elem = ctx.elem.create(ctx.remodel(data.resolve(key)), list, config.element)
         list.elements.set(key, elem)
       }
       contents.push(elem)
