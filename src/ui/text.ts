@@ -681,7 +681,8 @@ export class EditableLabel extends AbstractText {
   }
 
   handleDoubleClick (event :MouseEvent, pos :vec2) :boolean {
-    if (this.isFocused) return false
+    // we might have a Value instead of a Mutable, in which case we just act as a normal label
+    if (this.isFocused || !(this.text instanceof Mutable)) return false
     this.focus()
     const interaction = this.handlePointerDown(event, pos)
     if (interaction) interaction.release(event, pos)

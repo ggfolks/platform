@@ -399,7 +399,29 @@ export class GraphViewer extends VGroup {
       type: "tabbedpane",
       tabElement: {
         type: "box",
-        contents: {type: "label", text: "title"},
+        contents: {
+          type: "row",
+          contents: [
+            {
+              type: "editablelabel",
+              text: "title",
+              contents: {
+                type: "box",
+                contents: {type: "label", overrideParentState: "normal", scopeId: "tab"},
+              },
+            },
+            {
+              type: "button",
+              visible: "removable",
+              contents: {
+                type: "box",
+                scopeId: "removeTabButton",
+                contents: {type: "label", text: Value.constant("×")},
+              },
+              onClick: "remove",
+            },
+          ],
+        }
       },
       contentElement: {
         type: "panner",
@@ -419,6 +441,7 @@ export class GraphViewer extends VGroup {
       keys: "pageKeys",
       key: "id",
       activeKey: "activePage",
+      updateOrder: "updateOrder",
       constraints: {stretch: true},
     })
   }

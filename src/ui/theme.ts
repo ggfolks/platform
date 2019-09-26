@@ -29,6 +29,8 @@ export const DefaultStyles = {
     lighterGray: {type: "color", color: "#E0E0E0"},
     lightGray: {type: "color", color: "#D0D0D0"},
     mediumGray: {type: "color", color: "#808080"},
+    darkGray: {type: "color", color: "#606060"},
+    darkerGray: {type: "color", color: "#404040"},
     black: {type: "color", color: "#000000"},
   },
   borders: {
@@ -154,6 +156,16 @@ export const DefaultTheme = {
       pressed: {border: "$tabPressed"},
     },
     label: {font: "$tab"},
+  },
+  removeTabButton: {
+    box: {margin: [0, 0, 0, 10]},
+    label: {
+      font: "$tab",
+      fill: "$darkGray",
+      hovered: {fill: "$mediumGray"},
+      hoverFocused: {fill: "$mediumGray"},
+      pressed: {fill: "$lightGray"},
+    },
   },
   tabList: {
     box: {padding: [0, 5, 0, 5], border: "$tabList"}

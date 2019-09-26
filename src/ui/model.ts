@@ -2,7 +2,7 @@ import {Source, Value, Mutable} from "../core/react"
 import {RMap, MutableMap} from "../core/rcollect"
 
 /** Model actions executed in response to user actions (like button clicks). */
-export type Action = () => void
+export type Action = (...args :any) => void
 
 /** An action that does nothing. */
 export const NoopAction :Action = () => {}
