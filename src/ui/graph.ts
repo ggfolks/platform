@@ -181,7 +181,7 @@ export class GraphViewer extends VGroup {
                     selectAll: {
                       name: Value.constant("Select All"),
                       action: this._createPageModelAction(model => {
-                        const nodeKeys = model.resolve<Source<IterableIterator<string>>>("nodeKeys")
+                        const nodeKeys = model.resolve<Source<Iterable<string>>>("nodeKeys")
                         nodeKeys.once(keys => {
                           for (const key of keys) this.selection.add(key)
                         })

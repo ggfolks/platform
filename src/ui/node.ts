@@ -139,7 +139,7 @@ class UINode extends Node {
         canRedo.update(false)
       }
       function getCategoryKeys (category :CategoryNode) :Value<string[]> {
-        return category.children.keysValue().map<string[]>(Array.from)
+        return category.children.keysValue.map<string[]>(Array.from)
       }
       function getCategoryData (
         category :CategoryNode,
@@ -353,7 +353,7 @@ function createPageModelData (
       for (const id of ids) config[id] = graph.nodes.get(id)!.toJSON()
       return config
     }),
-    nodeKeys: graph.nodes.keysValue(),
+    nodeKeys: graph.nodes.keysValue,
     nodeData: {
       resolve: (key :ModelKey) => {
         let model = nodeModels.get(key)
@@ -387,9 +387,9 @@ function createPageModelData (
             title: node.title,
             position: createPropertyValue("position"),
             ...subgraphElement,
-            propertyKeys: node.propertiesMeta.keysValue().map(Array.from),
-            inputKeys: node.inputsMeta.keysValue().map(Array.from),
-            outputKeys: node.outputsMeta.keysValue().map(Array.from),
+            propertyKeys: node.propertiesMeta.keysValue.map(Array.from),
+            inputKeys: node.inputsMeta.keysValue.map(Array.from),
+            outputKeys: node.outputsMeta.keysValue.map(Array.from),
             defaultOutputKey: Value.constant(node.defaultOutputKey),
             propertyData: mapProvider(node.propertiesMeta, (value, key) => ({
               name: Value.constant(key),
