@@ -83,6 +83,25 @@ export interface ModelProvider {
 
   /** Resolves the model for `key`. */
   resolve (key :ModelKey) :Model
+
+  // TODO: should model providers provide a way to remove no longer used models?
+}
+
+/** Creates a model provider that computes the model via a `fn` of its `key`. */
+export function makeProvider<K extends ModelKey> (fn :(key :K) => ModelData) :ModelProvider {
+  const models = new Map<ModelKey, Model>()
+  return {
+    resolve: (key :K) => {
+      let model = models.get(key)
+      if (!model) models.set(key, model = new Model(fn(key)))
+      return model
+    }
+  }
+}
+
+/** Provides models from model data. */
+export function dataProvider (data :ModelData) :ModelProvider {
+  return makeProvider(key => data[key] as ModelData)
 }
 
 /** Creates a model provider from the supplied `map` and model data `maker` function. The `maker`
@@ -100,16 +119,7 @@ export interface ModelProvider {
 export function mapProvider<K extends ModelKey, V> (
   map :RMap<K,V>, maker :(v :Value<V>, k :K) => ModelData
 ) :ModelProvider {
-  const models = new Map<ModelKey,Model>()
-  return {
-    resolve: (key) => {
-      const model = models.get(key)
-      if (model) return model
-      const nmodel = new Model(maker(map.getValue(key as K) as Value<V>, key as K))
-      models.set(key, nmodel)
-      return nmodel
-    }
-  }
+  return makeProvider(key => maker(map.getValue(key as K) as Value<V>, key as K))
 }
 
 /** Creates a model provider from the supplied `map` and model data `maker` function. The `maker`
@@ -131,28 +141,5 @@ export function mapProvider<K extends ModelKey, V> (
 export function mutableMapProvider<K extends ModelKey, V> (
   map :MutableMap<K,V>, maker :(m:Mutable<V>) => ModelData
 ) :ModelProvider {
-  const models = new Map<ModelKey,Model>()
-  return {
-    resolve: (key) => {
-      const model = models.get(key)
-      if (model) return model
-      const nmodel = new Model(maker(map.getMutable(key as K) as Mutable<V>))
-      models.set(key, nmodel)
-      return nmodel
-    }
-  }
-}
-
-/** Provides models from model data. */
-export function dataProvider (data :ModelData) :ModelProvider {
-  const models = new Map<ModelKey, Model>()
-  return {
-    resolve: key => {
-      let model = models.get(key)
-      if (!model) {
-        models.set(key, model = new Model(data[key] as ModelData))
-      }
-      return model
-    }
-  }
+  return makeProvider(key => maker(map.getMutable(key as K) as Mutable<V>))
 }
