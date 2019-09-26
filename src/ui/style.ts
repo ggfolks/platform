@@ -487,11 +487,10 @@ export function makeBorder (ctx :StyleContext, config :BorderConfig) :Subject<De
             const cornerRadii = Array.isArray(cornerRadius)
               ? cornerRadius
               : [cornerRadius, cornerRadius, cornerRadius, cornerRadius]
-            const midx = w/2, midy = h/2
-            strokeArcPath(canvas, 0, midy, 0, 0, midx, 0, cornerRadii[0], lineWidths[0])
-            strokeArcPath(canvas, midx, 0, w, 0, w, midy, cornerRadii[1], lineWidths[1])
-            strokeArcPath(canvas, w, midy, w, h, midx, h, cornerRadii[2], lineWidths[2])
-            strokeArcPath(canvas, midx, h, 0, h, 0, midy, cornerRadii[3], lineWidths[3])
+            strokeArcPath(canvas, 0, 0, w, 0, cornerRadii[0], cornerRadii[1], lineWidths[0])
+            strokeArcPath(canvas, w, 0, w, h, cornerRadii[1], cornerRadii[2], lineWidths[1])
+            strokeArcPath(canvas, w, h, 0, h, cornerRadii[2], cornerRadii[3], lineWidths[2])
+            strokeArcPath(canvas, 0, h, 0, 0, cornerRadii[3], cornerRadii[0], lineWidths[3])
           } else {
             strokeLinePath(canvas, 0, 0, w, 0, lineWidths[0])
             strokeLinePath(canvas, w, 0, w, h, lineWidths[1])

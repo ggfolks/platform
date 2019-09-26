@@ -37,10 +37,12 @@ export const DefaultStyles = {
     textFocused: {stroke: {type: "color", color: "#D0D0D0"}, cornerRadius: textCorner},
     textInvalid: {stroke: {type: "color", color: "#FF0000"}, cornerRadius: textCorner},
     checkBox: {stroke: {type: "color", color: "#999999"}, cornerRadius: checkBoxCorner},
-    tabNormal: {stroke: {type: "color", color: "#808080"}, cornerRadius: tabCorner},
-    tabHovered: {stroke: {type: "color", color: "#D0D0D0"}, cornerRadius: tabCorner},
-    tabSelected: {stroke: {type: "color", color: "#E0E0E0"}, cornerRadius: tabCorner},
-    tabContent: {stroke: {type: "color", color: "#E0E0E0"}, width: [1, 0, 0, 0]},
+    tabHovered: {
+      stroke: {type: "color", color: "#303030"},
+      width: [1, 1, 0, 1],
+      cornerRadius: tabCorner,
+    },
+    tabList: {stroke: {type: "color", color: "#303030"}, width: [0, 0, 1, 0]},
     graphViewSelect: {stroke: {type: "color", color: "#808080"}},
     nodeHeader: {stroke: {type: "color", color: "#000000"}, cornerRadius: nodeHeaderCorner},
     nodeHeaderHovered: {stroke: {type: "color", color: "#303030"}, cornerRadius: nodeHeaderCorner},
@@ -58,6 +60,7 @@ export const DefaultStyles = {
     dropdownitem: {fill: {type: "color", color: "#303030"}},
     dropdownitemHovered: {fill: {type: "color", color: "#282828"}},
     dropdownitemPressed: {fill: {type: "color", color: "#202020"}},
+    tabSelected: {fill: {type: "color", color: "#303030"}, cornerRadius: tabCorner},
     menu: {fill: {type: "color", color: "#303030"}, cornerRadius: menuCorner},
     menuHovered: {fill: {type: "color", color: "#282828"}, cornerRadius: menuCorner},
     menuPressed: {fill: {type: "color", color: "#202020"}, cornerRadius: menuCorner},
@@ -129,16 +132,15 @@ export const DefaultTheme = {
   },
   tab: {
     box: {
-      padding: 5,
-      margin: [5, 5, 0, 5],
-      border: "$tabNormal",
+      padding: 10,
+      margin: [5, 0, 0, 0],
       hovered: {border: "$tabHovered"},
-      selected: {border: "$tabSelected"},
+      selected: {border: "$tabHovered", background: "$tabSelected"},
     },
     label: {font: "$tab"},
   },
-  tabContent: {
-    box: {border: "$tabContent"},
+  tabList: {
+    box: {padding: [0, 5, 0, 5], border: "$tabList"}
   },
   text: {
     box: {

@@ -241,7 +241,7 @@ function mergeEdits (first :PMap<any>, second :PMap<any>) {
 function createGraphModelData (graph :Graph, applyEdit :(edit :NodeEdit) => void) :ModelData {
   const pageModels = new Map<ModelKey, Model>()
   return {
-    pageKeys: Value.constant(["default"]),
+    pageKeys: Value.constant(["default", "test"]),
     pageData: {
       resolve: (key :ModelKey) => {
         let model = pageModels.get(key)

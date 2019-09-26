@@ -28,6 +28,7 @@ export class TabbedPane extends VGroup {
     this.contents.push(
       ctx.elem.create(ctx, this, {
         type: "box",
+        scopeId: "tabList",
         contents: {
           type: "hlist",
           element: {
@@ -47,12 +48,7 @@ export class TabbedPane extends VGroup {
       const oldElement = this.contents[1]
       if (oldElement) oldElement.dispose()
       const model = data.resolve(activeKey)
-      this.contents[1] = ctx.elem.create(ctx.remodel(model), this, {
-        type: "box",
-        scopeId: "tabContent",
-        contents: config.contentElement,
-        style: {halign: "stretch", valign: "stretch"},
-      })
+      this.contents[1] = ctx.elem.create(ctx.remodel(model), this, config.contentElement)
       this.invalidate()
     }))
   }
