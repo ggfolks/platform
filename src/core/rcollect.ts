@@ -116,7 +116,7 @@ export abstract class MutableList<E> extends RList<E> {
   /** The length of this list as a reactive value. */
   get lengthValue () :Value<number> {
     const value = this.map(l => l.length).fold(0, (_, s) => s)
-    Object.defineProperty(this, "lengthValue", {value, writable: false})
+    Object.defineProperty(this, "lengthValue", {value})
     return value
   }
 
@@ -209,7 +209,7 @@ export abstract class RSet<E> extends Source<ReadonlySet<E>> implements Readonly
   /** The size of this set as a reactive value. */
   get sizeValue () :Value<number> {
     const value = this.map(s => s.size).fold(0, (_, s) => s)
-    Object.defineProperty(this, "sizeValue", {value, writable: false})
+    Object.defineProperty(this, "sizeValue", {value})
     return value
   }
 
@@ -387,14 +387,14 @@ export abstract class RMap<K,V> extends Source<ReadonlyMap<K,V>> implements Read
       else if (c.prev === undefined) disp(
         keysIable, {[Symbol.iterator]: () => iteratorExcept(this.keys(), c.key)})
     }), () => keysIable)
-    Object.defineProperty(this, "keysValue", {value, writable: false})
+    Object.defineProperty(this, "keysValue", {value})
     return value
   }
 
   /** The size of this map as a reactive value. */
   get sizeValue () :Value<number> {
     const value = this.map(m => m.size).fold(0, (_, s) => s)
-    Object.defineProperty(this, "sizeValue", {value, writable: false})
+    Object.defineProperty(this, "sizeValue", {value})
     return value
   }
 
