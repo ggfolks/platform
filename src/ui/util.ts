@@ -13,10 +13,10 @@ export function makeRoundRectPath (canvas :CanvasRenderingContext2D,
   canvas.closePath()
 }
 
-/** Makes and strokes a simple arc path between three points. */
-export function strokeArcPath (canvas :CanvasRenderingContext2D,
-                               x1 :number, y1 :number, x2 :number, y2 :number,
-                               r1 :number, r2 :number, lineWidth :number) {
+/** Makes and strokes one side of a rounded rectangle. */
+export function strokeRoundRectSide (canvas :CanvasRenderingContext2D,
+                                     x1 :number, y1 :number, x2 :number, y2 :number,
+                                     r1 :number, r2 :number, lineWidth :number) {
   if (lineWidth === 0) return
   canvas.lineWidth = lineWidth
   canvas.beginPath()

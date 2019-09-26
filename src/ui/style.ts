@@ -2,7 +2,7 @@ import {Noop, PMap, getValue, log} from "../core/util"
 import {dim2, rect} from "../core/math"
 import {Color} from "../core/color"
 import {Subject} from "../core/react"
-import {makeRoundRectPath, strokeArcPath, strokeLinePath} from "./util"
+import {makeRoundRectPath, strokeLinePath, strokeRoundRectSide} from "./util"
 
 // TODO?: ImageConfig = string | {source/path/url :string, scale :number} | ?
 
@@ -487,10 +487,10 @@ export function makeBorder (ctx :StyleContext, config :BorderConfig) :Subject<De
             const cornerRadii = Array.isArray(cornerRadius)
               ? cornerRadius
               : [cornerRadius, cornerRadius, cornerRadius, cornerRadius]
-            strokeArcPath(canvas, 0, 0, w, 0, cornerRadii[0], cornerRadii[1], lineWidths[0])
-            strokeArcPath(canvas, w, 0, w, h, cornerRadii[1], cornerRadii[2], lineWidths[1])
-            strokeArcPath(canvas, w, h, 0, h, cornerRadii[2], cornerRadii[3], lineWidths[2])
-            strokeArcPath(canvas, 0, h, 0, 0, cornerRadii[3], cornerRadii[0], lineWidths[3])
+            strokeRoundRectSide(canvas, 0, 0, w, 0, cornerRadii[0], cornerRadii[1], lineWidths[0])
+            strokeRoundRectSide(canvas, w, 0, w, h, cornerRadii[1], cornerRadii[2], lineWidths[1])
+            strokeRoundRectSide(canvas, w, h, 0, h, cornerRadii[2], cornerRadii[3], lineWidths[2])
+            strokeRoundRectSide(canvas, 0, h, 0, 0, cornerRadii[3], cornerRadii[0], lineWidths[3])
           } else {
             strokeLinePath(canvas, 0, 0, w, 0, lineWidths[0])
             strokeLinePath(canvas, w, 0, w, h, lineWidths[1])
