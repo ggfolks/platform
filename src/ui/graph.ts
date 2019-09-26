@@ -406,6 +406,15 @@ export class GraphViewer extends VGroup {
         contents: {type: "graphview", editable: this._editable},
         constraints: {stretch: true},
       },
+      addTabElement: {
+        type: "button",
+        contents: {
+          type: "box",
+          scopeId: "addTabButton",
+          contents: {type: "label", text: Value.constant("🞣")},
+        },
+        onClick: "createPage",
+      },
       data: "pageData",
       keys: "pageKeys",
       key: "id",
@@ -765,8 +774,7 @@ export class NodeView extends VGroup {
       bodyContents.push({
         type: "button",
         onClick: () => {
-          const graphViewer = parent.parent!.parent!.parent as GraphViewer
-          graphViewer.push(new Model(ctx.model.data.subgraph as ModelData))
+          getGraphViewer(parent).push(new Model(ctx.model.data.subgraph as ModelData))
         },
         contents: {
           type: "box",

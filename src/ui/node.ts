@@ -241,7 +241,7 @@ function mergeEdits (first :PMap<any>, second :PMap<any>) {
 function createGraphModelData (graph :Graph, applyEdit :(edit :NodeEdit) => void) :ModelData {
   const pageModels = new Map<ModelKey, Model>()
   return {
-    pageKeys: Value.constant(["default", "test"]),
+    pageKeys: Value.constant(["default"]),
     pageData: {
       resolve: (key :ModelKey) => {
         let model = pageModels.get(key)
@@ -256,6 +256,9 @@ function createGraphModelData (graph :Graph, applyEdit :(edit :NodeEdit) => void
       },
     },
     activePage: Mutable.local("default"),
+    createPage: () => {
+      console.log("testing")
+    },
     toJSON: Value.constant(() => graph.toJSON()),
     fromJSON: Value.constant((json :GraphConfig) => {
       graph.fromJSON(json)

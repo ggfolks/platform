@@ -11,6 +11,7 @@ import {ModelKey, ModelProvider, Spec} from "./model"
 export interface TabbedPaneConfig extends AxisConfig {
   type :"tabbedpane"
   tabElement :ElementConfig
+  addTabElement? :ElementConfig
   contentElement :ElementConfig
   data :Spec<ModelProvider>
   keys :Spec<Source<ModelKey[]>>
@@ -25,21 +26,25 @@ export class TabbedPane extends VGroup {
   constructor (ctx :ElementContext, parent :Element, readonly config :TabbedPaneConfig) {
     super(ctx, parent, config)
     const activeKey = ctx.model.resolve(config.activeKey)
+    const hlistConfig = {
+      type: "hlist",
+      element: {
+        type: "tab",
+        contents: config.tabElement,
+        key: config.key,
+        activeKey,
+      },
+      data: config.data,
+      keys: config.keys,
+    }
     this.contents.push(
       ctx.elem.create(ctx, this, {
         type: "box",
         scopeId: "tabList",
-        contents: {
-          type: "hlist",
-          element: {
-            type: "tab",
-            contents: config.tabElement,
-            key: config.key,
-            activeKey,
-          },
-          data: config.data,
-          keys: config.keys,
-        },
+        contents: config.addTabElement ? {
+          type: "row",
+          contents: [hlistConfig, config.addTabElement],
+        } : hlistConfig,
         style: {halign: "left"},
       })
     )

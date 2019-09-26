@@ -135,13 +135,12 @@ class ClockNode extends Node {
 }
 
 /** An encapsulated graph. */
-abstract class SubgraphConfig implements NodeConfig {
-  type = "subgraph"
+interface AbstractSubgraphConfig extends NodeConfig {
   title? :string
-  graph :GraphConfig = {}
+  graph :GraphConfig
 }
 
-export class Subgraph extends Node {
+export abstract class AbstractSubgraph extends Node {
   readonly containedGraph :Graph
 
   private _containedOutputs :Map<string, Value<InputEdge<any>>> = new Map()
@@ -166,7 +165,7 @@ export class Subgraph extends Node {
     return this._outputsMeta
   }
 
-  constructor (graph :Graph, id :string, readonly config :SubgraphConfig) {
+  constructor (graph :Graph, id :string, readonly config :AbstractSubgraphConfig) {
     super(graph, id, config)
 
     const subctx = Object.create(graph.ctx)
@@ -265,6 +264,20 @@ export class Subgraph extends Node {
     }
     if (edge === undefined) throw new Error("Unknown output: " + name)
     return edge.switchMap(edge => this.containedGraph.getValue(edge, defaultValue))
+  }
+}
+
+/** An encapsulated graph. */
+abstract class SubgraphConfig implements NodeConfig {
+  type = "subgraph"
+  title? :string
+  graph :GraphConfig = {}
+}
+
+export class Subgraph extends AbstractSubgraph {
+
+  constructor (graph :Graph, id :string, readonly config :SubgraphConfig) {
+    super(graph, id, config)
   }
 }
 
@@ -380,6 +393,20 @@ class Output extends Node {
   }
 }
 
+/** A subgraph displayed as a page (tab) in the viewer. */
+abstract class PageConfig implements AbstractSubgraphConfig {
+  type = "page"
+  title? :string
+  graph :GraphConfig = {}
+}
+
+class Page extends AbstractSubgraph {
+
+  constructor (graph :Graph, id :string, readonly config :PageConfig) {
+    super(graph, id, config)
+  }
+}
+
 /** Logs its input to the console. */
 abstract class LogConfig implements NodeConfig {
   type = "log"
@@ -478,5 +505,6 @@ export function registerUtilNodes (registry :NodeTypeRegistry) {
   })
   registry.registerNodeTypes(undefined, {
     onChange: OnChange,
+    page: Page,
   })
 }
