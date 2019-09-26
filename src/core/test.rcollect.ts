@@ -178,7 +178,7 @@ test("rmap keysValue", () => {
   const map = MutableMap.local<string,string>()
   const keyHist :string[][] = []
   const expectHist :string[][] = []
-  map.keysValue().onValue(iter => keyHist.push(Array.from(iter)))
+  map.keysValue.onValue(iter => keyHist.push(Array.from(iter)))
   expectHist.push([])
   expect(keyHist).toStrictEqual(expectHist)
 
@@ -186,7 +186,7 @@ test("rmap keysValue", () => {
   expectHist.push(["a"])
   expect(keyHist).toStrictEqual(expectHist)
 
-  const remove1 = map.keysValue().onChange((nkeys, okeys) => {
+  const remove1 = map.keysValue.onChange((nkeys, okeys) => {
     expect(Array.from(okeys)).toStrictEqual(["a"])
     expect(Array.from(nkeys)).toStrictEqual(["a", "b"])
     remove1()
@@ -195,7 +195,7 @@ test("rmap keysValue", () => {
   expectHist.push(["a", "b"])
   expect(keyHist).toStrictEqual(expectHist)
 
-  const remove2 = map.keysValue().onChange((nkeys, okeys) => {
+  const remove2 = map.keysValue.onChange((nkeys, okeys) => {
     expect(Array.from(okeys)).toStrictEqual(["b", "a"]) // removed element is always last
     expect(Array.from(nkeys)).toStrictEqual(["b"])
     remove2()

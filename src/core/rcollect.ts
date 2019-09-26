@@ -113,6 +113,13 @@ export abstract class MutableList<E> extends RList<E> {
     while (this.length > 0) this.delete(this.length-1)
   }
 
+  /** The length of this list as a reactive value. */
+  get lengthValue () :Value<number> {
+    const value = this.map(l => l.length).fold(0, (_, s) => s)
+    Object.defineProperty(this, "lengthValue", {value, writable: false})
+    return value
+  }
+
   onChange (fn :(change :ListChange<E>) => any) :Remover {
     return addListener(this._listeners, fn)
   }
@@ -198,6 +205,13 @@ export abstract class RSet<E> extends Source<ReadonlySet<E>> implements Readonly
 
   /** Returns an iterator over the entries of this set, in insertion order. */
   [Symbol.iterator] () :IterableIterator<E> { return this.data[Symbol.iterator]() }
+
+  /** The size of this set as a reactive value. */
+  get sizeValue () :Value<number> {
+    const value = this.map(s => s.size).fold(0, (_, s) => s)
+    Object.defineProperty(this, "sizeValue", {value, writable: false})
+    return value
+  }
 
   /** Registers `fn` to be notified of changes to this set.
     * @return a remover thunk (invoke with no args to unregister `fn`). */
@@ -365,13 +379,23 @@ export abstract class RMap<K,V> extends Source<ReadonlyMap<K,V>> implements Read
     *
     * Reactive views are not provided for [[values]] or [[entries]] because those change every time
     * anything in the map changes. Simply call `map(m => m.values())` for example. */
-  keysValue () :Value<IterableIterator<K>> {
-    return Value.deriveValue(keyIteratorsEqual, disp => {
-      return this.onChange(c => {
-        if (c.type === "deleted") disp(this.keys(), iteratorPlus(this.keys(), c.key))
-        else if (c.prev === undefined) disp(this.keys(), iteratorExcept(this.keys(), c.key))
-      })
-    }, () => this.keys())
+  get keysValue () :Value<Iterable<K>> {
+    const keysIable :Iterable<K> = {[Symbol.iterator]: () => this.keys()}
+    const value = Value.deriveValue(iterablesEqual, disp => this.onChange(c => {
+      if (c.type === "deleted") disp(
+        keysIable, {[Symbol.iterator]: () => iteratorPlus(this.keys(), c.key)})
+      else if (c.prev === undefined) disp(
+        keysIable, {[Symbol.iterator]: () => iteratorExcept(this.keys(), c.key)})
+    }), () => keysIable)
+    Object.defineProperty(this, "keysValue", {value, writable: false})
+    return value
+  }
+
+  /** The size of this map as a reactive value. */
+  get sizeValue () :Value<number> {
+    const value = this.map(m => m.size).fold(0, (_, s) => s)
+    Object.defineProperty(this, "sizeValue", {value, writable: false})
+    return value
   }
 
   /** Registers `fn` to be notified of changes to this map.
@@ -395,18 +419,17 @@ export abstract class RMap<K,V> extends Source<ReadonlyMap<K,V>> implements Read
   }
 }
 
-function iteratorExcept<K> (iter :IterableIterator<K>, omit :K) :IterableIterator<K> {
+function iteratorExcept<K> (iter :Iterator<K>, omit :K) :Iterator<K> {
   return {
     next: () => {
       let next = iter.next()
       if (next.value === omit) next = iter.next()
       return next
     },
-    [Symbol.iterator]: () => iteratorExcept(iter[Symbol.iterator](), omit)
   }
 }
 
-function iteratorPlus<K> (iter :IterableIterator<K>, add :K) :IterableIterator<K> {
+function iteratorPlus<K> (iter :Iterator<K>, add :K) :Iterator<K> {
   let added = false
   return {
     next: () => {
@@ -416,13 +439,13 @@ function iteratorPlus<K> (iter :IterableIterator<K>, add :K) :IterableIterator<K
       added = true
       return {done: false, value: add}
     },
-    [Symbol.iterator]: () => iteratorPlus(iter[Symbol.iterator](), add)
   }
 }
 
-function keyIteratorsEqual<K> (a :IterableIterator<K>, b :IterableIterator<K>) :boolean {
+function iterablesEqual<K> (a :Iterable<K>, b :Iterable<K>) :boolean {
+  const aiter = a[Symbol.iterator](), biter = b[Symbol.iterator]()
   while (true) {
-    const anext = a.next(), bnext = b.next()
+    const anext = aiter.next(), bnext = biter.next()
     if (anext.done || bnext.done) return anext.done === bnext.done
     if (anext.value !== bnext.value) return false
   }
