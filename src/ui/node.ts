@@ -242,7 +242,7 @@ function createGraphModelData (graph :Graph, applyEdit :(edit :NodeEdit) => void
   const pageModels = new Map<ModelKey, Model>()
   const activePage = Mutable.local("default")
   return {
-    pageKeys: Value.constant(["default"]),
+    pageKeys: Value.constant(["default", "one", "two", "three", "four"]),
     pageData: {
       resolve: (key :ModelKey) => {
         let model = pageModels.get(key)
@@ -280,7 +280,7 @@ function createPageModelData (
   return {
     id: Value.constant(id),
     title: Value.constant(id),
-    removable: Value.constant(false),
+    removable: Value.constant(id !== "default"),
     remove: () => {
       console.log("remove")
     },

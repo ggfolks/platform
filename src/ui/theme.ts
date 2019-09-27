@@ -105,6 +105,7 @@ export const DefaultTheme = {
       hoverFocused: {},
     },
     menuitem: {},
+    tab: {stroke: "$white"},
     shortcut: {font: "$menu", fill: "$mediumGray"},
     graphview: {
       selectBackground: "$graphViewSelect",
