@@ -10,7 +10,7 @@ import {SkeletonUtils} from "three/examples/jsm/utils/SkeletonUtils"
 import {Clock} from "../core/clock"
 import {Subject} from "../core/react"
 import {RMap} from "../core/rcollect"
-import {NoopRemover, Remover} from "../core/util"
+import {Noop, NoopRemover, Remover} from "../core/util"
 import {Pointer} from "../input/hand"
 import {
   Component,
@@ -422,7 +422,13 @@ function createObject3D (objectConfig: Object3DConfig) :Subject<Object3D> {
     case "json":
       const jsonConfig = objectConfig as JsonConfig
       return Subject.deriveSubject(dispatch => {
-        new ObjectLoader().load(jsonConfig.url, dispatch)
+        new ObjectLoader().load(jsonConfig.url, dispatch /*onLoad*/, Noop /* onProgress */,
+          error => { // onError
+            console.error(error)
+            const errObj = new Object3D()
+            errObj.name =  "ERROR: " + error
+            dispatch(errObj)
+          })
         return NoopRemover
       })
 
