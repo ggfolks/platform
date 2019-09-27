@@ -1,18 +1,18 @@
-import {refEquals} from "../core/data"
+import {dataEquals, refEquals} from "../core/data"
 import {dim2, vec2} from "../core/math"
 import {Scale, getValueStyle} from "../core/ui"
-import {Mutable, Value} from "../core/react"
-import {MutableSet} from "../core/rcollect"
-import {Disposer, PMap, getValue} from "../core/util"
+import {ChangeFn, Mutable, Value} from "../core/react"
+import {MutableSet, filteredIterable} from "../core/rcollect"
+import {Disposer, Noop, PMap, getValue} from "../core/util"
 import {Graph, GraphConfig} from "../graph/graph"
 import {getNodeMeta, inputEdge} from "../graph/meta"
-import {Subgraph} from "../graph/util"
+import {Page, Subgraph} from "../graph/util"
 import {
   CategoryNode, InputEdge, InputEdges, Node, NodeConfig,
   NodeContext, NodeInput, NodeTypeRegistry,
 } from "../graph/node"
 import {HAnchor, Host, Root, RootConfig, VAnchor, getCurrentEditNumber} from "./element"
-import {Model, ModelData, ModelKey, ModelProvider, mapProvider} from "./model"
+import {Action, Model, ModelData, ModelKey, ModelProvider, mapProvider} from "./model"
 import {Theme, UI} from "./ui"
 import {ImageResolver, StyleDefs} from "./style"
 
@@ -241,16 +241,60 @@ function mergeEdits (first :PMap<any>, second :PMap<any>) {
 function createGraphModelData (graph :Graph, applyEdit :(edit :NodeEdit) => void) :ModelData {
   const pageModels = new Map<ModelKey, Model>()
   const activePage = Mutable.local("default")
+  let currentPageKeys :string[] = []
+  let changeFn :ChangeFn<string[]> = Noop
+  const getOrder = (id :string) => {
+    if (id === "default") return 0
+    return graph.nodes.require(id).config.order || 0
+  }
+  const updatePageKeys = () => {
+    const oldPageKeys = currentPageKeys
+    currentPageKeys = ["default"]
+    for (const [id, node] of graph.nodes) {
+      if (node.config.type === "page") currentPageKeys.push(id)
+    }
+    currentPageKeys.sort((a, b) => getOrder(a) - getOrder(b))
+    changeFn(currentPageKeys, oldPageKeys)
+  }
+  updatePageKeys()
+  const pageKeys = Value.deriveValue(
+    dataEquals,
+    dispatch => {
+      changeFn = dispatch
+      return graph.nodes.keysValue.onValue(updatePageKeys)
+    },
+    () => currentPageKeys,
+  )
   return {
-    pageKeys: Value.constant(["default", "one", "two", "three", "four"]),
+    pageKeys,
     pageData: {
       resolve: (key :ModelKey) => {
         let model = pageModels.get(key)
         if (!model) {
+          const id = key as string
+          let page :Page|undefined
+          let containedGraph = graph
+          let remove = Noop
+          if (key !== "default") {
+            page = graph.nodes.require(id) as Page
+            containedGraph = page.containedGraph
+            remove = () => {
+              if (activePage.current === id) {
+                const index = currentPageKeys.indexOf(id)
+                activePage.update(
+                  currentPageKeys[index === currentPageKeys.length - 1 ? index - 1 : index + 1],
+                )
+              }
+              graph.removeNode(id)
+              pageModels.delete(id)
+            }
+          }
           pageModels.set(key, model = new Model(createPageModelData(
-            graph,
+            containedGraph,
+            page,
             applyEdit,
-            key as string,
+            id,
+            remove,
           )))
         }
         return model
@@ -258,10 +302,55 @@ function createGraphModelData (graph :Graph, applyEdit :(edit :NodeEdit) => void
     },
     activePage,
     createPage: () => {
-      console.log("testing")
+      // find a unique id for the page
+      let pageId = ""
+      for (let ii = 2;; ii++) {
+        const id = "page" + ii
+        if (!graph.nodes.has(id)) {
+          pageId = id
+          break
+        }
+      }
+      graph.createNode(pageId, {
+        type: "page",
+        title: pageId,
+        order: getOrder(currentPageKeys[currentPageKeys.length - 1]) + 1,
+        graph: {},
+      })
+      activePage.update(pageId)
     },
     updateOrder: (id :string, index :number) => {
-      console.log("update order", id, index)
+      const currentIndex = currentPageKeys.indexOf(id)
+      if (currentIndex === index) return
+      if (id === "default") {
+        // to reorder the default page, we adjust the order of everything around it
+        let order = -1
+        for (let ii = index - 1; ii >= 0; ii--) {
+          const key = currentPageKeys[ii]
+          if (key !== "default") graph.nodes.require(key).getProperty("order").update(order--)
+        }
+        order = 1
+        for (let ii = index; ii < currentPageKeys.length; ii++) {
+          const key = currentPageKeys[ii]
+          if (key !== "default") graph.nodes.require(key).getProperty("order").update(order++)
+        }
+      } else {
+        // to reorder an ordinary page, we change its order
+        let newOrder :number
+        switch (index) {
+          case 0:
+            newOrder = getOrder(currentPageKeys[0]) - 1
+            break
+          case currentPageKeys.length:
+            newOrder = getOrder(currentPageKeys[currentPageKeys.length - 1]) + 1
+            break
+          default:
+            newOrder = (getOrder(currentPageKeys[index]) + getOrder(currentPageKeys[index - 1])) / 2
+            break
+        }
+        graph.nodes.require(id).getProperty("order").update(newOrder)
+      }
+      updatePageKeys()
     },
     toJSON: Value.constant(() => graph.toJSON()),
     fromJSON: Value.constant((json :GraphConfig) => {
@@ -273,17 +362,17 @@ function createGraphModelData (graph :Graph, applyEdit :(edit :NodeEdit) => void
 
 function createPageModelData (
   graph :Graph,
+  page :Page|undefined,
   applyEdit :(edit :NodeEdit) => void,
   id :string,
+  remove :Action,
 ) :ModelData {
   const nodeModels = new Map<ModelKey, Model>()
   return {
     id: Value.constant(id),
-    title: Value.constant(id),
-    removable: Value.constant(id !== "default"),
-    remove: () => {
-      console.log("remove")
-    },
+    title: page ? page.getProperty("title") : Value.constant(id),
+    removable: Value.constant(remove !== Noop),
+    remove,
     createNodes: Value.constant((config :GraphConfig) => {
       const add :GraphConfig = {}
       const ids = new Map<string, string>()
@@ -364,7 +453,10 @@ function createPageModelData (
       for (const id of ids) config[id] = graph.nodes.get(id)!.toJSON()
       return config
     }),
-    nodeKeys: graph.nodes.keysValue,
+    nodeKeys: page ? graph.nodes.keysValue : graph.nodes.keysValue.map(keys => filteredIterable(
+      keys,
+      key => graph.nodes.require(key).config.type !== "page",
+    )),
     nodeData: {
       resolve: (key :ModelKey) => {
         let model = nodeModels.get(key)

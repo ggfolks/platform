@@ -397,10 +397,11 @@ class Output extends Node {
 abstract class PageConfig implements AbstractSubgraphConfig {
   type = "page"
   title? :string
+  order? :number
   graph :GraphConfig = {}
 }
 
-class Page extends AbstractSubgraph {
+export class Page extends AbstractSubgraph {
 
   constructor (graph :Graph, id :string, readonly config :PageConfig) {
     super(graph, id, config)

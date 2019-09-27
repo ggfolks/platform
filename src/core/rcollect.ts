@@ -442,6 +442,24 @@ function iteratorPlus<K> (iter :Iterator<K>, add :K) :Iterator<K> {
   }
 }
 
+/** Returns an iterable that filters another iterable according to a predicate. */
+export function filteredIterable<K> (iter :Iterable<K>, pred :(key :K) => boolean) :Iterable<K> {
+  return {
+    [Symbol.iterator]: () => filteredIterator(iter[Symbol.iterator](), pred),
+  }
+}
+
+/** Returns an iterator that filters another iterator according to a predicate. */
+export function filteredIterator<K> (iter :Iterator<K>, pred :(key :K) => boolean) :Iterator<K> {
+  return {
+    next: () => {
+      let next = iter.next()
+      while (!(next.done || pred(next.value))) next = iter.next()
+      return next
+    },
+  }
+}
+
 function iterablesEqual<K> (a :Iterable<K>, b :Iterable<K>) :boolean {
   const aiter = a[Symbol.iterator](), biter = b[Symbol.iterator]()
   while (true) {
