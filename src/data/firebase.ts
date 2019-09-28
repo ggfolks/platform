@@ -14,12 +14,12 @@ const Blob = firebase.firestore.Blob
 
 import {TextEncoder, TextDecoder} from "util"
 import {Timestamp, log} from "../core/util"
-import {Data, Record} from "../core/data"
+import {Data, DataMapKey, Record} from "../core/data"
 import {UUID} from "../core/uuid"
 import {Encoder, Decoder, SyncSet, SyncMap, ValueType, setTextCodec} from "../core/codec"
 import {SyncMsg, SyncType} from "./protocol"
 import {isPersist} from "./meta"
-import {DObject, DMutable, Path} from "./data"
+import {DObject, DObjectType, DMutable, Path, PathMap} from "./data"
 import {DataStore, Resolved, Resolver, ResolvedView} from "./server"
 
 setTextCodec(() => new TextEncoder() as any, () => new TextDecoder() as any)
@@ -147,29 +147,100 @@ function applySnap (snap :DocSnap, object :DObject) {
   }
 }
 
-function syncToDoc (object :DObject, sync :SyncMsg, ref :DocRef) {
+type ValDelta = {type :"value", value :any}
+type SetDelta = {type :"set", add :Set<Data>, del :Set<Data>}
+type MapDelta = {type :"map", set :Map<DataMapKey,Data>, del :Set<DataMapKey>}
+type Delta = ValDelta | SetDelta | MapDelta
+type Update = {[key :string] :Delta}
+
+function getSetDelta (update :Update, prop :string) :SetDelta {
+  const delta = update[prop]
+  if (!delta) return (update[prop] = {type: "set", add: new Set<Data>(), del: new Set<Data>()})
+  else if (delta.type === "set") return delta
+  else throw new Error(`Expected set delta, got ${delta.type} (for ${prop})`)
+}
+
+function getMapDelta (update :Update, prop :string) :MapDelta {
+  const delta = update[prop]
+  if (!delta) return (update[prop] = {type: "map", set: new Map<DataMapKey,Data>(), del: new Set<DataMapKey>()})
+  else if (delta.type === "map") return delta
+  else throw new Error(`Expected map delta, got ${delta.type} (for ${prop})`)
+}
+
+function syncToUpdate (object :DObject, sync :SyncMsg, update :Update) {
   const meta = object.metas[sync.idx]
-  log.debug("syncToDoc", "path", object.path, "type", sync.type, "name", meta.name)
+  // log.debug("syncToUpdate", "path", object.path, "type", sync.type, "name", meta.name)
   switch (sync.type) {
   case SyncType.VALSET:
-    ref.set({[meta.name]: valueToFirestore(sync.value, sync.vtype)}, {merge: true})
+    update[meta.name] = {type: "value", value: valueToFirestore(sync.value, sync.vtype)}
     break
   case SyncType.SETADD:
     const addedValue = valueToFirestore(sync.elem, sync.etype)
-    ref.update({[meta.name]: FieldValue.arrayUnion(addedValue)})
+    const addDelta = getSetDelta(update, meta.name)
+    addDelta.del.delete(addedValue)
+    addDelta.add.add(addedValue)
+    // update[meta.name] = FieldValue.arrayUnion(addedValue)
     break
   case SyncType.SETDEL:
     const deletedValue = valueToFirestore(sync.elem, sync.etype)
-    ref.update({[meta.name]: FieldValue.arrayRemove(deletedValue)})
+    const delDelta = getSetDelta(update, meta.name)
+    delDelta.add.delete(deletedValue)
+    delDelta.del.add(deletedValue)
+    // ref.update({[meta.name]: FieldValue.arrayRemove(deletedValue)})
     break
   case SyncType.MAPSET:
     const setValue = valueToFirestore(sync.value, sync.vtype)
-    ref.update({[`${meta.name}.${sync.key}`]: setValue})
+    const setDelta = getMapDelta(update, meta.name)
+    setDelta.set.set(sync.key, setValue)
+    setDelta.del.delete(sync.key)
+    // ref.update({[`${meta.name}.${sync.key}`]: setValue})
     break
   case SyncType.MAPDEL:
-    ref.update({[`${meta.name}.${sync.key}`]: FieldValue.delete()})
+    const mdelDelta = getMapDelta(update, meta.name)
+    mdelDelta.set.delete(sync.key)
+    mdelDelta.del.add(sync.key)
+    // ref.update({[`${meta.name}.${sync.key}`]: FieldValue.delete()})
     break
   }
+}
+
+function persistUpdate (ref :DocRef, update :Update) {
+  const data :DocData = {}
+  let deleteData :DocData|undefined = undefined
+  for (const key in update) {
+    const delta = update[key]
+    switch (delta.type) {
+    case "value":
+      data[key] = delta.value
+      break
+
+    case "set":
+      if (delta.add.size > 0) {
+        data[key] = FieldValue.arrayUnion(...delta.add)
+        // we can't add and delete to a set in the same operation, so delete separately
+        if (delta.del.size > 0) {
+          if (!deleteData) deleteData = {}
+          deleteData[key] = FieldValue.arrayRemove(...delta.del)
+        }
+      }
+      else if (delta.del.size > 0) data[key] = FieldValue.arrayRemove(...delta.del)
+      else log.warn("No add or del in set delta?", "ref", ref, "prop", key, "delta", delta)
+      break
+
+    case "map":
+      for (const [k, v] of delta.set) data[`${key}.${k}`] = v
+      for (const k of delta.del) data[`${key}.${k}`] = FieldValue.delete()
+      break
+    }
+  }
+
+  ref.set(data, {merge: true})
+  log.debug("persistUpdate", "ref", ref, "keys", Object.keys(data))
+  if (deleteData) {
+    log.debug("persistUpdate.delete", "ref", ref, "props", Object.keys(deleteData))
+    ref.set(data, {merge: true})
+  }
+  return data
 }
 
 function needsConvert (data :Object) {
@@ -205,9 +276,19 @@ function recordFromFirestore (data :DocData) :Record {
   return rec
 }
 
+const DEFAULT_FLUSH_FREQ = 60 * 1000
+
 export class FirebaseDataStore extends DataStore {
   readonly db = firebase.firestore()
-  readonly refs = new Map<UUID, DocRef>()
+  readonly refs = new PathMap<DocRef>()
+  private readonly updates = new PathMap<Update>()
+  private readonly flushTimer :NodeJS.Timeout
+
+  constructor (rtype :DObjectType<any>, flushFreq = DEFAULT_FLUSH_FREQ) {
+    super(rtype)
+    log.info("Firebase datastore syncing every " + flushFreq/1000 + "s")
+    this.flushTimer = setInterval(() => this.flushUpdates(), flushFreq)
+  }
 
   createRecord (path :Path, key :UUID, data :Record) {
     const ref = pathToColRef(this.db, path).doc(key)
@@ -233,12 +314,11 @@ export class FirebaseDataStore extends DataStore {
     } else {
       const unlisten = ref.onSnapshot(snap => {
         if (snap.exists) applySnap(snap, res.object)
-        else ref.set({})
         res.resolvedData()
       })
       res.object.state.whenOnce(s => s === "disposed", _ => unlisten())
     }
-    this.refs.set(res.object.key, ref)
+    this.refs.set(res.object.path, ref)
   }
 
   resolveViewData (res :ResolvedView) {
@@ -268,8 +348,27 @@ export class FirebaseDataStore extends DataStore {
   }
 
   persistSync (obj :DObject, msg :SyncMsg) {
-    const ref = this.refs.get(obj.key)
-    if (ref) syncToDoc(obj, msg, ref)
-    else log.warn("Missing ref for sync persist", "obj", obj)
+    const ref = this.refs.get(obj.path)
+    if (!ref) log.warn("Missing ref for sync persist", "obj", obj)
+    else {
+      let update = this.updates.get(obj.path)
+      if (!update) {
+        this.updates.set(obj.path, update = {})
+        // log.debug("Added update", "path", obj.path, "size", this.updates.size)
+      }
+      syncToUpdate(obj, msg, update)
+    }
+  }
+
+  private flushUpdates () {
+    if (this.updates.size == 0) return
+    log.debug("flushUpdates", "updates", this.updates.size)
+    this.updates.forEach((up, path) => persistUpdate(pathToDocRef(this.db, path), up))
+    this.updates.clear()
+  }
+
+  shutdown () {
+    this.flushUpdates()
+    clearInterval(this.flushTimer)
   }
 }
