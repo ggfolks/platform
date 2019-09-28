@@ -102,61 +102,32 @@ function checkPath (path :Path) :Path {
   return path
 }
 
-/** Maintains a mapping from `Path` objects to arbitrary values (of the same type). */
-export class PathMap<T> {
+class PathNode<T> {
   private value :T|undefined = undefined
-  private children :{[key :string] :PathMap<T>}|undefined = undefined
+  private children :{[key :string] :PathNode<T>}|undefined = undefined
 
-  /** Sets the mapping for `path` to `value`. */
-  set (path :Path, value :T) { this._add(checkPath(path), 0, value) }
-
-  /** Looks and returns the mapping for `path`, or `undefined` if no mapping exists. */
-  get (path :Path) :T|undefined { return this._get(checkPath(path), 0) }
-
-  /** Looks up and returns the mapping for `path`, throws an error if no mapping exists. */
-  require (path :Path) :T {
-    const result = this._get(checkPath(path), 0)
-    if (!result) throw new Error(`Missing value for ${path}`)
-    return result
-  }
-
-  /** Deletes the mapping for `path`.
-    * @return the previous value of the mapping. */
-  delete (path :Path) :T|undefined { return this._delete(checkPath(path), 0) }
-
-  /** Removes all mappings from this map. */
-  clear () {
-    this.value = undefined
-    this.children = undefined
-  }
-
-  /** Applies `op` to all values in the map. Note: if `op` mutates the map, no guarantees are made
-    * as to whether `op` is applied or not to added or removed values. */
-  forEach (op :(v:T) => void) {
-    const {value, children} = this
-    if (value) op(value)
-    if (children) for (const key in children) children[key].forEach(op)
-  }
-
-  private _add (path :Path, pos :number, value :T) {
-    if (pos === path.length) this.value = value
-    else {
-      const children = this.children || (this.children = {})
-      const childmap = children[path[pos]] || (children[path[pos]] = new PathMap<T>())
-      childmap._add(path, pos+1, value)
-    }
-  }
-
-  private _get (path :Path, pos :number) :T|undefined {
+  get (path :Path, pos :number) :T|undefined {
     if (pos === path.length) return this.value
     else if (!this.children) return undefined
     else {
       const childmap = this.children[path[pos]]
-      return childmap ? childmap._get(path, pos+1) : undefined
+      return childmap ? childmap.get(path, pos+1) : undefined
     }
   }
 
-  private _delete (path :Path, pos :number) :T|undefined {
+  set (path :Path, pos :number, value :T) :boolean {
+    if (pos === path.length) {
+      const wasEmpty = this.value === undefined
+      this.value = value
+      return wasEmpty
+    } else {
+      const children = this.children || (this.children = {})
+      const child = children[path[pos]] || (children[path[pos]] = new PathNode<T>())
+      return child.set(path, pos+1, value)
+    }
+  }
+
+  delete (path :Path, pos :number) :T|undefined {
     if (pos === path.length) {
       const ovalue = this.value
       this.value = undefined
@@ -164,10 +135,58 @@ export class PathMap<T> {
     }
     else if (!this.children) return undefined
     else {
-      const childmap = this.children[path[pos]]
-      return childmap ? childmap._delete(path, pos+1) : undefined
+      const child = this.children[path[pos]]
+      return child ? child.delete(path, pos+1) : undefined
     }
   }
+
+  forEach (op :(v:T, p:Path) => void, path :Path) {
+    const {value, children} = this
+    if (value) op(value, path)
+    if (children) for (const key in children) children[key].forEach(op, path.concat(key))
+  }
+}
+
+/** Maintains a mapping from `Path` objects to arbitrary values (of the same type). */
+export class PathMap<T> {
+  private root = new PathNode<T>()
+  private _size = 0
+
+  /** Looks and returns the mapping for `path`, or `undefined` if no mapping exists. */
+  get (path :Path) :T|undefined { return this.root.get(checkPath(path), 0) }
+
+  /** Sets the mapping for `path` to `value`. */
+  set (path :Path, value :T) {
+    if (this.root.set(checkPath(path), 0, value)) this._size += 1
+  }
+
+  /** Returns the number of mappings in this map. */
+  get size () { return this._size }
+
+  /** Looks up and returns the mapping for `path`, throws an error if no mapping exists. */
+  require (path :Path) :T {
+    const result = this.root.get(checkPath(path), 0)
+    if (!result) throw new Error(`Missing value for ${path}`)
+    return result
+  }
+
+  /** Deletes the mapping for `path`.
+    * @return the previous value of the mapping. */
+  delete (path :Path) :T|undefined {
+    const oval = this.root.delete(checkPath(path), 0)
+    if (oval !== undefined) this._size -= 1
+    return oval
+  }
+
+  /** Removes all mappings from this map. */
+  clear () {
+    this.root = new PathNode<T>()
+    this._size = 0
+  }
+
+  /** Applies `op` to all values in the map. Note: if `op` mutates the map, no guarantees are made
+    * as to whether `op` is applied or not to added or removed values. */
+  forEach (op :(v:T, p:Path) => void) { this.root.forEach(op, []) }
 }
 
 /** Defines an index on a collection of objects. */
