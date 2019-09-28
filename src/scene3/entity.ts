@@ -413,7 +413,7 @@ export function loadGLTFAnimationClip (url :string) :Subject<AnimationClip> {
   )
 }
 
-function createObject3D (objectConfig: Object3DConfig) :Subject<Object3D> {
+export function createObject3D (objectConfig: Object3DConfig) :Subject<Object3D> {
   switch (objectConfig.type) {
     case "gltf":
       const gltfConfig = objectConfig as GLTFConfig
