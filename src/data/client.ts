@@ -72,31 +72,44 @@ export abstract class Connection {
   }
 }
 
-export type Resolved<T> = [T, Remover]
+class Resolved {
+  private refs = 0
 
-type Resolver<T> = () => Resolved<T>
-function objectRef<T extends DObject> (object :T, release :Remover) :Resolver<T> {
-  let refs = 0
-  return () => {
-    refs += 1
-    return [object, () => { refs -= 1 ; if (refs == 0) release() }]
+  constructor (cstate :Value<CState>, readonly state :Mutable<DState>, readonly resolved :any,
+               readonly resolve :() => void, readonly release :Remover) {
+    const unresub = cstate.onValue(cstate => {
+      switch (cstate) {
+      case "closed":
+        state.update("disconnected")
+        break
+      case "connected":
+        resolve()
+        break
+      }
+    })
+    state.whenOnce(s => s === "disposed", _ => unresub())
   }
-}
 
-type ViewInfo = {
-  path :Path,
-  state :Mutable<DState>
-  records :MutableMap<UUID, Record>
-  dispose :() => void
+  target<T> () :T { return this.resolved as T }
+
+  ref<T> () :[T, Remover] {
+    this.refs += 1
+    return [this.resolved, () => this.unref()]
+  }
+
+  unref () {
+    const refs = this.refs = this.refs-1
+    if (refs === 0) {
+      this.release()
+      this.state.update("disposed")
+    }
+  }
 }
 
 export class Client implements DataSource, Disposable {
   private readonly disposer = new Disposer()
   private readonly cstate = Mutable.local("connecting" as CState)
-  private readonly objects = new PathMap<DObject>()
-  private readonly states = new PathMap<Mutable<DState>>()
-  private readonly views = new PathMap<ViewInfo>()
-  private readonly resolved = new PathMap<Resolver<DObject>>()
+  private readonly resolved = new PathMap<Resolved>()
   private readonly _errors = new Emitter<string>()
   private readonly _serverAuth = Mutable.local(UUID0)
 
@@ -105,10 +118,10 @@ export class Client implements DataSource, Disposable {
 
   readonly resolver = {
     getMetas: (path :Path) => {
-      const obj = this.objects.get(path)
-      return obj ? obj.metas : undefined
+      const obj = this.resolved.get(path)
+      return obj ? obj.target<DObject>().metas : undefined
     },
-    getObject: (path :Path) => this.objects.require(path),
+    getObject: (path :Path) => this.resolved.require(path).target<DObject>(),
   }
 
   constructor (readonly serverUrl :URL,
@@ -143,70 +156,44 @@ export class Client implements DataSource, Disposable {
 
   get errors () :Stream<string> { return this._errors }
 
-  resolve<T extends DObject> (path :Path, otype :DObjectType<T>) :Resolved<T> {
+  resolve<T extends DObject> (path :Path, otype :DObjectType<T>) :[T, Remover] {
     const res = this.resolved.get(path)
-    if (res) return (res as Resolver<T>)()
+    if (res) return res.ref<T>()
 
     if (DebugLog) log.debug("Resolving", "path", path, "otype", otype)
     const state = Mutable.local<DState>("resolving")
-
     const object = new otype(this, path, state)
-    const nres = objectRef(object, () => {
+    const nres = new Resolved(this.cstate, state, object, () => {
+      if (DebugLog) log.debug("Subscribing", "path", path)
+      this.sendUp(path, {type: UpType.SUB, path})
+    }, () => {
       if (DebugLog) log.debug("Unsubscribing", "path", path)
       this.sendUp(path, {type: UpType.UNSUB, path})
       this.resolved.delete(path)
-      this.objects.delete(path)
-      state.update("disposed")
     })
     this.resolved.set(path, nres)
-    this.objects.set(path, object)
-    this.states.set(path, state)
 
-    const unresub = this.cstate.onValue(cstate => {
-      switch (cstate) {
-      case "closed":
-        state.update("disconnected")
-        break
-      case "connected":
-        if (DebugLog) log.debug("Subscribing", "path", path)
-        this.sendUp(path, {type: UpType.SUB, path})
-        break
-      }
-    })
-    state.whenOnce(s => s === "disposed", _ => unresub())
-
-    return nres()
+    return nres.ref()
   }
 
   // TODO: limit, startKey, etc.
-  resolveView<T extends Record> (view :DView<T>) :Resolved<RMap<UUID,T>> {
+  resolveView<T extends Record> (view :DView<T>) :[RMap<UUID,T>, Remover] {
     const path = view.path
+    const res = this.resolved.get(path)
+    if (res) return res.ref<RMap<UUID,T>>()
+
     const state = Mutable.local<DState>("resolving")
     const records = MutableMap.local<UUID, Record>()
-
-    const dispose = () => {
+    const nres = new Resolved(this.cstate, state, records, () => {
+      if (DebugLog) log.debug("Subscribing to view", "path", path)
+      this.sendUp(path, {type: UpType.VSUB, path})
+    }, () => {
       this.sendUp(path, {type: UpType.VUNSUB, path})
-      state.update("disposed")
-      this.views.delete(path)
-    }
-
-    const vinfo = {path, state, records, dispose}
-    this.views.set(path, vinfo)
-
-    const unresub = this.cstate.onValue(cstate => {
-      switch (cstate) {
-      case "closed":
-        state.update("disconnected")
-        break
-      case "connected":
-        if (DebugLog) log.debug("Subscribing to view", "path", path)
-        this.sendUp(path, {type: UpType.VSUB, path})
-        break
-      }
+      this.resolved.delete(path)
     })
-    state.whenOnce(s => s === "disposed", _ => unresub())
+    this.resolved.set(path, nres)
 
-    return [records as any, dispose] // coerce Record => T
+    return nres.ref()
   }
 
   createRecord (path :Path, key :UUID, data :Record) {
@@ -236,28 +223,28 @@ export class Client implements DataSource, Disposable {
         break
 
       case DownType.VSET:
-        const svinfo = this.views.require(msg.path)
-        for (const rec of msg.recs) svinfo.records.set(rec.key, rec.data)
+        const svrecs = this.resolved.require(msg.path).target<MutableMap<UUID,Record>>()
+        for (const rec of msg.recs) svrecs.set(rec.key, rec.data)
         break
       case DownType.VDEL:
-        const dvinfo = this.views.require(msg.path)
-        dvinfo.records.delete(msg.key)
+        const dvrecs = this.resolved.require(msg.path).target<MutableMap<UUID,Record>>()
+        dvrecs.delete(msg.key)
         break
       case DownType.VERR:
-        const evinfo = this.views.require(msg.path)
+        const evinfo = this.resolved.require(msg.path)
         evinfo.state.update("failed")
-        this.reportError(log.format("Query failed", "vpath", evinfo.path, "cause", msg.cause))
+        this.reportError(log.format("Query failed", "vpath", msg.path, "cause", msg.cause))
         break
 
       case DownType.SOBJ:
-        const sstate = this.states.require(msg.obj.path)
-        sstate.update("active")
+        const sres = this.resolved.require(msg.obj.path)
+        sres.state.update("active")
         break
       case DownType.SERR:
-        const estate = this.states.require(msg.path)
-        estate.update("failed")
-        this.reportError(log.format("Subscribe failed", "path", msg.path,
-                                    "obj", this.objects.get(msg.path), "cause", msg.cause))
+        const eres = this.resolved.require(msg.path)
+        eres.state.update("failed")
+        this.reportError(log.format("Subscribe failed", "path", msg.path, "obj", eres.target(),
+                                    "cause", msg.cause))
         break
 
       case SyncType.DECERR:
@@ -265,7 +252,7 @@ export class Client implements DataSource, Disposable {
         break
 
       default:
-        const obj = this.objects.require(msg.path)
+        const obj = this.resolved.require(msg.path).target<DObject>()
         obj.applySync(msg, true)
       }
 

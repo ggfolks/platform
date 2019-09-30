@@ -1,12 +1,12 @@
 import {UUID, UUID0, uuidv1} from "../core/uuid"
-import {Disposer, Timestamp, log} from "../core/util"
+import {Disposer, Timestamp, Remover, log} from "../core/util"
 import {Mutable, Subject, Value} from "../core/react"
 import {Decoder, setTextCodec} from "../core/codec"
 import {guestValidator} from "../auth/auth"
 import {getPropMetas, dobject, dmap, dvalue, dcollection, dqueue} from "./meta"
 import {Auth, DataSource, DObject, DState, MetaMsg, findObjectType} from "./data"
 import {MsgEncoder, MsgDecoder} from "./protocol"
-import {Client, Connection, CState, Resolved} from "./client"
+import {Client, Connection, CState} from "./client"
 import {MemoryDataStore, Session, SessionConfig} from "./server"
 
 import {TextEncoder, TextDecoder} from "util"
@@ -435,7 +435,7 @@ test("subscribe-post", done => {
     readonly client :Client
     readonly state = Mutable.local("preauth")
     readonly user :UserObject
-    room :Resolved<RoomObject>|undefined = undefined
+    room :[RoomObject, Remover]|undefined = undefined
 
     constructor (id :UUID) {
       this.client = new Client(
