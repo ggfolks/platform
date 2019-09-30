@@ -192,8 +192,20 @@ export class Client implements DataSource, Disposable {
 
     const vinfo = {path, state, records, dispose}
     this.views.set(path, vinfo)
-    if (DebugLog) log.debug("Subscribing to view", "path", path)
-    this.sendUp(path, {type: UpType.VSUB, path})
+
+    const unresub = this.cstate.onValue(cstate => {
+      switch (cstate) {
+      case "closed":
+        state.update("disconnected")
+        break
+      case "connected":
+        if (DebugLog) log.debug("Subscribing to view", "path", path)
+        this.sendUp(path, {type: UpType.VSUB, path})
+        break
+      }
+    })
+    state.whenOnce(s => s === "disposed", _ => unresub())
+
     return [records as any, dispose] // coerce Record => T
   }
 
