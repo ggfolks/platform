@@ -382,10 +382,11 @@ class TestConnection extends Connection {
   private readonly handler :ClientHandler
   readonly state = Value.constant("connected" as CState)
 
-  constructor (readonly client :Client, addr :URL, config :SessionConfig,
+  constructor (readonly client :Client, addr :URL, state :Mutable<CState>, config :SessionConfig,
                readonly runq :RunQueue) {
     super(client)
     this.handler = new ClientHandler(config, this, runq)
+    state.update("connected")
   }
 
   sendRawMsg (data :Uint8Array) {
@@ -407,7 +408,7 @@ test("subscribe-auth", () => {
 
   const authA = {source: "guest", id: ida, token: ""}
   const clientA = new Client(
-    testAddr, Value.constant(authA), (c, a) => new TestConnection(c, a, sconfig, queue))
+    testAddr, Value.constant(authA), (c, a, s) => new TestConnection(c, a, s, sconfig, queue))
   const objAA = clientA.resolve(["users", ida], UserObject)[0]
   expect(objAA.key).toBe(ida)
   let gotAA = false
@@ -441,7 +442,7 @@ test("subscribe-post", done => {
     constructor (id :UUID) {
       this.client = new Client(
         testAddr, Value.constant({source: "guest", id, token: ""}),
-        (c, a) => new TestConnection(c, a, sconfig, queue))
+        (c, a, s) => new TestConnection(c, a, s, sconfig, queue))
 
       if (DebugLog) this.state.onChange(ns => log.debug("Client state", "id", id, "state", ns))
 
