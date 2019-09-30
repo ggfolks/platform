@@ -156,7 +156,8 @@ export class Timestamp {
 export type Level = "debug" | "info" | "warn" | "error"
 
 function hasToString (obj :any) {
-  return typeof obj === "object" && Object.getPrototypeOf(obj).toString !== Object.prototype.toString
+  return typeof obj === "object" &&
+    Object.getPrototypeOf(obj).toString !== Object.prototype.toString
 }
 
 export function formatArgs (...args :any[]) :string {
@@ -175,7 +176,12 @@ export function formatArgs (...args :any[]) :string {
 }
 
 export function logAt (level :Level, msg :string, ...args :any[]) {
-  let logfn = level === "error" ? console.error : level === "warn" ? console.warn : console.log
+  let logfn = console.log
+  switch (level) {
+  case "error": logfn = console.error ; break
+  case "warn": logfn = console.warn ; break
+  case "info": logfn = console.info ; break
+  }
   const fargs = formatArgs(...args)
   logfn(fargs.length > 0 ? `${msg} [${fargs}]` : msg)
   if (args.length % 2 === 1) logfn(args[args.length-1])
