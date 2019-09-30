@@ -293,11 +293,15 @@ export abstract class Session implements Subscriber, ViewSubscriber {
   sendSync (msg :SyncMsg) { this.sendDown(msg) }
 
   sendDown (msg :DownMsg) {
+    let data :Uint8Array
     try {
-      this.sendMsg(this.encoder.encodeDown(this.auth, msg))
+      data = this.encoder.encodeDown(this.auth, msg)
     } catch (err) {
       log.warn("Failed to encode", "sess", this, "msg", msg, err)
       return
+    }
+    if (!this.sendMsg(data)) {
+      log.warn("Dropping message for unconnected session", "sess", this, "msg", msg)
     }
   }
 
@@ -436,7 +440,7 @@ export abstract class Session implements Subscriber, ViewSubscriber {
     this.sendDown({type: DownType.VSET, path, recs})
   }
 
-  protected abstract sendMsg (msg :Uint8Array) :void
+  protected abstract sendMsg (msg :Uint8Array) :boolean
 }
 
 type ServerConfig = {
@@ -485,11 +489,12 @@ class WSSession extends Session {
     return `${super.toString()}/${this.addr}`
   }
 
-  protected sendMsg (msg :Uint8Array) {
-    if (this.ws.readyState === WebSocket.OPEN) this.ws.send(msg, err => {
+  protected sendMsg (msg :Uint8Array) :boolean {
+    if (this.ws.readyState !== WebSocket.OPEN) return false
+    this.ws.send(msg, err => {
       if (err) log.warn("Message send failed", "sess", this, err) // TODO: terminate?
     })
-    else log.warn("Dropping message for unconnected session", "sess", this)
+    return true
   }
 
   protected didClose () {
