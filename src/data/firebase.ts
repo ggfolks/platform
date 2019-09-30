@@ -22,6 +22,8 @@ import {isPersist} from "./meta"
 import {DObject, DObjectType, DMutable, Path, PathMap} from "./data"
 import {DataStore, Resolved, Resolver, ResolvedView} from "./server"
 
+const DebugLog = false
+
 setTextCodec(() => new TextEncoder() as any, () => new TextDecoder() as any)
 
 function pathToDocRef (db :Firestore, path :Path) :DocRef {
@@ -210,7 +212,8 @@ class DocSyncer {
 
   addSync (object :DObject, sync :SyncMsg) {
     const meta = object.metas[sync.idx], update = this.update
-    // log.debug("syncToUpdate", "path", object.path, "type", sync.type, "name", meta.name)
+    if (DebugLog) log.debug("syncToUpdate", "path", object.path, "type", sync.type,
+                            "name", meta.name)
     switch (sync.type) {
     case SyncType.VALSET:
       update[meta.name] = {type: "value", value: valueToFirestore(sync.value, sync.vtype)}
@@ -279,9 +282,10 @@ class DocSyncer {
       this.needCreate = false
     }
     ref.update(data)
-    log.debug("persistUpdate", "path", this.path, "keys", Object.keys(data))
+    if (DebugLog) log.debug("persistUpdate", "path", this.path, "keys", Object.keys(data))
     if (deleteData) {
-      log.debug("persistUpdate.delete", "path", this.path, "props", Object.keys(deleteData))
+      if (DebugLog) log.debug("persistUpdate.delete", "path", this.path,
+                              "props", Object.keys(deleteData))
       ref.update(data)
     }
     this.update = {}
@@ -302,24 +306,24 @@ export class FirebaseDataStore extends DataStore {
 
   createRecord (path :Path, key :UUID, data :Record) {
     const ref = pathToColRef(this.db, path).doc(key)
-    log.debug("createRecord", "path", path, "key", key)
+    if (DebugLog) log.debug("createRecord", "path", path, "key", key)
     ref.set(recordToFirestore(data))
   }
   updateRecord (path :Path, key :UUID, data :Record, merge :boolean) {
     const ref = pathToColRef(this.db, path).doc(key)
-    log.debug("updateRecord", "path", path, "key", key)
+    if (DebugLog) log.debug("updateRecord", "path", path, "key", key)
     merge ? ref.set(data) : ref.update(recordToFirestore(data))
   }
   deleteRecord (path :Path, key :UUID) {
     const ref = pathToColRef(this.db, path).doc(key)
-    log.debug("deleteRecord", "path", path, "key", key)
+    if (DebugLog) log.debug("deleteRecord", "path", path, "key", key)
     ref.delete()
   }
 
   resolveData (res :Resolved, resolver? :Resolver) {
     const ref = pathToDocRef(this.db, res.object.path)
     const resolved = (needCreate :boolean) => {
-      log.debug("Creating syncer", "path", res.object.path, "create", needCreate)
+      if (DebugLog) log.debug("Creating syncer", "path", res.object.path, "create", needCreate)
       this.syncers.set(res.object.path, new DocSyncer(res.object.path, ref, needCreate))
       res.resolvedData()
     }
@@ -342,7 +346,7 @@ export class FirebaseDataStore extends DataStore {
       const sets = []
       for (const change of snap.docChanges()) {
         const doc = change.doc
-        // log.debug("View snap", "type", change.type, "path", res.tpath, "id", doc.id)
+        if (DebugLog) log.debug("View snap", "type", change.type, "path", res.tpath, "id", doc.id)
         switch (change.type) {
         case "added":
           sets.push({key: doc.id, data: recordFromFirestore(doc.data())})
