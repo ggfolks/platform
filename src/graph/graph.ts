@@ -56,9 +56,8 @@ export class Graph implements Disposable {
     const node = this._nodes.require(id)
     this._nodes.delete(id)
     node.dispose()
-    const config = this.config[node.id]
     delete this.config[node.id]
-    return config
+    return node.config
   }
 
   /** Removes all the nodes in the graph. */

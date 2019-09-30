@@ -46,12 +46,17 @@ export type NodeEditor = (edit :NodeEdit) => FullNodeEdit
 export type NodeRemover = (ids :Set<string>) => void
 export type NodeCopier = (ids :Set<string>) => GraphConfig
 
+const NoopEditor :NodeEditor = edit =>
+  ({activePage: "default", selection: new Set(), add: {}, edit: {}, remove: new Set()})
+
 export interface GraphEditConfig {
   [id :string] :PMap<any>
 }
 
 export interface NodeEdit {
   editNumber? :number
+  page? :string
+  activePage? :string
   selection? :Set<string>
   add? :GraphConfig
   edit? :GraphEditConfig
@@ -59,6 +64,7 @@ export interface NodeEdit {
 }
 
 interface FullNodeEdit extends NodeEdit {
+  activePage :string
   selection :Set<string>
   add :GraphConfig
   edit :GraphEditConfig
@@ -80,26 +86,27 @@ class UINode extends Node {
       let root :Root
       const ui = new UI(ctx.theme, ctx.styles, ctx.image)
       const disposer = new Disposer()
+      const activePage = Mutable.local("default")
       const selection = MutableSet.local<string>()
       const setSelection = (newSelection :Set<string>) => {
         selection.clear()
         for (const id of newSelection) selection.add(id)
       }
+      const pageEditor = Mutable.local<NodeEditor>(NoopEditor)
       const nodeCreator = Mutable.local<NodeCreator>(() => new Map())
-      const nodeEditor = Mutable.local<NodeEditor>(
-        edit => ({selection: new Set(), add: {}, edit: {}, remove: new Set()}),
-      )
       const canUndo = Mutable.local(false)
       const canRedo = Mutable.local(false)
       const undoStack :FullNodeEdit[] = []
       const redoStack :FullNodeEdit[] = []
       const applyEdit = (edit :NodeEdit) => {
+        const oldActivePage = activePage.current
         const oldSelection = new Set(selection)
-        const reverseEdit = nodeEditor.current(edit)
+        const reverseEdit = pageEditor.current(edit)
+        if (edit.activePage) activePage.update(edit.activePage)
         if (edit.selection) setSelection(edit.selection)
         const lastEdit = undoStack[undoStack.length - 1]
         const currentEditNumber = getCurrentEditNumber()
-        if (lastEdit && lastEdit.editNumber === currentEditNumber) {
+        if (lastEdit && lastEdit.editNumber === currentEditNumber && lastEdit.page === edit.page) {
           // merge into last edit
           for (const id in reverseEdit.add) {
             const nodeConfig = reverseEdit.add[id]
@@ -131,6 +138,7 @@ class UINode extends Node {
           }
         } else {
           reverseEdit.editNumber = currentEditNumber
+          reverseEdit.activePage = oldActivePage
           reverseEdit.selection = oldSelection
           undoStack.push(reverseEdit)
         }
@@ -172,16 +180,20 @@ class UINode extends Node {
           ctx.subgraphs.root,
           name => ctx.subgraphs.createNodeConfig(name),
         ),
+        activePage,
         selection,
+        pageEditor,
         nodeCreator,
-        nodeEditor,
         applyEdit,
         canUndo,
         undo: () => {
+          const oldActivePage = activePage.current
           const oldSelection = new Set(selection)
           const edit = undoStack.pop()!
-          const reverseEdit = nodeEditor.current(edit)
+          const reverseEdit = pageEditor.current(edit)
+          activePage.update(edit.activePage)
           setSelection(edit.selection)
+          reverseEdit.activePage = oldActivePage
           reverseEdit.selection = oldSelection
           redoStack.push(reverseEdit)
           canRedo.update(true)
@@ -189,10 +201,13 @@ class UINode extends Node {
         },
         canRedo,
         redo: () => {
+          const oldActivePage = activePage.current
           const oldSelection = new Set(selection)
           const edit = redoStack.pop()!
-          const reverseEdit = nodeEditor.current(edit)
+          const reverseEdit = pageEditor.current(edit)
+          activePage.update(edit.activePage)
           setSelection(edit.selection)
+          reverseEdit.activePage = oldActivePage
           reverseEdit.selection = oldSelection
           undoStack.push(reverseEdit)
           canUndo.update(true)
@@ -204,7 +219,7 @@ class UINode extends Node {
           canUndo.update(false)
           canRedo.update(false)
         },
-        ...createGraphModelData(graph, applyEdit),
+        ...createGraphModelData(graph, activePage, applyEdit),
       })
       root = ui.createRoot(this.config.root, model)
       if (this.config.size) root.setSize(this.config.size)
@@ -238,9 +253,12 @@ function mergeEdits (first :PMap<any>, second :PMap<any>) {
   }
 }
 
-function createGraphModelData (graph :Graph, applyEdit :(edit :NodeEdit) => void) :ModelData {
+function createGraphModelData (
+  graph :Graph,
+  activePage :Mutable<string>,
+  applyEdit :(edit :NodeEdit) => void,
+) :ModelData {
   const pageModels = new Map<ModelKey, Model>()
-  const activePage = Mutable.local("default")
   let currentPageKeys :string[] = []
   let changeFn :ChangeFn<string[]> = Noop
   const getOrder = (id :string) => {
@@ -265,42 +283,46 @@ function createGraphModelData (graph :Graph, applyEdit :(edit :NodeEdit) => void
     },
     () => currentPageKeys,
   )
+  const pageData = {
+    resolve: (key :ModelKey) => {
+      let model = pageModels.get(key)
+      if (!model) {
+        const id = key as string
+        let containedGraph = graph
+        let remove = Noop
+        let title = Value.constant(id)
+        if (key !== "default") {
+          const page = graph.nodes.require(id) as Page
+          containedGraph = page.containedGraph
+          const createPropertyValue = createPropertyValueCreator(page, applyEdit)
+          title = createPropertyValue("title")
+          remove = () => {
+            let newActivePage = activePage.current
+            if (activePage.current === id) {
+              const index = currentPageKeys.indexOf(id)
+              newActivePage = currentPageKeys[
+                index === currentPageKeys.length - 1 ? index - 1 : index + 1
+              ]
+            }
+            applyEdit({activePage: newActivePage, remove: new Set([id])})
+          }
+        }
+        pageModels.set(key, model = new Model(createPageModelData(
+          containedGraph,
+          activePage,
+          applyEdit,
+          id,
+          title,
+          remove,
+        )))
+      }
+      return model
+    },
+  }
+  const pageEditor = createNodeEditor(graph, pageModels)
   return {
     pageKeys,
-    pageData: {
-      resolve: (key :ModelKey) => {
-        let model = pageModels.get(key)
-        if (!model) {
-          const id = key as string
-          let page :Page|undefined
-          let containedGraph = graph
-          let remove = Noop
-          if (key !== "default") {
-            page = graph.nodes.require(id) as Page
-            containedGraph = page.containedGraph
-            remove = () => {
-              if (activePage.current === id) {
-                const index = currentPageKeys.indexOf(id)
-                activePage.update(
-                  currentPageKeys[index === currentPageKeys.length - 1 ? index - 1 : index + 1],
-                )
-              }
-              graph.removeNode(id)
-              pageModels.delete(id)
-            }
-          }
-          pageModels.set(key, model = new Model(createPageModelData(
-            containedGraph,
-            page,
-            applyEdit,
-            id,
-            remove,
-          )))
-        }
-        return model
-      },
-    },
-    activePage,
+    pageData,
     createPage: () => {
       // find a unique id for the page
       let pageId = ""
@@ -311,28 +333,30 @@ function createGraphModelData (graph :Graph, applyEdit :(edit :NodeEdit) => void
           break
         }
       }
-      graph.createNode(pageId, {
-        type: "page",
-        title: pageId,
-        order: getOrder(currentPageKeys[currentPageKeys.length - 1]) + 1,
-        graph: {},
-      })
-      activePage.update(pageId)
+      applyEdit({activePage: pageId, add: {
+        [pageId]: {
+          type: "page",
+          title: pageId,
+          order: getOrder(currentPageKeys[currentPageKeys.length - 1]) + 1,
+          graph: {},
+        },
+      }})
     },
     updateOrder: (id :string, index :number) => {
       const currentIndex = currentPageKeys.indexOf(id)
       if (currentIndex === index) return
+      const edit = {edit: {}}
       if (id === "default") {
         // to reorder the default page, we adjust the order of everything around it
         let order = -1
         for (let ii = index - 1; ii >= 0; ii--) {
           const key = currentPageKeys[ii]
-          if (key !== "default") graph.nodes.require(key).getProperty("order").update(order--)
+          if (key !== "default") edit.edit[key] = {order: order--}
         }
         order = 1
         for (let ii = index; ii < currentPageKeys.length; ii++) {
           const key = currentPageKeys[ii]
-          if (key !== "default") graph.nodes.require(key).getProperty("order").update(order++)
+          if (key !== "default") edit.edit[key] = {order: order++}
         }
       } else {
         // to reorder an ordinary page, we change its order
@@ -348,9 +372,22 @@ function createGraphModelData (graph :Graph, applyEdit :(edit :NodeEdit) => void
             newOrder = (getOrder(currentPageKeys[index]) + getOrder(currentPageKeys[index - 1])) / 2
             break
         }
-        graph.nodes.require(id).getProperty("order").update(newOrder)
+        edit.edit[id] = {order: newOrder}
       }
+      applyEdit(edit)
+    },
+    removeAll: () => {
+      applyEdit({activePage: "default", selection: new Set(), remove: new Set(graph.nodes.keys())})
+    },
+    editPages: (edit :NodeEdit) => {
+      if (edit.page) {
+        // forward to appropriate page model
+        const model = pageData.resolve(edit.page)
+        return model.resolve<NodeEditor>("editNodes")(edit)
+      }
+      const result = pageEditor(edit)
       updatePageKeys()
+      return result
     },
     toJSON: () => graph.toJSON(),
     fromJSON: (json :GraphConfig) => {
@@ -362,15 +399,16 @@ function createGraphModelData (graph :Graph, applyEdit :(edit :NodeEdit) => void
 
 function createPageModelData (
   graph :Graph,
-  page :Page|undefined,
+  activePage :Mutable<string>,
   applyEdit :(edit :NodeEdit) => void,
-  id :string,
+  page :string,
+  title :Value<string>,
   remove :Action,
 ) :ModelData {
   const nodeModels = new Map<ModelKey, Model>()
   return {
-    id: Value.constant(id),
-    title: page ? page.getProperty("title") : Value.constant(id),
+    id: Value.constant(page),
+    title,
     removable: Value.constant(remove !== Noop),
     remove,
     createNodes: (config :GraphConfig) => {
@@ -404,56 +442,16 @@ function createPageModelData (
           }
         }
       }
-      applyEdit({selection: new Set(ids.values()), add})
+      applyEdit({page, selection: new Set(ids.values()), add})
       return ids
     },
-    editNodes: (edit :NodeEdit) => {
-      const reverseAdd :GraphConfig = {}
-      const reverseEdit :GraphEditConfig = {}
-      const reverseRemove = new Set<string>()
-      if (edit.remove) {
-        for (const id of edit.remove) {
-          reverseAdd[id] = graph.removeNode(id)
-          nodeModels.delete(id)
-        }
-      }
-      if (edit.add) {
-        for (const id in edit.add) {
-          graph.createNode(id, edit.add[id])
-          reverseRemove.add(id)
-        }
-      }
-      if (edit.edit) {
-        for (const id in edit.edit) {
-          const node = graph.nodes.require(id)
-          const editConfig = edit.edit[id]
-          const reverseConfig :PMap<any> = {}
-          for (const key in editConfig) {
-            const property = node.getProperty(key)
-            const currentValue = property.current
-            reverseConfig[key] = currentValue === undefined ? null : currentValue
-            property.update(editConfig[key])
-          }
-          reverseEdit[id] = reverseConfig
-        }
-        for (const id in edit.edit) {
-          graph.nodes.require(id).reconnect()
-        }
-      }
-      if (edit.add) {
-        for (const id in edit.add) graph.nodes.require(id).connect()
-      }
-      return {add: reverseAdd, edit: reverseEdit, remove: reverseRemove}
-    },
-    removeAllNodes: () => {
-      applyEdit({selection: new Set(), remove: new Set(graph.nodes.keys())})
-    },
+    editNodes: createNodeEditor(graph, nodeModels),
     copyNodes: (ids :Set<string>) => {
       const config = {}
       for (const id of ids) config[id] = graph.nodes.get(id)!.toJSON()
       return config
     },
-    nodeKeys: page ? graph.nodes.keysValue : graph.nodes.keysValue.map(keys => filteredIterable(
+    nodeKeys: graph.nodes.keysValue.map(keys => filteredIterable(
       keys,
       key => graph.nodes.require(key).config.type !== "page",
     )),
@@ -466,23 +464,13 @@ function createPageModelData (
           const subgraphElement :ModelData = {}
           if (type === "subgraph") {
             const subgraph = node as Subgraph
-            subgraphElement.subgraph = createGraphModelData(subgraph.containedGraph, applyEdit)
-          }
-          function createPropertyValue (key :ModelKey, defaultValue? :Value<any>) {
-            const property = node.getProperty(key as string)
-            return Mutable.deriveMutable(
-              dispatch => property.onChange(dispatch),
-              () => getValue(property.current, defaultValue && defaultValue.current),
-              input => {
-                applyEdit({
-                  edit: {
-                    [node.id]: {[key]: input},
-                  },
-                })
-              },
-              refEquals,
+            subgraphElement.subgraph = createGraphModelData(
+              subgraph.containedGraph,
+              activePage,
+              applyEdit,
             )
           }
+          const createPropertyValue = createPropertyValueCreator(node, applyEdit, page)
           if (!node.config.position) node.config.position = [0, 0]
           nodeModels.set(key, model = new Model({
             id: Value.constant(node.id),
@@ -524,6 +512,70 @@ function createPageModelData (
         return model
       },
     },
+  }
+}
+
+function createNodeEditor (graph :Graph, models :Map<ModelKey, Model>) {
+  return (edit :NodeEdit) => {
+    const reverseAdd :GraphConfig = {}
+    const reverseEdit :GraphEditConfig = {}
+    const reverseRemove = new Set<string>()
+    if (edit.remove) {
+      for (const id of edit.remove) {
+        reverseAdd[id] = graph.removeNode(id)
+        models.delete(id)
+      }
+    }
+    if (edit.add) {
+      for (const id in edit.add) {
+        graph.createNode(id, edit.add[id])
+        reverseRemove.add(id)
+      }
+    }
+    if (edit.edit) {
+      for (const id in edit.edit) {
+        const node = graph.nodes.require(id)
+        const editConfig = edit.edit[id]
+        const reverseConfig :PMap<any> = {}
+        for (const key in editConfig) {
+          const property = node.getProperty(key)
+          const currentValue = property.current
+          reverseConfig[key] = currentValue === undefined ? null : currentValue
+          property.update(editConfig[key])
+        }
+        reverseEdit[id] = reverseConfig
+      }
+      for (const id in edit.edit) {
+        graph.nodes.require(id).reconnect()
+      }
+    }
+    if (edit.add) {
+      for (const id in edit.add) graph.nodes.require(id).connect()
+    }
+    return {page: edit.page, add: reverseAdd, edit: reverseEdit, remove: reverseRemove}
+  }
+}
+
+function createPropertyValueCreator (
+  node :Node,
+  applyEdit :(edit :NodeEdit) => void,
+  page? :string,
+) {
+  return (key :ModelKey, defaultValue? :Value<any>) => {
+    const property = node.getProperty(key as string)
+    return Mutable.deriveMutable(
+      dispatch => property.onChange(dispatch),
+      () => getValue(property.current, defaultValue && defaultValue.current),
+      input => {
+        applyEdit({
+          page,
+          edit: {
+            [node.id]: {[key]: input},
+          },
+        })
+      },
+      refEquals,
+    )
   }
 }
 

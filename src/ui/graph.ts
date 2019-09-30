@@ -24,12 +24,13 @@ const clipboard = Mutable.local<GraphConfig|undefined>(undefined)
 
 export class GraphViewer extends VGroup {
   readonly contents :Element[] = []
+  readonly activePage :Mutable<string>
   readonly selection :MutableSet<string>
   readonly applyEdit :(edit :NodeEdit) => void
 
   private _editable = Value.constant(false)
+  private _pageEditor :Mutable<NodeEditor>
   private _nodeCreator :Mutable<NodeCreator>
-  private _nodeEditor :Mutable<NodeEditor>
   private _nodeFunctionRemover? :Remover
   private _stack :Model[] = []
   private _poppable = Mutable.local(false)
@@ -42,9 +43,10 @@ export class GraphViewer extends VGroup {
     const typeCategoryData = ctx.model.resolve<ModelProvider>("typeCategoryData")
     const subgraphCategoryKeys = ctx.model.resolve<Source<string[]>>("subgraphCategoryKeys")
     const subgraphCategoryData = ctx.model.resolve<ModelProvider>("subgraphCategoryData")
+    this._pageEditor = ctx.model.resolve<Mutable<NodeEditor>>("pageEditor")
     this._nodeCreator = ctx.model.resolve<Mutable<NodeCreator>>("nodeCreator")
-    this._nodeEditor = ctx.model.resolve<Mutable<NodeEditor>>("nodeEditor")
     const remove = ctx.model.resolve<Action>("remove")
+    this.activePage = ctx.model.resolve<Mutable<string>>("activePage")
     this.selection = ctx.model.resolve<MutableSet<string>>("selection")
     this.applyEdit = ctx.model.resolve<(edit :NodeEdit) => void>("applyEdit")
     this._clearUndoStacks = ctx.model.resolve<Action>("clearUndoStacks")
@@ -121,8 +123,8 @@ export class GraphViewer extends VGroup {
                     clearAll: {
                       name: Value.constant("Clear All"),
                       enabled: this._editable,
-                      action: this._createPageModelAction(model => {
-                        model.resolve<Action>("removeAllNodes")()
+                      action: this._createGraphModelAction(model => {
+                        model.resolve<Action>("removeAll")()
                       }),
                     },
                     sep1: {separator: Value.constant(true)},
@@ -204,7 +206,8 @@ export class GraphViewer extends VGroup {
                         clipboard.update(dataCopy(
                           model.resolve<NodeCopier>("copyNodes")(this.selection),
                         ))
-                        this.applyEdit({selection: new Set(), remove: this.selection})
+                        const page = model.resolve<Value<string>>("id").current
+                        this.applyEdit({page, selection: new Set(), remove: this.selection})
                       }),
                     },
                     copy: {
@@ -226,7 +229,8 @@ export class GraphViewer extends VGroup {
                     delete: {
                       enabled: editableSelection,
                       action: this._createPageModelAction(model => {
-                        this.applyEdit({selection: new Set(), remove: this.selection})
+                        const page = model.resolve<Value<string>>("id").current
+                        this.applyEdit({page, selection: new Set(), remove: this.selection})
                       }),
                     },
                   }),
@@ -313,6 +317,7 @@ export class GraphViewer extends VGroup {
   }
 
   push (model :Model) {
+    this.activePage.update("default")
     this._updateNodeFunctions(model)
     this._stack.push(model)
     this.contents[1].dispose()
@@ -324,6 +329,7 @@ export class GraphViewer extends VGroup {
   }
 
   pop () {
+    this.activePage.update("default")
     const oldModel = this._stack.pop()
     if (!oldModel) throw new Error("Stack is empty")
     const model = this._stack[this._stack.length - 1]
@@ -344,8 +350,8 @@ export class GraphViewer extends VGroup {
       this.disposer.remove(this._nodeFunctionRemover)
     }
     const pageData = graphModel.resolve<ModelProvider>("pageData")
-    const activePage = graphModel.resolve<Value<string>>("activePage")
-    this.disposer.add(this._nodeFunctionRemover = activePage.onValue(activePage => {
+    this._pageEditor.update(graphModel.resolve<NodeEditor>("editPages"))
+    this.disposer.add(this._nodeFunctionRemover = this.activePage.onValue(activePage => {
       const pageModel = pageData.resolve(activePage)
       const createNodes = pageModel.resolve<NodeCreator>("createNodes")
       this._nodeCreator.update((config :GraphConfig) => {
@@ -354,7 +360,6 @@ export class GraphViewer extends VGroup {
         graphView.repositionNodes(ids)
         return ids
       })
-      this._nodeEditor.update(pageModel.resolve<NodeEditor>("editNodes"))
     }))
   }
 
@@ -362,12 +367,15 @@ export class GraphViewer extends VGroup {
     return () => op(this.contents[1].findChild("panner") as Panner)
   }
 
+  private _createGraphModelAction (op :(model :Model) => void) :Action {
+    return () => op(this._stack[this._stack.length - 1])
+  }
+
   private _createPageModelAction (op :(model :Model) => void) :Action {
     return () => {
       const graphModel = this._stack[this._stack.length - 1]
       const pageData = graphModel.resolve<ModelProvider>("pageData")
-      const activePage = graphModel.resolve<Value<string>>("activePage")
-      op(pageData.resolve(activePage.current))
+      op(pageData.resolve(this.activePage.current))
     }
   }
 
@@ -385,6 +393,7 @@ export class GraphViewer extends VGroup {
         // destroy and recreate the entire element
         this.contents[1].dispose()
         this.contents[1] = this._createElement(model)
+        this.activePage.update("default")
         this.selection.clear()
         this._clearUndoStacks()
         this.invalidate()
@@ -440,7 +449,7 @@ export class GraphViewer extends VGroup {
       data: "pageData",
       keys: "pageKeys",
       key: "id",
-      activeKey: "activePage",
+      activeKey: this.activePage,
       updateOrder: "updateOrder",
       constraints: {stretch: true},
     })
@@ -557,8 +566,9 @@ export class GraphView extends AbsGroup {
       cy += position[1]
     }
     // now translate the centroid to the last mouse position
+    // (making sure y is non-negative)
     const dx = this._lastContaining[0] - cx / ids.size
-    const dy = this._lastContaining[1] - cy / ids.size
+    const dy = Math.max(this._lastContaining[1], 0) - cy / ids.size
     for (const id of ids.values()) {
       const nodeView = this.elements.get(id)!.node.contents as NodeView
       const position = nodeView.position
