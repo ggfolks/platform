@@ -175,7 +175,7 @@ class UINode extends Node {
         selection,
         nodeCreator,
         nodeEditor,
-        applyEdit: Value.constant(applyEdit),
+        applyEdit,
         canUndo,
         undo: () => {
           const oldSelection = new Set(selection)
@@ -352,11 +352,11 @@ function createGraphModelData (graph :Graph, applyEdit :(edit :NodeEdit) => void
       }
       updatePageKeys()
     },
-    toJSON: Value.constant(() => graph.toJSON()),
-    fromJSON: Value.constant((json :GraphConfig) => {
+    toJSON: () => graph.toJSON(),
+    fromJSON: (json :GraphConfig) => {
       graph.fromJSON(json)
       pageModels.clear() // force update to page data
-    }),
+    },
   }
 }
 
@@ -373,7 +373,7 @@ function createPageModelData (
     title: page ? page.getProperty("title") : Value.constant(id),
     removable: Value.constant(remove !== Noop),
     remove,
-    createNodes: Value.constant((config :GraphConfig) => {
+    createNodes: (config :GraphConfig) => {
       const add :GraphConfig = {}
       const ids = new Map<string, string>()
       for (const oldId in config) {
@@ -406,8 +406,8 @@ function createPageModelData (
       }
       applyEdit({selection: new Set(ids.values()), add})
       return ids
-    }),
-    editNodes: Value.constant((edit :NodeEdit) => {
+    },
+    editNodes: (edit :NodeEdit) => {
       const reverseAdd :GraphConfig = {}
       const reverseEdit :GraphEditConfig = {}
       const reverseRemove = new Set<string>()
@@ -444,15 +444,15 @@ function createPageModelData (
         for (const id in edit.add) graph.nodes.require(id).connect()
       }
       return {add: reverseAdd, edit: reverseEdit, remove: reverseRemove}
-    }),
+    },
     removeAllNodes: () => {
       applyEdit({selection: new Set(), remove: new Set(graph.nodes.keys())})
     },
-    copyNodes: Value.constant((ids :Set<string>) => {
+    copyNodes: (ids :Set<string>) => {
       const config = {}
       for (const id of ids) config[id] = graph.nodes.get(id)!.toJSON()
       return config
-    }),
+    },
     nodeKeys: page ? graph.nodes.keysValue : graph.nodes.keysValue.map(keys => filteredIterable(
       keys,
       key => graph.nodes.require(key).config.type !== "page",

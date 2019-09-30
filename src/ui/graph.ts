@@ -25,7 +25,7 @@ const clipboard = Mutable.local<GraphConfig|undefined>(undefined)
 export class GraphViewer extends VGroup {
   readonly contents :Element[] = []
   readonly selection :MutableSet<string>
-  readonly applyEdit :Value<(edit :NodeEdit) => void>
+  readonly applyEdit :(edit :NodeEdit) => void
 
   private _editable = Value.constant(false)
   private _nodeCreator :Mutable<NodeCreator>
@@ -46,7 +46,7 @@ export class GraphViewer extends VGroup {
     this._nodeEditor = ctx.model.resolve<Mutable<NodeEditor>>("nodeEditor")
     const remove = ctx.model.resolve<Action>("remove")
     this.selection = ctx.model.resolve<MutableSet<string>>("selection")
-    this.applyEdit = ctx.model.resolve<Value<(edit :NodeEdit) => void>>("applyEdit")
+    this.applyEdit = ctx.model.resolve<(edit :NodeEdit) => void>("applyEdit")
     this._clearUndoStacks = ctx.model.resolve<Action>("clearUndoStacks")
     const haveSelection = this.selection.fold(false, (value, set) => set.size > 0)
     const editableSelection = Value.join(haveSelection, this._editable).map(
@@ -202,16 +202,16 @@ export class GraphViewer extends VGroup {
                       enabled: editableSelection,
                       action: this._createPageModelAction(model => {
                         clipboard.update(dataCopy(
-                          model.resolve<Value<NodeCopier>>("copyNodes").current(this.selection),
+                          model.resolve<NodeCopier>("copyNodes")(this.selection),
                         ))
-                        this.applyEdit.current({selection: new Set(), remove: this.selection})
+                        this.applyEdit({selection: new Set(), remove: this.selection})
                       }),
                     },
                     copy: {
                       enabled: haveSelection,
                       action: this._createPageModelAction(model => {
                         clipboard.update(dataCopy(
-                          model.resolve<Value<NodeCopier>>("copyNodes").current(this.selection),
+                          model.resolve<NodeCopier>("copyNodes")(this.selection),
                         ))
                       }),
                     },
@@ -226,7 +226,7 @@ export class GraphViewer extends VGroup {
                     delete: {
                       enabled: editableSelection,
                       action: this._createPageModelAction(model => {
-                        this.applyEdit.current({selection: new Set(), remove: this.selection})
+                        this.applyEdit({selection: new Set(), remove: this.selection})
                       }),
                     },
                   }),
@@ -347,14 +347,14 @@ export class GraphViewer extends VGroup {
     const activePage = graphModel.resolve<Value<string>>("activePage")
     this.disposer.add(this._nodeFunctionRemover = activePage.onValue(activePage => {
       const pageModel = pageData.resolve(activePage)
-      const createNodes = pageModel.resolve<Value<NodeCreator>>("createNodes").current
+      const createNodes = pageModel.resolve<NodeCreator>("createNodes")
       this._nodeCreator.update((config :GraphConfig) => {
         const ids = createNodes(config)
         const graphView = this.findChild("graphview") as GraphView
         graphView.repositionNodes(ids)
         return ids
       })
-      this._nodeEditor.update(pageModel.resolve<Value<NodeEditor>>("editNodes").current)
+      this._nodeEditor.update(pageModel.resolve<NodeEditor>("editNodes"))
     }))
   }
 
@@ -381,7 +381,7 @@ export class GraphViewer extends VGroup {
       reader.onload = () => {
         const json = JSON.parse(reader.result as string)
         const model = this._stack[this._stack.length - 1]
-        model.resolve<Value<(json :GraphConfig) => void>>("fromJSON").current(json)
+        model.resolve<(json :GraphConfig) => void>("fromJSON")(json)
         // destroy and recreate the entire element
         this.contents[1].dispose()
         this.contents[1] = this._createElement(model)
@@ -448,7 +448,7 @@ export class GraphViewer extends VGroup {
 
   private _export () {
     const model = this._stack[this._stack.length - 1]
-    const json = model.resolve<Value<() => GraphConfig>>("toJSON").current()
+    const json = model.resolve<() => GraphConfig>("toJSON")()
     const file = new File([JSON.stringify(json)], "graph.json", {type: "application/octet-stream"})
     open(URL.createObjectURL(file), "_self")
     // TODO: call revokeObjectURL when finished with download
