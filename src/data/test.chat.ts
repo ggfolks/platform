@@ -4,7 +4,7 @@ import {Mutable, Subject, Value} from "../core/react"
 import {Decoder, setTextCodec} from "../core/codec"
 import {guestValidator} from "../auth/auth"
 import {getPropMetas, dobject, dmap, dvalue, dcollection, dqueue} from "./meta"
-import {Auth, DataSource, DObject, DState, MetaMsg, Path, findObjectType} from "./data"
+import {Auth, DataSource, DObject, DState, MetaMsg, findObjectType} from "./data"
 import {MsgEncoder, MsgDecoder} from "./protocol"
 import {Client, Connection, CState, Resolved} from "./client"
 import {MemoryDataStore, Session, SessionConfig} from "./server"
@@ -396,7 +396,6 @@ class TestConnection extends Connection {
 }
 
 const testAddr = new URL("ws://test/")
-const testLocator = (path :Path) => Subject.constant(testAddr)
 
 test("subscribe-auth", () => {
   const testStore = new MemoryDataStore(RootObject)
@@ -407,7 +406,7 @@ test("subscribe-auth", () => {
 
   const authA = {source: "guest", id: ida, token: ""}
   const clientA = new Client(
-    testLocator, Value.constant(authA), (c, a) => new TestConnection(c, a, sconfig, queue))
+    testAddr, Value.constant(authA), (c, a) => new TestConnection(c, a, sconfig, queue))
   const objAA = clientA.resolve(["users", ida], UserObject)[0]
   expect(objAA.key).toBe(ida)
   let gotAA = false
@@ -440,7 +439,7 @@ test("subscribe-post", done => {
 
     constructor (id :UUID) {
       this.client = new Client(
-        testLocator, Value.constant({source: "guest", id, token: ""}),
+        testAddr, Value.constant({source: "guest", id, token: ""}),
         (c, a) => new TestConnection(c, a, sconfig, queue))
 
       if (DebugLog) this.state.onChange(ns => log.debug("Client state", "id", id, "state", ns))

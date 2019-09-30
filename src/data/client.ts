@@ -1,7 +1,7 @@
-import {Disposable, Remover, log} from "../core/util"
+import {Disposable, Disposer, Remover, log} from "../core/util"
 import {UUID, UUID0} from "../core/uuid"
 import {Record} from "../core/data"
-import {Emitter, Mutable, Stream, Subject, Value} from "../core/react"
+import {Emitter, Mutable, Stream, Value} from "../core/react"
 import {RMap, MutableMap} from "../core/rcollect"
 import {Decoder} from "../core/codec"
 import {SessionAuth, sessionAuth} from "../auth/auth"
@@ -11,14 +11,7 @@ import {DownMsg, DownType, SyncMsg, SyncType, UpMsg, UpType,
 
 const DebugLog = false
 
-/** Resolves the address of the server that hosts the object at `path`. */
-export type Locator = (path :Path) => Subject<URL>
-
-/** Creates `Connection` instances for clients. */
-export type Connector = (client :Client, addr :URL) => Connection
-
-export type Resolved<T> = [T, Remover]
-
+/** Creates a server address based on the browser location. */
 export function addrFromLocation (path :string) :URL {
   const addr = new URL(window.location.href)
   addr.protocol = (addr.protocol === "https:") ? "wss:" : "ws:"
@@ -28,6 +21,58 @@ export function addrFromLocation (path :string) :URL {
   else addr.pathname = locpath.substring(0, locpath.lastIndexOf("/")+1) + path
   return addr
 }
+
+/** Creates `Connection` instances for clients. */
+export type Connector = (client :Client, addr :URL, state :Mutable<CState>) => Connection
+
+export type CState = "connecting" | "connected" | "closed"
+
+export abstract class Connection {
+  protected readonly disposer = new Disposer()
+  private readonly encoder = new MsgEncoder()
+  private readonly decoder = new MsgDecoder()
+
+  constructor (readonly client :Client) {}
+
+  abstract state :Value<CState>
+
+  init () {
+    // send our auth info as the first message to this connection and again if it ever changes
+    this.disposer.add(this.client.auth.onValue(auth => this.sendMsg({type: UpType.AUTH, ...auth})))
+  }
+
+  sendMsg (msg :UpMsg) {
+    switch (this.state.current) {
+    case "closed":
+      log.warn("Can't send on closed connection", "conn", this, "msg", msg)
+      break
+    case "connected":
+      try { this.sendRawMsg(this.encoder.encodeUp(msg)) }
+      catch (err) { log.warn("Failed to encode message", "msg", msg, err) }
+      break
+    default:
+      this.state.whenOnce(st => st === "connected", _ => this.sendMsg(msg))
+      break
+    }
+  }
+
+  recvMsg (data :Uint8Array) {
+    const msg = this.decoder.decodeDown(this.client.resolver, new Decoder(data))
+    try {
+      this.client.handleDown(msg)
+    } catch (err) {
+      log.warn("Failed to handle down msg", "msg", msg, err)
+    }
+  }
+
+  abstract sendRawMsg (msg :Uint8Array) :void
+
+  close () {
+    this.disposer.dispose()
+  }
+}
+
+export type Resolved<T> = [T, Remover]
 
 type Resolver<T> = () => Resolved<T>
 function objectRef<T extends DObject> (object :T, release :Remover) :Resolver<T> {
@@ -46,13 +91,17 @@ type ViewInfo = {
 }
 
 export class Client implements DataSource, Disposable {
-  private readonly conns = new Map<string, Connection>()
+  private readonly disposer = new Disposer()
+  private readonly cstate = Mutable.local("connecting" as CState)
   private readonly objects = new PathMap<DObject>()
   private readonly states = new PathMap<Mutable<DState>>()
   private readonly views = new PathMap<ViewInfo>()
   private readonly resolved = new PathMap<Resolver<DObject>>()
   private readonly _errors = new Emitter<string>()
   private readonly _serverAuth = Mutable.local(UUID0)
+
+  private reconnectAttempts = 0
+  private conn :Connection
 
   readonly resolver = {
     getMetas: (path :Path) => {
@@ -62,9 +111,31 @@ export class Client implements DataSource, Disposable {
     getObject: (path :Path) => this.objects.require(path),
   }
 
-  constructor (readonly locator :Locator,
+  constructor (readonly serverUrl :URL,
                readonly auth :Value<SessionAuth> = sessionAuth,
-               readonly connector :Connector = wsConnector) {}
+               readonly connector :Connector = wsConnector) {
+    this.disposer.add(this.cstate.onValue(cstate => {
+      if (DebugLog) log.debug(`Client connect state: ${cstate}`)
+      switch (cstate) {
+      case "connected":
+        this.reconnectAttempts = 0
+        break
+      case "closed":
+        const reconns = this.reconnectAttempts = this.reconnectAttempts+1
+        const delay = Math.pow(2, Math.min(reconns, 9)) // max out at ~10 mins
+        log.debug("Scheduling reconnect", "attempt", reconns, "delay", delay)
+        const cancel = setTimeout(() => {
+          this.conn.close()
+          this.conn = connector(this, serverUrl, this.cstate)
+          this.conn.init()
+        }, delay*1000)
+        this.disposer.add(() => clearInterval(cancel))
+        break
+      }
+    }))
+    this.conn = connector(this, serverUrl, this.cstate)
+    this.conn.init()
+  }
 
   /** The id as which we're authenticated on the server. This should eventually match the id in
     * [[auth]] once the server has acknowledged our auth request. */
@@ -78,7 +149,8 @@ export class Client implements DataSource, Disposable {
 
     if (DebugLog) log.debug("Resolving", "path", path, "otype", otype)
     const state = Mutable.local<DState>("resolving")
-    const object = new otype(this, path, this.objectState(path, state))
+
+    const object = new otype(this, path, state)
     const nres = objectRef(object, () => {
       if (DebugLog) log.debug("Unsubscribing", "path", path)
       this.sendUp(path, {type: UpType.UNSUB, path})
@@ -90,7 +162,19 @@ export class Client implements DataSource, Disposable {
     this.objects.set(path, object)
     this.states.set(path, state)
 
-    this.sendUp(path, {type: UpType.SUB, path})
+    const unresub = this.cstate.onValue(cstate => {
+      switch (cstate) {
+      case "closed":
+        state.update("disconnected")
+        break
+      case "connected":
+        if (DebugLog) log.debug("Subscribing", "path", path)
+        this.sendUp(path, {type: UpType.SUB, path})
+        break
+      }
+    })
+    state.whenOnce(s => s === "disposed", _ => unresub())
+
     return nres()
   }
 
@@ -184,102 +268,25 @@ export class Client implements DataSource, Disposable {
   }
 
   dispose () {
-    for (const conn of this.conns.values()) conn.close()
-  }
-
-  // TODO: when do we dispose connections?
-
-  protected objectState (path :Path, ostate :Value<DState>) :Value<DState> {
-    const sstate = Value.switch(this.connFor(path).map(c => c.state.map(cstateToDState)).
-                                fold(Value.constant<DState>("resolving"), (os, ns) => ns))
-    return Value.join2(sstate, ostate).map(([ss, os]) => ss === "disconnected" ? ss : os)
-  }
-
-  protected connFor (path :Path) :Subject<Connection> {
-    const {locator, conns, connector} = this
-    return locator(path).map(addr => {
-      const key = addr.toString()
-      const conn = conns.get(key)
-      if (conn) return conn
-      const nconn = connector(this, addr)
-      conns.set(key, nconn)
-      // send our auth info as the first message to this connection and again if it ever changes
-      const unauth = this.auth.onValue(auth => {
-        this.sendUpVia(nconn, [], {type: UpType.AUTH, ...auth})
-      })
-      // when the connection closes, clean up after it
-      nconn.state.when(cs => cs === "closed", _ => {
-        unauth()
-        conns.delete(key)
-      })
-      return nconn
-    })
+    this.disposer.dispose()
+    this.conn.close()
   }
 
   protected sendUp (path :Path, msg :UpMsg) {
-    this.connFor(path).once(conn => this.sendUpVia(conn, path, msg))
-  }
-
-  protected sendUpVia (conn :Connection, path :Path, msg :UpMsg) {
     if (DebugLog) log.debug("sendUp", "path", path, "msg", msg);
-    conn.sendMsg(msg)
+    this.conn.sendMsg(msg)
   }
-}
-
-export type CState = "connecting" | "connected" | "closed"
-
-function cstateToDState (cstate :CState) :DState {
-  switch (cstate) {
-  case "connecting": return "active"
-  case "connected": return "active"
-  case "closed": return "disconnected"
-  }
-}
-
-export abstract class Connection {
-  private readonly encoder = new MsgEncoder()
-  private readonly decoder = new MsgDecoder()
-
-  constructor (readonly client :Client) {}
-
-  abstract state :Value<CState>
-
-  sendMsg (msg :UpMsg) {
-    switch (this.state.current) {
-    case "closed":
-      log.warn("Can't send on closed connection", "conn", this, "msg", msg)
-      break
-    case "connected":
-      try { this.sendRawMsg(this.encoder.encodeUp(msg)) }
-      catch (err) { log.warn("Failed to encode message", "msg", msg, err) }
-      break
-    default:
-      this.state.whenOnce(st => st === "connected", _ => this.sendMsg(msg))
-      break
-    }
-  }
-
-  recvMsg (data :Uint8Array) {
-    const msg = this.decoder.decodeDown(this.client.resolver, new Decoder(data))
-    try {
-      this.client.handleDown(msg)
-    } catch (err) {
-      log.warn("Failed to handle down msg", "msg", msg, err)
-    }
-  }
-
-  abstract sendRawMsg (msg :Uint8Array) :void
-  abstract close () :void
 }
 
 class WSConnection extends Connection {
   private readonly ws :WebSocket
-  readonly state = Mutable.local("connecting" as CState)
 
-  constructor (client :Client, addr :URL) {
+  constructor (client :Client, addr :URL, readonly state :Mutable<CState>) {
     super(client)
     log.info("Connecting", "addr", addr)
+    state.update("connecting")
     const ws = this.ws = new WebSocket(addr.href)
+    this.disposer.add(() => ws.close())
     ws.binaryType = "arraybuffer"
     ws.addEventListener("open", ev => {
       this.state.update("connected")
@@ -296,9 +303,8 @@ class WSConnection extends Connection {
   }
 
   sendRawMsg (msg :Uint8Array) { this.ws.send(msg) }
-  close () { this.ws.close() }
   toString() { return this.ws.url }
 }
 
 /** Creates websocket connections to the supplied `addr`, for `client`. */
-export const wsConnector :Connector = (client, addr) => new WSConnection(client, addr)
+export const wsConnector :Connector = (client, addr, state) => new WSConnection(client, addr, state)
