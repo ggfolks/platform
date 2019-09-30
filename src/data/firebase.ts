@@ -207,13 +207,16 @@ function getMapDelta (update :Update, prop :string) :MapDelta {
 class DocSyncer {
   private update :Update = {}
   private needsFlush = false
+  public needCreate = false
 
-  constructor (readonly path :Path, readonly ref :DocRef, private needCreate :boolean) {}
+  constructor (readonly path :Path, readonly ref :DocRef) {
+    if (DebugLog) log.debug("Created syncer", "path", path)
+  }
 
   addSync (object :DObject, sync :SyncMsg) {
     const meta = object.metas[sync.idx], update = this.update
-    if (DebugLog) log.debug("syncToUpdate", "path", object.path, "type", sync.type,
-                            "name", meta.name)
+    // if (DebugLog) log.debug("syncToUpdate", "path", object.path, "type", sync.type,
+    //                         "name", meta.name)
     switch (sync.type) {
     case SyncType.VALSET:
       update[meta.name] = {type: "value", value: valueToFirestore(sync.value, sync.vtype)}
@@ -322,18 +325,18 @@ export class FirebaseDataStore extends DataStore {
 
   resolveData (res :Resolved, resolver? :Resolver) {
     const ref = pathToDocRef(this.db, res.object.path)
-    const resolved = (needCreate :boolean) => {
-      if (DebugLog) log.debug("Creating syncer", "path", res.object.path, "create", needCreate)
-      this.syncers.set(res.object.path, new DocSyncer(res.object.path, ref, needCreate))
-      res.resolvedData()
-    }
+    const syncer = new DocSyncer(res.object.path, ref)
+    this.syncers.set(res.object.path, syncer)
     if (resolver) {
       resolver(res.object)
-      resolved(false)
+      res.resolvedData()
     } else {
       const unlisten = ref.onSnapshot(snap => {
         if (snap.exists) applySnap(snap, res.object)
-        resolved(!snap.exists)
+        // the first time we hear back from Firebase, the sync doc may not exist; in that case we
+        // have to tell the syncer to create it before its first sync to the doc
+        else syncer.needCreate = true
+        res.resolvedData()
       })
       res.object.state.whenOnce(s => s === "disposed", _ => unlisten())
     }
@@ -375,8 +378,9 @@ export class FirebaseDataStore extends DataStore {
     this.syncers.forEach(syncer => syncer.flush())
   }
 
-  shutdown () {
+  shutdown () :Promise<void> {
     this.flushUpdates()
     clearInterval(this.flushTimer)
+    return this.db.waitForPendingWrites()
   }
 }
