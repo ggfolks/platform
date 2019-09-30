@@ -1,4 +1,4 @@
-import {Remover, NoopRemover} from "./util"
+import {Remover, NoopRemover, filteredIterable} from "./util"
 import {Data, dataEquals, refEquals} from "./data"
 import {Eq, Mutable, Remove, Source, Subject,
         Value, ValueFn, dispatchValue, addListener} from "./react"
@@ -384,8 +384,7 @@ export abstract class RMap<K,V> extends Source<ReadonlyMap<K,V>> implements Read
     const value = Value.deriveValue(iterablesEqual, disp => this.onChange(c => {
       if (c.type === "deleted") disp(
         keysIable, {[Symbol.iterator]: () => iteratorPlus(this.keys(), c.key)})
-      else if (c.prev === undefined) disp(
-        keysIable, {[Symbol.iterator]: () => iteratorExcept(this.keys(), c.key)})
+      else if (c.prev === undefined) disp(keysIable, filteredIterable(keysIable, k => k !== c.key))
     }), () => keysIable)
     Object.defineProperty(this, "keysValue", {value})
     return value
@@ -419,16 +418,6 @@ export abstract class RMap<K,V> extends Source<ReadonlyMap<K,V>> implements Read
   }
 }
 
-function iteratorExcept<K> (iter :Iterator<K>, omit :K) :Iterator<K> {
-  return {
-    next: () => {
-      let next = iter.next()
-      if (next.value === omit) next = iter.next()
-      return next
-    },
-  }
-}
-
 function iteratorPlus<K> (iter :Iterator<K>, add :K) :Iterator<K> {
   let added = false
   return {
@@ -438,24 +427,6 @@ function iteratorPlus<K> (iter :Iterator<K>, add :K) :Iterator<K> {
       if (!next.done) return next
       added = true
       return {done: false, value: add}
-    },
-  }
-}
-
-/** Returns an iterable that filters another iterable according to a predicate. */
-export function filteredIterable<K> (iter :Iterable<K>, pred :(key :K) => boolean) :Iterable<K> {
-  return {
-    [Symbol.iterator]: () => filteredIterator(iter[Symbol.iterator](), pred),
-  }
-}
-
-/** Returns an iterator that filters another iterator according to a predicate. */
-export function filteredIterator<K> (iter :Iterator<K>, pred :(key :K) => boolean) :Iterator<K> {
-  return {
-    next: () => {
-      let next = iter.next()
-      while (!(next.done || pred(next.value))) next = iter.next()
-      return next
     },
   }
 }

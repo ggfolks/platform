@@ -193,3 +193,23 @@ export const log = {
 export function getValue<T> (value :T|undefined, defaultValue :T) :T {
   return value === undefined ? defaultValue : value
 }
+
+/** Returns an iterable that filters another iterable according to a predicate.
+  * Elements which _pass_ the predicate will be returned by the iterators. */
+export function filteredIterable<E> (iter :Iterable<E>, pred :(elem :E) => boolean) :Iterable<E> {
+  return {
+    [Symbol.iterator]: () => filteredIterator(iter[Symbol.iterator](), pred),
+  }
+}
+
+/** Returns an iterator that filters another iterator according to a predicate.
+  * Elements which _pass_ the predicate will be returned by the iterator. */
+export function filteredIterator<E> (iter :Iterator<E>, pred :(elem :E) => boolean) :Iterator<E> {
+  return {
+    next: () => {
+      let next = iter.next()
+      while (!(next.done || pred(next.value))) next = iter.next()
+      return next
+    },
+  }
+}

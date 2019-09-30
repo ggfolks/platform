@@ -1,4 +1,4 @@
-import {BitSet} from "./util"
+import {BitSet, filteredIterable} from "./util"
 
 test("bitset", () => {
   const b = new BitSet()
@@ -15,4 +15,9 @@ test("bitset", () => {
 
   for (let ii = 1; ii < 1024; ii += 2) expect(b.add(ii)).toBe(true)
   for (let ii = 0; ii < 1024; ii += 1) expect(b.has(ii)).toBe(ii%2 !== 0)
+})
+
+test("filter", () => {
+  const nums = [1, 2, 3, 4, 5, 6]
+  expect(Array.from(filteredIterable(nums, n => n % 2 == 0))).toEqual([2, 4, 6])
 })
