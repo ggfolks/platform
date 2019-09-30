@@ -374,6 +374,7 @@ class ClientHandler extends Session {
   sendMsg (data :Uint8Array) {
     const cdata = data.slice()
     this.queue.push(() => this.conn.recvMsg(cdata))
+    return true
   }
 }
 
