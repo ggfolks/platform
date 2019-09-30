@@ -462,7 +462,10 @@ class WSSession extends Session {
 
     ws.on("message", msg => {
       // TODO: do we need to check readyState === CLOSING and drop late messages?
-      if (msg instanceof ArrayBuffer) this.recvMsg(new Uint8Array(msg))
+      // santity check
+      if (this._state.current === "closed") log.warn(
+        "Dropping message that arrived on closed socket", "sess", this);
+      else if (msg instanceof ArrayBuffer) this.recvMsg(new Uint8Array(msg))
       else log.warn("Got non-binary message", "sess", this, "msg", msg)
     })
     ws.on("close", (code, reason) => {
