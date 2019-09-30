@@ -206,7 +206,7 @@ class DocSyncer {
   private update :Update = {}
   private needsFlush = false
 
-  constructor (readonly ref :DocRef, private needCreate :boolean) {}
+  constructor (readonly path :Path, readonly ref :DocRef, private needCreate :boolean) {}
 
   addSync (object :DObject, sync :SyncMsg) {
     const meta = object.metas[sync.idx], update = this.update
@@ -264,7 +264,7 @@ class DocSyncer {
           }
         }
         else if (delta.del.size > 0) data[key] = FieldValue.arrayRemove(...delta.del)
-        else log.warn("No add or del in set delta?", "ref", ref, "prop", key, "delta", delta)
+        else log.warn("No add or del in set delta?", "path", this.path, "prop", key, "delta", delta)
         break
 
       case "map":
@@ -279,9 +279,9 @@ class DocSyncer {
       this.needCreate = false
     }
     ref.update(data)
-    log.debug("persistUpdate", "ref", ref, "keys", Object.keys(data))
+    log.debug("persistUpdate", "path", this.path, "keys", Object.keys(data))
     if (deleteData) {
-      log.debug("persistUpdate.delete", "ref", ref, "props", Object.keys(deleteData))
+      log.debug("persistUpdate.delete", "path", this.path, "props", Object.keys(deleteData))
       ref.update(data)
     }
     this.update = {}
@@ -318,19 +318,21 @@ export class FirebaseDataStore extends DataStore {
 
   resolveData (res :Resolved, resolver? :Resolver) {
     const ref = pathToDocRef(this.db, res.object.path)
-    let needCreate = false
+    const resolved = (needCreate :boolean) => {
+      log.debug("Creating syncer", "path", res.object.path, "create", needCreate)
+      this.syncers.set(res.object.path, new DocSyncer(res.object.path, ref, needCreate))
+      res.resolvedData()
+    }
     if (resolver) {
       resolver(res.object)
-      res.resolvedData()
+      resolved(false)
     } else {
       const unlisten = ref.onSnapshot(snap => {
         if (snap.exists) applySnap(snap, res.object)
-        else needCreate = true
-        res.resolvedData()
+        resolved(!snap.exists)
       })
       res.object.state.whenOnce(s => s === "disposed", _ => unlisten())
     }
-    this.syncers.set(res.object.path, new DocSyncer(ref, needCreate))
   }
 
   resolveViewData (res :ResolvedView) {
