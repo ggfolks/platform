@@ -9,8 +9,8 @@ import {Box} from "./box"
 import {Element, ElementConfig, ElementContext, PointerInteraction, Observer} from "./element"
 import {AbsConstraints, AbsGroup, AxisConfig, VGroup, OffAxisPolicy} from "./group"
 import {VList} from "./list"
-import {Action, Model, ModelData, ModelProvider, Spec, dataProvider} from "./model"
-import {InputValue, NodeCopier, NodeCreator, NodeEdit, NodeEditor} from "./node"
+import {Action, Model, ModelProvider, Spec, dataProvider} from "./model"
+import {InputValue, NodeCopier, NodeCreator, NodeEdit} from "./node"
 import {Panner} from "./scroll"
 import {BackgroundConfig, BorderConfig, NoopDecor, addDecorationBounds} from "./style"
 
@@ -26,15 +26,13 @@ export class GraphViewer extends VGroup {
   readonly contents :Element[] = []
   readonly activePage :Mutable<string>
   readonly selection :MutableSet<string>
+  readonly push :(id :string) => void
   readonly applyEdit :(edit :NodeEdit) => void
 
   private _editable = Value.constant(false)
-  private _pageEditor :Mutable<NodeEditor>
+  private _graphModel :Value<Model>
   private _nodeCreator :Mutable<NodeCreator>
   private _nodeFunctionRemover? :Remover
-  private _stack :Model[] = []
-  private _poppable = Mutable.local(false)
-  private _clearUndoStacks :Action
 
   constructor (readonly ctx :ElementContext, parent :Element, readonly config :GraphViewerConfig) {
     super(ctx, parent, config)
@@ -43,19 +41,17 @@ export class GraphViewer extends VGroup {
     const typeCategoryData = ctx.model.resolve<ModelProvider>("typeCategoryData")
     const subgraphCategoryKeys = ctx.model.resolve<Source<string[]>>("subgraphCategoryKeys")
     const subgraphCategoryData = ctx.model.resolve<ModelProvider>("subgraphCategoryData")
-    this._pageEditor = ctx.model.resolve<Mutable<NodeEditor>>("pageEditor")
+    this._graphModel = ctx.model.resolve<Value<Model>>("graphModel")
     this._nodeCreator = ctx.model.resolve<Mutable<NodeCreator>>("nodeCreator")
     const remove = ctx.model.resolve<Action>("remove")
     this.activePage = ctx.model.resolve<Mutable<string>>("activePage")
     this.selection = ctx.model.resolve<MutableSet<string>>("selection")
+    this.push = ctx.model.resolve<(id :string) => void>("push")
     this.applyEdit = ctx.model.resolve<(edit :NodeEdit) => void>("applyEdit")
-    this._clearUndoStacks = ctx.model.resolve<Action>("clearUndoStacks")
     const haveSelection = this.selection.fold(false, (value, set) => set.size > 0)
     const editableSelection = Value.join(haveSelection, this._editable).map(
       ([selection, editable]) => selection && editable,
     )
-    this._updateNodeFunctions(ctx.model)
-
     function createMenuItem (element :ElementConfig) {
       return {
         type: "menuitem",
@@ -292,8 +288,8 @@ export class GraphViewer extends VGroup {
             },
             {
               type: "button",
-              onClick: () => this.pop(),
-              visible: this._poppable,
+              onClick: "pop",
+              visible: "canPop",
               contents: {
                 type: "box",
                 contents: {type: "label", text: Value.constant("←")},
@@ -311,35 +307,14 @@ export class GraphViewer extends VGroup {
         },
         style: {halign: "stretch"},
       }),
-      this._createElement(ctx.model),
     )
-    this._stack.push(ctx.model)
-  }
-
-  push (model :Model) {
-    this.activePage.update("default")
-    this._updateNodeFunctions(model)
-    this._stack.push(model)
-    this.contents[1].dispose()
-    this.contents[1] = this._createElement(model)
-    this._poppable.update(true)
-    this.selection.clear()
-    this._clearUndoStacks()
-    this.invalidate()
-  }
-
-  pop () {
-    this.activePage.update("default")
-    const oldModel = this._stack.pop()
-    if (!oldModel) throw new Error("Stack is empty")
-    const model = this._stack[this._stack.length - 1]
-    this.contents[1].dispose()
-    this.contents[1] = this._createElement(model)
-    this._updateNodeFunctions(model)
-    this._poppable.update(this._stack.length > 1)
-    this.selection.clear()
-    this._clearUndoStacks()
-    this.invalidate()
+    this.disposer.add(this._graphModel.onValue(model => {
+      const oldContents = this.contents[1]
+      if (oldContents) oldContents.dispose()
+      this.contents[1] = this._createElement(model)
+      this._updateNodeFunctions(model)
+      this.invalidate()
+    }))
   }
 
   protected get defaultOffPolicy () :OffAxisPolicy { return "stretch" }
@@ -350,7 +325,6 @@ export class GraphViewer extends VGroup {
       this.disposer.remove(this._nodeFunctionRemover)
     }
     const pageData = graphModel.resolve<ModelProvider>("pageData")
-    this._pageEditor.update(graphModel.resolve<NodeEditor>("editPages"))
     this.disposer.add(this._nodeFunctionRemover = this.activePage.onValue(activePage => {
       const pageModel = pageData.resolve(activePage)
       const createNodes = pageModel.resolve<NodeCreator>("createNodes")
@@ -368,12 +342,12 @@ export class GraphViewer extends VGroup {
   }
 
   private _createGraphModelAction (op :(model :Model) => void) :Action {
-    return () => op(this._stack[this._stack.length - 1])
+    return () => op(this._graphModel.current)
   }
 
   private _createPageModelAction (op :(model :Model) => void) :Action {
     return () => {
-      const graphModel = this._stack[this._stack.length - 1]
+      const graphModel = this._graphModel.current
       const pageData = graphModel.resolve<ModelProvider>("pageData")
       op(pageData.resolve(this.activePage.current))
     }
@@ -388,15 +362,8 @@ export class GraphViewer extends VGroup {
       const reader = new FileReader()
       reader.onload = () => {
         const json = JSON.parse(reader.result as string)
-        const model = this._stack[this._stack.length - 1]
+        const model = this._graphModel.current
         model.resolve<(json :GraphConfig) => void>("fromJSON")(json)
-        // destroy and recreate the entire element
-        this.contents[1].dispose()
-        this.contents[1] = this._createElement(model)
-        this.activePage.update("default")
-        this.selection.clear()
-        this._clearUndoStacks()
-        this.invalidate()
       }
       reader.readAsText(input.files[0])
     })
@@ -456,7 +423,7 @@ export class GraphViewer extends VGroup {
   }
 
   private _export () {
-    const model = this._stack[this._stack.length - 1]
+    const model = this._graphModel.current
     const json = model.resolve<() => GraphConfig>("toJSON")()
     const file = new File([JSON.stringify(json)], "graph.json", {type: "application/octet-stream"})
     open(URL.createObjectURL(file), "_self")
@@ -806,9 +773,7 @@ export class NodeView extends VGroup {
     if (ctx.model.resolve<Value<string>>("type").current === "subgraph") {
       bodyContents.push({
         type: "button",
-        onClick: () => {
-          getGraphViewer(parent).push(new Model(ctx.model.data.subgraph as ModelData))
-        },
+        onClick: () => getGraphViewer(parent).push(this.id),
         contents: {
           type: "box",
           scopeId: "nodeButton",

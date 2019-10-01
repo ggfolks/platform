@@ -2,7 +2,7 @@ import {dataEquals, refEquals} from "../core/data"
 import {dim2, vec2} from "../core/math"
 import {Scale, getValueStyle} from "../core/ui"
 import {ChangeFn, Mutable, Value} from "../core/react"
-import {MutableSet} from "../core/rcollect"
+import {MutableList, MutableSet} from "../core/rcollect"
 import {Disposer, Noop, PMap, getValue, filteredIterable} from "../core/util"
 import {Graph, GraphConfig} from "../graph/graph"
 import {getNodeMeta, inputEdge} from "../graph/meta"
@@ -47,7 +47,7 @@ export type NodeRemover = (ids :Set<string>) => void
 export type NodeCopier = (ids :Set<string>) => GraphConfig
 
 const NoopEditor :NodeEditor = edit =>
-  ({activePage: "default", selection: new Set(), add: {}, edit: {}, remove: new Set()})
+  ({path: [], activePage: "default", selection: new Set(), add: {}, edit: {}, remove: new Set()})
 
 export interface GraphEditConfig {
   [id :string] :PMap<any>
@@ -55,6 +55,7 @@ export interface GraphEditConfig {
 
 export interface NodeEdit {
   editNumber? :number
+  path? :string[]
   page? :string
   activePage? :string
   selection? :Set<string>
@@ -64,6 +65,7 @@ export interface NodeEdit {
 }
 
 interface FullNodeEdit extends NodeEdit {
+  path :string[]
   activePage :string
   selection :Set<string>
   add :GraphConfig
@@ -81,27 +83,52 @@ class UINode extends Node {
     this._disposer.add(this.graph.getValue(this.config.input, false).onValue(value => {
       if (!value) return
       let graph = this.graph
+      // we may have started out in a subgraph; in that case, rise to the outermost graph
       while (graph.ctx.subgraph) graph = graph.ctx.subgraph.graph
       const ctx = this.graph.ctx as UINodeContext
       let root :Root
       const ui = new UI(ctx.theme, ctx.styles, ctx.image)
       const disposer = new Disposer()
+      const path = MutableList.local<string>()
       const activePage = Mutable.local("default")
       const selection = MutableSet.local<string>()
       const setSelection = (newSelection :Set<string>) => {
-        selection.clear()
+        // remove anything not in the new selection
+        for (const id of selection) {
+          if (!newSelection.has(id)) selection.delete(id)
+        }
+        // add anything not in the old selection
         for (const id of newSelection) selection.add(id)
       }
       const pageEditor = Mutable.local<NodeEditor>(NoopEditor)
       const nodeCreator = Mutable.local<NodeCreator>(() => new Map())
+      const graphModel = Mutable.local<Model>(new Model({}))
+      const setPath = (newPath :string[]) => {
+        activePage.update("default")
+        selection.clear()
+        let sharedLength = 0
+        while (path[sharedLength] && path[sharedLength] === newPath[sharedLength]) sharedLength++
+        while (path.length > sharedLength) path.delete(path.length - 1)
+        while (path.length < newPath.length) path.append(newPath[path.length])
+        let pathGraph = graph
+        for (const id of path) {
+          const subgraph = pathGraph.nodes.require(id) as Subgraph
+          pathGraph = subgraph.containedGraph
+        }
+        const data = createGraphModelData(pathGraph, activePage, applyEdit)
+        pageEditor.update(data.editPages as NodeEditor)
+        graphModel.update(new Model(data))
+      }
       const canUndo = Mutable.local(false)
       const canRedo = Mutable.local(false)
       const undoStack :FullNodeEdit[] = []
       const redoStack :FullNodeEdit[] = []
       const applyEdit = (edit :NodeEdit) => {
+        const oldPath = path.slice()
         const oldActivePage = activePage.current
         const oldSelection = new Set(selection)
         const reverseEdit = pageEditor.current(edit)
+        if (edit.path) setPath(edit.path)
         if (edit.activePage) activePage.update(edit.activePage)
         if (edit.selection) setSelection(edit.selection)
         const lastEdit = undoStack[undoStack.length - 1]
@@ -138,6 +165,7 @@ class UINode extends Node {
           }
         } else {
           reverseEdit.editNumber = currentEditNumber
+          reverseEdit.path = oldPath
           reverseEdit.activePage = oldActivePage
           reverseEdit.selection = oldSelection
           undoStack.push(reverseEdit)
@@ -146,6 +174,7 @@ class UINode extends Node {
         canUndo.update(true)
         canRedo.update(false)
       }
+      setPath([])
       function getCategoryKeys (category :CategoryNode) :Value<string[]> {
         return category.children.keysValue.map<string[]>(Array.from)
       }
@@ -180,19 +209,30 @@ class UINode extends Node {
           ctx.subgraphs.root,
           name => ctx.subgraphs.createNodeConfig(name),
         ),
+        path,
+        push: (id :string) => {
+          const newPath = path.slice()
+          newPath.push(id)
+          setPath(newPath)
+        },
+        canPop: path.lengthValue.map(length => length > 0),
+        pop: () => setPath(path.slice(0, path.length - 1)),
+        graphModel,
         activePage,
         selection,
-        pageEditor,
         nodeCreator,
         applyEdit,
         canUndo,
         undo: () => {
+          const oldPath = path.slice()
           const oldActivePage = activePage.current
           const oldSelection = new Set(selection)
           const edit = undoStack.pop()!
           const reverseEdit = pageEditor.current(edit)
+          setPath(edit.path)
           activePage.update(edit.activePage)
           setSelection(edit.selection)
+          reverseEdit.path = oldPath
           reverseEdit.activePage = oldActivePage
           reverseEdit.selection = oldSelection
           redoStack.push(reverseEdit)
@@ -201,12 +241,15 @@ class UINode extends Node {
         },
         canRedo,
         redo: () => {
+          const oldPath = path.slice()
           const oldActivePage = activePage.current
           const oldSelection = new Set(selection)
           const edit = redoStack.pop()!
           const reverseEdit = pageEditor.current(edit)
+          setPath(edit.path)
           activePage.update(edit.activePage)
           setSelection(edit.selection)
+          reverseEdit.path = oldPath
           reverseEdit.activePage = oldActivePage
           reverseEdit.selection = oldSelection
           undoStack.push(reverseEdit)
@@ -219,7 +262,6 @@ class UINode extends Node {
           canUndo.update(false)
           canRedo.update(false)
         },
-        ...createGraphModelData(graph, activePage, applyEdit),
       })
       root = ui.createRoot(this.config.root, model)
       if (this.config.size) root.setSize(this.config.size)

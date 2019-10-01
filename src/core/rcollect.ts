@@ -40,8 +40,8 @@ export abstract class RList<E> extends Source<ReadonlyList<E>> implements Readon
 
   /** Returns a copy of a slice of this list as a plain array.
     * @param start the start index of the slice, defaults to `0`.
-    * @param length the length of the slice, defaults to all elements after `start`. */
-  slice (start? :number, length? :number) :E[] { return this.elems.slice(start, length) }
+    * @param end the end index of the slice (exclusive), defaults to all elements after `start`. */
+  slice (start? :number, end? :number) :E[] { return this.elems.slice(start, end) }
 
   /** Maps the elements of this list (into an array) via `fn`.
     * @return a plain array containing the mapped elements. */
