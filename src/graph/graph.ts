@@ -1,7 +1,7 @@
 import {Clock} from "../core/clock"
 import {Emitter, Stream, Value} from "../core/react"
 import {MutableMap, RMap} from "../core/rcollect"
-import {Disposable} from "../core/util"
+import {Disposable, log} from "../core/util"
 import {InputEdge, InputEdges, Node, NodeConfig, NodeContext} from "./node"
 
 /** Configuration for a graph. */
@@ -117,7 +117,7 @@ export class Graph implements Disposable {
       let type = typeof value
       if (type === "object") {
         if (value && value.nodeType) type = value.nodeType
-        else throw new Error("Constant value of unsupported type: " + value)
+        else throw new Error(log.format("Constant value of unsupported type", "value", value))
       }
       this._nodes.set(id, node = this.ctx.types.createNode(this, id, {type, value}))
     }
