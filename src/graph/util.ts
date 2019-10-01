@@ -171,52 +171,13 @@ export abstract class AbstractSubgraph extends Node {
     const subctx = Object.create(graph.ctx)
     subctx.subgraph = this
     this._title = this.getProperty("title", config.type) as Mutable<string>
-    this._disposer.add(this.containedGraph = new Graph(subctx, config.graph))
+    this._disposer.add(this.containedGraph = new Graph(subctx, config.graph || {}))
     // we don't bother with disposers for the values that we listen to on the contained graph
     // because the contained graph will never outlive this node
-    const maybeSetMeta = (node :Node) => {
-      let currentName :string|undefined
-      switch (node.config.type) {
-        case "property":
-          Value
-            .join(
-              node.getProperty<string>("name"),
-              node.getProperty<string>("propType"),
-              node.getProperty<any>("defaultValue"),
-            )
-            .onValue(([name, propType, defaultValue]) => {
-              if (currentName !== undefined) this._propertiesMeta.delete(currentName)
-              this._propertiesMeta.set(
-                currentName = name!,
-                {
-                  type: propType!,
-                  defaultValue: getValue(defaultValue, propertyDefaults[propType!]),
-                },
-              )
-            })
-          break
-        case "input":
-          node.getProperty<string>("name").onValue(name => {
-            if (currentName !== undefined) this._inputsMeta.delete(currentName)
-            this._inputsMeta.set(currentName = name!, {type: "any"}) // TODO: infer?
-          })
-          break
-        case "output":
-          node.getProperty<string>("name").onValue(name => {
-            if (currentName !== undefined) {
-              this._outputsMeta.delete(currentName)
-              this._containedOutputs.delete(currentName)
-            }
-            this._outputsMeta.set(currentName = name!, {type: "any"}) // TODO: infer?
-            this._containedOutputs.set(currentName, node.getProperty("input"))
-          })
-          break
-      }
-    }
-    for (const node of this.containedGraph.nodes.values()) maybeSetMeta(node)
+    this._updateMeta()
     this.containedGraph.nodes.onChange(change => {
       if (change.type === "set") {
-        maybeSetMeta(change.value)
+        this._maybeSetMeta(change.value)
       } else { // change.type === "deleted"
         let map :MutableMap<string, any>
         switch (change.prev.config.type) {
@@ -251,7 +212,56 @@ export abstract class AbstractSubgraph extends Node {
   fromJSON (json :NodeConfig) {
     super.fromJSON(json)
     this.containedGraph.fromJSON(json.graph)
+    this._updateMeta()
     return json
+  }
+
+  protected _updateMeta () {
+    this._propertiesMeta.clear()
+    this._inputsMeta.clear()
+    this._outputsMeta.clear()
+    this._containedOutputs.clear()
+    for (const node of this.containedGraph.nodes.values()) this._maybeSetMeta(node)
+  }
+
+  protected _maybeSetMeta (node :Node) {
+    let currentName :string|undefined
+    switch (node.config.type) {
+      case "property":
+        Value
+          .join(
+            node.getProperty<string>("name"),
+            node.getProperty<string>("propType"),
+            node.getProperty<any>("defaultValue"),
+          )
+          .onValue(([name, propType, defaultValue]) => {
+            if (currentName !== undefined) this._propertiesMeta.delete(currentName)
+            this._propertiesMeta.set(
+              currentName = name!,
+              {
+                type: propType!,
+                defaultValue: getValue(defaultValue, propertyDefaults[propType!]),
+              },
+            )
+          })
+        break
+      case "input":
+        node.getProperty<string>("name").onValue(name => {
+          if (currentName !== undefined) this._inputsMeta.delete(currentName)
+          this._inputsMeta.set(currentName = name!, {type: "any"}) // TODO: infer?
+        })
+        break
+      case "output":
+        node.getProperty<string>("name").onValue(name => {
+          if (currentName !== undefined) {
+            this._outputsMeta.delete(currentName)
+            this._containedOutputs.delete(currentName)
+          }
+          this._outputsMeta.set(currentName = name!, {type: "any"}) // TODO: infer?
+          this._containedOutputs.set(currentName, node.getProperty("input"))
+        })
+        break
+    }
   }
 
   protected _createOutput (name :string, defaultValue :any) {

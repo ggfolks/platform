@@ -98,7 +98,7 @@ export abstract class AbstractLabel extends Element {
 /** Defines configuration for [[Label]]. */
 export interface LabelConfig extends AbstractLabelConfig {
   type :"label"
-  text :Spec<Value<string>>
+  text? :Spec<Value<string>>
 }
 
 /** Displays styled text. */
@@ -108,7 +108,8 @@ export class Label extends AbstractLabel {
     super(ctx, parent, config)
   }
   protected resolveText (ctx :ElementContext, config :LabelConfig) {
-    return ctx.model.resolve(config.text) }
+    return ctx.model.resolveOpt(config.text) || Value.constant("")
+  }
 }
 
 async function readClipText () :Promise<string|undefined> {

@@ -2,7 +2,7 @@ import {dataEquals, refEquals} from "../core/data"
 import {dim2, vec2} from "../core/math"
 import {Scale, getValueStyle} from "../core/ui"
 import {ChangeFn, Mutable, Value} from "../core/react"
-import {MutableList, MutableSet} from "../core/rcollect"
+import {MutableSet} from "../core/rcollect"
 import {Disposer, Noop, PMap, getValue, filteredIterable} from "../core/util"
 import {Graph, GraphConfig} from "../graph/graph"
 import {getNodeMeta, inputEdge} from "../graph/meta"
@@ -89,7 +89,7 @@ class UINode extends Node {
       let root :Root
       const ui = new UI(ctx.theme, ctx.styles, ctx.image)
       const disposer = new Disposer()
-      const path = MutableList.local<string>()
+      const path = Mutable.local<string[]>([])
       const activePage = Mutable.local("default")
       const selection = MutableSet.local<string>()
       const setSelection = (newSelection :Set<string>) => {
@@ -106,25 +106,23 @@ class UINode extends Node {
       const setPath = (newPath :string[]) => {
         activePage.update("default")
         selection.clear()
-        let sharedLength = 0
-        while (path[sharedLength] && path[sharedLength] === newPath[sharedLength]) sharedLength++
-        while (path.length > sharedLength) path.delete(path.length - 1)
-        while (path.length < newPath.length) path.append(newPath[path.length])
+        path.update(newPath)
         let pathGraph = graph
-        for (const id of path) {
+        for (const id of newPath) {
           const subgraph = pathGraph.nodes.require(id) as Subgraph
           pathGraph = subgraph.containedGraph
         }
-        const data = createGraphModelData(pathGraph, activePage, applyEdit)
+        const data = createGraphModelData(pathGraph, activePage, applyEdit, reloadPath)
         pageEditor.update(data.editPages as NodeEditor)
         graphModel.update(new Model(data))
       }
+      const reloadPath = () => setPath(path.current)
       const canUndo = Mutable.local(false)
       const canRedo = Mutable.local(false)
       const undoStack :FullNodeEdit[] = []
       const redoStack :FullNodeEdit[] = []
       const applyEdit = (edit :NodeEdit) => {
-        const oldPath = path.slice()
+        const oldPath = path.current.slice()
         const oldActivePage = activePage.current
         const oldSelection = new Set(selection)
         const reverseEdit = pageEditor.current(edit)
@@ -211,12 +209,12 @@ class UINode extends Node {
         ),
         path,
         push: (id :string) => {
-          const newPath = path.slice()
+          const newPath = path.current.slice()
           newPath.push(id)
           setPath(newPath)
         },
-        canPop: path.lengthValue.map(length => length > 0),
-        pop: () => setPath(path.slice(0, path.length - 1)),
+        canPop: path.map(path => path.length > 0),
+        pop: () => setPath(path.current.slice(0, path.current.length - 1)),
         graphModel,
         activePage,
         selection,
@@ -224,16 +222,14 @@ class UINode extends Node {
         applyEdit,
         canUndo,
         undo: () => {
-          const oldPath = path.slice()
-          const oldActivePage = activePage.current
           const oldSelection = new Set(selection)
           const edit = undoStack.pop()!
-          const reverseEdit = pageEditor.current(edit)
           setPath(edit.path)
           activePage.update(edit.activePage)
+          const reverseEdit = pageEditor.current(edit)
           setSelection(edit.selection)
-          reverseEdit.path = oldPath
-          reverseEdit.activePage = oldActivePage
+          reverseEdit.path = edit.path
+          reverseEdit.activePage = edit.activePage
           reverseEdit.selection = oldSelection
           redoStack.push(reverseEdit)
           canRedo.update(true)
@@ -241,16 +237,14 @@ class UINode extends Node {
         },
         canRedo,
         redo: () => {
-          const oldPath = path.slice()
-          const oldActivePage = activePage.current
           const oldSelection = new Set(selection)
           const edit = redoStack.pop()!
-          const reverseEdit = pageEditor.current(edit)
           setPath(edit.path)
           activePage.update(edit.activePage)
+          const reverseEdit = pageEditor.current(edit)
           setSelection(edit.selection)
-          reverseEdit.path = oldPath
-          reverseEdit.activePage = oldActivePage
+          reverseEdit.path = edit.path
+          reverseEdit.activePage = edit.activePage
           reverseEdit.selection = oldSelection
           undoStack.push(reverseEdit)
           canUndo.update(true)
@@ -299,6 +293,7 @@ function createGraphModelData (
   graph :Graph,
   activePage :Mutable<string>,
   applyEdit :(edit :NodeEdit) => void,
+  reloadPath :Action,
 ) :ModelData {
   const pageModels = new Map<ModelKey, Model>()
   let currentPageKeys :string[] = []
@@ -353,6 +348,7 @@ function createGraphModelData (
           containedGraph,
           activePage,
           applyEdit,
+          reloadPath,
           id,
           title,
           remove,
@@ -434,7 +430,7 @@ function createGraphModelData (
     toJSON: () => graph.toJSON(),
     fromJSON: (json :GraphConfig) => {
       graph.fromJSON(json)
-      pageModels.clear() // force update to page data
+      reloadPath()
     },
   }
 }
@@ -443,6 +439,7 @@ function createPageModelData (
   graph :Graph,
   activePage :Mutable<string>,
   applyEdit :(edit :NodeEdit) => void,
+  reloadPath :Action,
   page :string,
   title :Value<string>,
   remove :Action,
@@ -510,6 +507,7 @@ function createPageModelData (
               subgraph.containedGraph,
               activePage,
               applyEdit,
+              reloadPath,
             )
           }
           const createPropertyValue = createPropertyValueCreator(node, applyEdit, page)

@@ -164,7 +164,6 @@ export class Graph implements Disposable {
       this._nodes.set(key, node)
       node.fromJSON(config)
     }
-    this.dispose()
     for (const node of this._nodes.values()) node.reconnect()
   }
 
