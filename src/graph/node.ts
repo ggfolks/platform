@@ -201,7 +201,7 @@ export abstract class Node implements Disposable {
   }
 
   protected _createOutput (name :string, defaultValue :any) :Value<any> {
-    throw new Error("Unknown output " + name)
+    throw new Error(`Unknown output '${name}'`)
   }
 }
 
