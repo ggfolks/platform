@@ -108,7 +108,7 @@ export class Label extends AbstractLabel {
     super(ctx, parent, config)
   }
   protected resolveText (ctx :ElementContext, config :LabelConfig) {
-    return ctx.model.resolveOpt(config.text) || Value.constant("")
+    return ctx.model.resolve(config.text, Value.constant(""))
   }
 }
 
@@ -583,9 +583,10 @@ export class NumberText extends AbstractText {
     super(ctx, parent, config, Mutable.local(""))
     this.number = ctx.model.resolve(config.number)
     const maxDecimals = getValue(config.maxDecimals, 3)
-    this.disposer.add(
-      this.number.onValue(value => this.text.update(numberToString(value, maxDecimals))),
-    )
+    this.disposer.add(this.number.onValue(value => {
+      const textValue = parseFloat(this.text.current)
+      if (value !== textValue) this.text.update(numberToString(value, maxDecimals))
+    }))
     this.disposer.add(
       this.text.onChange(text => {
         const value = parseFloat(text)
