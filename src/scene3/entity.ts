@@ -411,10 +411,9 @@ const errorAnimation = new AnimationClip("error", 0, [])
 export function loadGLTFAnimationClip (url :string) :Subject<AnimationClip> {
   const idx = url.indexOf('#')
   return loadGLTF(url.substring(0, idx)).map(gltf => {
-    const name = url.substring(idx + 1)
-    const clip = AnimationClip.findByName(gltf.animations, name)
+    const clip = AnimationClip.findByName(gltf.animations, url.substring(idx + 1))
     if (clip) return clip
-    log.warn("Missing requested animation", "url", url, "name", name)
+    log.warn("Missing requested animation", "url", url)
     return errorAnimation
   })
 }
