@@ -211,34 +211,68 @@ export abstract class DataStore {
     }
   }
 
-  createRecord (path :Path, key :UUID, data :Record) {
-    // TEMP: nothing by default
-  }
-  updateRecord (path :Path, key :UUID, data :Record, merge :boolean) {
-    // TEMP: nothing by default
-  }
-  deleteRecord (path :Path, key :UUID) {
-    // TEMP: nothing by default
-  }
-
   upSync (auth :Auth, obj :DObject, msg :SyncMsg) {
     const name = obj.metas[msg.idx].name
     if (obj.canRead(name, auth) && obj.canWrite(name, auth)) obj.applySync(msg, false)
     else log.warn("Write rejected", "auth", auth, "obj", obj, "prop", name)
   }
 
+  abstract createRecord (path :Path, key :UUID, data :Record) :void
+  abstract updateRecord (path :Path, key :UUID, data :Record, merge :boolean) :void
+  abstract deleteRecord (path :Path, key :UUID) :void
+
   abstract resolveData (res :Resolved, resolver? :Resolver) :void
-
   abstract resolveViewData (res :ResolvedView) :void
-
   abstract persistSync (obj :DObject, msg :SyncMsg) :void
 }
 
 export class MemoryDataStore extends DataStore {
+  private readonly tables = new PathMap<MutableMap<UUID, Record>>()
 
   resolveData (res :Resolved, resolver? :Resolver) { res.resolvedData() }
-  resolveViewData (res :ResolvedView) { res.resolvedRecords() }
   persistSync (obj :DObject, msg :SyncMsg) {} // noop!
+
+  createRecord (path :Path, key :UUID, data :Record) {
+    const table = this.resolveTable(path)
+    if (table.has(key)) log.warn(
+      "createRecord already exists", "path", path, "key", key, "data", data)
+    else table.set(key, data)
+  }
+  updateRecord (path :Path, key :UUID, data :Record, merge :boolean) {
+    const table = this.resolveTable(path)
+    if (!table.has(key)) log.warn(
+      "updateRecord does not exist", "path", path, "key", key, "data", data)
+    else table.set(key, data)
+  }
+  deleteRecord (path :Path, key :UUID) {
+    const table = this.resolveTable(path)
+    table.delete(key)
+  }
+
+  resolveViewData (res :ResolvedView) {
+    const table = this.resolveTable(res.tpath)
+    const unlisten = table.onChange(change => {
+      switch (change.type) {
+      case "set":
+        // TODO: only set if it passes the view's query criteria
+        res.recordSet([{key: change.key, data: change.value}])
+        break
+      case "deleted":
+        res.recordDelete(change.key)
+        break
+      }
+    })
+    res.state.whenOnce(s => s === "disposed", _ => unlisten())
+    // TODO: only set if it passes the view's query criteria
+    for (const [key, rec] of table) res.records.set(key, rec)
+    res.resolvedRecords()
+  }
+
+  private resolveTable (path :Path) :MutableMap<UUID, Record> {
+    let table = this.tables.get(path)
+    if (!table) this.tables.set(path, table = MutableMap.local<UUID, Record>())
+    return table
+  }
 }
 
 class ObjectRef {
