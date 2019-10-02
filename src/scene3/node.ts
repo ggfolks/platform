@@ -478,43 +478,61 @@ export function registerScene3Subgraphs (registry :SubgraphRegistry) {
     dragToRotate: {
       hover: {type: "hover"},
       viewMovement: {type: "Vector3.split", input: ["hover", "viewMovement"]},
-      pitchDelta: {type: "multiply", inputs: [["hover", "pressed"], ["viewMovement", "y"], -1]},
-      yawDelta: {type: "multiply", inputs: [["hover", "pressed"], ["viewMovement", "x"], 1]},
-      pitch: {type: "accumulate", min: -Math.PI/2, max: Math.PI/2, input: "pitchDelta"},
-      yaw: {type: "accumulate", input: "yawDelta"},
-      rotation: {type: "Euler", order: "ZYX", x: "pitch", y: "yaw"},
-      updateRotation: {type: "updateRotation", input: "rotation"},
+      updateRotation: {
+        type: "updateRotation",
+        input: {
+          type: "Euler",
+          order: "ZYX",
+          x: {
+            type: "accumulate",
+            min: -Math.PI/2,
+            max: Math.PI/2,
+            input: {type: "multiply", inputs: [["hover", "pressed"], ["viewMovement", "y"], -1]},
+          },
+          y: {
+            type: "accumulate",
+            input: {type: "multiply", inputs: [["hover", "pressed"], ["viewMovement", "x"], 1]},
+          },
+        },
+      },
     },
     wasdMovement: {
-      w: {type: "key", code: 87},
-      a: {type: "key", code: 65},
-      s: {type: "key", code: 83},
-      d: {type: "key", code: 68},
-      forwardBack: {type: "subtract", a: "s", b: "w"},
-      leftRight: {type: "subtract", a: "d", b: "a"},
-      stride: {type: "Vector3", x: "leftRight", z: "forwardBack"},
-      clock: {type: "clock"},
-      speed: {type: "property", name: "speed", defaultValue: 10},
-      delta: {type: "multiply", inputs: ["clock", "speed"]},
-      translation: {type: "Vector3.multiplyScalar", vector: "stride", scalar: "delta"},
-      transform: {type: "readTransform"},
-      rotated: {
-        type: "Vector3.applyQuaternion",
-        vector: "translation",
-        quaternion: ["transform", "quaternion"],
+      translate: {
+        type: "translate",
+        frame: "world",
+        input: {
+          type: "Vector3.projectOnPlane",
+          input: {
+            type: "Vector3.applyQuaternion",
+            vector: {
+              type: "Vector3.multiplyScalar",
+              vector: {
+                type: "Vector3",
+                x: {type: "subtract", a: {type: "key", code: 68}, b: {type: "key", code: 65}},
+                z: {type: "subtract", a: {type: "key", code: 83}, b: {type: "key", code: 87}},
+              },
+              scalar: {
+                type: "multiply",
+                inputs: [{type: "clock"}, {type: "property", name: "speed", defaultValue: 10}],
+              },
+            },
+            quaternion: [{type: "readTransform"}, "quaternion"],
+          },
+        },
       },
-      projected: {type: "Vector3.projectOnPlane", input: "rotated"},
-      translate: {type: "translate", frame: "world", input: "projected"},
     },
     spaceToJump: {
-      space: {type: "key", code: 32},
-      speed: {type: "property", name: "speed", defaultValue: 3},
-      jump: {type: "multiply", inputs: ["space", "speed"]},
       fallable: {
         type: "subgraph",
         title: "fallable",
         grabbed: false,
-        jump: "jump",
+        jump: {
+          type: "multiply",
+          inputs: [
+            {type: "key", code: 32},
+            {type: "property", name: "speed", defaultValue: 3},
+          ],
+        },
         height: 1,
         graph: fallable,
       },

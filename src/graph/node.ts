@@ -2,7 +2,7 @@ import {refEquals} from "../core/data"
 import {ChangeFn, Mutable, Value, addListener, dispatchChange} from "../core/react"
 import {MutableMap, RMap} from "../core/rcollect"
 import {Disposable, Disposer, Noop, NoopRemover, getValue} from "../core/util"
-import {Graph, getConstantOrValueNodeId} from "./graph"
+import {Graph, getImplicitNodeId} from "./graph"
 import {InputEdgeMeta, OutputEdgeMeta, PropertyMeta, getNodeMeta} from "./meta"
 import {Subgraph, SubgraphRegistry} from "./util"
 
@@ -15,7 +15,8 @@ export interface NodeConfig {
 }
 
 /** Describes the input of a node: a node ID, a node/output pair, or a static value. */
-export type NodeInput<T> = string | [string, string] | T | Value<T> | QuotedValue<T>
+export type NodeInput<T> =
+  string | [string|NodeConfig, string] | T | Value<T> | QuotedValue<T> | NodeConfig
 
 /** Wraps a value so that we don't confuse it with a node ID or node/output pair. */
 export type QuotedValue<T> = {value: T}
@@ -210,7 +211,7 @@ function inputToJSON (input :InputEdge<any>) {
     ? null
     : typeof input === "string" || Array.isArray(input)
     ? input
-    : getConstantOrValueNodeId(input)
+    : getImplicitNodeId(input)
 }
 
 /** Wraps a value so that we can swap it out after creating it. */

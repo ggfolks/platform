@@ -219,3 +219,11 @@ export function filteredIterator<E> (iter :Iterator<E>, pred :(elem :E) => boole
     },
   }
 }
+
+/** Converts the supplied value to a string of limited length. */
+export function toLimitedString (value :any, maxLength = 30) {
+  // round numbers to six digits after decimal
+  if (typeof value === "number") return String(Math.round(value * 1000000) / 1000000)
+  const string = String(value)
+  return string.length > maxLength ? string.substring(0, maxLength - 3) + "..." : string
+}

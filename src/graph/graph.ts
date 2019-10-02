@@ -1,7 +1,7 @@
 import {Clock} from "../core/clock"
 import {Emitter, Stream, Value} from "../core/react"
 import {MutableMap, RMap} from "../core/rcollect"
-import {Disposable, log} from "../core/util"
+import {Disposable, log, toLimitedString} from "../core/util"
 import {InputEdge, InputEdges, Node, NodeConfig, NodeContext} from "./node"
 
 /** Configuration for a graph. */
@@ -9,9 +9,13 @@ export interface GraphConfig {
   [id :string] :NodeConfig
 }
 
-/** Returns the node id used for a fixed constant or reactive value. */
-export function getConstantOrValueNodeId (value :any) {
-  return (value instanceof Value) ? getValueNodeId(value) : getConstantNodeId(value)
+/** Returns the node id used for a fixed constant, reactive value, or inline config. */
+export function getImplicitNodeId (value :any) {
+  return (value instanceof Value)
+    ? getValueNodeId(value)
+    : value.type
+    ? getInlineNodeId(value)
+    : getConstantNodeId(value)
 }
 
 /** Returns the node id used for a reactive value. */
@@ -19,10 +23,18 @@ function getValueNodeId (value :Value<any>) {
   return `$${value.id}`
 }
 
+let lastConfigId = 0
+
+/** Returns the node id used for an inline config. */
+function getInlineNodeId (value :NodeConfig) {
+  if (!value._configId) value._configId = ++lastConfigId
+  return `%${value._configId}`
+}
+
 /** Returns the node id used for a fixed constant value. */
 function getConstantNodeId (value :any) {
   if (value && value.value !== undefined) value = value.value
-  return `__${value}`
+  return `__${toLimitedString(value)}`
 }
 
 /** An execution graph. */
@@ -90,12 +102,13 @@ export class Graph implements Disposable {
       return Value.constant(defaultValue)
     }
     if (Array.isArray(input)) {
-      const [nodeId, outputName] = input
-      const node = this._nodes.get(nodeId)
+      const [nodeIdOrConfig, outputName] = input
+      const node = this._getOrCreateNode(nodeIdOrConfig)
       return node ? node.getOutput(outputName, defaultValue) : Value.constant(defaultValue)
     }
-    if (typeof input === "string") {
-      const node = this._nodes.get(input)
+    const inputAsNodeConfig = input as NodeConfig
+    if (typeof input === "string" || inputAsNodeConfig.type) {
+      const node = this._getOrCreateNode(inputAsNodeConfig)
       return node ? node.getOutput(undefined, defaultValue) : Value.constant(defaultValue)
     }
     if (input instanceof Value) {
@@ -122,6 +135,14 @@ export class Graph implements Disposable {
       this._nodes.set(id, node = this.ctx.types.createNode(this, id, {type, value}))
     }
     return node.getOutput(undefined, defaultValue)
+  }
+
+  protected _getOrCreateNode (idOrConfig :string|NodeConfig) :Node|undefined {
+    if (typeof idOrConfig === "string") return this._nodes.get(idOrConfig)
+    const id = getInlineNodeId(idOrConfig)
+    let node = this._nodes.get(id)
+    if (!node) this._nodes.set(id, node = this.ctx.types.createNode(this, id, idOrConfig))
+    return node
   }
 
   /** Updates the state of the graph.  Should be called once per frame. */

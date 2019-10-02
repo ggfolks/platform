@@ -1,7 +1,7 @@
 import {Color, Euler, Math as M, Vector3} from "three"
 
 import {Mutable, Value} from "../core/react"
-import {PMap} from "../core/util"
+import {PMap, toLimitedString} from "../core/util"
 import {EnumMeta, NumberConstraints, getEnumMeta} from "../graph/meta"
 import {Element, ElementConfig, ElementContext} from "./element"
 import {AxisConfig, VGroup} from "./group"
@@ -236,11 +236,4 @@ function createPropertyRowConfig (model :Model, valueConfig :ElementConfig) {
       valueConfig,
     ],
   }
-}
-
-function toLimitedString (value :any) {
-  // round numbers to six digits after decimal
-  if (typeof value === "number") return String(Math.round(value * 1000000) / 1000000)
-  const string = String(value)
-  return string.length > 30 ? string.substring(0, 27) + "..." : string
 }

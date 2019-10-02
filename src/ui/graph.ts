@@ -3,7 +3,7 @@ import {dim2, rect, vec2} from "../core/math"
 import {Mutable, Source, Subject, Value} from "../core/react"
 import {MutableSet} from "../core/rcollect"
 import {PMap, Remover, getValue} from "../core/util"
-import {GraphConfig, getConstantOrValueNodeId} from "../graph/graph"
+import {GraphConfig, getImplicitNodeId} from "../graph/graph"
 import {InputEdge} from "../graph/node"
 import {Box} from "./box"
 import {Element, ElementConfig, ElementContext, PointerInteraction, Observer} from "./element"
@@ -700,17 +700,11 @@ export class GraphView extends AbsGroup {
       const inputData = model.resolve<ModelProvider>("inputData")
       const inputs :string[] = []
       const pushInput = (edge :InputEdge<any>) => {
-        if (Array.isArray(edge)) {
-          inputs.push(edge[0])
-          roots.delete(edge[0])
-        } else if (typeof edge === "string") {
-          inputs.push(edge)
-          roots.delete(edge)
-        } else if (edge !== undefined) {
-          const nodeId = getConstantOrValueNodeId(edge)
-          inputs.push(nodeId)
-          roots.delete(nodeId)
-        }
+        if (edge === undefined || edge === null) return
+        let nodeId = Array.isArray(edge) ? edge[0] : edge
+        if (typeof nodeId !== "string") nodeId = getImplicitNodeId(nodeId)
+        inputs.push(nodeId)
+        roots.delete(nodeId)
       }
       for (const inputKey of inputKeys) {
         // remove anything from roots that's used as an input
@@ -1136,7 +1130,7 @@ export class EdgeView extends Element {
             ? element === targetId
             : Array.isArray(element)
             ? element[0] === targetId && element[1] === outputKey
-            : element !== undefined && getConstantOrValueNodeId(element) === targetId
+            : element !== undefined && getImplicitNodeId(element) === targetId
         ) {
           const newValue = value.current.slice()
           newValue.splice(ii, 1)
@@ -1193,7 +1187,7 @@ export class EdgeView extends Element {
         } else if (typeof input === "string") {
           targetId = input
         } else if (input !== undefined && input !== null) {
-          targetId = getConstantOrValueNodeId(input)
+          targetId = getImplicitNodeId(input)
         } else {
           return true
         }
