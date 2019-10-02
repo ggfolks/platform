@@ -472,7 +472,7 @@ const dormantGLTFs :Map<string, Promise<GLTF>> = new Map()
 const errorGeom = new BoxBufferGeometry()
 const errorMat = new MeshBasicMaterial({color: 0xFF0000})
 
-function loadGLTF (url :string) {
+export function loadGLTF (url :string) :Subject<GLTF> {
   let gltf = activeGLTFs.get(url)
   if (!gltf) {
     let active = false
