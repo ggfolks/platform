@@ -529,6 +529,7 @@ export class Root extends Element {
 
   dispose () {
     super.dispose()
+    this.focus.update(undefined)
     this.contents.dispose()
   }
 
@@ -996,6 +997,16 @@ export class HTMLHost extends Host {
     this._lastOrigins[index] = vec2.clone(root.origin)
     const unviz = root.visible.onValue(
       viz => root.canvasElem.style.visibility = viz ? "visible" : "hidden")
+    // TODO: this text overlay stuff needs to handle multiple roots, which will need the host to
+    // have some idea of a host-wide focus; we don't have that now so we punt
+    const clearText = () => {
+      const text = this._textOverlay
+      if (text.parentNode) {
+        this._container.removeChild(text)
+        this._clearText()
+        this._clearText = NoopRemover
+      }
+    }
     const unfocus = root.focus.onValue(focus => {
       const text = this._textOverlay
       if (focus && focus.config.type === "text") {
@@ -1003,13 +1014,9 @@ export class HTMLHost extends Host {
         this._container.appendChild(text)
         text.focus() // for mobile (has to happen while handling touch event)
         setTimeout(() => text.focus(), 1) // for desktop (fails if done immediately, yay!)
-      } else if (text.parentNode) {
-        this._container.removeChild(text)
-        this._clearText()
-        this._clearText = NoopRemover
-      }
+      } else clearText()
     });
-    this._unroots.set(root, () => { unviz(); unfocus() })
+    this._unroots.set(root, () => { unviz(); unfocus(); clearText() })
   }
 
   protected _updatePosition (root :Root) {
