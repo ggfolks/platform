@@ -10,7 +10,7 @@ import {SkeletonUtils} from "three/examples/jsm/utils/SkeletonUtils"
 import {Clock} from "../core/clock"
 import {Subject} from "../core/react"
 import {RMap} from "../core/rcollect"
-import {Noop, NoopRemover, Remover} from "../core/util"
+import {Noop, NoopRemover, Remover, log} from "../core/util"
 import {Pointer} from "../input/hand"
 import {
   Component,
@@ -490,7 +490,7 @@ function loadGLTF (url :string) {
           },
           event => { /* do nothing with progress for now */ },
           error => {
-            console.error(error)
+            log.warn("Could not load GLTF", "url", url, "error", error)
             resolve({scene: new Mesh(errorGeom, errorMat), animations: []})
           },
         ))
