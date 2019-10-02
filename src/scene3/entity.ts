@@ -414,7 +414,7 @@ export function loadGLTFAnimationClip (url :string) :Subject<AnimationClip> {
     const name = url.substring(idx + 1)
     const clip = AnimationClip.findByName(gltf.animations, name)
     if (clip) return clip
-    log.warn("Missing requested animation", "name", name)
+    log.warn("Missing requested animation", "url", url, "name", name)
     return errorAnimation
   })
 }
