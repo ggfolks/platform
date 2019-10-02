@@ -402,15 +402,21 @@ export class AnimationSystem extends System {
   }
 }
 
+const errorAnimation = new AnimationClip("error", 0, [])
+
 /**
  * Loads a GLTF animation clip identified by an anchored URL, where the anchor tag is taken to
  * represent the clip name.
  */
 export function loadGLTFAnimationClip (url :string) :Subject<AnimationClip> {
   const idx = url.indexOf('#')
-  return loadGLTF(url.substring(0, idx)).map(
-    gltf => AnimationClip.findByName(gltf.animations, url.substring(idx + 1)),
-  )
+  return loadGLTF(url.substring(0, idx)).map(gltf => {
+    const name = url.substring(idx + 1)
+    const clip = AnimationClip.findByName(gltf.animations, name)
+    if (clip) return clip
+    log.warn("Missing requested animation", "name", name)
+    return errorAnimation
+  })
 }
 
 export function createObject3D (objectConfig: Object3DConfig) :Subject<Object3D> {
