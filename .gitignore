@@ -4,6 +4,7 @@ docs
 lib/auth
 lib/core
 lib/data
+lib/engine
 lib/entity
 lib/graph
 lib/input
