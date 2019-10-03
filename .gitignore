@@ -2,6 +2,7 @@ demo/node_modules
 demo/tsconfig.tsbuildinfo
 docs
 lib/auth
+lib/channel
 lib/core
 lib/data
 lib/engine

@@ -1,5 +1,6 @@
 import {Remover} from "../core/util"
 import {UUID, UUID0} from "../core/uuid"
+import {Path} from "../core/path"
 import {Data, Record, dataEquals, refEquals} from "../core/data"
 import {ChangeFn, Eq, Mutable, Value, ValueFn, addListener, dispatchChange} from "../core/react"
 import {MutableSet, MutableMap} from "../core/rcollect"
@@ -25,8 +26,7 @@ export class DMutable<T> extends Mutable<T> {
       const ov = current
       if (!eq(ov, value)) {
         dispatchChange(listeners, current = value, ov)
-        if (!fromSync) owner.noteWrite(
-          {type: SyncType.VALSET, path: owner.path, idx, vtype: meta.vtype, value})
+        if (!fromSync) owner.noteWrite({type: SyncType.VALSET, idx, vtype: meta.vtype, value})
       }
     }
     return new DMutable(eq, lner => addListener(listeners, lner), () => current, update)
@@ -51,7 +51,7 @@ class DMutableSet<E> extends MutableSet<E> {
     if (this.data.size !== size) {
       this.notifyAdd(elem)
       if (!fromSync) this.owner.noteWrite(
-        {type: SyncType.SETADD, path: this.owner.path, idx: this.idx, elem, etype: this.meta.etype})
+        {type: SyncType.SETADD, idx: this.idx, elem, etype: this.meta.etype})
     }
     return this
   }
@@ -60,7 +60,7 @@ class DMutableSet<E> extends MutableSet<E> {
     if (!this.data.delete(elem)) return false
     this.notifyDelete(elem)
     if (!fromSync) this.owner.noteWrite(
-      {type: SyncType.SETDEL, path: this.owner.path, idx: this.idx, elem, etype: this.meta.etype})
+      {type: SyncType.SETDEL, idx: this.idx, elem, etype: this.meta.etype})
     return true
   }
 }
@@ -76,7 +76,7 @@ class DMutableMap<K,V> extends MutableMap<K,V> {
     this.notifySet(key, value, prev)
     if (!fromSync) {
       const {owner, idx} = this, {ktype, vtype} = this.meta
-      owner.noteWrite({type: SyncType.MAPSET, path: owner.path, idx, key, value, ktype, vtype})
+      owner.noteWrite({type: SyncType.MAPSET, idx, key, value, ktype, vtype})
     }
     return this
   }
@@ -87,106 +87,10 @@ class DMutableMap<K,V> extends MutableMap<K,V> {
     this.notifyDelete(key, prev as V)
     if (!fromSync) {
       const {owner, idx} = this
-      owner.noteWrite({type: SyncType.MAPDEL, path: owner.path, idx, key, ktype: this.meta.ktype})
+      owner.noteWrite({type: SyncType.MAPDEL, idx, key, ktype: this.meta.ktype})
     }
     return true
   }
-}
-
-/** Identifies the path to an object from the root of the data store. Even path elements are object
-  * property names, odd path elements are object collection keys (UUIDs). */
-export type Path = Array<string | UUID>
-
-function checkPath (path :Path) :Path {
-  if (path === undefined) throw new Error(`Illegal undefined path`)
-  return path
-}
-
-class PathNode<T> {
-  private value :T|undefined = undefined
-  private children :{[key :string] :PathNode<T>}|undefined = undefined
-
-  get (path :Path, pos :number) :T|undefined {
-    if (pos === path.length) return this.value
-    else if (!this.children) return undefined
-    else {
-      const childmap = this.children[path[pos]]
-      return childmap ? childmap.get(path, pos+1) : undefined
-    }
-  }
-
-  set (path :Path, pos :number, value :T) :boolean {
-    if (pos === path.length) {
-      const wasEmpty = this.value === undefined
-      this.value = value
-      return wasEmpty
-    } else {
-      const children = this.children || (this.children = {})
-      const child = children[path[pos]] || (children[path[pos]] = new PathNode<T>())
-      return child.set(path, pos+1, value)
-    }
-  }
-
-  delete (path :Path, pos :number) :T|undefined {
-    if (pos === path.length) {
-      const ovalue = this.value
-      this.value = undefined
-      return ovalue
-    }
-    else if (!this.children) return undefined
-    else {
-      const child = this.children[path[pos]]
-      return child ? child.delete(path, pos+1) : undefined
-    }
-  }
-
-  forEach (op :(v:T, p:Path) => void, path :Path) {
-    const {value, children} = this
-    if (value) op(value, path)
-    if (children) for (const key in children) children[key].forEach(op, path.concat(key))
-  }
-}
-
-/** Maintains a mapping from `Path` objects to arbitrary values (of the same type). */
-export class PathMap<T> {
-  private root = new PathNode<T>()
-  private _size = 0
-
-  /** Looks and returns the mapping for `path`, or `undefined` if no mapping exists. */
-  get (path :Path) :T|undefined { return this.root.get(checkPath(path), 0) }
-
-  /** Sets the mapping for `path` to `value`. */
-  set (path :Path, value :T) {
-    if (this.root.set(checkPath(path), 0, value)) this._size += 1
-  }
-
-  /** Returns the number of mappings in this map. */
-  get size () { return this._size }
-
-  /** Looks up and returns the mapping for `path`, throws an error if no mapping exists. */
-  require (path :Path) :T {
-    const result = this.root.get(checkPath(path), 0)
-    if (!result) throw new Error(`Missing value for ${path}`)
-    return result
-  }
-
-  /** Deletes the mapping for `path`.
-    * @return the previous value of the mapping. */
-  delete (path :Path) :T|undefined {
-    const oval = this.root.delete(checkPath(path), 0)
-    if (oval !== undefined) this._size -= 1
-    return oval
-  }
-
-  /** Removes all mappings from this map. */
-  clear () {
-    this.root = new PathNode<T>()
-    this._size = 0
-  }
-
-  /** Applies `op` to all values in the map. Note: if `op` mutates the map, no guarantees are made
-    * as to whether `op` is applied or not to added or removed values. */
-  forEach (op :(v:T, p:Path) => void) { this.root.forEach(op, []) }
 }
 
 /** Defines an index on a collection of objects. */
@@ -247,12 +151,15 @@ export class DQueue<M extends Record> {
 
   get addr () :DQueueAddr { return {path: this.owner.path, index: this.index} }
 
-  post (msg :M) {
-    return this.owner.source.post(this.addr, msg)
-  }
+  post (msg :M) { return this.owner.source.post(this.addr.index, msg) }
 }
 
-export type DHandler<O extends DObject,M> = (obj :O, msg :M, auth: Auth) => void
+export interface DContext {
+  auth :Auth
+  post (queue :DQueueAddr, msg :Record) :void
+}
+
+export type DHandler<O extends DObject,M> = (ctx :DContext, obj :O, msg :M) => void
 
 export type DObjectType<T extends DObject> = {
   new (source :DataSource, path :Path, state :Value<DState>) :T
@@ -277,14 +184,10 @@ export type DState = "resolving" | "failed" | "active" | "disconnected" | "dispo
 
 export interface DataSource {
 
-  /** Posts `msg` to the queue at the address `queue`. */
-  post (queue :DQueueAddr, msg :Record) :void
-  // TODO: optional auth for server entities that want to post to further queues with same creds?
-  // TODO: variants that wait for the message to be processed? also return channels?
-
-  /** Sends a sync request for `obj`. This is only used internally. */
-  sendSync (obj :DObject, msg :SyncMsg) :void
-
+  /** Posts `msg` to the queue at `index`. */
+  post (index :number, msg :Record) :void
+  /** Sends a sync request for `obj`. */
+  sendSync (msg :SyncMsg) :void
   /** Creates record in the table at `path` with key `key` and `data`. */
   createRecord (path :Path, key :UUID, data :Record) :void
   /** Updates record with `key` in the table at `path` with `data`. */
@@ -340,7 +243,7 @@ export abstract class DObject {
     * and `canRead` tests. */
   canCreate (prop :string, auth :Auth) :boolean { return auth.isSystem }
 
-  noteWrite (msg :SyncMsg) { this.source.sendSync(this, msg) }
+  noteWrite (msg :SyncMsg) { this.source.sendSync(msg) }
 
   applySync (msg :SyncMsg, fromSync :boolean) {
     const prop = this[this.metas[msg.idx].name]

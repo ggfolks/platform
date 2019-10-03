@@ -1,20 +1,15 @@
-import {PMap, NoopRemover, Remover, log} from "../core/util"
-import {UUID, UUID0, setRandomSource} from "../core/uuid"
+import {PMap, Remover, log} from "../core/util"
+import {UUID, UUID0} from "../core/uuid"
+import {Path, PathMap} from "../core/path"
 import {Record} from "../core/data"
-import {Stream, Emitter, Mutable, Subject, Value} from "../core/react"
-import {MutableMap, MutableSet, RMap, RSet} from "../core/rcollect"
-import {Decoder} from "../core/codec"
-import {Auth, AuthValidator, guestValidator} from "../auth/auth"
+import {Mutable, Subject, Value} from "../core/react"
+import {MutableMap, RMap} from "../core/rcollect"
+import {Auth} from "../auth/auth"
 import {Named, PropMeta, TableMeta, ViewMeta, tableForView, getPropMetas, isPersist} from "./meta"
-import {DataSource, DObject, DObjectType, DState, DQueueAddr, MetaMsg, Path, PathMap,
-        findObjectType} from "./data"
-import {DownType, DownMsg, MsgEncoder, MsgDecoder, UpMsg, UpType, SyncMsg} from "./protocol"
-
-import * as http from "http"
-import WebSocket from "ws"
-
-import * as crypto from "crypto"
-setRandomSource(array => crypto.randomFillSync(Buffer.from(array.buffer)))
+import {DataSource, DObject, DObjectType, DState, DQueueAddr, MetaMsg, findObjectType} from "./data"
+import {DataMsg, DataType, DataCodec, ObjMsg, ObjType, mkObjCodec, SyncMsg,
+        ViewMsg, ViewType, ViewCodec} from "./protocol"
+import {ChannelHandler} from "../channel/channel"
 
 const DebugLog = false
 
@@ -32,6 +27,18 @@ export class Resolved implements DataSource {
 
   constructor (readonly store :DataStore, path :Path, otype :DObjectType<any>) {
     this.object = new otype(this, path, this.state)
+  }
+
+  addSubscriber (sub :Subscriber) {
+    this.subscribers.push(sub)
+    this.store.postMeta(this.object, {type: "subscribed", id: sub.auth.id})
+  }
+  removeSubscriber (sub :Subscriber) {
+    const idx = this.subscribers.indexOf(sub)
+    if (idx >= 0) {
+      this.subscribers.splice(idx, 1)
+      this.store.postMeta(this.object, {type: "unsubscribed", id: sub.auth.id})
+    }
   }
 
   subscribe (sub :Subscriber) :Subject<DObject|Error> {
@@ -59,10 +66,13 @@ export class Resolved implements DataSource {
     }
   }
 
-  post (queue :DQueueAddr, msg :Record) { this.store.post(sysAuth, queue, msg) }
+  post (index :number, msg :Record, auth = sysAuth) {
+    this.store.post(auth, {path: this.object.path, index}, msg)
+  }
 
-  sendSync (obj :DObject, msg :SyncMsg) {
-    if (DebugLog) log.debug("sendSync", "obj", this.object, "msg", msg)
+  sendSync (msg :SyncMsg) {
+    const obj = this.object
+    if (DebugLog) log.debug("sendSync", "obj", obj, "msg", msg)
     const meta = obj.metas[msg.idx]
     for (const sub of this.subscribers) if (obj.canRead(meta.name, sub.auth)) sub.sendSync(msg)
     if (isPersist(meta)) this.store.persistSync(obj, msg)
@@ -189,7 +199,7 @@ export abstract class DataStore {
         const meta = object.metas[queue.index]
         if (meta.type !== "queue") throw new Error(`Not a queue prop at path [type=${meta.type}]`)
         // TODO: check canSubscribe permission?
-        meta.handler(object, msg, auth)
+        meta.handler({auth, post: (queue, msg) => this.post(auth, queue, msg)}, object, msg)
       } catch (err) {
         log.warn("Failed to post", "auth", auth, "queue", queue, "msg", msg, err)
       }
@@ -205,7 +215,7 @@ export abstract class DataStore {
       return
     }
     try {
-      meta.handler(obj, msg, sysAuth)
+      meta.handler({auth: sysAuth, post: (queue, msg) => this.post(sysAuth, queue, msg)}, obj, msg)
     } catch (err) {
       log.warn("Failed to post meta", "obj", obj, "msg", msg, err)
     }
@@ -275,317 +285,81 @@ export class MemoryDataStore extends DataStore {
   }
 }
 
-class ObjectRef {
-  refs = 1 // start reffed
-  constructor (readonly object :DObject) {}
-  ref () { this.refs += 1 }
-  unref () :boolean {
-    this.refs -= 1
-    return this.refs === 0
-  }
-}
-
-export type SessionConfig = {store :DataStore, authers :PMap<AuthValidator>}
-
-export abstract class Session implements Subscriber, ViewSubscriber {
-  private readonly objects = new PathMap<ObjectRef>()
-  private readonly unsubs = new PathMap<Remover>()
-  private readonly vunsubs = new PathMap<Remover>()
-  private readonly encoder = new MsgEncoder()
-  private readonly decoder = new MsgDecoder()
-  private readonly authers :PMap<AuthValidator>
-  private readonly pending :UpMsg[] = []
-  private _auth :Auth|undefined = undefined
-
-  readonly store :DataStore
-
-  constructor (config :SessionConfig) {
-    this.store = config.store
-    this.authers = config.authers
-  }
-
-  get auth () :Auth {
-    if (this._auth) return this._auth
-    throw new Error(`Session not yet authed [sess=${this}]`)
-  }
-
-  recvMsg (msgData :Uint8Array) {
-    let msg :UpMsg
-    try {
-      msg = this.decoder.decodeUp(this.store, new Decoder(msgData))
-    } catch (err) {
-      log.warn("Failed to decode message", "sess", this, "data", msgData, err)
-      return
-    }
-    try {
-      this.handleMsg(msg)
-    } catch (err) {
-      log.warn("Failed to handle message", "sess", this, "msg", msg, err)
-    }
-  }
-
-  sendSync (msg :SyncMsg) { this.sendDown(msg) }
-
-  sendDown (msg :DownMsg) {
-    let data :Uint8Array
-    try {
-      data = this.encoder.encodeDown(this.auth, msg)
-    } catch (err) {
-      log.warn("Failed to encode", "sess", this, "msg", msg, err)
-      return
-    }
-    if (!this.sendMsg(data)) {
-      log.warn("Dropping message for unconnected session", "sess", this, "msg", msg)
-    }
-  }
-
-  recordSet (path :Path, recs :{key :UUID, data :Record}[]) {
-    this.sendDown({type: DownType.VSET, path, recs})
-  }
-  recordDelete (path :Path, key :UUID) {
-    this.sendDown({type: DownType.VDEL, path, key})
-  }
-
-  addObject (obj :DObject) {
-    const oref = this.objects.get(obj.path)
-    if (oref) oref.ref()
-    else {
-      this.objects.set(obj.path, new ObjectRef(obj))
-      this.store.postMeta(obj, {type: "subscribed", id: this.auth.id})
-    }
-  }
-
-  removeObject (path :Path) {
-    const oref = this.objects.get(path)
-    if (!oref) log.warn("No ref for removed object?", "sess", this, "path", path)
-    else if (oref.unref()) {
-      this.store.postMeta(oref.object, {type: "unsubscribed", id: this.auth.id})
-      this.objects.delete(path)
-    }
-  }
-
-  dispose () {
-    this.unsubs.forEach(unsub => unsub())
-    this.unsubs.clear()
-    this.vunsubs.forEach(vunsub => vunsub())
-    this.vunsubs.clear()
-  }
-
-  protected handleMsg (msg :UpMsg) {
-    if (DebugLog) log.debug("handleMsg", "sess", this, "msg", msg)
-
-    // defer processing messages until we're authed
-    if (msg.type !== UpType.AUTH && !this._auth) {
-      // TODO: if pending grows too large, disconnect client?
-      this.pending.push(msg)
-      return
-    }
-
-    switch (msg.type) {
-    case UpType.AUTH:
-      const auther = this.authers[msg.source]
-      if (auther) auther.validateAuth(msg.id, msg.token).onValue(auth => {
-        this._auth = auth
-        this.sendDown({type: DownType.AUTHED, id: msg.id})
-        log.info("Session authed", "sess", this, "source", msg.source)
-        for (const msg of this.pending) this.handleMsg(msg)
-        this.pending.length = 0
-      })
-      else log.warn("Session authed with invalid auth source", "sess", this, "msg", msg)
-      break
-
-    case UpType.SUB:
-      this.subscribe(msg.path)
-      break
-    case UpType.UNSUB:
-      const unsub = this.unsubs.get(msg.path)
-      if (unsub) {
-        this.unsubs.delete(msg.path)
-        unsub()
-      }
-      break
-
-    case UpType.VSUB:
-      this.subscribeView(msg.path)
-      break
-    case UpType.VUNSUB:
-      const vunsub = this.vunsubs.get(msg.path)
-      if (vunsub) {
-        this.vunsubs.delete(msg.path)
-        vunsub()
-      }
-      break
-
-    case UpType.TADD:
-    case UpType.TSET:
-    case UpType.TDEL:
-      // TODO
-      break
-
-    case UpType.POST:
-      this.store.post(this.auth, msg.queue, msg.msg)
-      break
-
-    default:
-      const ref = this.objects.get(msg.path)
-      if (ref) {
-        const obj = ref.object
-        switch (obj.state.current) {
-        case "resolving":
-          obj.state.whenOnce(s => s === "active", _ => this.store.upSync(this.auth, obj, msg))
-          break
-        case "active":
-          this.store.upSync(this.auth, obj, msg)
-          break
-        default:
-          log.warn("Dropping sync message for inactive object", "sess", this,
-                   "state", obj.state.current, "msg", msg)
-          break
-        }
-      }
-      else log.warn("Dropping sync message, no subscription", "sess", this, "msg", msg)
-    }
-  }
-
-  toString () {
-    return `${this._auth ? this._auth.id : "<unauthed>"}`
-  }
-
-  protected subscribe (path :Path) {
-    const res = this.store.resolve(path)
-    let unref = NoopRemover
-    const unsub = res.subscribe(this).onValue(res => {
-      if (res instanceof Error) this.sendDown({type: DownType.SERR, path, cause: res.message})
-      else {
-        this.addObject(res)
-        unref = () => this.removeObject(path)
-        this.sendDown({type: DownType.SOBJ, obj: res})
+/** Creates channel handlers for `DataStore` services using `store`. */
+export function channelHandlers (store :DataStore) :PMap<ChannelHandler<any>> {
+  const data :ChannelHandler<DataMsg> = (auth, path, mkChannel) => {
+    const channel = mkChannel(DataCodec)
+    channel.messages.onEmit(msg => {
+      switch (msg.type) {
+      case DataType.POST:
+        store.post(auth.current, msg.queue, msg.msg)
+        break
+      case DataType.TADD:
+      case DataType.TSET:
+      case DataType.TDEL:
+        log.warn("TODO: TADD/SET/DEL", "msg", msg) // TODO
+        break
       }
     })
-    this.unsubs.set(path, () => { unsub() ; unref() })
+    return Promise.resolve(channel)
   }
 
-  protected subscribeView (path :Path) {
-    const res = this.store.resolveView(path)
-    const [rmap, unsub] = res.subscribe(this)
-    this.vunsubs.set(path, unsub)
+  const object :ChannelHandler<ObjMsg> = (auth, path, mkChannel) => {
+    return new Promise((resolve, reject) => {
+      // wait for object to be active before we do canSubscribe check
+      const res = store.resolve(path), obj = res.object
+      obj.state.whenOnce(s => s === "active", _ => {
+        if (!obj.canSubscribe(auth.current)) reject(new Error("Access denied."))
+        else {
+          const channel = mkChannel(mkObjCodec(obj))
+          channel.messages.onEmit(msg => {
+            switch (msg.type) {
+            case ObjType.OBJ:
+              log.warn("Invalid upstream OBJ message", "channel", channel, "msg", msg)
+              break
+            case ObjType.POST:
+              res.post(msg.index, msg.msg, auth.current)
+              break
+            default:
+              const name = obj.metas[msg.idx].name
+              if (obj.canRead(name, auth.current) &&
+                  obj.canWrite(name, auth.current)) obj.applySync(msg, false)
+              else log.warn("Write rejected", "auth", auth, "obj", obj, "prop", name)
+              break
+            }
+          })
+          const sub :Subscriber = {
+            get auth () { return auth.current },
+            sendSync: msg => channel.sendMsg(msg)
+          }
+          res.addSubscriber(sub)
+          channel.state.whenOnce(s => s === "closed", _ => res.removeSubscriber(sub))
+          channel.sendMsg({type: ObjType.OBJ, obj: res.object})
+          resolve(channel)
+        }
+      })
+    })
+  }
+
+  const view :ChannelHandler<ViewMsg> = (auth, path, mkChannel) => {
+    const res = store.resolveView(path)
+    const sub :ViewSubscriber = {
+      get auth () :Auth { return auth.current },
+      recordSet (tpath :Path, recs :{key :UUID, data :Record}[]) {
+        channel.sendMsg({type: ViewType.SET, recs})
+      },
+      recordDelete (tpath :Path, key :UUID) {
+        channel.sendMsg({type: ViewType.DEL, key})
+      }
+    }
+    const [rmap, unsub] = res.subscribe(sub)
+    const channel = mkChannel(ViewCodec)
+    channel.state.whenOnce(s => s === "closed", unsub)
     const recs = []
     for (const [key,data] of rmap.entries()) recs.push({key, data})
-    this.sendDown({type: DownType.VSET, path, recs})
+    channel.sendMsg({type: ViewType.SET, recs})
+    return Promise.resolve(channel)
   }
 
-  protected abstract sendMsg (msg :Uint8Array) :boolean
-}
-
-type ServerConfig = {
-  port? :number
-  httpServer? :http.Server
-}
-
-type SessionState = "connecting" | "open" | "closed"
-
-class WSSession extends Session {
-  private readonly _state = Mutable.local("connecting" as SessionState)
-
-  constructor (config :SessionConfig, readonly addr :string, readonly ws :WebSocket) {
-    super(config)
-
-    const onOpen = () => this._state.update("open")
-    if (ws.readyState === WebSocket.OPEN) onOpen()
-    else ws.on("open", onOpen)
-
-    ws.on("message", msg => {
-      // TODO: do we need to check readyState === CLOSING and drop late messages?
-      // santity check
-      if (this._state.current === "closed") log.warn(
-        "Dropping message that arrived on closed socket", "sess", this);
-      else if (msg instanceof ArrayBuffer) this.recvMsg(new Uint8Array(msg))
-      else log.warn("Got non-binary message", "sess", this, "msg", msg)
-    })
-    ws.on("close", (code, reason) => {
-      log.info("Session closed", "sess", this, "code", code, "reason", reason)
-      this.didClose()
-    })
-    ws.on("error", error => {
-      log.info("Session failed", "error", error)
-      this.didClose()
-    })
-    // TODO: ping/pong & session timeout
-
-    log.info("Session started", "sess", this)
-  }
-
-  get state () :Value<SessionState> { return this._state }
-
-  close () {
-    this.ws.terminate()
-    this.didClose()
-  }
-
-  toString () {
-    return `${super.toString()}/${this.addr}`
-  }
-
-  protected sendMsg (msg :Uint8Array) :boolean {
-    if (this.ws.readyState !== WebSocket.OPEN) return false
-    this.ws.send(msg, err => {
-      if (err) log.warn("Message send failed", "sess", this, err) // TODO: terminate?
-    })
-    return true
-  }
-
-  protected didClose () {
-    this._state.update("closed")
-    this.dispose()
-  }
-}
-
-export type ServerState = "initializing" | "listening" | "terminating" | "terminated"
-
-export interface AuthValidator {
-
-  /** Validates authentication info provided by a client.
-    * @return a subject that yields an `Auth` instance iff the supplied info is valid. If it is
-    * invalid, a warning should be logged and the subject should not complete. */
-  validateAuth (id :UUID, token :string) :Subject<Auth>
-}
-
-export class Server {
-  private readonly wss :WebSocket.Server
-  private readonly _sessions = MutableSet.local<WSSession>()
-  private readonly _state = Mutable.local("initializing" as ServerState)
-
-  readonly authers :PMap<AuthValidator>
-  /** Emits errors reported by the underlying web socket server. */
-  readonly errors :Stream<Error> = new Emitter()
-
-  constructor (readonly store :DataStore,
-               authers :PMap<AuthValidator> = {},
-               config :ServerConfig = {}) {
-    this.authers = {...authers, guest: guestValidator}
-    const wscfg = config.httpServer ? {server: config.httpServer} : {port: config.port || 8080}
-    const wss = this.wss = new WebSocket.Server(wscfg)
-    wss.on("listening", () => this._state.update("listening"))
-    wss.on("connection", (ws, req) => {
-      ws.binaryType = "arraybuffer"
-      // if we have an x-forwarded-for header, use that to get the client's IP
-      const xffs = req.headers["x-forwarded-for"], xff = Array.isArray(xffs) ? xffs[0] : xffs
-      // parsing "X-Forwarded-For: <client>, <proxy1>, <proxy2>, ..."
-      const addr = (xff ? xff.split(/\s*,\s*/)[0] : req.connection.remoteAddress) || "<unknown>"
-      const sess = new WSSession(this, addr, ws)
-      this._sessions.add(sess)
-      sess.state.when(ss => ss === "closed", () => this._sessions.delete(sess))
-    })
-    wss.on("error", error => (this.errors as Emitter<Error>).emit(error))
-  }
-
-  get sessions () :RSet<Session> { return this._sessions }
-
-  get state () :Value<ServerState> { return this._state }
-
-  shutdown () {
-    this._state.update("terminating")
-    for (const sess of this._sessions) sess.close()
-    this.wss.close(() => this._state.update("terminated"))
-  }
+  return {data, object, view}
 }

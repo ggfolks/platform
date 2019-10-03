@@ -1,4 +1,4 @@
-import {UUID, uuidv1} from "../core/uuid"
+import {UUID, UUID0, uuidv1} from "../core/uuid"
 import {Mutable, Subject} from "../core/react"
 
 /** The source for unauthenticated (guess) credentials. */
@@ -51,6 +51,8 @@ export type Auth = {
   // TODO: change this to something extensible like: hasToken("admin"|"support"|"system")
   // or maybe those tokens are named "isAdmin" etc. and are jammed into this object...
 }
+
+export const noAuth = {id: UUID0, isGuest: false, isSystem: false}
 
 /** Handles validation of auth credentials in server code. */
 export interface AuthValidator {

@@ -1,13 +1,15 @@
 import {UUID, UUID0, uuidv1} from "../core/uuid"
 import {Disposer, Timestamp, Remover, log} from "../core/util"
-import {Mutable, Subject, Value} from "../core/react"
-import {Decoder, setTextCodec} from "../core/codec"
-import {guestValidator} from "../auth/auth"
+import {Emitter, Mutable, Subject, Value} from "../core/react"
+import {Encoder, Decoder, setTextCodec} from "../core/codec"
+import {SessionAuth, guestValidator} from "../auth/auth"
+import {CState, ChannelManager, Connection} from "../channel/channel"
+import {ChannelClient} from "../channel/client"
 import {getPropMetas, dobject, dmap, dvalue, dcollection, dqueue} from "./meta"
-import {Auth, DataSource, DObject, DState, MetaMsg, findObjectType} from "./data"
-import {MsgEncoder, MsgDecoder} from "./protocol"
-import {Client, Connection, CState} from "./client"
-import {MemoryDataStore, Session, SessionConfig} from "./server"
+import {Auth, DataSource, DContext, DObject, DState, MetaMsg, findObjectType} from "./data"
+import {addObject, getObject} from "./protocol"
+import {ClientStore} from "./client"
+import {MemoryDataStore, channelHandlers} from "./server"
 
 import {TextEncoder, TextDecoder} from "util"
 setTextCodec(() => new TextEncoder() as any, () => new TextDecoder() as any)
@@ -45,17 +47,17 @@ const userQ = (id :UUID) => UserObject.queueAddr(["users", id], "userq")
 type UserReq = {type :"enter", room :UUID}
              | {type :"created", room :UUID}
 
-function handleUserReq (obj :UserObject, req :UserReq, auth :Auth) {
+function handleUserReq (ctx :DContext, obj :UserObject, req :UserReq) {
   if (DebugLog) log.debug("handleUserReq", "req", req)
   switch (req.type) {
   case "enter":
-    if (auth.isSystem) {
+    if (ctx.auth.isSystem) {
       obj.room.update({type: "joined", id: req.room})
-      obj.source.post(roomQ(req.room), {type: "joined", id: obj.key, username: obj.username.current})
+      ctx.post(roomQ(req.room), {type: "joined", id: obj.key, username: obj.username.current})
     }
     break
   case "created":
-    if (auth.isSystem) {
+    if (ctx.auth.isSystem) {
       obj.room.update({type: "created", id: req.room})
     }
     break
@@ -118,7 +120,7 @@ export class RoomObject extends DObject {
 
 const roomQ = (id :UUID) => RoomObject.queueAddr(["rooms", id], "roomq")
 
-function handleRoomReq (obj :RoomObject, req :RoomReq, auth :Auth) {
+function handleRoomReq (ctx :DContext, obj :RoomObject, req :RoomReq) {
   if (DebugLog) log.debug("handleRoomReq", "req", req)
   switch (req.type) {
   case "created":
@@ -127,38 +129,38 @@ function handleRoomReq (obj :RoomObject, req :RoomReq, auth :Auth) {
     break
   case "join":
     // we could do an auth or ban list check here
-    if (DebugLog) log.debug("Adding occupant", "room", obj.key, "user", auth.id)
-    obj.occupants.set(auth.id, {username: "?"})
-    obj.source.post(userQ(auth.id), {type: "enter", room: obj.key})
-    obj.source.post(sysChatQ, {type: "occupied", id: obj.key, occupants: obj.occupants.size})
+    if (DebugLog) log.debug("Adding occupant", "room", obj.key, "user", ctx.auth.id)
+    obj.occupants.set(ctx.auth.id, {username: "?"})
+    ctx.post(userQ(ctx.auth.id), {type: "enter", room: obj.key})
+    ctx.post(sysChatQ, {type: "occupied", id: obj.key, occupants: obj.occupants.size})
     break
 
   case "joined":
-    if (auth.isSystem) {
+    if (ctx.auth.isSystem) {
       const info = obj.occupants.get(req.id)
       if (info) obj.occupants.set(req.id, {...info, username: req.username})
     }
     break
 
   case "speak":
-    if (obj.occupants.has(auth.id) || auth.isSystem) {
+    if (obj.occupants.has(ctx.auth.id) || ctx.auth.isSystem) {
       const mid = obj.nextMsgId.current
       obj.nextMsgId.update(mid+1)
-      obj.messages.set(mid, {sender: auth.id, sent: Timestamp.now(), text: req.text})
+      obj.messages.set(mid, {sender: ctx.auth.id, sent: Timestamp.now(), text: req.text})
     }
     break
 
   case "edit":
     const msg = obj.messages.get(req.mid)
-    if (msg && msg.sender === auth.id) {
+    if (msg && msg.sender === ctx.auth.id) {
       obj.messages.set(req.mid, {...msg, text: req.newText, edited: Timestamp.now()})
     }
     break
 
   case "rename":
-    if (auth.isSystem || auth.id === obj.owner.current) {
+    if (ctx.auth.isSystem || ctx.auth.id === obj.owner.current) {
       obj.name.update(req.name)
-      obj.source.post(sysChatQ, {type: "renamed", id: obj.key, name: req.name})
+      ctx.post(sysChatQ, {type: "renamed", id: obj.key, name: req.name})
     }
     break
 
@@ -168,13 +170,13 @@ function handleRoomReq (obj :RoomObject, req :RoomReq, auth :Auth) {
   }
 }
 
-function handleMetaMsg (obj :RoomObject, msg :MetaMsg, auth :Auth) {
+function handleMetaMsg (ctx :DContext, obj :RoomObject, msg :MetaMsg) {
   if (DebugLog) log.debug("handleMetaMsg", "msg", msg)
   switch (msg.type) {
   case "unsubscribed":
     if (DebugLog) log.debug("Removing occupant", "room", obj.key, "user", msg.id)
     obj.occupants.delete(msg.id)
-    obj.source.post(sysChatQ, {type: "occupied", id: obj.key, occupants: obj.occupants.size})
+    ctx.post(sysChatQ, {type: "occupied", id: obj.key, occupants: obj.occupants.size})
     break
   }
 }
@@ -227,21 +229,21 @@ export class RootObject extends DObject {
 const chatQ = RootObject.queueAddr([], "chatq")
 const sysChatQ = RootObject.queueAddr([], "syschatq")
 
-function handleChatReq (obj :RootObject, req :ChatReq, auth :Auth) {
+function handleChatReq (ctx :DContext, obj :RootObject, req :ChatReq) {
   if (DebugLog) log.debug("handleChatReq", "req", req)
   switch (req.type) {
   case "create":
     const id = uuidv1()
     obj.publicRooms.set(id, {name: req.name, occupants: 0})
-    obj.source.post(roomQ(id), {type: "created", owner: auth.id, name: req.name})
-    obj.source.post(userQ(auth.id), {type: "created", room: id})
+    ctx.post(roomQ(id), {type: "created", owner: ctx.auth.id, name: req.name})
+    ctx.post(userQ(ctx.auth.id), {type: "created", room: id})
     break
   }
 }
 
-function handleSysChatReq (obj :RootObject, req :SysChatReq, auth :Auth) {
+function handleSysChatReq (ctx :DContext, obj :RootObject, req :SysChatReq) {
   if (DebugLog) log.debug("handleSysChatReq", "req", req)
-  if (auth.isSystem) {
+  if (ctx.auth.isSystem) {
     switch (req.type) {
     case "renamed":
       obj.updateRoom(req.id, oinfo => ({...oinfo, name: req.name}))
@@ -297,8 +299,8 @@ test("access", () => {
 })
 
 const noopSource :DataSource = {
-  post: (queue, msg) => {},
-  sendSync: (obj, msg) => {},
+  post: (index, msg) => {},
+  sendSync: (msg) => {},
   createRecord: (path, key, data) => {},
   updateRecord: (path, key, data, merge) => {},
   deleteRecord: (path, key) => {},
@@ -319,17 +321,13 @@ test("codec", () => {
   room.messages.set(2, {sender: id2, sent: now.minus(3, Timestamp.MINUTES), text: "Hiya Testy."})
   room.messages.set(3, {sender: id1, sent: now.minus(1, Timestamp.MINUTES), text: "How's the elves?"})
 
-  const enc = new MsgEncoder()
-  enc.addObject(sysauth, room)
+  const enc = new Encoder()
+  addObject(enc, sysauth, room)
 
-  const msg = enc.encoder.finish()
+  const msg = enc.finish()
   const dec = new Decoder(msg)
-  const mdec = new MsgDecoder()
   const state = Value.constant<DState>("active")
-  const droom = mdec.getObject(dec, [], {
-    getMetas: id => getPropMetas(RoomObject.prototype),
-    getObject: id => new RoomObject(noopSource, ["rooms", roomId], state)
-  }) as RoomObject
+  const droom = getObject(dec, new RoomObject(noopSource, ["rooms", roomId], state)) as RoomObject
 
   expect(droom.owner.current).toEqual(room.owner.current)
   expect(droom.name.current).toEqual(room.name.current)
@@ -363,90 +361,103 @@ test("findObjectType", () => {
 
 type RunQueue = Array<() => void>
 
-function process (queue :RunQueue) {
-  while (queue.length > 0) queue.shift()!()
-}
-
-class ClientHandler extends Session {
-  constructor (config :SessionConfig, readonly conn :TestConnection,
-               readonly queue :RunQueue) { super(config) }
-
-  sendMsg (data :Uint8Array) {
-    const cdata = data.slice()
-    this.queue.push(() => this.conn.recvMsg(cdata))
-    return true
+function process (queue :RunQueue, onDone :() => void) {
+  if (queue.length > 0) {
+    queue.shift()!()
+    setTimeout(() => process(queue, onDone), 1)
   }
-}
-
-class TestConnection extends Connection {
-  private readonly handler :ClientHandler
-  readonly state = Value.constant("connected" as CState)
-
-  constructor (readonly client :Client, addr :URL, state :Mutable<CState>, config :SessionConfig,
-               readonly runq :RunQueue) {
-    super(client)
-    this.handler = new ClientHandler(config, this, runq)
-    state.update("connected")
-  }
-
-  sendRawMsg (data :Uint8Array) {
-    const cdata = data.slice()
-    this.runq.push(() => this.handler.recvMsg(cdata))
-  }
-
-  close () { this.handler.dispose() }
+  else onDone()
 }
 
 const testAddr = new URL("ws://test/")
 
-test("subscribe-auth", () => {
+class TestSession implements Connection {
+  readonly cmgr :ChannelManager
+  readonly state = Value.constant<CState>("open")
+  readonly msgs = new Emitter<Uint8Array>()
+
+  constructor (readonly store :MemoryDataStore,
+               readonly runq :RunQueue,
+               readonly client :TestClient) {
+    this.cmgr = new ChannelManager(this, channelHandlers(store), {guest: guestValidator})
+  }
+
+  send (msg :Uint8Array) :boolean {
+    const cmsg = msg.slice()
+    this.runq.push(() => this.client.msgs.emit(cmsg))
+    return true
+  }
+
+  toString () { return "TestSession" }
+}
+
+class TestClient extends ChannelClient {
+  readonly session :TestSession
+
+  constructor (store :MemoryDataStore, auth :SessionAuth, readonly runq :RunQueue) {
+    super({serverUrl: testAddr, auth: Value.constant(auth)})
+    this.session = new TestSession(store, runq, this)
+    this.state.update("open")
+  }
+
+  protected openSocket (url :URL) {
+    return {
+      send: (msg :Uint8Array) => {
+        const cmsg = msg.slice()
+        this.runq.push(() => this.session.msgs.emit(cmsg))
+      },
+      close: () => {},
+      toString: () => "TestSocket"
+    }
+  }
+}
+
+test("subscribe-auth", done => {
   const testStore = new MemoryDataStore(RootObject)
-  const sconfig = {store: testStore, authers: {guest: guestValidator}}
 
   const ida = uuidv1(), idb = uuidv1()
   const queue :RunQueue = []
 
   const authA = {source: "guest", id: ida, token: ""}
-  const clientA = new Client(
-    testAddr, Value.constant(authA), (c, a, s) => new TestConnection(c, a, s, sconfig, queue))
-  const objAA = clientA.resolve(["users", ida], UserObject)[0]
+  const clientA = new TestClient(testStore, authA, queue)
+  const storeA = new ClientStore(clientA)
+  const objAA = storeA.resolve(["users", ida], UserObject)[0]
   expect(objAA.key).toBe(ida)
   let gotAA = false
   objAA.state.whenOnce(s => s === "active", _ => gotAA = true)
 
   // try to subscribe to user b's object via a, should fail
-  const objAB = clientA.resolve(["users", idb], UserObject)[0]
+  const objAB = storeA.resolve(["users", idb], UserObject)[0]
   let failedAB = false
   objAB.state.whenOnce(s => s === "failed", _ => failedAB = true)
 
-  process(queue)
-
-  expect(gotAA).toEqual(true)
-  expect(failedAB).toEqual(true)
+  process(queue, () => {
+    expect(gotAA).toEqual(true)
+    expect(failedAB).toEqual(true)
+    done()
+  })
 })
 
 test("subscribe-post", done => {
   const testStore = new MemoryDataStore(RootObject)
-  const sconfig = {store: testStore, authers: {guest: guestValidator}}
 
   const ida = uuidv1(), idb = uuidv1()
   const queue :RunQueue = []
 
   class Chatter {
     readonly subs = new Disposer()
-    readonly client :Client
+    readonly client :TestClient
+    readonly store :ClientStore
     readonly state = Mutable.local("preauth")
     readonly user :UserObject
     room :[RoomObject, Remover]|undefined = undefined
 
     constructor (id :UUID) {
-      this.client = new Client(
-        testAddr, Value.constant({source: "guest", id, token: ""}),
-        (c, a, s) => new TestConnection(c, a, s, sconfig, queue))
-
+      this.client = new TestClient(testStore, {source: "guest", id, token: ""}, queue)
+      this.store = new ClientStore(this.client)
       if (DebugLog) this.state.onChange(ns => log.debug("Client state", "id", id, "state", ns))
 
-      const [user, unuser] = this.client.resolve(["users", id], UserObject)
+      const [user, unuser] = this.store.resolve(["users", id], UserObject)
       this.subs.add(unuser)
       this.user = user
       user.state.when(s => s === "active", _ => this.state.update("authed"))
@@ -460,14 +471,14 @@ test("subscribe-post", done => {
     }
 
     join (id :UUID) {
-      this.client.post(roomQ(id), {type: "join"})
+      this.store.post(roomQ(id), {type: "join"})
     }
 
     joined (id :UUID|undefined) {
       if (DebugLog) log.debug("Client joined room", "cid", this.client.auth.id, "rid", id)
       if (this.room) this.room[1]()
       if (id) {
-        this.room = this.client.resolve(["rooms", id], RoomObject)
+        this.room = this.store.resolve(["rooms", id], RoomObject)
         const room = this.room[0]
         room.state.when(s => s === "active", _ => {
           this.state.update("entered")
@@ -495,7 +506,7 @@ test("subscribe-post", done => {
   Subject.join2(chatA.state, chatB.state).onValue(([a,b]) => {
     // console.log(`States ${a} / ${b}`)
     if (a === "authed" && b === "authed") {
-      chatA.client.post(chatQ, {type: "create", name: "Test Room"})
+      chatA.store.post(chatQ, {type: "create", name: "Test Room"})
     } else if (a === "entered" && b === "entered") {
       chatA.speak("Hello world.")
     } else if (a === "entered") {
@@ -506,12 +517,10 @@ test("subscribe-post", done => {
     } else if (a === "heard2" && b === "heard2") {
       chatA.dispose()
       chatB.dispose()
-      process(queue)
-      done()
     } else if (a === "heard1" && b === "heard1") {
       chatB.speak("Hello.")
     }
   })
 
-  process(queue)
+  process(queue, done)
 })

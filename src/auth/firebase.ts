@@ -41,7 +41,7 @@ async function refreshFirebaseSession (user :firebase.User) {
   // just punt on this because this is all going to change when we have real auth
   const authdoc = await authref.get()
   if (authdoc.exists) {
-    const data = authdoc.data() || {}, tokens = data.tokens || {}
+    const data = authdoc.data({serverTimestamps: "estimate"}) || {}, tokens = data.tokens || {}
     // prune expired sessions
     const now = new Date().getTime(), expired = now - TOKEN_EXPIRE, usable = now - TOKEN_USABLE
     let token = "", changed = false

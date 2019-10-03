@@ -14,12 +14,13 @@ const Blob = firebase.firestore.Blob
 
 import {TextEncoder, TextDecoder} from "util"
 import {Timestamp, log} from "../core/util"
+import {Path, PathMap} from "../core/path"
 import {Data, DataMapKey, Record} from "../core/data"
 import {UUID} from "../core/uuid"
 import {Encoder, Decoder, SyncSet, SyncMap, ValueType, setTextCodec} from "../core/codec"
 import {SyncMsg, SyncType} from "./protocol"
 import {isPersist} from "./meta"
-import {DObject, DObjectType, DMutable, Path, PathMap} from "./data"
+import {DObject, DObjectType, DMutable} from "./data"
 import {DataStore, Resolved, Resolver, ResolvedView} from "./server"
 
 const DebugLog = false

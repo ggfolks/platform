@@ -1,5 +1,6 @@
 import {Timestamp, log} from "./util"
 import {UUID, uuidToString, uuidFromString} from "./uuid"
+import {Path} from "./path"
 import {Data, DataArray, DataMap, DataMapKey, DataSet, Record, isMap, isSet} from "./data"
 
 export type KeyType = "undefined" | "boolean" | "int8" | "int16" | "int32" | "size8" | "size16"
@@ -358,6 +359,14 @@ export class Encoder {
     }
   }
 
+  addPath (path :Path) {
+    if (path.length > 255) throw new Error(`Path too long: ${path}`)
+    this.addValue(path.length, "size8")
+    for (let ii = 0, ll = path.length; ii < ll; ii += 1) {
+      this.addValue(path[ii], ii % 2 == 0 ? "string" : "uuid")
+    }
+  }
+
   finish () :Uint8Array {
     const encoded = new Uint8Array(this.buffer, 0, this.pos)
     this.reset()
@@ -433,5 +442,13 @@ export class Decoder {
     for (const key of into.keys()) if (!keys.includes(key)) into.delete(key, true)
     for (let ii = 0; ii < size; ii += 1) into.set(keys[ii], vals[ii], true)
     return into
+  }
+
+  getPath () :Path {
+    const path :Path = [], length = this.getValue("size8")
+    for (let ii = 0, ll = length; ii < ll; ii += 1) {
+      path.push(this.getValue(ii % 2 == 0 ? "string" : "uuid"))
+    }
+    return path
   }
 }
