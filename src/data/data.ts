@@ -7,7 +7,7 @@ import {MutableSet, MutableMap} from "../core/rcollect"
 import {Auth} from "../auth/auth"
 import {WhereClause, OrderClause, PropMeta, ValueMeta, SetMeta, MapMeta, CollectionMeta, TableMeta,
         tableForView, getPropMetas} from "./meta"
-import {SyncMsg, SyncType} from "./protocol"
+import {SyncMsg, ObjType} from "./protocol"
 
 // re-export Auth to make life easier for modules that define DObjects & DQueues & handlers
 export {Auth} from "../auth/auth"
@@ -26,7 +26,7 @@ export class DMutable<T> extends Mutable<T> {
       const ov = current
       if (!eq(ov, value)) {
         dispatchChange(listeners, current = value, ov)
-        if (!fromSync) owner.noteWrite({type: SyncType.VALSET, idx, vtype: meta.vtype, value})
+        if (!fromSync) owner.noteWrite({type: ObjType.VALSET, idx, vtype: meta.vtype, value})
       }
     }
     return new DMutable(eq, lner => addListener(listeners, lner), () => current, update)
@@ -51,7 +51,7 @@ class DMutableSet<E> extends MutableSet<E> {
     if (this.data.size !== size) {
       this.notifyAdd(elem)
       if (!fromSync) this.owner.noteWrite(
-        {type: SyncType.SETADD, idx: this.idx, elem, etype: this.meta.etype})
+        {type: ObjType.SETADD, idx: this.idx, elem, etype: this.meta.etype})
     }
     return this
   }
@@ -60,7 +60,7 @@ class DMutableSet<E> extends MutableSet<E> {
     if (!this.data.delete(elem)) return false
     this.notifyDelete(elem)
     if (!fromSync) this.owner.noteWrite(
-      {type: SyncType.SETDEL, idx: this.idx, elem, etype: this.meta.etype})
+      {type: ObjType.SETDEL, idx: this.idx, elem, etype: this.meta.etype})
     return true
   }
 }
@@ -76,7 +76,7 @@ class DMutableMap<K,V> extends MutableMap<K,V> {
     this.notifySet(key, value, prev)
     if (!fromSync) {
       const {owner, idx} = this, {ktype, vtype} = this.meta
-      owner.noteWrite({type: SyncType.MAPSET, idx, key, value, ktype, vtype})
+      owner.noteWrite({type: ObjType.MAPSET, idx, key, value, ktype, vtype})
     }
     return this
   }
@@ -87,7 +87,7 @@ class DMutableMap<K,V> extends MutableMap<K,V> {
     this.notifyDelete(key, prev as V)
     if (!fromSync) {
       const {owner, idx} = this
-      owner.noteWrite({type: SyncType.MAPDEL, idx, key, ktype: this.meta.ktype})
+      owner.noteWrite({type: ObjType.MAPDEL, idx, key, ktype: this.meta.ktype})
     }
     return true
   }
@@ -248,11 +248,11 @@ export abstract class DObject {
   applySync (msg :SyncMsg, fromSync :boolean) {
     const prop = this[this.metas[msg.idx].name]
     switch (msg.type) {
-    case SyncType.VALSET: (prop as DMutable<any>).update(msg.value, fromSync) ; break
-    case SyncType.SETADD: (prop as DMutableSet<any>).add(msg.elem, fromSync) ; break
-    case SyncType.SETDEL: (prop as DMutableSet<any>).delete(msg.elem, fromSync) ; break
-    case SyncType.MAPSET: (prop as DMutableMap<any,any>).set(msg.key, msg.value, fromSync) ; break
-    case SyncType.MAPDEL: (prop as DMutableMap<any,any>).delete(msg.key, fromSync) ; break
+    case ObjType.VALSET: (prop as DMutable<any>).update(msg.value, fromSync) ; break
+    case ObjType.SETADD: (prop as DMutableSet<any>).add(msg.elem, fromSync) ; break
+    case ObjType.SETDEL: (prop as DMutableSet<any>).delete(msg.elem, fromSync) ; break
+    case ObjType.MAPSET: (prop as DMutableMap<any,any>).set(msg.key, msg.value, fromSync) ; break
+    case ObjType.MAPDEL: (prop as DMutableMap<any,any>).delete(msg.key, fromSync) ; break
     }
   }
 

@@ -18,7 +18,7 @@ import {Path, PathMap} from "../core/path"
 import {Data, DataMapKey, Record} from "../core/data"
 import {UUID} from "../core/uuid"
 import {Encoder, Decoder, SyncSet, SyncMap, ValueType, setTextCodec} from "../core/codec"
-import {SyncMsg, SyncType} from "./protocol"
+import {SyncMsg, ObjType} from "./protocol"
 import {isPersist} from "./meta"
 import {DObject, DObjectType, DMutable} from "./data"
 import {DataStore, Resolved, Resolver, ResolvedView} from "./server"
@@ -219,28 +219,28 @@ class DocSyncer {
     // if (DebugLog) log.debug("syncToUpdate", "path", object.path, "type", sync.type,
     //                         "name", meta.name)
     switch (sync.type) {
-    case SyncType.VALSET:
+    case ObjType.VALSET:
       update[meta.name] = {type: "value", value: valueToFirestore(sync.value, sync.vtype)}
       break
-    case SyncType.SETADD:
+    case ObjType.SETADD:
       const addedValue = valueToFirestore(sync.elem, sync.etype)
       const addDelta = getSetDelta(update, meta.name)
       addDelta.del.delete(addedValue)
       addDelta.add.add(addedValue)
       break
-    case SyncType.SETDEL:
+    case ObjType.SETDEL:
       const deletedValue = valueToFirestore(sync.elem, sync.etype)
       const delDelta = getSetDelta(update, meta.name)
       delDelta.add.delete(deletedValue)
       delDelta.del.add(deletedValue)
       break
-    case SyncType.MAPSET:
+    case ObjType.MAPSET:
       const setValue = valueToFirestore(sync.value, sync.vtype)
       const setDelta = getMapDelta(update, meta.name)
       setDelta.set.set(sync.key, setValue)
       setDelta.del.delete(sync.key)
       break
-    case SyncType.MAPDEL:
+    case ObjType.MAPDEL:
       const mdelDelta = getMapDelta(update, meta.name)
       mdelDelta.set.delete(sync.key)
       mdelDelta.del.add(sync.key)

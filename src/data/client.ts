@@ -7,7 +7,7 @@ import {RMap, MutableMap} from "../core/rcollect"
 import {Channel, CState} from "../channel/channel"
 import {ChannelClient} from "../channel/client"
 import {DataSource, DView, DObject, DObjectType, DState, DQueueAddr} from "./data"
-import {SyncMsg, SyncType, DataType, DataMsg, DataCodec, ObjType, ObjMsg, mkObjCodec,
+import {SyncMsg, DataType, DataMsg, DataCodec, ObjType, ObjMsg, mkObjCodec,
         ViewType, ViewMsg, ViewCodec} from "./protocol"
 
 const DebugLog = false
@@ -89,7 +89,7 @@ class ResolvedObject extends Resolved implements DataSource {
         // TODO: does it make sense to allow servers to post to client objects?
         log.warn("Illegal downstream POST msg", "path", this.path, "msg", msg)
         break
-      case SyncType.DECERR:
+      case ObjType.DECERR:
         log.warn("Failed to decode sync message", "path", this.path, "err", msg)
         break
       default:
