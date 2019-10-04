@@ -1,6 +1,14 @@
+import {Disposable} from "../core/util"
 import {Component} from "./game"
 
-/** Renders a mesh. */
+/** Top-level interface to render engine. */
+export interface RenderEngine extends Disposable {
+
+  /** Updates the render engine. Should be called once per frame. */
+  update () :void
+}
+
+/** Renders the mesh specified by the `meshFilter`. */
 export interface MeshRenderer extends Component {
 }
 

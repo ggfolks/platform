@@ -24,15 +24,23 @@ export class TypeScriptGameEngine implements GameEngine {
   createGameObject (name? :string) :GameObject {
     return new TypeScriptGameObject(getValue(name, "object"))
   }
+
+  dispose () {
+    // TODO: dispose of all extant game objects?
+  }
 }
 
-interface ComponentConstructor {
+/** Constructor interface for TypeScript components. */
+export interface ComponentConstructor {
   new (gameObject :TypeScriptGameObject, type :string): Component
 }
 
 const componentConstructors = new Map<string, ComponentConstructor>()
 
-function registerComponentType (type :string, constructor :ComponentConstructor) {
+/** Registers a component type's constructor with the TypeScript engine.
+  * @param type the component type name.
+  * @param constructor the component constructor. */
+export function registerComponentType (type :string, constructor :ComponentConstructor) {
   componentConstructors.set(type, constructor)
 }
 
@@ -61,10 +69,13 @@ class TypeScriptGameObject implements GameObject {
   }
 }
 
-class TypeScriptComponent implements Component {
+export class TypeScriptComponent implements Component {
 
   constructor (readonly gameObject :TypeScriptGameObject, readonly type :string) {
-    Object.defineProperty(gameObject, type, {configurable: true, enumerable: true, value: this})
+    if (type !== "transform") {
+      // transform is handled as a special case
+      Object.defineProperty(gameObject, type, {configurable: true, enumerable: true, value: this})
+    }
   }
 
   dispose () {

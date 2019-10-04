@@ -4,8 +4,8 @@ import {Disposable} from "../core/util"
 /** The available primitive types. */
 export type PrimitiveType = "sphere" | "cylinder" | "cube" | "quad"
 
-/** Top-level interface to scene graph engine. */
-export interface GameEngine {
+/** Top-level interface to game engine. */
+export interface GameEngine extends Disposable {
 
   /** Creates and returns a new game object containing a primitive.
     * @param type the type of primitive desired. */
