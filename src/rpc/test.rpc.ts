@@ -16,6 +16,7 @@ class TestProtocol extends RProtocol {
 class TestImpl implements ImplOf<TestProtocol> {
 
   calls :{name:string, year:number}[] = []
+  disposed = false
 
   testCall (name :string, year :number) {
     this.calls.push({name, year})
@@ -26,6 +27,10 @@ class TestImpl implements ImplOf<TestProtocol> {
     const res = text.length > length ? "longer" : "not longer"
     // console.log(`testReq ${text} ${length} => ${res}`)
     return Promise.resolve(res)
+  }
+
+  dispose () {
+    this.disposed = true
   }
 }
 
@@ -57,7 +62,12 @@ test("service", done => {
 
   queue.process(() => {
     expect(impl.calls).toStrictEqual([{name: "Elvis", year: 1935}, {name: "Madonna", year: 1958}])
-    expect(reqRes).toStrictEqual("not longer")
-    done()
+    expect(reqRes).toBe("not longer")
+
+    test.dispose()
+    queue.process(() => {
+      expect(impl.disposed).toBe(true)
+      done()
+    })
   })
 })

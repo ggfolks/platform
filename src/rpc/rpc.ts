@@ -20,6 +20,11 @@ export type RProtocolType<P extends RProtocol> = {new () :P}
 
 type FunProps<T> = {[K in keyof T] :T[K] extends Function ? K : never}[keyof T]
 
+/** Defines the interface for an implementation based on protocol `P`. Note that the protocol is
+  * extended with a `dispose` method which will be called if the client closes the channel
+  * connecting to this service implementation. */
+export type ImplOf<P extends RProtocol> = Pick<P, FunProps<P>> & Disposable
+
 /** Defines lifecycle additions that are provided to a service proxy. */
 export interface RService extends Disposable {
 
@@ -31,9 +36,6 @@ export interface RService extends Disposable {
     * underlying channel. */
   dispose () :void
 }
-
-/** Defines the interface for an implementation based on protocol `P`. */
-export type ImplOf<P extends RProtocol> = Pick<P, FunProps<P>>
 
 /** Defines the interface of the proxy of the service defined by protocol `P`. */
 export type ProxyOf<P extends RProtocol> = Pick<P, FunProps<P>> & RService
@@ -50,11 +52,11 @@ export interface ServiceProvider<P extends RProtocol> {
   /** Attempts to open a service at `path` for the client identified by `auth`.
     * @return `undefined` if this provider does not handle services at `path`, or a promise which
     * yields a service implementation or a rejection (due to failed authentication for example). */
-  open (auth :Auth, path :Path) :Promise<ImplOf<P>>|undefined
+  open (auth :Value<Auth>, path :Path) :Promise<ImplOf<P>>|undefined
 }
 
 function tryOpen<P extends RProtocol> (
-  prov :ServiceProvider<P>, auth :Auth, path :Path,
+  prov :ServiceProvider<P>, auth :Value<Auth>, path :Path,
   mkChannel :(codec :ChannelCodec<RpcMsg>) => Channel<RpcMsg>
 ) :Promise<Channel<RpcMsg>>|undefined {
   const res = prov.open(auth, path)
@@ -88,6 +90,7 @@ function tryOpen<P extends RProtocol> (
         break
       }
     })
+    channel.state.whenOnce(s => s === "closed", _ => svc.dispose())
     return channel
   })
   else return undefined
@@ -100,7 +103,7 @@ export function serviceHandler (providers :ServiceProvider<any>[]) :PMap<Channel
   return {
     service: (auth, path, mkChannel) => {
       for (const prov of providers) {
-        const res = tryOpen(prov, auth.current, path, mkChannel)
+        const res = tryOpen(prov, auth, path, mkChannel)
         if (res) return res
       }
       return Promise.reject(new Error("Provider not found"))
