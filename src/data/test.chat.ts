@@ -1,18 +1,13 @@
 import {UUID, UUID0, uuidv1} from "../core/uuid"
 import {Disposer, Timestamp, Remover, log} from "../core/util"
-import {Emitter, Mutable, Subject, Value} from "../core/react"
-import {Encoder, Decoder, setTextCodec} from "../core/codec"
-import {SessionAuth, guestValidator} from "../auth/auth"
-import {CState, ChannelManager, Connection} from "../channel/channel"
-import {ChannelClient} from "../channel/client"
+import {Mutable, Subject, Value} from "../core/react"
+import {Encoder, Decoder} from "../core/codec"
+import {TestClient, RunQueue} from "../channel/test.channel"
 import {getPropMetas, dobject, dmap, dvalue, dcollection, dqueue} from "./meta"
 import {Auth, DataSource, DContext, DObject, DState, MetaMsg, findObjectType} from "./data"
 import {addObject, getObject} from "./protocol"
 import {ClientStore} from "./client"
 import {MemoryDataStore, channelHandlers} from "./server"
-
-import {TextEncoder, TextDecoder} from "util"
-setTextCodec(() => new TextEncoder() as any, () => new TextDecoder() as any)
 
 const DebugLog = false
 
@@ -359,67 +354,14 @@ test("findObjectType", () => {
   expect(findObjectType(AObject, ["bs", "", "cs", ""])).toStrictEqual(CObject)
 })
 
-type RunQueue = Array<() => void>
-
-function process (queue :RunQueue, onDone :() => void) {
-  if (queue.length > 0) {
-    queue.shift()!()
-    setTimeout(() => process(queue, onDone), 1)
-  }
-  else onDone()
-}
-
-const testAddr = new URL("ws://test/")
-
-class TestSession implements Connection {
-  readonly cmgr :ChannelManager
-  readonly state = Value.constant<CState>("open")
-  readonly msgs = new Emitter<Uint8Array>()
-
-  constructor (readonly store :MemoryDataStore,
-               readonly runq :RunQueue,
-               readonly client :TestClient) {
-    this.cmgr = new ChannelManager(this, channelHandlers(store), {guest: guestValidator})
-  }
-
-  send (msg :Uint8Array) :boolean {
-    const cmsg = msg.slice()
-    this.runq.push(() => this.client.msgs.emit(cmsg))
-    return true
-  }
-
-  toString () { return "TestSession" }
-}
-
-class TestClient extends ChannelClient {
-  readonly session :TestSession
-
-  constructor (store :MemoryDataStore, auth :SessionAuth, readonly runq :RunQueue) {
-    super({serverUrl: testAddr, auth: Value.constant(auth)})
-    this.session = new TestSession(store, runq, this)
-    this.state.update("open")
-  }
-
-  protected openSocket (url :URL) {
-    return {
-      send: (msg :Uint8Array) => {
-        const cmsg = msg.slice()
-        this.runq.push(() => this.session.msgs.emit(cmsg))
-      },
-      close: () => {},
-      toString: () => "TestSocket"
-    }
-  }
-}
-
 test("subscribe-auth", done => {
   const testStore = new MemoryDataStore(RootObject)
 
   const ida = uuidv1(), idb = uuidv1()
-  const queue :RunQueue = []
+  const queue :RunQueue = new RunQueue()
 
   const authA = {source: "guest", id: ida, token: ""}
-  const clientA = new TestClient(testStore, authA, queue)
+  const clientA = new TestClient(authA, queue, channelHandlers(testStore))
   const storeA = new ClientStore(clientA)
   const objAA = storeA.resolve(["users", ida], UserObject)[0]
   expect(objAA.key).toBe(ida)
@@ -431,7 +373,7 @@ test("subscribe-auth", done => {
   let failedAB = false
   objAB.state.whenOnce(s => s === "failed", _ => failedAB = true)
 
-  process(queue, () => {
+  queue.process(() => {
     expect(gotAA).toEqual(true)
     expect(failedAB).toEqual(true)
     done()
@@ -442,7 +384,7 @@ test("subscribe-post", done => {
   const testStore = new MemoryDataStore(RootObject)
 
   const ida = uuidv1(), idb = uuidv1()
-  const queue :RunQueue = []
+  const queue :RunQueue = new RunQueue()
 
   class Chatter {
     readonly subs = new Disposer()
@@ -453,7 +395,7 @@ test("subscribe-post", done => {
     room :[RoomObject, Remover]|undefined = undefined
 
     constructor (id :UUID) {
-      this.client = new TestClient(testStore, {source: "guest", id, token: ""}, queue)
+      this.client = new TestClient({source: "guest", id, token: ""}, queue, channelHandlers(testStore))
       this.store = new ClientStore(this.client)
       if (DebugLog) this.state.onChange(ns => log.debug("Client state", "id", id, "state", ns))
 
@@ -522,5 +464,5 @@ test("subscribe-post", done => {
     }
   })
 
-  process(queue, done)
+  queue.process(done)
 })
