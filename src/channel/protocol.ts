@@ -6,15 +6,13 @@ import {Auth} from "../auth/auth"
 
 const DebugLog = false
 
-// channel messages are symmetric, so we don't have up/down variants
 export const enum ChanType { AUTH, AUTHED, OPEN, READY, FAILED, CLOSE }
-type AuthMsg   = {type :ChanType.AUTH, source :string, id :UUID, token :string}
-type AuthedMsg = {type :ChanType.AUTHED, id :UUID}
-type OpenMsg   = {type :ChanType.OPEN,   id :number, ctype :string, cpath :Path}
-type ReadyMsg  = {type :ChanType.READY,  id :number, remoteId :number}
-type FailedMsg = {type :ChanType.FAILED, id :number, cause :string}
-type CloseMsg  = {type :ChanType.CLOSE,  id :number}
-export type ChanMsg = AuthMsg | AuthedMsg | OpenMsg | ReadyMsg | FailedMsg | CloseMsg
+export type ChanMsg = {type :ChanType.AUTH, source :string, id :UUID, token :string}
+                    | {type :ChanType.AUTHED, id :UUID}
+                    | {type :ChanType.OPEN,   id :number, ctype :string, cpath :Path}
+                    | {type :ChanType.READY,  id :number, remoteId :number}
+                    | {type :ChanType.FAILED, id :number, cause :string}
+                    | {type :ChanType.CLOSE,  id :number}
 
 export function encodeMsg (enc :Encoder, rcpt :Auth, msg :ChanMsg) :void {
   if (DebugLog) log.debug("encodeMsg", "msg", msg)
