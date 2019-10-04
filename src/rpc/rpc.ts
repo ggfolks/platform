@@ -21,8 +21,8 @@ export type RProtocolType<P extends RProtocol> = {new () :P}
 type FunProps<T> = {[K in keyof T] :T[K] extends Function ? K : never}[keyof T]
 
 /** Defines the interface for an implementation based on protocol `P`. Note that the protocol is
-  * extended with a `dispose` method which will be called if the client closes the channel
-  * connecting to this service implementation. */
+  * extended with a `dispose` method which will be called if the client closes its service proxy
+  * manually, or eventually when the client ends its session. */
 export type ImplOf<P extends RProtocol> = Pick<P, FunProps<P>> & Disposable
 
 /** Defines lifecycle additions that are provided to a service proxy. */
