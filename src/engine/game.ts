@@ -1,5 +1,7 @@
+import {Clock} from "../core/clock"
 import {mat4, quat, vec3} from "../core/math"
 import {Disposable} from "../core/util"
+import {RenderEngine} from "./render"
 
 /** The available primitive types. */
 export type PrimitiveType = "sphere" | "cylinder" | "cube" | "quad"
@@ -7,13 +9,20 @@ export type PrimitiveType = "sphere" | "cylinder" | "cube" | "quad"
 /** Top-level interface to game engine. */
 export interface GameEngine extends Disposable {
 
+  /** The active render engine. */
+  readonly renderEngine :RenderEngine
+
   /** Creates and returns a new game object containing a primitive.
     * @param type the type of primitive desired. */
   createPrimitive (type :PrimitiveType) :GameObject
 
   /** Creates and returns a new (empty) game object.
-    * @param [name] the name of the object. */
-  createGameObject (name? :string) :GameObject
+    * @param [name] the name of the object.
+    * @param [components] an array of component types to create. */
+  createGameObject (name? :string, components? :string[]) :GameObject
+
+  /** Updates the game state. */
+  update (clock :Clock) :void
 }
 
 /** Represents an object in the game hierarchy. */
@@ -36,6 +45,10 @@ export interface GameObject extends Disposable {
     * @return the component reference. */
   getComponent<T extends Component> (type :string) :T
 
+  /** Sends a message to all components on the game object.
+    * @param message the name of the message to send. */
+  sendMessage (message :string) :void
+
   /** Anything else is an untyped component. */
   readonly [type :string] :any
 }
@@ -46,9 +59,33 @@ export interface Component extends Disposable {
   /** The game object to which this component is attached. */
   readonly gameObject :GameObject
 
+  /** The game object transform. */
+  readonly transform :Transform
+
   /** The component type. */
   readonly type :string
+
+  /** Sends a message to all components on the game object.
+    * @param message the name of the message to send. */
+  sendMessage (message :string) :void
+
+  /** Starts a coroutine on this component.
+    * @param fn the coroutine to start.
+    * @return the coroutine object. */
+  startCoroutine (fn :Iterator<void>) :Coroutine
+
+  /** Optional wake function. */
+  readonly awake? :() => void
+
+  /** Optional update function. */
+  readonly update? :(clock :Clock) => void
+
+  /** Optional function to call if the transform changed. */
+  readonly onTransformChanged? :() => void
 }
+
+/** Represents a coroutine running on a component. */
+export interface Coroutine extends Disposable {}
 
 /** Represents a game object transform. */
 export interface Transform extends Component {

@@ -1,28 +1,49 @@
+import {Clock} from "../../core/clock"
 import {mat4, quat, vec3} from "../../core/math"
-import {getValue} from "../../core/util"
+import {Mutable, Value} from "../../core/react"
+import {Disposer, getValue} from "../../core/util"
 import {
-  Component, Cube, Cylinder, GameEngine, GameObject, Mesh,
+  Component, Coroutine, Cube, Cylinder, GameEngine, GameObject, Mesh,
   MeshFilter, PrimitiveType, Quad, Sphere, Transform,
 } from "../game"
+import {RenderEngine} from "../render"
+
+interface Updatable { update (clock :Clock) :void }
+interface Wakeable { awake () :void }
 
 /** An implementation of the GameEngine interface in TypeScript. */
 export class TypeScriptGameEngine implements GameEngine {
+  readonly dirtyTransforms = new Set<TypeScriptTransform>()
+  readonly updatables = new Set<Updatable>()
+
+  _renderEngine? :RenderEngine
+
+  get renderEngine () :RenderEngine {
+    if (!this._renderEngine) throw new Error("Missing render engine")
+    return this._renderEngine
+  }
 
   createPrimitive (type :PrimitiveType) :GameObject {
-    const gameObject = this.createGameObject(type)
-    const meshFilter = gameObject.addComponent<MeshFilter>("meshFilter")
+    const gameObject = this.createGameObject(type, ["meshFilter", "meshRenderer"])
+    const meshFilter = gameObject.getComponent<MeshFilter>("meshFilter")
     switch (type) {
       case "sphere": meshFilter.mesh = new TypeScriptSphere() ; break
       case "cylinder": meshFilter.mesh = new TypeScriptCylinder() ; break
       case "cube": meshFilter.mesh = new TypeScriptCube() ; break
       case "quad": meshFilter.mesh = new TypeScriptQuad() ; break
     }
-    gameObject.createComponent("meshRenderer")
     return gameObject
   }
 
-  createGameObject (name? :string) :GameObject {
-    return new TypeScriptGameObject(getValue(name, "object"))
+  createGameObject (name? :string, components? :string[]) :GameObject {
+    return new TypeScriptGameObject(this, getValue(name, "object"), components || [])
+  }
+
+  update (clock :Clock) :void {
+    for (const updatable of this.updatables) updatable.update(clock)
+    for (const transform of this.dirtyTransforms) transform._validateGlobal()
+    this.dirtyTransforms.clear()
+    this.renderEngine.update()
   }
 
   dispose () {
@@ -44,21 +65,50 @@ export function registerComponentType (type :string, constructor :ComponentConst
   componentConstructors.set(type, constructor)
 }
 
-class TypeScriptGameObject implements GameObject {
+export class TypeScriptGameObject implements GameObject {
   readonly transform :Transform
 
-  constructor (public name :string) {
+  private readonly _componentValues = new Map<string, Mutable<Component|undefined>>()
+
+  constructor (public gameEngine :TypeScriptGameEngine, public name :string, components :string[]) {
     this.transform = this.addComponent("transform")
+    for (const type of components) this.addComponent(type, false)
+    this.sendMessage("awake")
   }
 
-  addComponent<T extends Component> (type :string) :T {
+  addComponent<T extends Component> (type :string, wake = true) :T {
     const Constructor = componentConstructors.get(type)
     if (!Constructor) throw new Error(`Unknown component type "${type}"`)
-    return new Constructor(this, type) as T
+    const component = new Constructor(this, type) as T
+    if (wake) {
+      const wakeable = component as unknown as Wakeable
+      if (wakeable.awake) wakeable.awake()
+    }
+    return component
   }
 
   getComponent<T extends Component> (type :string) :T {
     return this[type] as T
+  }
+
+  getComponentValue<T extends Component> (type :string) :Value<T|undefined> {
+    let value = this._componentValues.get(type)
+    if (!value) this._componentValues.set(type, value = Mutable.local(this[type]))
+    return value as Value<T|undefined>
+  }
+
+  hasMessageHandler (message :string) :boolean {
+    for (const key in this) {
+      if (this[key][message]) return true
+    }
+    return false
+  }
+
+  sendMessage (message :string) :void {
+    for (const key in this) {
+      const component = this[key]
+      if (component[message]) component[message]()
+    }
   }
 
   dispose () {
@@ -67,19 +117,75 @@ class TypeScriptGameObject implements GameObject {
       if (value instanceof TypeScriptComponent) value.dispose()
     }
   }
+
+  _setComponent (type :string, component :Component) {
+    const value = this._componentValues.get(type)
+    if (value) value.update(component)
+    if (type === "transform") return // transform is handled as a special case
+    Object.defineProperty(this, type, {configurable: true, enumerable: true, value: component})
+  }
+
+  _deleteComponent (type :string) {
+    delete this[type]
+    const value = this._componentValues.get(type)
+    if (value) value.update(undefined)
+  }
 }
 
 export class TypeScriptComponent implements Component {
+  protected readonly _disposer = new Disposer()
+  private readonly _coroutines :Coroutine[] = []
+
+  get transform () :Transform { return this.gameObject.transform }
 
   constructor (readonly gameObject :TypeScriptGameObject, readonly type :string) {
-    if (type !== "transform") {
-      // transform is handled as a special case
-      Object.defineProperty(gameObject, type, {configurable: true, enumerable: true, value: this})
-    }
+    gameObject._setComponent(type, this)
+    const updatable = this as unknown as Updatable
+    if (updatable.update) gameObject.gameEngine.updatables.add(updatable)
+  }
+
+  sendMessage (message :string) :void {
+    this.gameObject.sendMessage(message)
+  }
+
+  startCoroutine (fn :Iterator<void>) :Coroutine {
+    return new TypeScriptCoroutine(this, fn)
   }
 
   dispose () {
-    delete this.gameObject[this.type]
+    this._disposer.dispose()
+    this.gameObject._deleteComponent(this.type)
+    for (const coroutine of this._coroutines) coroutine.dispose()
+    const updatable = this as unknown as Updatable
+    if (updatable.update) this.gameObject.gameEngine.updatables.delete(updatable)
+  }
+
+  _addCoroutine (coroutine :TypeScriptCoroutine) {
+    this._coroutines.push(coroutine)
+    this.gameObject.gameEngine.updatables.add(coroutine)
+  }
+
+  _removeCoroutine (coroutine :TypeScriptCoroutine) {
+    this._coroutines.splice(this._coroutines.indexOf(coroutine), 1)
+    this.gameObject.gameEngine.updatables.delete(coroutine)
+  }
+}
+
+export class TypeScriptCoroutine implements Coroutine {
+
+  constructor (
+    private readonly _component :TypeScriptComponent,
+    private readonly _fn :Iterator<void>,
+  ) {
+    this._component._addCoroutine(this)
+  }
+
+  update () {
+    if (this._fn.next().done) this.dispose()
+  }
+
+  dispose () {
+    this._component._removeCoroutine(this)
   }
 }
 
@@ -112,7 +218,6 @@ class TypeScriptTransform extends TypeScriptComponent implements Transform {
 
     const makeLocalProxy = (target :any) => new Proxy(target, {
       set: (obj, prop, value) => {
-        this._validateLocal()
         obj[prop] = value
         this._invalidateGlobal()
         return true
@@ -128,7 +233,6 @@ class TypeScriptTransform extends TypeScriptComponent implements Transform {
 
     const makeGlobalProxy = (target :any) => new Proxy(target, {
       set: (obj, prop, value) => {
-        this._validateGlobal()
         obj[prop] = value
         this._invalidateLocal()
         return true
@@ -164,7 +268,7 @@ class TypeScriptTransform extends TypeScriptComponent implements Transform {
     this._maybeRemoveFromParent()
     this._parent = parent as TypeScriptTransform|undefined
     if (this._parent) this._parent._children.push(this)
-    if (worldPositionStays) this._localValid = false
+    if (worldPositionStays) this._invalidateLocal()
     else this._invalidateGlobal()
   }
 
@@ -192,6 +296,7 @@ class TypeScriptTransform extends TypeScriptComponent implements Transform {
   dispose () {
     super.dispose()
     this._maybeRemoveFromParent()
+    this.gameObject.gameEngine.dirtyTransforms.delete(this)
   }
 
   private _maybeRemoveFromParent () {
@@ -200,14 +305,19 @@ class TypeScriptTransform extends TypeScriptComponent implements Transform {
 
   private _invalidateLocal () {
     this._localValid = false
-    this._invalidateChildGlobals()
+    this._invalidateGlobal()
   }
 
   private _validateLocal () {
     if (this._localValid) return
     this._localValid = true
     // compute local transform from global and parent global
-    mat4.copy(worldMatrix, this.localToWorldMatrix)
+    mat4.fromRotationTranslationScale(
+      worldMatrix,
+      this._rotationTarget,
+      this._positionTarget,
+      this._lossyScaleTarget,
+    )
     if (this._parent) {
       mat4.invert(parentInverseMatrix, this._parent.localToWorldMatrix)
       mat4.multiply(worldMatrix, parentInverseMatrix, worldMatrix)
@@ -220,6 +330,9 @@ class TypeScriptTransform extends TypeScriptComponent implements Transform {
   private _invalidateGlobal () {
     if (!this._globalValid) return
     this._globalValid = false
+    if (this.gameObject.hasMessageHandler("onTransformChanged")) {
+      this.gameObject.gameEngine.dirtyTransforms.add(this)
+    }
     this._invalidateChildGlobals()
   }
 
@@ -227,7 +340,7 @@ class TypeScriptTransform extends TypeScriptComponent implements Transform {
     for (const child of this._children) child._invalidateGlobal()
   }
 
-  private _validateGlobal () {
+  _validateGlobal () {
     if (this._globalValid) return
     this._globalValid = true
     // compute global transform from local and parent global
@@ -247,28 +360,27 @@ class TypeScriptTransform extends TypeScriptComponent implements Transform {
     mat4.getTranslation(this._positionTarget, this._localToWorldMatrixTarget)
     mat4.getRotation(this._rotationTarget, this._localToWorldMatrixTarget)
     mat4.getScaling(this._lossyScaleTarget, this._localToWorldMatrixTarget)
+    this.sendMessage("onTransformChanged")
   }
 }
 registerComponentType("transform", TypeScriptTransform)
 
-class TypeScriptMeshFilter extends TypeScriptComponent implements MeshFilter {
-  private _mesh? :TypeScriptMesh
+export class TypeScriptMeshFilter extends TypeScriptComponent implements MeshFilter {
+  meshValue = Mutable.local<TypeScriptMesh|undefined>(undefined)
 
-  get mesh () :Mesh|undefined { return this._mesh }
-  set mesh (mesh :Mesh|undefined) {
-    this._mesh = mesh as TypeScriptMesh
-  }
+  get mesh () :Mesh|undefined { return this.meshValue.current }
+  set mesh (mesh :Mesh|undefined) { this.meshValue.update(mesh as TypeScriptMesh) }
 }
 registerComponentType("meshFilter", TypeScriptMeshFilter)
 
-class TypeScriptMesh implements Mesh {
+export class TypeScriptMesh implements Mesh {
   dispose () {}
 }
 
-class TypeScriptSphere extends TypeScriptMesh implements Sphere {}
+export class TypeScriptSphere extends TypeScriptMesh implements Sphere {}
 
-class TypeScriptCylinder extends TypeScriptMesh implements Cylinder {}
+export class TypeScriptCylinder extends TypeScriptMesh implements Cylinder {}
 
-class TypeScriptCube extends TypeScriptMesh implements Cube {}
+export class TypeScriptCube extends TypeScriptMesh implements Cube {}
 
-class TypeScriptQuad extends TypeScriptMesh implements Quad {}
+export class TypeScriptQuad extends TypeScriptMesh implements Quad {}
