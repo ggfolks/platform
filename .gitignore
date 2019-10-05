@@ -11,6 +11,7 @@ lib/graph
 lib/input
 lib/node_modules
 lib/physics3
+lib/rpc
 lib/scene2
 lib/scene3
 lib/space
