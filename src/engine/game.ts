@@ -25,6 +25,9 @@ export interface GameEngine extends Disposable {
   update (clock :Clock) :void
 }
 
+/** Time is just a global reference. */
+export const Time = {deltaTime: 0}
+
 /** Represents an object in the game hierarchy. */
 export interface GameObject extends Disposable {
 
@@ -72,7 +75,7 @@ export interface Component extends Disposable {
   /** Starts a coroutine on this component.
     * @param fn the coroutine to start.
     * @return the coroutine object. */
-  startCoroutine (fn :Iterator<void>) :Coroutine
+  startCoroutine (fn :() => Iterator<void>) :Coroutine
 
   /** Optional wake function. */
   readonly awake? :() => void

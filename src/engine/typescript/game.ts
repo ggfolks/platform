@@ -4,7 +4,7 @@ import {Mutable, Value} from "../../core/react"
 import {Disposer, getValue} from "../../core/util"
 import {
   Component, Coroutine, Cube, Cylinder, GameEngine, GameObject, Mesh,
-  MeshFilter, PrimitiveType, Quad, Sphere, Transform,
+  MeshFilter, PrimitiveType, Quad, Sphere, Time, Transform,
 } from "../game"
 import {RenderEngine} from "../render"
 
@@ -40,6 +40,7 @@ export class TypeScriptGameEngine implements GameEngine {
   }
 
   update (clock :Clock) :void {
+    Time.deltaTime = clock.dt
     for (const updatable of this.updatables) updatable.update(clock)
     for (const transform of this.dirtyTransforms) transform._validateGlobal()
     this.dirtyTransforms.clear()
@@ -148,8 +149,8 @@ export class TypeScriptComponent implements Component {
     this.gameObject.sendMessage(message)
   }
 
-  startCoroutine (fn :Iterator<void>) :Coroutine {
-    return new TypeScriptCoroutine(this, fn)
+  startCoroutine (fn :() => Iterator<void>) :Coroutine {
+    return new TypeScriptCoroutine(this, fn())
   }
 
   dispose () {
