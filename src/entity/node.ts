@@ -1,4 +1,5 @@
 import {Value} from "../core/react"
+import {log} from "../core/util"
 import {Graph} from "../graph/graph"
 import {inputEdge, outputEdge, property} from "../graph/meta"
 import {Node, NodeConfig, NodeContext, NodeTypeRegistry} from "../graph/node"
@@ -48,6 +49,11 @@ export class EntityComponentNode<T extends Component<any>> extends EntityNode {
     const ctx = this.graph.ctx as EntityNodeContext
     let id = this.config.component
     if (id === undefined) id = this.propertiesMeta.require("component").defaultValue
+    const entityId = this._entityId
+    const config = ctx.domain.entityConfig(entityId)
+    if (config && !config.components[id]) {
+      log.warn("Missing component for entity", "entityId", entityId, "component", id)
+    }
     return ctx.domain.components[id] as T|undefined
   }
 }
