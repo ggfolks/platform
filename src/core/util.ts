@@ -227,3 +227,27 @@ export function toLimitedString (value :any, maxLength = 30) {
   const string = String(value)
   return string.length > maxLength ? string.substring(0, maxLength - 3) + "..." : string
 }
+
+/** Type for easing functions. */
+export type EaseFn = (proportion :number) => number
+
+/** An easing function that simply returns the proportion unchanged. */
+export function easeLinear (proportion :number) {
+  return proportion
+}
+
+/** An easing function that starts at zero velocity and accelerates, stopping suddenly. */
+export function easeIn (proportion :number) {
+  return proportion * proportion
+}
+
+/** An easing function that starts with a velocity and decelerates to a stop. */
+export function easeOut (proportion :number) {
+  return proportion * (2 - proportion)
+}
+
+/** An easing function that starts at zero velocity, accelerates until the midpoint, then
+  * decelerates to a stop at the end. */
+export function easeInAndOut (proportion :number) {
+  return proportion * proportion * (3 - 2 * proportion)
+}
