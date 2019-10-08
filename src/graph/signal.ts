@@ -6,6 +6,7 @@ import {InputEdge, Node, NodeConfig, NodeTypeRegistry} from "./node"
 
 /** Interface for wave generator configs. */
 interface WaveConfig extends NodeConfig {
+  dutyCycle :InputEdge<number>
   frequency :InputEdge<number>
   amplitude :InputEdge<number>
 }
@@ -19,12 +20,34 @@ abstract class Wave extends Node {
   }
 
   protected _createOutput () {
+    const dutyCycle = this.graph.getValue(this.config.dutyCycle, 0.5)
     const frequency = this.graph.getValue(this.config.frequency, 1)
     const amplitude = this.graph.getValue(this.config.amplitude, 1)
+    const twoPi = Math.PI * 2
     return this.graph.clock.fold(
       0,
       (value, clock) => {
-        this._phase += clock.dt * frequency.current * Math.PI * 2
+        const onSpeed = frequency.current * Math.PI / dutyCycle.current
+        const offSpeed = frequency.current * Math.PI / (1 - dutyCycle.current)
+        for (let timeRemaining = clock.dt; timeRemaining > 0; ) {
+          let timeToSwitch :number
+          if (this._phase < Math.PI) { // on
+            timeToSwitch = (Math.PI - this._phase) / onSpeed
+            if (timeRemaining < timeToSwitch) {
+              this._phase += timeRemaining * onSpeed
+              break
+            }
+            this._phase = Math.PI
+          } else { // off
+            timeToSwitch = (twoPi - this._phase) / offSpeed
+            if (timeRemaining < timeToSwitch) {
+              this._phase += timeRemaining * offSpeed
+              break
+            }
+            this._phase = 0
+          }
+          timeRemaining -= timeToSwitch
+        }
         return amplitude.current * this._getValue(this._phase)
       },
     )
@@ -36,6 +59,7 @@ abstract class Wave extends Node {
 /** Generates a sine wave, preserves phase over varying frequency. */
 abstract class SineConfig implements WaveConfig {
   type = "sine"
+  @inputEdge("number") dutyCycle = undefined
   @inputEdge("number") frequency = undefined
   @inputEdge("number") amplitude = undefined
   @outputEdge("number") output = undefined
@@ -55,6 +79,7 @@ class Sine extends Wave {
 /** Generates a square wave, preserves phase over varying frequency. */
 abstract class SquareConfig implements WaveConfig {
   type = "square"
+  @inputEdge("number") dutyCycle = undefined
   @inputEdge("number") frequency = undefined
   @inputEdge("number") amplitude = undefined
   @outputEdge("number") output = undefined
@@ -67,13 +92,14 @@ class Square extends Wave {
   }
 
   protected _getValue (phase :number) {
-    return (phase % (Math.PI * 2)) < Math.PI ? 1 : -1
+    return phase < Math.PI ? 1 : -1
   }
 }
 
 /** Generates a square wave, preserves phase over varying frequency. */
 abstract class TriangleConfig implements WaveConfig {
   type = "triangle"
+  @inputEdge("number") dutyCycle = undefined
   @inputEdge("number") frequency = undefined
   @inputEdge("number") amplitude = undefined
   @outputEdge("number") output = undefined
@@ -86,7 +112,7 @@ class Triangle extends Wave {
   }
 
   protected _getValue (phase :number) {
-    const remainder = phase % (Math.PI * 2) / (Math.PI * 0.5)
+    const remainder = phase / (Math.PI * 0.5)
     if (remainder <= 1) return remainder
     if (remainder <= 3) return 2 - remainder
     return remainder - 4
@@ -97,6 +123,7 @@ class Triangle extends Wave {
 abstract class SawtoothConfig implements WaveConfig {
   type = "sawtooth"
   @property() reversed = false
+  @inputEdge("number") dutyCycle = undefined
   @inputEdge("number") frequency = undefined
   @inputEdge("number") amplitude = undefined
   @outputEdge("number") output = undefined
@@ -109,7 +136,7 @@ class Sawtooth extends Wave {
   }
 
   protected _getValue (phase :number) {
-    let remainder = phase % (Math.PI * 2) / Math.PI
+    let remainder = phase / Math.PI
     if (this.config.reversed) remainder = 2 - remainder
     return (remainder < 1) ? remainder : remainder - 2
   }
