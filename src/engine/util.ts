@@ -4,7 +4,7 @@ import {Component, Time, Transform} from "./game"
 
 /** A coroutine that moves a transform over time from its current position to a new one.
   * @param transform the transform to modify.
-  * @param position the new position (in world space).
+  * @param position the new position (in local space).
   * @param duration the duration, in seconds, over which to move.
   * @param [easing=easeLinear] the type of easing to use. */
 export function* moveTo (
@@ -13,12 +13,12 @@ export function* moveTo (
   duration :number,
   ease :EaseFn = easeLinear,
 ) {
-  yield* animateTo(transform, "position", position, duration, ease)
+  yield* animateTo(transform, "localPosition", position, duration, ease)
 }
 
 /** A coroutine that rotates a transform over time from its current orientation to a new one.
   * @param transform the transform to modify.
-  * @param rotation the new rotation (in world space).
+  * @param rotation the new rotation (in local space).
   * @param duration the duration, in seconds, over which to rotate.
   * @param [ease=easeLinear] the type of easing to use. */
 export function* rotateTo (
@@ -27,7 +27,7 @@ export function* rotateTo (
   duration :number,
   ease :EaseFn = easeLinear,
 ) {
-  yield* animateTo(transform, "rotation", rotation, duration, ease)
+  yield* animateTo(transform, "localRotation", rotation, duration, ease)
 }
 
 /** A coroutine that resizes a transform over time from its current scale to a new one.
@@ -71,7 +71,7 @@ export function* animateTo (
   duration :number,
   ease :EaseFn = easeLinear,
 ) {
-  const startValue = component[name]
+  const startValue = copy(component[name])
   const interpolate = getInterpolateFn(value)
   let elapsed = 0
   do {
@@ -83,6 +83,17 @@ export function* animateTo (
 
 const tmpq = quat.create()
 const tmpv = vec3.create()
+
+function copy (value :any) {
+  if (typeof value === "number") return value
+  if (value instanceof Float32Array) {
+    // new Float32Array(value) and Float32Array.from(value) fail if value is a proxy
+    const copiedValue = new Float32Array(value.length)
+    for (let ii = 0; ii < value.length; ii++) copiedValue[ii] = value[ii]
+    return copiedValue
+  }
+  throw new Error(`Don't know how to copy value "${value}"`)
+}
 
 function getInterpolateFn (value :any) :(start :any, end :any, proportion :number) => any {
   if (typeof value === "number") {
