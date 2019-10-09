@@ -35,13 +35,27 @@ export function* rotateTo (
   * @param rotation the new scale (in local space).
   * @param duration the duration, in seconds, over which to scale.
   * @param [ease=easeLinear] the type of easing to use. */
+export function* uniformScaleTo (
+  transform :Transform,
+  scale :number,
+  duration :number,
+  ease :EaseFn = easeLinear,
+) {
+  yield* scaleTo(transform, vec3.fromValues(scale, scale, scale), duration, ease)
+}
+
+/** A coroutine that resizes a transform over time from its current scale to a new one.
+  * @param transform the transform to modify.
+  * @param rotation the new scale (in local space).
+  * @param duration the duration, in seconds, over which to scale.
+  * @param [ease=easeLinear] the type of easing to use. */
 export function* scaleTo (
   transform :Transform,
   scale :vec3,
   duration :number,
   ease :EaseFn = easeLinear,
 ) {
-  yield* animateTo(transform, "scale", scale, duration, ease)
+  yield* animateTo(transform, "localScale", scale, duration, ease)
 }
 
 /** A coroutine that animations a property over time from its current value to a target value.
@@ -104,9 +118,8 @@ export function* waitWhile (condition :() => boolean) {
 }
 
 /** A coroutine that waits for all the coroutines passed as arguments to complete.
-  * @param fns the coroutines to wait for. */
-export function* waitForAll (...fns :Array<() => Generator<any>>) {
-  const generators = fns.map(fn => fn())
+  * @param generators the coroutines to wait for. */
+export function* waitForAll (...generators :Generator<void>[]) {
   while (true) {
     let allDone = true
     for (const generator of generators) {

@@ -149,7 +149,7 @@ export class TypeScriptComponent implements Component {
     this.gameObject.sendMessage(message)
   }
 
-  startCoroutine (fn :() => Generator<any>) :Coroutine {
+  startCoroutine (fn :() => Generator<void>) :Coroutine {
     return new TypeScriptCoroutine(this, fn())
   }
 
@@ -176,7 +176,7 @@ export class TypeScriptCoroutine implements Coroutine {
 
   constructor (
     private readonly _component :TypeScriptComponent,
-    private readonly _fn :Generator<any>,
+    private readonly _fn :Generator<void>,
   ) {
     this._component._addCoroutine(this)
   }

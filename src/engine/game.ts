@@ -75,7 +75,7 @@ export interface Component extends Disposable {
   /** Starts a coroutine on this component.
     * @param fn the coroutine to start.
     * @return the coroutine object. */
-  startCoroutine (fn :() => Generator<any>) :Coroutine
+  startCoroutine (fn :() => Generator<void>) :Coroutine
 
   /** Optional wake function. */
   readonly awake? :() => void
