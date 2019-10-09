@@ -1,13 +1,15 @@
 import {
-  BoxBufferGeometry, BufferGeometry, CylinderBufferGeometry, DirectionalLight, Mesh,
-  MeshBasicMaterial, Object3D, PerspectiveCamera, PlaneBufferGeometry, Scene,
-  SphereBufferGeometry, WebGLRenderer,
+  AmbientLight, BoxBufferGeometry, BufferGeometry, CylinderBufferGeometry, DirectionalLight,
+  Light as LightObject, Mesh, MeshBasicMaterial, MeshStandardMaterial, Object3D, PerspectiveCamera,
+  PlaneBufferGeometry, Scene, SphereBufferGeometry, WebGLRenderer,
 } from "three"
 import {Color} from "../../../core/color"
 import {Value} from "../../../core/react"
 import {Disposer} from "../../../core/util"
 import {windowSize} from "../../../scene2/gl"
-import {Camera, Light, Material, MeshRenderer, RenderEngine} from "../../render"
+import {
+  Camera, Light, LightType, Material, MaterialType, MeshRenderer, RenderEngine,
+} from "../../render"
 import {
   TypeScriptComponent, TypeScriptCube, TypeScriptCylinder, TypeScriptGameEngine,
   TypeScriptGameObject, TypeScriptMesh, TypeScriptMeshFilter, TypeScriptQuad, TypeScriptSphere,
@@ -68,16 +70,26 @@ export class ThreeRenderEngine implements RenderEngine {
   }
 }
 
+type MaterialObject = MeshBasicMaterial | MeshStandardMaterial
+
 class ThreeMaterial implements Material {
+  private _type :MaterialType = "basic"
   private _color :Color
-  _basicMaterial = new MeshBasicMaterial()
+  private _materialObject :MaterialObject = new MeshBasicMaterial()
+
+  get type () :MaterialType { return this._type }
+  set type (type :MaterialType) {
+    if (type === this._type) return
+    this._type = type
+    this._updateType()
+  }
 
   get color () :Color { return this._color }
   set color (color :Color) { Color.copy(this._color, color) }
 
-  get threeMaterial () { return this._basicMaterial }
+  get object () { return this._materialObject }
 
-  constructor () {
+  constructor (public _meshRenderer? :ThreeMeshRenderer) {
     this._color = new Proxy(Color.fromRGB(1, 1, 1), {
       set: (obj, prop, value) => {
         obj[prop] = value
@@ -91,12 +103,21 @@ class ThreeMaterial implements Material {
   }
 
   dispose () {
-    this._basicMaterial.dispose()
+    this._materialObject.dispose()
+  }
+
+  private _updateType () {
+    this._materialObject.dispose()
+    this._materialObject = this._type === "basic"
+      ? new MeshBasicMaterial()
+      : new MeshStandardMaterial()
+    this._updateColor()
+    if (this._meshRenderer) this._meshRenderer._updateMaterials()
   }
 
   private _updateColor () {
-    this._basicMaterial.color.fromArray(this._color, 1)
-    this._basicMaterial.opacity = this._color[0]
+    this._materialObject.color.fromArray(this._color, 1)
+    this._materialObject.opacity = this._color[0]
   }
 }
 
@@ -110,16 +131,28 @@ abstract class ThreeObjectComponent extends TypeScriptComponent {
 
   awake () {
     this.object.matrixAutoUpdate = false
-    this.renderEngine.scene.add(this.object)
+    this._addObject()
   }
 
   onTransformChanged () {
-    this.object.matrixWorld.fromArray(this.transform.localToWorldMatrix)
+    this._updateTransform()
   }
 
   dispose () {
     super.dispose()
+    this._removeObject()
+  }
+
+  protected _removeObject () {
     this.renderEngine.scene.remove(this.object)
+  }
+
+  protected _addObject () {
+    this.renderEngine.scene.add(this.object)
+  }
+
+  protected _updateTransform () {
+    this.object.matrixWorld.fromArray(this.transform.localToWorldMatrix)
   }
 }
 
@@ -153,8 +186,9 @@ class ThreeMeshRenderer extends ThreeObjectComponent implements MeshRenderer {
   constructor (gameObject :TypeScriptGameObject, type :string) {
     super(gameObject, type)
 
-    this._materials = new Proxy([new ThreeMaterial()], {
+    this._materials = new Proxy([new ThreeMaterial(this)], {
       set: (obj, prop, value) => {
+        if (value instanceof ThreeMaterial) value._meshRenderer = this
         obj[prop] = value
         this._updateMaterials()
         return true
@@ -187,10 +221,10 @@ class ThreeMeshRenderer extends ThreeObjectComponent implements MeshRenderer {
 
   get object () :Object3D { return this._mesh }
 
-  private _updateMaterials () {
+  _updateMaterials () {
     this._mesh.material = this._materials.length === 1
-      ? this._materials[0].threeMaterial
-      : this._materials.map(mat => mat.threeMaterial)
+      ? this._materials[0].object
+      : this._materials.map(mat => mat.object)
   }
 }
 registerComponentType("meshRenderer", ThreeMeshRenderer)
@@ -234,8 +268,47 @@ class ThreeCamera extends ThreeObjectComponent implements Camera {
 registerComponentType("camera", ThreeCamera)
 
 class ThreeLight extends ThreeObjectComponent implements Light {
-  private _directionalLight = new DirectionalLight()
+  private _lightType :LightType = "ambient"
+  private _color :Color
+  private _lightObject :LightObject = new AmbientLight()
 
-  get object () :Object3D { return this._directionalLight }
+  get lightType () :LightType { return this._lightType }
+  set lightType (type :LightType) {
+    if (type === this._lightType) return
+    this._lightType = type
+    this._updateLightType()
+  }
+
+  get color () :Color { return this._color }
+  set color (color :Color) { Color.copy(this._color, color) }
+
+  get object () :Object3D { return this._lightObject }
+
+  constructor (gameObject :TypeScriptGameObject, type :string) {
+    super(gameObject, type)
+
+    this._color = new Proxy(Color.fromRGB(1, 1, 1), {
+      set: (obj, prop, value) => {
+        obj[prop] = value
+        this._updateColor()
+        return true
+      },
+      get: (obj, prop) => {
+        return obj[prop]
+      },
+    })
+  }
+
+  private _updateLightType () {
+    this._removeObject()
+    this._lightObject = this._lightType === "ambient" ? new AmbientLight() : new DirectionalLight()
+    this._updateColor()
+    this._updateTransform()
+    this._addObject()
+  }
+
+  private _updateColor () {
+    this._lightObject.color.fromArray(this._color, 1)
+  }
 }
 registerComponentType("light", ThreeLight)

@@ -23,8 +23,14 @@ export interface MeshRenderer extends Component {
   materials :Material[]
 }
 
+/** The available material types. */
+export type MaterialType = "basic" | "standard"
+
 /** Represents a single material. */
 export interface Material extends Disposable {
+
+  /** The material type. */
+  type :MaterialType
 
   /** The material color. */
   color :Color
@@ -40,7 +46,15 @@ export interface Camera extends Component {
   fieldOfView :number
 }
 
+/** The available light types. */
+export type LightType = "ambient" | "directional"
+
 /** Represents a light attached to a game object. */
 export interface Light extends Component {
-  
+
+  /** The light type. */
+  lightType :LightType
+
+  /** The light color. */
+  color :Color
 }
