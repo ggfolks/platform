@@ -1,11 +1,15 @@
 import {clamp} from "./math"
 
-/** Represents a color as a set of ARGB channels.
-  * Colors are really just Float32Arrays, for performance. */
-export abstract class Color extends Float32Array {
+/** Represents a color as a set of ARGB channels. We extend Float32Array so that we can distinguish
+  * between colors and quaternions (both four-element arrays). */
+export class Color extends Float32Array {
+
+  private constructor () {
+    super(4)
+  }
 
   /** Creates a color instance with all channels initialized to `0`. */
-  static create () :Color { return new Float32Array(4) }
+  static create () :Color { return new Color() }
 
   /** Creates a color from the supplied RGB channels (in `[0, 1]`) and full alpha. */
   static fromRGB (r :number, g :number, b :number) :Color { return Color.fromARGB(1, r, g, b) }
@@ -26,7 +30,10 @@ export abstract class Color extends Float32Array {
   /** Copies color `c` into `into`.
     * @return the supplied color `into`. */
   static copy (into :Color, c :Color) :Color {
-    into.set(c)
+    into[0] = c[0]
+    into[1] = c[1]
+    into[2] = c[2]
+    into[3] = c[3]
     return into
   }
 
@@ -37,6 +44,17 @@ export abstract class Color extends Float32Array {
     into[1] = into[1] * c[1]
     into[2] = into[2] * c[2]
     into[3] = into[3] * c[3]
+    return into
+  }
+
+  /** Linearly interpolates between `a` and `b`, storing the result in `into`.
+    * @return the supplied color `into`. */
+  static lerp (into :Color, a :Color, b :Color, t :number) :Color {
+    const ct = 1 - t
+    into[0] = a[0] * ct + b[0] * t
+    into[1] = a[1] * ct + b[1] * t
+    into[2] = a[2] * ct + b[2] * t
+    into[3] = a[3] * ct + b[3] * t
     return into
   }
 

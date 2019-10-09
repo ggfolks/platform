@@ -1,14 +1,16 @@
 import {
-  BoxBufferGeometry, BufferGeometry, CylinderBufferGeometry, Mesh, Object3D,
-  PerspectiveCamera, PlaneBufferGeometry, Scene, SphereBufferGeometry, WebGLRenderer,
+  BoxBufferGeometry, BufferGeometry, CylinderBufferGeometry, DirectionalLight, Mesh,
+  MeshBasicMaterial, Object3D, PerspectiveCamera, PlaneBufferGeometry, Scene,
+  SphereBufferGeometry, WebGLRenderer,
 } from "three"
+import {Color} from "../../../core/color"
 import {Value} from "../../../core/react"
 import {Disposer} from "../../../core/util"
 import {windowSize} from "../../../scene2/gl"
-import {Camera, MeshRenderer, RenderEngine} from "../../render"
+import {Camera, Light, Material, MeshRenderer, RenderEngine} from "../../render"
 import {
   TypeScriptComponent, TypeScriptCube, TypeScriptCylinder, TypeScriptGameEngine,
-  TypeScriptMesh, TypeScriptMeshFilter, TypeScriptQuad, TypeScriptSphere,
+  TypeScriptGameObject, TypeScriptMesh, TypeScriptMeshFilter, TypeScriptQuad, TypeScriptSphere,
   registerComponentType,
 } from "../game"
 
@@ -50,6 +52,10 @@ export class ThreeRenderEngine implements RenderEngine {
     this.scene.autoUpdate = false
   }
 
+  createMaterial () :Material {
+    return new ThreeMaterial()
+  }
+
   update () {
     this.renderer.render(
       this.scene,
@@ -59,6 +65,38 @@ export class ThreeRenderEngine implements RenderEngine {
 
   dispose () {
     this._disposer.dispose()
+  }
+}
+
+class ThreeMaterial implements Material {
+  private _color :Color
+  _basicMaterial = new MeshBasicMaterial()
+
+  get color () :Color { return this._color }
+  set color (color :Color) { Color.copy(this._color, color) }
+
+  get threeMaterial () { return this._basicMaterial }
+
+  constructor () {
+    this._color = new Proxy(Color.fromRGB(1, 1, 1), {
+      set: (obj, prop, value) => {
+        obj[prop] = value
+        this._updateColor()
+        return true
+      },
+      get: (obj, prop) => {
+        return obj[prop]
+      },
+    })
+  }
+
+  dispose () {
+    this._basicMaterial.dispose()
+  }
+
+  private _updateColor () {
+    this._basicMaterial.color.fromArray(this._color, 1)
+    this._basicMaterial.opacity = this._color[0]
   }
 }
 
@@ -101,6 +139,35 @@ const emptyGeometry = new BufferGeometry()
 
 class ThreeMeshRenderer extends ThreeObjectComponent implements MeshRenderer {
   private _mesh = new Mesh()
+  private _materials :ThreeMaterial[]
+
+  get material () :Material { return this.materials[0] }
+  set material (mat :Material) { this.materials[0] = mat as ThreeMaterial }
+
+  get materials () :Material[] { return this._materials }
+  set materials (mats :Material[]) {
+    this._materials.length = mats.length
+    for (let ii = 0; ii < mats.length; ii++) this._materials[ii] = mats[ii] as ThreeMaterial
+  }
+
+  constructor (gameObject :TypeScriptGameObject, type :string) {
+    super(gameObject, type)
+
+    this._materials = new Proxy([new ThreeMaterial()], {
+      set: (obj, prop, value) => {
+        obj[prop] = value
+        this._updateMaterials()
+        return true
+      },
+      get: (obj, prop) => {
+        return obj[prop]
+      },
+    })
+    this._updateMaterials()
+    this._disposer.add(() => {
+      for (const material of this._materials) material.dispose()
+    })
+  }
 
   awake () {
     super.awake()
@@ -119,6 +186,12 @@ class ThreeMeshRenderer extends ThreeObjectComponent implements MeshRenderer {
   }
 
   get object () :Object3D { return this._mesh }
+
+  private _updateMaterials () {
+    this._mesh.material = this._materials.length === 1
+      ? this._materials[0].threeMaterial
+      : this._materials.map(mat => mat.threeMaterial)
+  }
 }
 registerComponentType("meshRenderer", ThreeMeshRenderer)
 
@@ -159,3 +232,10 @@ class ThreeCamera extends ThreeObjectComponent implements Camera {
   }
 }
 registerComponentType("camera", ThreeCamera)
+
+class ThreeLight extends ThreeObjectComponent implements Light {
+  private _directionalLight = new DirectionalLight()
+
+  get object () :Object3D { return this._directionalLight }
+}
+registerComponentType("light", ThreeLight)

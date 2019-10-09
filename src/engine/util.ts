@@ -1,3 +1,4 @@
+import {Color} from "../core/color"
 import {quat, vec3} from "../core/math"
 import {EaseFn, PMap, easeLinear} from "../core/util"
 import {Time, Transform} from "./game"
@@ -81,9 +82,6 @@ export function* animateTo (
   object[name] = value
 }
 
-const tmpq = quat.create()
-const tmpv = vec3.create()
-
 function copy (value :any) {
   if (typeof value === "number") return value
   if (value instanceof Float32Array) {
@@ -95,9 +93,16 @@ function copy (value :any) {
   throw new Error(`Don't know how to copy value "${value}"`)
 }
 
+const tmpc = Color.create()
+const tmpq = quat.create()
+const tmpv = vec3.create()
+
 function getInterpolateFn (value :any) :(start :any, end :any, proportion :number) => any {
   if (typeof value === "number") {
     return (start, end, proportion) => start + (end - start) * proportion
+  }
+  if (value instanceof Color) {
+    return (start, end, proportion) => Color.lerp(tmpc, start, end, proportion)
   }
   if (value instanceof Float32Array) {
     // for the moment, we just assume slerp for four-vector, lerp for three
