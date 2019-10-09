@@ -17,6 +17,8 @@ export interface StateConfig {
   repetitions? :number
   /** Whether to pause the animation on its last frame when finished (default: false). */
   clampWhenFinished? :boolean
+  /** The time scale for the animation (default: 1). */
+  timeScale? :number
   /** Whether to wait for the animation to complete before transitioning (default: false). */
   finishBeforeTransition? :boolean
   /** Transitions with priorities greater than this value can interrupt the animation even if
@@ -72,6 +74,7 @@ export class AnimationController implements Disposable {
         const action = this._mixer.clipAction(clip)
         action.clampWhenFinished = getValue(config.clampWhenFinished, false)
         action.repetitions = getValue(config.repetitions, Infinity)
+        action.timeScale = getValue(config.timeScale, 1)
         if (config.finishBeforeTransition) {
           const listener = (event :Event) => {
             if (event.action === action) {
