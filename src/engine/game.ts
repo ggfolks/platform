@@ -129,6 +129,9 @@ export interface Transform extends Component {
 
   /** The matrix that transforms from local to world space. */
   readonly localToWorldMatrix :mat4
+
+  /** The matrix that transforms from world to local space. */
+  readonly worldToLocalMatrix :mat4
 }
 
 /** Contains a mesh. */

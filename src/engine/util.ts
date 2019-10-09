@@ -1,6 +1,6 @@
 import {quat, vec3} from "../core/math"
-import {EaseFn, easeLinear} from "../core/util"
-import {Component, Time, Transform} from "./game"
+import {EaseFn, PMap, easeLinear} from "../core/util"
+import {Time, Transform} from "./game"
 
 /** A coroutine that moves a transform over time from its current position to a new one.
   * @param transform the transform to modify.
@@ -59,26 +59,26 @@ export function* scaleTo (
 }
 
 /** A coroutine that animations a property over time from its current value to a target value.
-  * @param component the component to modify.
+  * @param object the object to modify.
   * @param name the name of the property to modify.
   * @param value the new value of the property.
   * @param duration the duration, in seconds, over which to animate the property.
   * @param [ease=easeLinear] the type of easing to use in animating. */
 export function* animateTo (
-  component :Component,
+  object :PMap<any>,
   name :string,
   value :any,
   duration :number,
   ease :EaseFn = easeLinear,
 ) {
-  const startValue = copy(component[name])
+  const startValue = copy(object[name])
   const interpolate = getInterpolateFn(value)
   let elapsed = 0
   do {
     yield
-    component[name] = interpolate(startValue, value, ease(elapsed / duration))
+    object[name] = interpolate(startValue, value, ease(elapsed / duration))
   } while ((elapsed += Time.deltaTime) < duration)
-  component[name] = value
+  object[name] = value
 }
 
 const tmpq = quat.create()
