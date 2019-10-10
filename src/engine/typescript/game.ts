@@ -149,8 +149,11 @@ export class TypeScriptComponent implements Component {
     this.gameObject.sendMessage(message)
   }
 
-  startCoroutine (fn :() => Generator<void>) :Coroutine {
-    return new TypeScriptCoroutine(this, fn())
+  startCoroutine (fnOrGenerator :(() => Generator<void>)|Generator<void>) :Coroutine {
+    return new TypeScriptCoroutine(
+      this,
+      typeof fnOrGenerator === "function" ? fnOrGenerator() : fnOrGenerator,
+    )
   }
 
   dispose () {

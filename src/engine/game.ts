@@ -73,9 +73,9 @@ export interface Component extends Disposable {
   sendMessage (message :string) :void
 
   /** Starts a coroutine on this component.
-    * @param fn the coroutine to start.
+    * @param fnOrGenerator the coroutine to start.
     * @return the coroutine object. */
-  startCoroutine (fn :() => Generator<void>) :Coroutine
+  startCoroutine (fnOrGenerator :(() => Generator<void>)|Generator<void>) :Coroutine
 
   /** Optional wake function. */
   readonly awake? :() => void

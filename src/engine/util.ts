@@ -31,6 +31,23 @@ export function* rotateTo (
   yield* animateTo(transform, "localRotation", rotation, duration, ease)
 }
 
+/** A coroutine that rotates at a fixed angular velocity.
+  * @param transform the transform to modify.
+  * @param velocity the angular velocity (radians/second). */
+export function* spin (transform :Transform, vel :vec3) {
+  while (true) {
+    // https://gamedev.stackexchange.com/questions/108920/applying-angular-velocity-to-quaternion
+    quat.multiply(tmpq, quat.set(tmpq, vel[0], vel[1], vel[2], 0), transform.rotation)
+    const ht = Time.deltaTime * 0.5
+    transform.rotation[0] += ht * tmpq[0]
+    transform.rotation[1] += ht * tmpq[1]
+    transform.rotation[2] += ht * tmpq[2]
+    transform.rotation[3] += ht * tmpq[3]
+    quat.normalize(transform.rotation, transform.rotation)
+    yield
+  }
+}
+
 /** A coroutine that resizes a transform over time from its current scale to a new one.
   * @param transform the transform to modify.
   * @param rotation the new scale (in local space).
