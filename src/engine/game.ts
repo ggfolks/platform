@@ -155,3 +155,10 @@ export interface Cube extends Mesh {}
 
 /** A quad mesh. */
 export interface Quad extends Mesh {}
+
+/** Represents a (GLTF) model loaded from a URL. */
+export interface Model extends Component {
+
+  /** The URL of the model to load. */
+  url? :string
+}

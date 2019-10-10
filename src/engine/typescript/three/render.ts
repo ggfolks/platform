@@ -3,10 +3,13 @@ import {
   Light as LightObject, Mesh, MeshBasicMaterial, MeshStandardMaterial, Object3D, PerspectiveCamera,
   PlaneBufferGeometry, Scene, SphereBufferGeometry, WebGLRenderer,
 } from "three"
+import {SkeletonUtils} from "three/examples/jsm/utils/SkeletonUtils"
 import {Color} from "../../../core/color"
 import {Value} from "../../../core/react"
-import {Disposer} from "../../../core/util"
+import {Disposer, NoopRemover, Remover} from "../../../core/util"
 import {windowSize} from "../../../scene2/gl"
+import {loadGLTF} from "../../../scene3/entity"
+import {Model} from "../../game"
 import {
   Camera, Light, LightType, Material, MaterialType, MeshRenderer, RenderEngine,
 } from "../../render"
@@ -130,7 +133,6 @@ abstract class ThreeObjectComponent extends TypeScriptComponent {
   }
 
   awake () {
-    this.object.matrixAutoUpdate = false
     this._addObject()
   }
 
@@ -148,6 +150,7 @@ abstract class ThreeObjectComponent extends TypeScriptComponent {
   }
 
   protected _addObject () {
+    this.object.matrixAutoUpdate = false
     this.renderEngine.scene.add(this.object)
   }
 
@@ -312,3 +315,41 @@ class ThreeLight extends ThreeObjectComponent implements Light {
   }
 }
 registerComponentType("light", ThreeLight)
+
+class ThreeModel extends ThreeObjectComponent implements Model {
+  private _url? :string
+  private _object = new Object3D()
+  private _urlRemover :Remover = NoopRemover
+
+  get object () :Object3D { return this._object }
+
+  get url () :string|undefined { return this._url }
+  set url (url :string|undefined) {
+    if (this._url === url) return
+    this._url = url
+    this._updateUrl()
+  }
+
+  dispose () {
+    super.dispose()
+    this._urlRemover()
+  }
+
+  private _updateUrl () {
+    this._urlRemover()
+    this._removeObject()
+    if (!this._url) return
+    this._urlRemover = loadGLTF(this._url).onValue(gltf => {
+      this._removeObject()
+      this._object = SkeletonUtils.clone(gltf.scene) as Object3D
+      this._updateTransform()
+      this._addObject()
+    })
+  }
+
+  protected _updateTransform () {
+    super._updateTransform()
+    for (const child of this._object.children) child.updateMatrixWorld(true)
+  }
+}
+registerComponentType("model", ThreeModel)
