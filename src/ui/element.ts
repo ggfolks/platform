@@ -908,7 +908,10 @@ export class Host implements Disposable {
   }
 
   handleMouseEvent (event :MouseEvent) {
-    for (const root of this.roots) root.dispatchMouseEvent(event)
+    for (let ii = this.roots.length - 1; ii >= 0; ii--) {
+      if (event.cancelBubble) return
+      this.roots[ii].dispatchMouseEvent(event)
+    }
   }
   handleKeyEvent (event :KeyboardEvent) {
     // TODO: maintain a notion of which root currently has focus (if any)
