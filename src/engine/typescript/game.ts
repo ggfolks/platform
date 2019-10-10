@@ -1,10 +1,10 @@
 import {Clock} from "../../core/clock"
 import {mat4, quat, vec3} from "../../core/math"
 import {Mutable, Value} from "../../core/react"
-import {Disposer, getValue} from "../../core/util"
+import {Disposer, PMap, getValue} from "../../core/util"
 import {
-  Component, Coroutine, Cube, Cylinder, GameEngine, GameObject, Mesh,
-  MeshFilter, PrimitiveType, Quad, Sphere, Time, Transform,
+  Component, ComponentConfig, Coroutine, Cube, Cylinder, GameEngine, GameObject, GameObjectConfig,
+  Mesh, MeshFilter, PrimitiveType, Quad, Sphere, Time, Transform,
 } from "../game"
 import {RenderEngine} from "../render"
 
@@ -23,20 +23,27 @@ export class TypeScriptGameEngine implements GameEngine {
     return this._renderEngine
   }
 
-  createPrimitive (type :PrimitiveType) :GameObject {
-    const gameObject = this.createGameObject(type, ["meshFilter", "meshRenderer"])
-    const meshFilter = gameObject.getComponent<MeshFilter>("meshFilter")
+  createPrimitive (type :PrimitiveType, materialConfig? :PMap<any>) :GameObject {
+    let mesh :TypeScriptMesh
     switch (type) {
-      case "sphere": meshFilter.mesh = new TypeScriptSphere() ; break
-      case "cylinder": meshFilter.mesh = new TypeScriptCylinder() ; break
-      case "cube": meshFilter.mesh = new TypeScriptCube() ; break
-      case "quad": meshFilter.mesh = new TypeScriptQuad() ; break
+      case "sphere": mesh = new TypeScriptSphere() ; break
+      case "cylinder": mesh = new TypeScriptCylinder() ; break
+      case "cube": mesh = new TypeScriptCube() ; break
+      case "quad": mesh = new TypeScriptQuad() ; break
+      default: throw new Error(`Unknown primitive type "${type}"`)
     }
-    return gameObject
+    return this.createGameObject(type, {
+      meshFilter: {mesh},
+      meshRenderer: {material: materialConfig || {}},
+    })
   }
 
-  createGameObject (name? :string, components? :string[]) :GameObject {
-    return new TypeScriptGameObject(this, getValue(name, "object"), components || [])
+  createGameObjects (configs :PMap<GameObjectConfig>) :void {
+    for (const name in configs) this.createGameObject(name, configs[name])
+  }
+
+  createGameObject (name? :string, config? :GameObjectConfig) :GameObject {
+    return new TypeScriptGameObject(this, getValue(name, "object"), config || {})
   }
 
   update (clock :Clock) :void {
@@ -71,16 +78,28 @@ export class TypeScriptGameObject implements GameObject {
 
   private readonly _componentValues = new Map<string, Mutable<Component|undefined>>()
 
-  constructor (public gameEngine :TypeScriptGameEngine, public name :string, components :string[]) {
-    this.transform = this.addComponent("transform")
-    for (const type of components) this.addComponent(type, false)
+  constructor (
+    public gameEngine :TypeScriptGameEngine,
+    public name :string,
+    config :GameObjectConfig,
+  ) {
+    this.transform = this.addComponent("transform", {}, false)
+    this.addComponents(config, false)
     this.sendMessage("awake")
   }
 
-  addComponent<T extends Component> (type :string, wake = true) :T {
-    const Constructor = componentConstructors.get(type)
-    if (!Constructor) throw new Error(`Unknown component type "${type}"`)
-    const component = new Constructor(this, type) as T
+  addComponents (config :PMap<ComponentConfig>, wake = true) {
+    for (const type in config) this.addComponent(type, config[type], wake)
+  }
+
+  addComponent<T extends Component> (type :string, config :ComponentConfig = {}, wake = true) :T {
+    let component = this[type] as T|undefined
+    if (!component) {
+      const Constructor = componentConstructors.get(type)
+      if (!Constructor) throw new Error(`Unknown component type "${type}"`)
+      component = new Constructor(this, type) as T
+    }
+    applyConfig(component, config)
     if (wake) {
       const wakeable = component as unknown as Wakeable
       if (wakeable.awake) wakeable.awake()
@@ -130,6 +149,20 @@ export class TypeScriptGameObject implements GameObject {
     delete this[type]
     const value = this._componentValues.get(type)
     if (value) value.update(undefined)
+  }
+}
+
+function applyConfig (target :PMap<any>, config :PMap<any>) {
+  for (const key in config) {
+    const value = config[key]
+    const targetValue = target[key]
+    if (
+      typeof value === "object" &&
+      value !== null &&
+      typeof targetValue === "object" &&
+      targetValue !== null
+    ) applyConfig(targetValue, value)
+    else target[key] = value
   }
 }
 

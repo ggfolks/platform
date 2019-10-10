@@ -1,10 +1,16 @@
 import {Clock} from "../core/clock"
 import {mat4, quat, vec3} from "../core/math"
-import {Disposable} from "../core/util"
+import {Disposable, PMap} from "../core/util"
 import {RenderEngine} from "./render"
 
 /** The available primitive types. */
 export type PrimitiveType = "sphere" | "cylinder" | "cube" | "quad"
+
+/** The type used to configure components. */
+export type ComponentConfig = PMap<any>
+
+/** The type used to configure game objects. */
+export type GameObjectConfig = PMap<ComponentConfig>
 
 /** Top-level interface to game engine. */
 export interface GameEngine extends Disposable {
@@ -13,13 +19,18 @@ export interface GameEngine extends Disposable {
   readonly renderEngine :RenderEngine
 
   /** Creates and returns a new game object containing a primitive.
-    * @param type the type of primitive desired. */
-  createPrimitive (type :PrimitiveType) :GameObject
+    * @param type the type of primitive desired.
+    * @param [materialConfig] the configuration of the material to use, if not the default. */
+  createPrimitive (type :PrimitiveType, materialConfig? :PMap<any>) :GameObject
+
+  /** Creates a set of game objects.
+    * @param configs the map from name to config. */
+  createGameObjects (configs :PMap<GameObjectConfig>) :void
 
   /** Creates and returns a new (empty) game object.
     * @param [name] the name of the object.
-    * @param [components] an array of component types to create. */
-  createGameObject (name? :string, components? :string[]) :GameObject
+    * @param [config] the configuration of the object's components. */
+  createGameObject (name? :string, config? :GameObjectConfig) :GameObject
 
   /** Updates the game state. */
   update (clock :Clock) :void
@@ -37,11 +48,16 @@ export interface GameObject extends Disposable {
   /** The game object's transform component. */
   readonly transform :Transform
 
+  /** Adds a set of components to the game object.
+    * @param config the object mapping component types to configurations. */
+  addComponents (config :PMap<ComponentConfig>) :void
+
   /** Adds a component to the game object.  Once the component is added, it will be accessible as
     * `gameObject.componentType`.
     * @param type the type of component to add.
+    * @param [config] optional configuration for the component.
     * @return the newly created component. */
-  addComponent<T extends Component> (type :string) :T
+  addComponent<T extends Component> (type :string, config? :ComponentConfig) :T
 
   /** Gets a typed reference to a component.
     * @param type the type of component desired.
