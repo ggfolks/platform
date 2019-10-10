@@ -1,15 +1,17 @@
 import {
-  AmbientLight, BoxBufferGeometry, BufferGeometry, CylinderBufferGeometry, DirectionalLight,
-  Light as LightObject, Mesh, MeshBasicMaterial, MeshStandardMaterial, Object3D, PerspectiveCamera,
-  PlaneBufferGeometry, Scene, SphereBufferGeometry, WebGLRenderer,
+  AnimationClip, AnimationMixer, AmbientLight, BoxBufferGeometry, BufferGeometry,
+  CylinderBufferGeometry, DirectionalLight, Light as LightObject, Mesh, MeshBasicMaterial,
+  MeshStandardMaterial, Object3D, PerspectiveCamera, PlaneBufferGeometry, Scene,
+  SphereBufferGeometry, WebGLRenderer,
 } from "three"
 import {SkeletonUtils} from "three/examples/jsm/utils/SkeletonUtils"
+import {Clock} from "../../../core/clock"
 import {Color} from "../../../core/color"
-import {Value} from "../../../core/react"
+import {Mutable, Subject, Value, ValueFn} from "../../../core/react"
 import {Disposer, NoopRemover, Remover} from "../../../core/util"
 import {windowSize} from "../../../scene2/gl"
-import {loadGLTF} from "../../../scene3/entity"
-import {Model} from "../../game"
+import {loadGLTF, loadGLTFAnimationClip} from "../../../scene3/entity"
+import {Animation, Model} from "../../game"
 import {
   Camera, Light, LightType, Material, MaterialType, MeshRenderer, RenderEngine,
 } from "../../render"
@@ -125,15 +127,25 @@ class ThreeMaterial implements Material {
 }
 
 abstract class ThreeObjectComponent extends TypeScriptComponent {
-
-  abstract get object () :Object3D
+  readonly objectValue = Mutable.local<Object3D|undefined>(undefined)
 
   get renderEngine () :ThreeRenderEngine {
     return this.gameObject.gameEngine.renderEngine as ThreeRenderEngine
   }
 
-  awake () {
-    this._addObject()
+  constructor (gameObject :TypeScriptGameObject, type :string) {
+    super(gameObject, type)
+    this._disposer.add(this.objectValue.onValue(((
+      object :Object3D|undefined,
+      oldObject :Object3D|undefined,
+    ) => {
+      if (oldObject) this.renderEngine.scene.remove(oldObject)
+      if (object) {
+        object.matrixAutoUpdate = false
+        object.matrixWorld.fromArray(this.transform.localToWorldMatrix)
+        this.renderEngine.scene.add(object)
+      }
+    }) as ValueFn<Object3D|undefined>))
   }
 
   onTransformChanged () {
@@ -141,21 +153,13 @@ abstract class ThreeObjectComponent extends TypeScriptComponent {
   }
 
   dispose () {
+    this.objectValue.update(undefined)
     super.dispose()
-    this._removeObject()
-  }
-
-  protected _removeObject () {
-    this.renderEngine.scene.remove(this.object)
-  }
-
-  protected _addObject () {
-    this.object.matrixAutoUpdate = false
-    this.renderEngine.scene.add(this.object)
   }
 
   protected _updateTransform () {
-    this.object.matrixWorld.fromArray(this.transform.localToWorldMatrix)
+    const object = this.objectValue.current
+    if (object) object.matrixWorld.fromArray(this.transform.localToWorldMatrix)
   }
 }
 
@@ -189,6 +193,7 @@ class ThreeMeshRenderer extends ThreeObjectComponent implements MeshRenderer {
   constructor (gameObject :TypeScriptGameObject, type :string) {
     super(gameObject, type)
 
+    this.objectValue.update(this._mesh)
     this._materials = new Proxy([new ThreeMaterial(this)], {
       set: (obj, prop, value) => {
         if (value instanceof ThreeMaterial) value._meshRenderer = this
@@ -204,10 +209,6 @@ class ThreeMeshRenderer extends ThreeObjectComponent implements MeshRenderer {
     this._disposer.add(() => {
       for (const material of this._materials) material.dispose()
     })
-  }
-
-  awake () {
-    super.awake()
     this._disposer.add(
       this.gameObject
         .getComponentValue<TypeScriptMeshFilter>("meshFilter")
@@ -222,8 +223,6 @@ class ThreeMeshRenderer extends ThreeObjectComponent implements MeshRenderer {
     )
   }
 
-  get object () :Object3D { return this._mesh }
-
   _updateMaterials () {
     this._mesh.material = this._materials.length === 1
       ? this._materials[0].object
@@ -235,7 +234,6 @@ registerComponentType("meshRenderer", ThreeMeshRenderer)
 class ThreeCamera extends ThreeObjectComponent implements Camera {
   private _perspectiveCamera = new PerspectiveCamera()
 
-  get object () :Object3D { return this._perspectiveCamera }
   get camera () :PerspectiveCamera { return this._perspectiveCamera }
 
   get aspect () :number { return this._perspectiveCamera.aspect }
@@ -252,8 +250,9 @@ class ThreeCamera extends ThreeObjectComponent implements Camera {
     this._perspectiveCamera.updateProjectionMatrix()
   }
 
-  awake () {
-    super.awake()
+  constructor (gameObject :TypeScriptGameObject, type :string) {
+    super(gameObject, type)
+    this.objectValue.update(this._perspectiveCamera)
     this.renderEngine.cameras.push(this)
 
     // for now, just use the renderer element aspect
@@ -273,7 +272,7 @@ registerComponentType("camera", ThreeCamera)
 class ThreeLight extends ThreeObjectComponent implements Light {
   private _lightType :LightType = "ambient"
   private _color :Color
-  private _lightObject :LightObject = new AmbientLight()
+  private _lightObject? :LightObject
 
   get lightType () :LightType { return this._lightType }
   set lightType (type :LightType) {
@@ -284,8 +283,6 @@ class ThreeLight extends ThreeObjectComponent implements Light {
 
   get color () :Color { return this._color }
   set color (color :Color) { Color.copy(this._color, color) }
-
-  get object () :Object3D { return this._lightObject }
 
   constructor (gameObject :TypeScriptGameObject, type :string) {
     super(gameObject, type)
@@ -300,28 +297,28 @@ class ThreeLight extends ThreeObjectComponent implements Light {
         return obj[prop]
       },
     })
+    this._updateLightType()
   }
 
   private _updateLightType () {
-    this._removeObject()
-    this._lightObject = this._lightType === "ambient" ? new AmbientLight() : new DirectionalLight()
+    this.objectValue.update(
+      this._lightObject = (this._lightType === "ambient")
+        ? new AmbientLight()
+        : new DirectionalLight()
+    )
     this._updateColor()
     this._updateTransform()
-    this._addObject()
   }
 
   private _updateColor () {
-    this._lightObject.color.fromArray(this._color, 1)
+    this._lightObject!.color.fromArray(this._color, 1)
   }
 }
 registerComponentType("light", ThreeLight)
 
 class ThreeModel extends ThreeObjectComponent implements Model {
   private _url? :string
-  private _object = new Object3D()
   private _urlRemover :Remover = NoopRemover
-
-  get object () :Object3D { return this._object }
 
   get url () :string|undefined { return this._url }
   set url (url :string|undefined) {
@@ -337,19 +334,115 @@ class ThreeModel extends ThreeObjectComponent implements Model {
 
   private _updateUrl () {
     this._urlRemover()
-    this._removeObject()
+    this.objectValue.update(undefined)
     if (!this._url) return
     this._urlRemover = loadGLTF(this._url).onValue(gltf => {
-      this._removeObject()
-      this._object = SkeletonUtils.clone(gltf.scene) as Object3D
-      this._updateTransform()
-      this._addObject()
+      this.objectValue.update(SkeletonUtils.clone(gltf.scene) as Object3D)
     })
   }
 
   protected _updateTransform () {
     super._updateTransform()
-    for (const child of this._object.children) child.updateMatrixWorld(true)
+    const object = this.objectValue.current
+    if (object) updateChildren(object)
   }
 }
 registerComponentType("model", ThreeModel)
+
+class ThreeAnimation extends TypeScriptComponent implements Animation {
+  playAutomatically = true
+
+  private _urls :string[]
+  private _mixerSubject :Subject<AnimationMixer>
+  private _mixer? :AnimationMixer
+  private _clipsByUrl = new Map<string, Subject<AnimationClip>>()
+  private _clipsByName = new Map<string, Subject<AnimationClip>>()
+
+  get url () :string|undefined { return this.urls[0] }
+  set url (url :string|undefined) {
+    if (url === undefined) this._urls.length = 0
+    else this._urls[0] = url
+  }
+
+  get urls () :string[] { return this._urls }
+  set urls (urls :string[]) {
+    this._urls.length = urls.length
+    for (let ii = 0; ii < urls.length; ii++) this._urls[ii] = urls[ii]
+  }
+
+  constructor (gameObject :TypeScriptGameObject, type :string) {
+    super(gameObject, type)
+
+    this._urls = new Proxy([], {
+      set: (obj, prop, value) => {
+        obj[prop] = value
+        this._updateUrls()
+        return true
+      },
+      get: (obj, prop) => {
+        return obj[prop]
+      },
+    })
+
+    this._mixerSubject = Subject.deriveSubject(dispatch => {
+      return this.gameObject
+        .getComponentValue<ThreeModel>("model")
+        .switchMap(
+          model => model ? model.objectValue : Value.constant<Object3D|undefined>(undefined),
+        )
+        .onValue((object :Object3D|undefined) => {
+          if (object) dispatch(new AnimationMixer(object))
+        })
+    })
+    this._disposer.add(this._mixerSubject.onValue(mixer => this._mixer = mixer))
+  }
+
+  awake () {
+    if (this.playAutomatically) this.play()
+  }
+
+  play (name? :string) :void {
+    let clip :Subject<AnimationClip>|undefined
+    if (name !== undefined) clip = this._clipsByName.get(name)
+    else clip = this._clipsByUrl.get(this._urls[0])
+    if (!clip) throw new Error(`Unknown animation clip "${name}"`)
+    Subject.join2(clip, this._mixerSubject).once(([clip, mixer]) => {
+      mixer.clipAction(clip).play()
+    })
+  }
+
+  update (clock :Clock) {
+    if (this._mixer) {
+      this._mixer.update(clock.dt)
+      updateChildren(this._mixer.getRoot())
+    }
+  }
+
+  private _updateUrls () {
+    // remove any clips no longer in the set
+    const urlSet = new Set(this._urls)
+    for (const url of this._clipsByUrl.keys()) {
+      if (!urlSet.has(url)) {
+        this._clipsByUrl.delete(url)
+        this._clipsByName.delete(getAnchor(url))
+      }
+    }
+    // add any new clips
+    for (const url of this._urls) {
+      if (!this._clipsByUrl.has(url)) {
+        const clip = loadGLTFAnimationClip(url)
+        this._clipsByUrl.set(url, clip)
+        this._clipsByName.set(getAnchor(url), clip)
+      }
+    }
+  }
+}
+registerComponentType("animation", ThreeAnimation)
+
+function updateChildren (object :Object3D) {
+  for (const child of object.children) child.updateMatrixWorld(true)
+}
+
+function getAnchor (url :string) {
+  return url.substring(url.lastIndexOf("#") + 1)
+}

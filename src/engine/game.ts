@@ -178,3 +178,20 @@ export interface Model extends Component {
   /** The URL of the model to load. */
   url? :string
 }
+
+/** Represents a set of (GLTF) animations loaded from URLs. */
+export interface Animation extends Component {
+
+  /** The URL of the first animation, if any. */
+  url? :string
+
+  /** The URLs of the animations to load. */
+  urls :string[]
+
+  /** Whether or not to play the animation automatically on startup. */
+  playAutomatically :boolean
+
+  /** Plays an animation
+    * @param [name] the name of the animation to play, if not the default. */
+  play (name? :string) :void
+}
