@@ -237,6 +237,14 @@ const LOSSY_SCALE_INVALID = (1 << 5)
 const LOCAL_TO_WORLD_MATRIX_INVALID = (1 << 6)
 const WORLD_TO_LOCAL_MATRIX_INVALID = (1 << 7)
 
+const LOCAL_INVALID =
+  LOCAL_POSITION_INVALID | LOCAL_ROTATION_INVALID |
+  LOCAL_TO_WORLD_MATRIX_INVALID | WORLD_TO_LOCAL_MATRIX_INVALID
+
+const WORLD_INVALID =
+  POSITION_INVALID | ROTATION_INVALID | LOSSY_SCALE_INVALID |
+  LOCAL_TO_WORLD_MATRIX_INVALID | WORLD_TO_LOCAL_MATRIX_INVALID
+
 class TypeScriptTransform extends TypeScriptComponent implements Transform {
   readonly lossyScale :vec3
   readonly localToWorldMatrix :mat4
@@ -334,17 +342,7 @@ class TypeScriptTransform extends TypeScriptComponent implements Transform {
     this._maybeRemoveFromParent()
     this._parent = parent as TypeScriptTransform|undefined
     if (this._parent) this._parent._children.push(this)
-    if (worldPositionStays) {
-      this._invalidate(
-        LOCAL_POSITION_INVALID | LOCAL_ROTATION_INVALID |
-        LOCAL_TO_WORLD_MATRIX_INVALID | WORLD_TO_LOCAL_MATRIX_INVALID,
-      )
-    } else {
-      this._invalidate(
-        POSITION_INVALID | ROTATION_INVALID | LOSSY_SCALE_INVALID |
-        LOCAL_TO_WORLD_MATRIX_INVALID | WORLD_TO_LOCAL_MATRIX_INVALID,
-      )
-    }
+    this._invalidate(worldPositionStays ? LOCAL_INVALID : WORLD_INVALID)
   }
 
   get childCount () :number { return this._children.length }
@@ -382,30 +380,8 @@ class TypeScriptTransform extends TypeScriptComponent implements Transform {
     const intersection = flags & ~this._invalidFlags
     if (intersection === 0) return
     this._invalidFlags |= flags
-    let childFlags = 0
-    if (intersection & (LOCAL_POSITION_INVALID | POSITION_INVALID)) {
-      childFlags |= POSITION_INVALID | LOCAL_TO_WORLD_MATRIX_INVALID | WORLD_TO_LOCAL_MATRIX_INVALID
-    }
-    if (intersection & (LOCAL_ROTATION_INVALID | ROTATION_INVALID)) {
-      childFlags |=
-        POSITION_INVALID | ROTATION_INVALID | LOSSY_SCALE_INVALID |
-        LOCAL_TO_WORLD_MATRIX_INVALID | WORLD_TO_LOCAL_MATRIX_INVALID
-    }
-    if (intersection & LOCAL_SCALE_INVALID) {
-      childFlags |=
-        POSITION_INVALID | LOSSY_SCALE_INVALID |
-        LOCAL_TO_WORLD_MATRIX_INVALID | WORLD_TO_LOCAL_MATRIX_INVALID
-    }
-    if (intersection & LOCAL_TO_WORLD_MATRIX_INVALID) {
-      childFlags |= LOCAL_TO_WORLD_MATRIX_INVALID | WORLD_TO_LOCAL_MATRIX_INVALID
-    }
-    if (childFlags !== 0) {
-      for (const child of this._children) child._invalidate(childFlags)
-    }
-    if (
-      intersection & LOCAL_TO_WORLD_MATRIX_INVALID &&
-      this.gameObject.hasMessageHandler("onTransformChanged")
-    ) {
+    for (const child of this._children) child._invalidate(WORLD_INVALID)
+    if (this.gameObject.hasMessageHandler("onTransformChanged")) {
       this.gameObject.gameEngine.dirtyTransforms.add(this)
     }
   }
