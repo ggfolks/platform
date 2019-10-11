@@ -7,7 +7,7 @@ import {
 import {SkeletonUtils} from "three/examples/jsm/utils/SkeletonUtils"
 import {Clock} from "../../../core/clock"
 import {Color} from "../../../core/color"
-import {Mutable, Subject, Value, ValueFn} from "../../../core/react"
+import {Mutable, Subject, Value} from "../../../core/react"
 import {Disposer, NoopRemover, Remover} from "../../../core/util"
 import {windowSize} from "../../../scene2/gl"
 import {loadGLTF, loadGLTFAnimationClip} from "../../../scene3/entity"
@@ -135,9 +135,9 @@ abstract class ThreeObjectComponent extends TypeScriptComponent {
 
   constructor (gameObject :TypeScriptGameObject, type :string) {
     super(gameObject, type)
-    this._disposer.add(this.objectValue.onValue(((
-      object :Object3D|undefined,
-      oldObject :Object3D|undefined,
+    this._disposer.add(this.objectValue.onValue((
+      object,
+      oldObject? :Object3D|undefined,
     ) => {
       if (oldObject) this.renderEngine.scene.remove(oldObject)
       if (object) {
@@ -145,7 +145,7 @@ abstract class ThreeObjectComponent extends TypeScriptComponent {
         object.matrixWorld.fromArray(this.transform.localToWorldMatrix)
         this.renderEngine.scene.add(object)
       }
-    }) as ValueFn<Object3D|undefined>))
+    }))
   }
 
   onTransformChanged () {
@@ -390,7 +390,7 @@ class ThreeAnimation extends TypeScriptComponent implements Animation {
         .switchMap(
           model => model ? model.objectValue : Value.constant<Object3D|undefined>(undefined),
         )
-        .onValue((object :Object3D|undefined) => {
+        .onValue(object => {
           if (object) dispatch(new AnimationMixer(object))
         })
     })
