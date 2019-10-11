@@ -1,6 +1,7 @@
 import {Clock} from "../core/clock"
 import {mat4, quat, vec3} from "../core/math"
 import {Disposable, PMap} from "../core/util"
+import {PhysicsEngine} from "./physics"
 import {RenderEngine} from "./render"
 
 /** The available primitive types. */
@@ -18,10 +19,18 @@ export interface GameEngine extends Disposable {
   /** The active render engine. */
   readonly renderEngine :RenderEngine
 
+  /** The active physics engine. */
+  readonly physicsEngine :PhysicsEngine
+
   /** Creates and returns a new game object containing a primitive.
     * @param type the type of primitive desired.
-    * @param [materialConfig] the configuration of the material to use, if not the default. */
-  createPrimitive (type :PrimitiveType, materialConfig? :PMap<any>) :GameObject
+    * @param [materialConfig] the configuration of the material to use, if not the default.
+    * @param [rigidBodyConfig] the configuration of the rigid body component, if desired. */
+  createPrimitive (
+    type :PrimitiveType,
+    materialConfig? :PMap<any>,
+    rigidBodyConfig? :PMap<any>,
+  ) :GameObject
 
   /** Creates a set of game objects.
     * @param configs the map from name to config. */

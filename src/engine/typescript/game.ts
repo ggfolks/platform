@@ -6,6 +6,7 @@ import {
   Component, ComponentConfig, Coroutine, Cube, Cylinder, GameEngine, GameObject, GameObjectConfig,
   Mesh, MeshFilter, PrimitiveType, Quad, Sphere, Time, Transform,
 } from "../game"
+import {PhysicsEngine} from "../physics"
 import {RenderEngine} from "../render"
 
 interface Updatable { update (clock :Clock) :void }
@@ -17,13 +18,23 @@ export class TypeScriptGameEngine implements GameEngine {
   readonly updatables = new Set<Updatable>()
 
   _renderEngine? :RenderEngine
+  _physicsEngine? :PhysicsEngine
 
   get renderEngine () :RenderEngine {
     if (!this._renderEngine) throw new Error("Missing render engine")
     return this._renderEngine
   }
 
-  createPrimitive (type :PrimitiveType, materialConfig? :PMap<any>) :GameObject {
+  get physicsEngine () :PhysicsEngine {
+    if (!this._physicsEngine) throw new Error("Missing physics engine")
+    return this._physicsEngine
+  }
+
+  createPrimitive (
+    type :PrimitiveType,
+    materialConfig? :PMap<any>,
+    rigidBodyConfig? :PMap<any>,
+  ) :GameObject {
     let mesh :TypeScriptMesh
     switch (type) {
       case "sphere": mesh = new TypeScriptSphere() ; break
@@ -35,6 +46,7 @@ export class TypeScriptGameEngine implements GameEngine {
     return this.createGameObject(type, {
       meshFilter: {mesh},
       meshRenderer: {material: materialConfig || {}},
+      ...(rigidBodyConfig ? {rigidBody: rigidBodyConfig} : undefined),
     })
   }
 
@@ -49,9 +61,19 @@ export class TypeScriptGameEngine implements GameEngine {
   update (clock :Clock) :void {
     Time.deltaTime = clock.dt
     for (const updatable of this.updatables) updatable.update(clock)
+    if (this._physicsEngine) {
+      // validate transforms both before the physics update (to apply any changes made outside the
+      // physics system) and after (to apply the transforms read from the physics system)
+      this._validateDirtyTransforms()
+      this._physicsEngine.update(clock)
+    }
+    this._validateDirtyTransforms()
+    this.renderEngine.update()
+  }
+
+  _validateDirtyTransforms () {
     for (const transform of this.dirtyTransforms) transform._validate(LOCAL_TO_WORLD_MATRIX_INVALID)
     this.dirtyTransforms.clear()
-    this.renderEngine.update()
   }
 
   dispose () {

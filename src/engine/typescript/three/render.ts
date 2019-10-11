@@ -434,7 +434,7 @@ class ThreeAnimation extends TypeScriptComponent implements Animation {
         .switchMap(
           model => model ? model.objectValue : Value.constant<Object3D|undefined>(undefined),
         )
-        .onValue((object :Object3D|undefined) => {
+        .onValue(object => {
           if (object) dispatch(new AnimationMixer(object))
         })
     })
