@@ -173,7 +173,7 @@ const TypeScriptQuadPrototype = TypeScriptQuad.prototype as any
 TypeScriptQuadPrototype._bufferGeometry = new PlaneBufferGeometry()
 
 const TypeScriptSpherePrototype = TypeScriptSphere.prototype as any
-TypeScriptSpherePrototype._bufferGeometry = new SphereBufferGeometry()
+TypeScriptSpherePrototype._bufferGeometry = new SphereBufferGeometry(1, 16, 12)
 
 const emptyGeometry = new BufferGeometry()
 

@@ -396,6 +396,9 @@ class TypeScriptTransform extends TypeScriptComponent implements Transform {
         POSITION_INVALID | LOSSY_SCALE_INVALID |
         LOCAL_TO_WORLD_MATRIX_INVALID | WORLD_TO_LOCAL_MATRIX_INVALID
     }
+    if (intersection & LOCAL_TO_WORLD_MATRIX_INVALID) {
+      childFlags |= LOCAL_TO_WORLD_MATRIX_INVALID | WORLD_TO_LOCAL_MATRIX_INVALID
+    }
     if (childFlags !== 0) {
       for (const child of this._children) child._invalidate(childFlags)
     }
@@ -441,8 +444,6 @@ class TypeScriptTransform extends TypeScriptComponent implements Transform {
         this.localScale,
       )
       if (this._parent) {
-        // TODO: figure out why the transform fails to update without this
-        this._parent._validate(ROTATION_INVALID)
         mat4.multiply(
           this._localToWorldMatrixTarget,
           this._parent.localToWorldMatrix,
