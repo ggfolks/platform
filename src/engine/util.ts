@@ -37,13 +37,13 @@ export function* rotateTo (
 export function* spin (transform :Transform, vel :vec3) {
   while (true) {
     // https://gamedev.stackexchange.com/questions/108920/applying-angular-velocity-to-quaternion
-    quat.multiply(tmpq, quat.set(tmpq, vel[0], vel[1], vel[2], 0), transform.rotation)
+    quat.multiply(tmpq, quat.set(tmpq, vel[0], vel[1], vel[2], 0), transform.localRotation)
     const ht = Time.deltaTime * 0.5
-    transform.rotation[0] += ht * tmpq[0]
-    transform.rotation[1] += ht * tmpq[1]
-    transform.rotation[2] += ht * tmpq[2]
-    transform.rotation[3] += ht * tmpq[3]
-    quat.normalize(transform.rotation, transform.rotation)
+    transform.localRotation[0] += ht * tmpq[0]
+    transform.localRotation[1] += ht * tmpq[1]
+    transform.localRotation[2] += ht * tmpq[2]
+    transform.localRotation[3] += ht * tmpq[3]
+    quat.normalize(transform.localRotation, transform.localRotation)
     yield
   }
 }
