@@ -1,19 +1,20 @@
 import {
   AnimationClip, AnimationMixer, AmbientLight, BoxBufferGeometry, BufferGeometry,
-  CylinderBufferGeometry, DirectionalLight, Light as LightObject, Mesh, MeshBasicMaterial,
-  MeshStandardMaterial, Object3D, PerspectiveCamera, PlaneBufferGeometry, Scene,
-  SphereBufferGeometry, WebGLRenderer,
+  CylinderBufferGeometry, DirectionalLight, Intersection, Light as LightObject, Mesh,
+  MeshBasicMaterial, MeshStandardMaterial, Object3D, PerspectiveCamera, PlaneBufferGeometry,
+  Raycaster, Scene, SphereBufferGeometry, Vector2, WebGLRenderer,
 } from "three"
 import {SkeletonUtils} from "three/examples/jsm/utils/SkeletonUtils"
 import {Clock} from "../../../core/clock"
 import {Color} from "../../../core/color"
+import {vec2, vec3} from "../../../core/math"
 import {Mutable, Subject, Value} from "../../../core/react"
 import {Disposer, NoopRemover, Remover} from "../../../core/util"
 import {windowSize} from "../../../scene2/gl"
 import {loadGLTF, loadGLTFAnimationClip} from "../../../scene3/entity"
-import {Animation, Model} from "../../game"
+import {Animation, Model, Transform} from "../../game"
 import {
-  Camera, Light, LightType, Material, MaterialType, MeshRenderer, RenderEngine,
+  Camera, Light, LightType, Material, MaterialType, MeshRenderer, RaycastHit, RenderEngine,
 } from "../../render"
 import {
   TypeScriptComponent, TypeScriptCube, TypeScriptCylinder, TypeScriptGameEngine,
@@ -22,6 +23,8 @@ import {
 } from "../game"
 
 const defaultCamera = new PerspectiveCamera()
+const raycaster :Raycaster = new Raycaster()
+const raycasterResults :Intersection[] = []
 
 /** A render engine that uses Three.js. */
 export class ThreeRenderEngine implements RenderEngine {
@@ -63,6 +66,32 @@ export class ThreeRenderEngine implements RenderEngine {
     return new ThreeMaterial()
   }
 
+  raycastAll (
+    origin :vec3,
+    direction :vec3,
+    minDistance :number = 0,
+    maxDistance :number = Infinity,
+    target? :RaycastHit[],
+  ) :RaycastHit[] {
+    raycaster.near = minDistance
+    raycaster.far = maxDistance
+    raycaster.ray.origin.fromArray(origin)
+    raycaster.ray.direction.fromArray(direction)
+    raycasterResults.length = 0
+    raycaster.intersectObject(this.scene, true, raycasterResults)
+    if (!target) target = []
+    for (const result of raycasterResults) {
+      target.push({
+        distance: result.distance,
+        point: result.point.toArray(vec3.create()) as vec3,
+        transform: getTransform(result.object),
+        textureCoord: result.uv ? result.uv.toArray(vec2.create()) as vec2 : undefined,
+        triangleIndex: result.faceIndex,
+      })
+    }
+    return target
+  }
+
   update () {
     this.renderer.render(
       this.scene,
@@ -73,6 +102,12 @@ export class ThreeRenderEngine implements RenderEngine {
   dispose () {
     this._disposer.dispose()
   }
+}
+
+function getTransform (object :Object3D) :Transform {
+  if (object.userData.transform) return object.userData.transform
+  if (!object.parent) throw new Error("Can't find transform corresponding to Object3D")
+  return getTransform(object.parent)
 }
 
 type MaterialObject = MeshBasicMaterial | MeshStandardMaterial
@@ -137,12 +172,13 @@ abstract class ThreeObjectComponent extends TypeScriptComponent {
     super(gameObject, type)
     this._disposer.add(this.objectValue.onValue((
       object,
-      oldObject? :Object3D|undefined,
+      oldObject? :Object3D,
     ) => {
       if (oldObject) this.renderEngine.scene.remove(oldObject)
       if (object) {
         object.matrixAutoUpdate = false
         object.matrixWorld.fromArray(this.transform.localToWorldMatrix)
+        object.userData.transform = this.transform
         this.renderEngine.scene.add(object)
       }
     }))
@@ -231,6 +267,8 @@ class ThreeMeshRenderer extends ThreeObjectComponent implements MeshRenderer {
 }
 registerComponentType("meshRenderer", ThreeMeshRenderer)
 
+const tmpVector2 = new Vector2()
+
 class ThreeCamera extends ThreeObjectComponent implements Camera {
   private _perspectiveCamera = new PerspectiveCamera()
 
@@ -260,6 +298,12 @@ class ThreeCamera extends ThreeObjectComponent implements Camera {
       const element = this.renderEngine.renderer.domElement
       this.aspect = element.clientWidth / element.clientHeight
     }))
+  }
+
+  viewportPointToDirection (coords :vec2, target? :vec3) :vec3 {
+    if (!target) target = vec3.create()
+    raycaster.setFromCamera(tmpVector2.fromArray(coords), this._perspectiveCamera)
+    return raycaster.ray.direction.toArray(target) as vec3
   }
 
   dispose () {
@@ -390,7 +434,7 @@ class ThreeAnimation extends TypeScriptComponent implements Animation {
         .switchMap(
           model => model ? model.objectValue : Value.constant<Object3D|undefined>(undefined),
         )
-        .onValue(object => {
+        .onValue((object :Object3D|undefined) => {
           if (object) dispatch(new AnimationMixer(object))
         })
     })
