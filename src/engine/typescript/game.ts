@@ -2,10 +2,20 @@ import {Clock} from "../../core/clock"
 import {mat4, quat, vec3} from "../../core/math"
 import {Mutable, Value} from "../../core/react"
 import {Disposer, PMap, getValue} from "../../core/util"
+import {Graph as GraphObject, GraphConfig} from "../../graph/graph"
+import {registerLogicNodes} from "../../graph/logic"
+import {registerMathNodes} from "../../graph/math"
+import {registerSignalNodes} from "../../graph/signal"
+import {registerUtilNodes} from "../../graph/util"
+import {registerInputNodes} from "../../input/node"
+import {registerUINodes} from "../../ui/node"
+import {NodeTypeRegistry} from "../../graph/node"
+import {SubgraphRegistry} from "../../graph/util"
 import {
   Component, ComponentConfig, Coroutine, Cube, Cylinder, GameEngine, GameObject, GameObjectConfig,
   Mesh, MeshFilter, PrimitiveType, Quad, Sphere, Time, Transform,
 } from "../game"
+import {Graph} from "../graph"
 import {PhysicsEngine} from "../physics"
 import {RenderEngine} from "../render"
 
@@ -16,6 +26,18 @@ interface Wakeable { awake () :void }
 export class TypeScriptGameEngine implements GameEngine {
   readonly dirtyTransforms = new Set<TypeScriptTransform>()
   readonly updatables = new Set<Updatable>()
+
+  readonly ctx = {
+    types: new NodeTypeRegistry(
+      registerLogicNodes,
+      registerMathNodes,
+      registerSignalNodes,
+      registerUtilNodes,
+      registerInputNodes,
+      registerUINodes,
+    ),
+    subgraphs: new SubgraphRegistry(),
+  }
 
   _renderEngine? :RenderEngine
   _physicsEngine? :PhysicsEngine
@@ -487,3 +509,55 @@ export class TypeScriptCylinder extends TypeScriptMesh implements Cylinder {}
 export class TypeScriptCube extends TypeScriptMesh implements Cube {}
 
 export class TypeScriptQuad extends TypeScriptMesh implements Quad {}
+
+export class TypeScriptGraph extends TypeScriptComponent implements Graph {
+  private readonly _graph :GraphObject
+  private readonly _config :GraphConfig
+
+  get config () :GraphConfig { return this._config }
+  set config (config :GraphConfig) {
+    // remove any nodes no longer in the config
+    for (const id of this._graph.nodes.keys()) {
+      if (config[id] === undefined) this._graph.removeNode(id)
+    }
+    // add/re-add any nodes present
+    for (const id in config) {
+      if (this._graph.nodes.has(id)) this._graph.removeNode(id)
+      this._graph.createNode(id, config[id])
+    }
+    // reconnect after everything's in place
+    for (const id in config) {
+      this._graph.nodes.require(id).reconnect()
+    }
+  }
+
+  constructor (gameObject :TypeScriptGameObject, type :string) {
+    super(gameObject, type)
+    const configTarget = {}
+    this._graph = new GraphObject(gameObject.gameEngine.ctx, configTarget)
+    this._config = new Proxy(configTarget, {
+      set: (obj, prop, value) => {
+        const id = prop as string
+        if (this._graph.nodes.has(id)) this._graph.removeNode(id)
+        if (value) this._graph.createNode(id, value)
+        return true
+      },
+      deleteProperty: (obj, prop) => {
+        const id = prop as string
+        if (this._graph.nodes.has(id)) {
+          this._graph.removeNode(id)
+          return true
+        }
+        return false
+      },
+      get: (obj, prop) => {
+        return obj[prop]
+      },
+    })
+  }
+
+  update (clock :Clock) {
+    this._graph.update(clock)
+  }
+}
+registerComponentType("graph", TypeScriptGraph)
