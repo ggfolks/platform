@@ -6,6 +6,9 @@ import {Component, Transform} from "./game"
 /** Top-level interface to render engine. */
 export interface RenderEngine extends Disposable {
 
+  /** The HTML canvas. */
+  readonly domElement :HTMLElement
+
   /** Creates a new material.
     * @return the newly created material instance. */
   createMaterial () :Material

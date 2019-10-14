@@ -31,6 +31,7 @@ export class ThreeRenderEngine implements RenderEngine {
   private readonly _disposer = new Disposer()
 
   readonly renderer = new WebGLRenderer()
+  readonly domElement = this.renderer.domElement
   readonly scene = new Scene()
   readonly cameras :ThreeCamera[] = []
 

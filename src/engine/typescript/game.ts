@@ -3,19 +3,11 @@ import {mat4, quat, vec3} from "../../core/math"
 import {Mutable, Value} from "../../core/react"
 import {Disposer, PMap, getValue} from "../../core/util"
 import {Graph as GraphObject, GraphConfig} from "../../graph/graph"
-import {registerLogicNodes} from "../../graph/logic"
-import {registerMathNodes} from "../../graph/math"
-import {registerSignalNodes} from "../../graph/signal"
-import {registerUtilNodes} from "../../graph/util"
-import {registerInputNodes} from "../../input/node"
-import {registerUINodes} from "../../ui/node"
-import {NodeTypeRegistry} from "../../graph/node"
-import {SubgraphRegistry} from "../../graph/util"
+import {NodeContext} from "../../graph/node"
 import {
   Component, ComponentConfig, Coroutine, Cube, Cylinder, GameEngine, GameObject, GameObjectConfig,
-  Mesh, MeshFilter, PrimitiveType, Quad, Sphere, Time, Transform,
+  Graph, Mesh, MeshFilter, PrimitiveType, Quad, Sphere, Time, Transform,
 } from "../game"
-import {Graph} from "../graph"
 import {PhysicsEngine} from "../physics"
 import {RenderEngine} from "../render"
 
@@ -26,18 +18,6 @@ interface Wakeable { awake () :void }
 export class TypeScriptGameEngine implements GameEngine {
   readonly dirtyTransforms = new Set<TypeScriptTransform>()
   readonly updatables = new Set<Updatable>()
-
-  readonly ctx = {
-    types: new NodeTypeRegistry(
-      registerLogicNodes,
-      registerMathNodes,
-      registerSignalNodes,
-      registerUtilNodes,
-      registerInputNodes,
-      registerUINodes,
-    ),
-    subgraphs: new SubgraphRegistry(),
-  }
 
   _renderEngine? :RenderEngine
   _physicsEngine? :PhysicsEngine
@@ -51,6 +31,8 @@ export class TypeScriptGameEngine implements GameEngine {
     if (!this._physicsEngine) throw new Error("Missing physics engine")
     return this._physicsEngine
   }
+
+  constructor (readonly ctx :NodeContext) {}
 
   createPrimitive (
     type :PrimitiveType,
