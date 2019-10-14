@@ -4,6 +4,7 @@ import {dim2, rect, vec2} from "../core/math"
 import {Record} from "../core/data"
 import {Emitter, Mutable, Source, Stream, Value} from "../core/react"
 import {Scale} from "../core/ui"
+import {keyEvents, mouseEvents, pointerEvents, touchEvents, wheelEvents} from "../input/react"
 import {Model} from "./model"
 import {Spec, StyleContext} from "./style"
 
@@ -567,12 +568,10 @@ export class Root extends Element {
       }
       currentEditNumber++
       break
-    case "mousecancel":
-      if (iact) {
-        iact.cancel()
-        this.interacts[button] = undefined
-        this._updateElementsOver(event, pos)
-      }
+    case "dblclick":
+      if (rect.contains(this.bounds, pos)) event.cancelBubble = true
+      this.contents.maybeHandleDoubleClick(event, pos)
+      break
     }
   }
 
@@ -664,11 +663,6 @@ export class Root extends Element {
     const pos = vec2.set(tmpv, event.offsetX-this.origin[0], event.offsetY-this.origin[1])
     if (rect.contains(this.bounds, pos)) event.cancelBubble = true
     this.contents.maybeHandleWheel(event, pos)
-  }
-  dispatchDoubleClickEvent (event :MouseEvent) {
-    const pos = vec2.set(tmpv, event.offsetX-this.origin[0], event.offsetY-this.origin[1])
-    if (rect.contains(this.bounds, pos)) event.cancelBubble = true
-    this.contents.maybeHandleDoubleClick(event, pos)
   }
 
   protected computePreferredSize (hintX :number, hintY :number, into :dim2) {
@@ -845,13 +839,6 @@ export class Control extends Element {
   * Clients will generally not use this class directly but rather use the `Host2` or `Host3`
   * subclasses which integrate more tightly with the `scene2` and `scene3` libraries. */
 export class Host implements Disposable {
-  private readonly onMouse = (event :MouseEvent) => this.handleMouseEvent(event)
-  private readonly onKey = (event :KeyboardEvent) => this.handleKeyEvent(event)
-  private readonly onWheel = (event :WheelEvent) => this.handleWheelEvent(event)
-  private readonly onDoubleClick = (event :MouseEvent) => this.handleDoubleClickEvent(event)
-  private readonly onPointerDown = (event :PointerEvent) => this.handlePointerDown(event)
-  private readonly onPointerUp = (event :PointerEvent) => this.handlePointerUp(event)
-  private readonly onTouch = (event :TouchEvent) => this.handleTouchEvent(event)
   private _canvas? :HTMLCanvasElement
   protected readonly roots :Root[] = []
 
@@ -876,63 +863,45 @@ export class Host implements Disposable {
 
   bind (canvas :HTMLCanvasElement) :Remover {
     this._canvas = canvas
-    canvas.addEventListener("mousedown", this.onMouse)
-    canvas.addEventListener("mousemove", this.onMouse)
-    document.addEventListener("mouseup", this.onMouse)
-    canvas.addEventListener("wheel", this.onWheel)
-    canvas.addEventListener("dblclick", this.onDoubleClick)
-    canvas.addEventListener("pointerdown", this.onPointerDown)
-    canvas.addEventListener("pointerup", this.onPointerUp)
-    canvas.addEventListener("touchstart", this.onTouch)
-    canvas.addEventListener("touchmove", this.onTouch)
-    canvas.addEventListener("touchcancel", this.onTouch)
-    canvas.addEventListener("touchend", this.onTouch)
-    document.addEventListener("keydown", this.onKey)
-    document.addEventListener("keyup", this.onKey)
+    const unmouse = mouseEvents(canvas, "mousedown", "mousemove", "mouseup", "dblclick").
+      onEmit(ev => this.handleMouseEvent(ev))
+    const unwheel = wheelEvents(canvas).onEmit(ev => this.handleWheelEvent(ev))
+    const untouch = touchEvents(canvas, "touchstart", "touchmove", "touchcancel", "touchend").
+      onEmit(ev => this.handleTouchEvent(ev))
+    const unkey = keyEvents("keydown", "keyup").onEmit(ev => this.handleKeyEvent(ev))
+    const unpointer = pointerEvents(canvas, "pointerdown", "pointerup").onEmit(ev => {
+      if (ev.type === "pointerdown") canvas.setPointerCapture(ev.pointerId)
+      else canvas.releasePointerCapture(ev.pointerId)
+    })
     return () => {
-      canvas.removeEventListener("mousedown", this.onMouse)
-      canvas.removeEventListener("mousemove", this.onMouse)
-      document.removeEventListener("mouseup", this.onMouse)
-      canvas.removeEventListener("wheel", this.onWheel)
-      canvas.removeEventListener("dblclick", this.onDoubleClick)
-      canvas.removeEventListener("pointerdown", this.onPointerDown)
-      canvas.removeEventListener("pointerup", this.onPointerUp)
-      canvas.removeEventListener("touchstart", this.onTouch)
-      canvas.removeEventListener("touchmove", this.onTouch)
-      canvas.removeEventListener("touchcancel", this.onTouch)
-      canvas.removeEventListener("touchend", this.onTouch)
-      document.removeEventListener("keydown", this.onKey)
-      document.removeEventListener("keyup", this.onKey)
+      unmouse()
+      untouch()
+      unkey()
+      unpointer()
+      unwheel()
       this._canvas = undefined
     }
   }
 
-  handleMouseEvent (event :MouseEvent) {
+  dispatchEvent (event :UIEvent, op :(r:Root) => void) {
     for (let ii = this.roots.length - 1; ii >= 0; ii--) {
       if (event.cancelBubble) return
-      this.roots[ii].dispatchMouseEvent(event)
+      op(this.roots[ii])
     }
+  }
+
+  handleMouseEvent (event :MouseEvent) {
+    this.dispatchEvent(event, r => r.dispatchMouseEvent(event))
   }
   handleKeyEvent (event :KeyboardEvent) {
     // TODO: maintain a notion of which root currently has focus (if any)
-    for (const root of this.roots) root.dispatchKeyEvent(event)
+    this.dispatchEvent(event, r => r.dispatchKeyEvent(event))
   }
   handleWheelEvent (event :WheelEvent) {
-    for (const root of this.roots) root.dispatchWheelEvent(event)
-  }
-  handleDoubleClickEvent (event :MouseEvent) {
-    for (const root of this.roots) root.dispatchDoubleClickEvent(event)
-  }
-  handlePointerDown (event :PointerEvent) {
-    const canvas = event.target as HTMLElement
-    canvas.setPointerCapture(event.pointerId)
-  }
-  handlePointerUp (event :PointerEvent) {
-    const canvas = event.target as HTMLElement
-    canvas.releasePointerCapture(event.pointerId)
+    this.dispatchEvent(event, r => r.dispatchWheelEvent(event))
   }
   handleTouchEvent (event :TouchEvent) {
-    for (const root of this.roots) root.dispatchTouchEvent(event)
+    this.dispatchEvent(event, r => r.dispatchTouchEvent(event))
   }
 
   update (clock :Clock) {
@@ -987,7 +956,7 @@ export class HTMLHost extends Host {
   }
 
   handleKeyEvent (event :KeyboardEvent) {
-    // don't dispatch key eevents to the root while we have a text overlay
+    // don't dispatch key events to the root while we have a text overlay
     if (!this._textOverlay.parentNode) super.handleKeyEvent(event)
   }
 
