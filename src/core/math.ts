@@ -5,6 +5,28 @@ export * from "gl-matrix"
 export const vec2zero = vec2.create()
 export const vec2one = vec2.fromValues(1, 1)
 
+/** Converts a number to a string of the form `Sw.f` where `S` is `+` or `-`, optionally rounding
+  * to the specified number of decimal digits. */
+export const numToString = (n :number, digits? :number) =>
+  `${n >= 0 ? "+" : ""}${digits ? n.toFixed(digits) : n}`
+
+/** Converts a 2D position to a string of the form `Sx.xSy.y`, optionally rounding to the specified
+  * number of decimal digits. */
+export const posToString = (x :number, y :number, digits? :number) =>
+  numToString(x, digits) + numToString(y, digits)
+
+/** Converts a 2D size to a string of the form `WxH`, optionally rounding to the specified number
+  * of decimal digits. */
+export const sizeToString = (w :number, h :number, digits? :number) =>
+  `${digits ? w.toFixed(digits) : w}x${digits ? h.toFixed(digits) : h}`
+
+/** Converts a 2D vector to a string of the form `Sx.xSy.y`, optionally rounding to the specified
+  * number of decimal digits. */
+export const vec2ToString = (v :vec2, digits? :number) => posToString(v[0], v[1])
+
+/** Returns `val` clamped to the range `[min, max]`. */
+export const clamp = (val :number, min :number, max :number) => Math.min(Math.max(min, val), max)
+
 export class dim2 extends Float32Array {
 
   static create () :dim2 {
@@ -57,8 +79,8 @@ export class dim2 extends Float32Array {
     return out
   }
 
-  static toString (d :dim2) :string {
-    return `${d[0]}x${d[1]}`
+  static toString (d :dim2, digits? :number) :string {
+    return sizeToString(d[0], d[1], digits)
   }
 }
 
@@ -158,12 +180,7 @@ export class rect extends Float32Array {
     return r[3] + r[1]
   }
 
-  static toString (d :dim2) :string {
-    const x = d[0], y = d[1], pre = (x :number) => x<0 ? "" : "+"
-    return `${d[3]}x${d[4]}${pre(x)}${x}${pre(y)}${y}`
+  static toString (d :dim2, digits? :number) :string {
+    return `${sizeToString(d[3], d[4], digits)}${posToString(d[0], d[1], digits)}`
   }
-}
-
-export function clamp (val :number, min :number, max :number) {
-  return Math.min(Math.max(min, val), max)
 }
