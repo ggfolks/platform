@@ -1,4 +1,4 @@
-import {vec2} from "gl-matrix"
+import {vec2, vec2ToString} from "../core/math"
 import {MutableMap, RMap} from "../core/rcollect"
 import {Disposable} from "../core/util"
 import {Mouse} from "./mouse"
@@ -94,4 +94,9 @@ export class Pointer {
   constructor (readonly position :vec2 = vec2.create(),
                readonly movement :vec2 = vec2.create(),
                readonly pressed :boolean = false) {}
+
+  toString () {
+    const p = this.position, m = this.movement, pd = this.pressed
+    return `P${vec2ToString(p, 2)} M${vec2ToString(m, 2)}${pd ? " pressed" : ""}`
+  }
 }
