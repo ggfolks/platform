@@ -1,11 +1,13 @@
-import {dim2} from "../core/math"
+import {dim2, vec3zero} from "../core/math"
 import {Value} from "../core/react"
+import {getValue} from "../core/util"
 import {Graph} from "../graph/graph"
 import {property, outputEdge} from "../graph/meta"
 import {Node, NodeConfig, NodeTypeRegistry} from "../graph/node"
 import {SubgraphRegistry} from "../graph/util"
 import {PointerConfig} from "../input/node"
 import {windowSize} from "../scene2/gl"
+import {Graph as GraphComponent, Hover, Hoverable} from "./game"
 
 /** Emits information about a single hover point. */
 abstract class HoverConfig implements NodeConfig, PointerConfig {
@@ -20,17 +22,53 @@ abstract class HoverConfig implements NodeConfig, PointerConfig {
   @outputEdge("boolean", true) hovered = undefined
 }
 
-class Hover extends Node {
+class HoverNode extends Node {
 
   constructor (graph :Graph, id :string, readonly config :HoverConfig) {
     super(graph, id, config)
+  }
+
+  protected _createOutput (name :string) {
+    const index = getValue(this.config.index, 0)
+    const count = getValue(this.config.count, 1)
+    const getHover = (hovers :ReadonlyMap<number, Hover>) => {
+      if (hovers.size === count) {
+        let remaining = index
+        for (const value of hovers.values()) {
+          if (remaining-- === 0) return value
+        }
+      }
+      return undefined
+    }
+    let hover :Value<Hover|undefined>
+    const component = this.graph.ctx.graphComponent as GraphComponent|undefined
+    if (component) {
+      hover = component.gameObject.getComponentValue<Hoverable>("hoverable")
+        .switchMap(hoverable => {
+          if (!hoverable) return Value.constant<Hover|undefined>(undefined)
+          return hoverable.hovers.fold(
+            getHover(hoverable.hovers),
+            (hover, hovers) => getHover(hovers),
+          )
+        })
+    } else {
+      hover = Value.constant<Hover|undefined>(undefined)
+    }
+    switch (name) {
+      case "worldPosition":
+      case "worldMovement":
+      case "viewPosition":
+      case "viewMovement": return hover.map(hover => hover ? hover[name] : vec3zero)
+      case "pressed": return hover.map(hover => Boolean(hover && hover.pressed))
+      default: return hover.map(Boolean)
+    }
   }
 }
 
 /** Registers the nodes in this module with the supplied registry. */
 export function registerEngineNodes (registry :NodeTypeRegistry) {
   registry.registerNodeTypes(["engine"], {
-    hover: Hover,
+    hover: HoverNode,
   })
 }
 

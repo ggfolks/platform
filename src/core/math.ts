@@ -5,6 +5,8 @@ export * from "gl-matrix"
 export const vec2zero = vec2.create()
 export const vec2one = vec2.fromValues(1, 1)
 
+export const vec3zero = vec3.create()
+
 /** Converts a number to a string of the form `Sw.f` where `S` is `+` or `-`, optionally rounding
   * to the specified number of decimal digits. */
 export const numToString = (n :number, digits? :number) =>

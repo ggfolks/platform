@@ -5,7 +5,7 @@ import {Mutable, Value} from "../../core/react"
 import {Disposer, PMap, getValue} from "../../core/util"
 import {windowSize} from "../../scene2/gl"
 import {Graph as GraphObject, GraphConfig} from "../../graph/graph"
-import {NodeTypeRegistry} from "../../graph/node"
+import {NodeConfig, NodeTypeRegistry} from "../../graph/node"
 import {registerLogicNodes} from "../../graph/logic"
 import {registerMathNodes} from "../../graph/math"
 import {registerSignalNodes} from "../../graph/signal"
@@ -233,20 +233,29 @@ function applyConfig (target :PMap<any>, config :PMap<any>) {
       typeof value === "object" &&
       value !== null &&
       typeof targetValue === "object" &&
-      targetValue !== null
+      targetValue !== null &&
+      !(targetValue instanceof NonApplicableConfig)
     ) applyConfig(targetValue, value)
     else target[key] = value
   }
 }
 
 export class TypeScriptComponent implements Component {
+  readonly aliases :string[]
+
   protected readonly _disposer = new Disposer()
   private readonly _coroutines :Coroutine[] = []
 
   get transform () :Transform { return this.gameObject.transform }
 
-  constructor (readonly gameObject :TypeScriptGameObject, readonly type :string) {
+  constructor (
+    readonly gameObject :TypeScriptGameObject,
+    readonly type :string,
+    ...aliases :string[]
+  ) {
     gameObject._setComponent(type, this)
+    this.aliases = aliases
+    for (const alias of aliases) gameObject._setComponent(alias, this)
     const updatable = this as unknown as Updatable
     if (updatable.update) gameObject.gameEngine.updatables.add(updatable)
   }
@@ -273,6 +282,7 @@ export class TypeScriptComponent implements Component {
   dispose () {
     this._disposer.dispose()
     this.gameObject._deleteComponent(this.type)
+    for (const alias of this.aliases) this.gameObject._deleteComponent(alias)
     for (const coroutine of this._coroutines) coroutine.dispose()
     const updatable = this as unknown as Updatable
     if (updatable.update) this.gameObject.gameEngine.updatables.delete(updatable)
@@ -547,11 +557,15 @@ export class TypeScriptCube extends TypeScriptMesh implements Cube {}
 
 export class TypeScriptQuad extends TypeScriptMesh implements Quad {}
 
+// marker class to flag configurations as being not recursively applicable
+class NonApplicableConfig<T> {
+  [key :string] :T
+}
+
 export class TypeScriptGraph extends TypeScriptComponent implements Graph {
   private readonly _graph :GraphObject
-  private readonly _config :GraphConfig
 
-  get config () :GraphConfig { return this._config }
+  get config () :GraphConfig { return this._graph.config }
   set config (config :GraphConfig) {
     // remove any nodes no longer in the config
     for (const id of this._graph.nodes.keys()) {
@@ -562,35 +576,17 @@ export class TypeScriptGraph extends TypeScriptComponent implements Graph {
       if (this._graph.nodes.has(id)) this._graph.removeNode(id)
       this._graph.createNode(id, config[id])
     }
-    // reconnect after everything's in place
+    // connect after everything's in place
     for (const id in config) {
-      this._graph.nodes.require(id).reconnect()
+      this._graph.nodes.require(id).connect()
     }
   }
 
   constructor (gameObject :TypeScriptGameObject, type :string) {
     super(gameObject, type)
-    const configTarget = {}
-    this._graph = new GraphObject(gameObject.gameEngine.ctx, configTarget)
-    this._config = new Proxy(configTarget, {
-      set: (obj, prop, value) => {
-        const id = prop as string
-        if (this._graph.nodes.has(id)) this._graph.removeNode(id)
-        if (value) this._graph.createNode(id, value)
-        return true
-      },
-      deleteProperty: (obj, prop) => {
-        const id = prop as string
-        if (this._graph.nodes.has(id)) {
-          this._graph.removeNode(id)
-          return true
-        }
-        return false
-      },
-      get: (obj, prop) => {
-        return obj[prop]
-      },
-    })
+    const subctx = Object.create(gameObject.gameEngine.ctx)
+    subctx.graphComponent = this
+    this._graph = new GraphObject(subctx, new NonApplicableConfig<NodeConfig>())
   }
 
   update (clock :Clock) {

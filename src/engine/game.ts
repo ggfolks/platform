@@ -1,5 +1,6 @@
 import {Clock} from "../core/clock"
 import {mat4, quat, vec3} from "../core/math"
+import {Value} from "../core/react"
 import {RMap} from "../core/rcollect"
 import {Disposable, PMap} from "../core/util"
 import {InputNodeContext} from "../input/node"
@@ -18,7 +19,11 @@ export type ComponentConfig = PMap<any>
 export type GameObjectConfig = PMap<ComponentConfig>
 
 /** Context container. */
-export interface GameContext extends UINodeContext, InputNodeContext {}
+export interface GameContext extends UINodeContext, InputNodeContext {
+
+  /** Provides graphs with a reference to the owning component. */
+  graphComponent? :Graph
+}
 
 /** Top-level interface to game engine. */
 export interface GameEngine extends Disposable {
@@ -90,6 +95,11 @@ export interface GameObject extends Disposable {
     * @param type the type of component desired.
     * @return the component reference. */
   getComponent<T extends Component> (type :string|ComponentConstructor<T>) :T|undefined
+
+  /** Gets a reactive view of a component.
+    * @param type the type of component desired.
+    * @return the reactive value. */
+  getComponentValue<T extends Component> (type :string) :Value<T|undefined>
 
   /** Sends a message to all components on the game object.
     * @param message the name of the message to send.

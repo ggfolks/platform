@@ -115,6 +115,7 @@ export class ThreeRenderEngine implements RenderEngine {
   }
 
   updateHovers () {
+    this._hand.update()
     for (const camera of this.cameras) {
       for (const [identifier, pointer] of this._hand.pointers) {
         const rayOrigin = camera.transform.position
@@ -150,7 +151,7 @@ export class ThreeRenderEngine implements RenderEngine {
         this.raycastAll(rayOrigin, rayDirection, 0, Infinity, raycastHits)
         let noted = false
         for (const hit of raycastHits) {
-          const objectComponent = hit.transform.requireComponent(ThreeObjectComponent)
+          const objectComponent = hit.transform.requireComponent<ThreeObjectComponent>("hoverable")
           if (this._maybeNoteHovered(identifier, pointer, camera, objectComponent, hit.point)) {
             noted = true
             break
@@ -312,7 +313,7 @@ abstract class ThreeObjectComponent extends TypeScriptComponent {
   }
 
   constructor (gameObject :TypeScriptGameObject, type :string) {
-    super(gameObject, type)
+    super(gameObject, type, "hoverable")
     this._disposer.add(this.objectValue.onValue((
       object,
       oldObject? :Object3D,
