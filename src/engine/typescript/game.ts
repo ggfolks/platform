@@ -12,11 +12,12 @@ import {registerSignalNodes} from "../../graph/signal"
 import {SubgraphRegistry, registerUtilNodes} from "../../graph/util"
 import {registerInputNodes} from "../../input/node"
 import {HTMLHost} from "../../ui/element"
-import {UINodeContext, registerUINodes} from "../../ui/node"
+import {registerUINodes} from "../../ui/node"
 import {DefaultStyles, DefaultTheme} from "../../ui/theme"
 import {
-  Component, ComponentConfig, Coroutine, Cube, Cylinder, GameEngine, GameObject, GameObjectConfig,
-  Graph, Mesh, MeshFilter, PrimitiveType, Quad, Sphere, Time, Transform,
+  Component, ComponentConfig, ComponentConstructor, Coroutine, Cube, Cylinder, GameContext,
+  GameEngine, GameObject, GameObjectConfig, Graph, Mesh, MeshFilter, PrimitiveType, Quad, Sphere,
+  Time, Transform,
 } from "../game"
 import {PhysicsEngine} from "../physics"
 import {RenderEngine} from "../render"
@@ -29,7 +30,7 @@ interface Wakeable { awake () :void }
 export class TypeScriptGameEngine implements GameEngine {
   private readonly _disposer = new Disposer()
 
-  readonly ctx :UINodeContext
+  readonly ctx :GameContext
 
   readonly dirtyTransforms = new Set<TypeScriptTransform>()
   readonly updatables = new Set<Updatable>()
@@ -97,7 +98,9 @@ export class TypeScriptGameEngine implements GameEngine {
 
   update (clock :Clock) :void {
     Time.deltaTime = clock.dt
+    this.renderEngine.updateHovers()
     for (const updatable of this.updatables) updatable.update(clock)
+    this.ctx.host.update(clock)
     if (this._physicsEngine) {
       // validate transforms both before the physics update (to apply any changes made outside the
       // physics system) and after (to apply the transforms read from the physics system)
@@ -105,7 +108,7 @@ export class TypeScriptGameEngine implements GameEngine {
       this._physicsEngine.update(clock)
     }
     this._validateDirtyTransforms()
-    this.renderEngine.update()
+    this.renderEngine.render()
   }
 
   _validateDirtyTransforms () {
@@ -120,16 +123,16 @@ export class TypeScriptGameEngine implements GameEngine {
 }
 
 /** Constructor interface for TypeScript components. */
-export interface ComponentConstructor {
+export interface TypeScriptComponentConstructor {
   new (gameObject :TypeScriptGameObject, type :string): Component
 }
 
-const componentConstructors = new Map<string, ComponentConstructor>()
+const componentConstructors = new Map<string, TypeScriptComponentConstructor>()
 
 /** Registers a component type's constructor with the TypeScript engine.
   * @param type the component type name.
   * @param constructor the component constructor. */
-export function registerComponentType (type :string, constructor :ComponentConstructor) {
+export function registerComponentType (type :string, constructor :TypeScriptComponentConstructor) {
   componentConstructors.set(type, constructor)
 }
 
@@ -167,8 +170,18 @@ export class TypeScriptGameObject implements GameObject {
     return component
   }
 
-  getComponent<T extends Component> (type :string) :T {
-    return this[type] as T
+  requireComponent<T extends Component> (type :string|ComponentConstructor<T>) :T {
+    const component = this.getComponent(type)
+    if (!component) throw new Error(`Missing required component of type "${type}"`)
+    return component
+  }
+
+  getComponent<T extends Component> (type :string|ComponentConstructor<T>) :T|undefined {
+    if (typeof type === "string") return this[type] as T
+    for (const key in this) {
+      if (this[key] instanceof type) return this[key] as unknown as T
+    }
+    return undefined
   }
 
   getComponentValue<T extends Component> (type :string) :Value<T|undefined> {
@@ -184,10 +197,10 @@ export class TypeScriptGameObject implements GameObject {
     return false
   }
 
-  sendMessage (message :string) :void {
+  sendMessage (message :string, ...args :any[]) :void {
     for (const key in this) {
       const component = this[key]
-      if (component[message]) component[message]()
+      if (component[message]) component[message](...args)
     }
   }
 
@@ -238,8 +251,16 @@ export class TypeScriptComponent implements Component {
     if (updatable.update) gameObject.gameEngine.updatables.add(updatable)
   }
 
-  sendMessage (message :string) :void {
-    this.gameObject.sendMessage(message)
+  requireComponent<T extends Component> (type :string|ComponentConstructor<T>) :T {
+    return this.gameObject.requireComponent(type)
+  }
+
+  getComponent<T extends Component> (type :string|ComponentConstructor<T>) :T|undefined {
+    return this.gameObject.getComponent(type)
+  }
+
+  sendMessage (message :string, ...args :any[]) :void {
+    this.gameObject.sendMessage(message, ...args)
   }
 
   startCoroutine (fnOrGenerator :(() => Generator<void>)|Generator<void>) :Coroutine {

@@ -1,4 +1,4 @@
-import {vec2} from "gl-matrix"
+import {vec2, vec3} from "gl-matrix"
 
 export * from "gl-matrix"
 
@@ -182,5 +182,44 @@ export class rect extends Float32Array {
 
   static toString (d :dim2, digits? :number) :string {
     return `${sizeToString(d[3], d[4], digits)}${posToString(d[0], d[1], digits)}`
+  }
+}
+
+/** A 3D plane. */
+export class Plane extends Float32Array {
+
+  private constructor () {
+    super(4)
+  }
+
+  /** Creates an invalid plane instance (zero normal). */
+  static create () :Plane { return new Plane() }
+
+  /** Sets a plane based on the plane normal and a point on the plane.
+    * @param out the plane to hold the result.
+    * @param normal the plane normal vector.
+    * @param point the point on the plane.
+    * @return the target plane. */
+  static setFromNormalAndCoplanarPoint (out :Plane, normal :vec3, point :vec3) :Plane {
+    out[0] = normal[0]
+    out[1] = normal[1]
+    out[2] = normal[2]
+    out[3] = -vec3.dot(normal, point)
+    return out
+  }
+
+  /** Finds the intersection, if any, between a ray and a plane.
+    * @param plane the plane to check against.
+    * @param origin the origin of the ray.
+    * @param direction the direction of the ray.
+    * @return the distance to the intersection, or a negative value/NaN if there isn't one (that is,
+    * the result is valid if >= 0). */
+  static intersectRay (plane :Plane, origin :vec3, direction :vec3) :number {
+    return (-plane[3] - Plane._dot(plane, origin)) / Plane._dot(plane, direction)
+  }
+
+  /** Computes the dot product of the plane normal with a point. */
+  private static _dot (plane :Plane, point :vec3) {
+    return plane[0] * point[0] + plane[1] * point[1] + plane[2] * point[2]
   }
 }

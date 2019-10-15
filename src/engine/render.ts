@@ -1,7 +1,7 @@
 import {vec2, vec3} from "../core/math"
 import {Color} from "../core/color"
 import {Disposable} from "../core/util"
-import {Component, Transform} from "./game"
+import {Component, Hoverable, Transform} from "./game"
 
 /** Top-level interface to render engine. */
 export interface RenderEngine extends Disposable {
@@ -28,8 +28,11 @@ export interface RenderEngine extends Disposable {
     target? :RaycastHit[],
   ) :RaycastHit[]
 
-  /** Updates the render engine. Should be called once per frame. */
-  update () :void
+  /** Updates the hover states. */
+  updateHovers () :void
+
+  /** Renders a frame. */
+  render () :void
 }
 
 /** Describes a single raycast intersection. */
@@ -52,7 +55,7 @@ export interface RaycastHit {
 }
 
 /** Renders the mesh specified by the `meshFilter`. */
-export interface MeshRenderer extends Component {
+export interface MeshRenderer extends Component, Hoverable {
 
   /** The first material assigned to the renderer. */
   material :Material
@@ -75,7 +78,7 @@ export interface Material extends Disposable {
 }
 
 /** Represents a camera attached to a game object. */
-export interface Camera extends Component {
+export interface Camera extends Component, Hoverable {
 
   /** The camera's aspect ratio (width over height). */
   aspect :number
@@ -83,8 +86,20 @@ export interface Camera extends Component {
   /** The camera's vertical field of view in degrees. */
   fieldOfView :number
 
-  /** Converts a point in viewport coordinates (0,0 to 1,1) to a direction in world space for this
-    * camera.
+  /** Finds the direction in world space in which the camera is pointing.
+    * @param [target] an optional vector to hold the result.
+    * @return the direction in world space. */
+  getDirection (target? :vec3) :vec3
+
+  /** Converts a point in screen coordinates (0,0 at upper left, width-1,height-1 at lower right)
+    * to a direction in world space for this camera.
+    * @param coords the coordinates to convert.
+    * @param [target] an optional vector to hold the result.
+    * @return the direction in world space. */
+  screenPointToDirection (coords :vec2, target? :vec3) :vec3
+
+  /** Converts a point in viewport coordinates (0,0 at lower left, 1,1 at upper right) to a
+    * direction in world space for this camera.
     * @param coords the coordinates to convert.
     * @param [target] an optional vector to hold the result.
     * @return the direction in world space. */

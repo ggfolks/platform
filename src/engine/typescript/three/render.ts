@@ -7,13 +7,14 @@ import {
 import {SkeletonUtils} from "three/examples/jsm/utils/SkeletonUtils"
 import {Clock} from "../../../core/clock"
 import {Color} from "../../../core/color"
-import {vec2, vec3} from "../../../core/math"
+import {Plane, vec2, vec3} from "../../../core/math"
 import {Mutable, Subject, Value} from "../../../core/react"
+import {MutableMap} from "../../../core/rcollect"
 import {Disposer, NoopRemover, Remover} from "../../../core/util"
 import {windowSize} from "../../../scene2/gl"
 import {loadGLTF, loadGLTFAnimationClip} from "../../../scene3/entity"
-import {Hand} from "../../../input/hand"
-import {Animation, Model, Transform} from "../../game"
+import {Hand, Pointer} from "../../../input/hand"
+import {Animation, Hover, Model, Transform} from "../../game"
 import {
   Camera, Light, LightType, Material, MaterialType, MeshRenderer, RaycastHit, RenderEngine,
 } from "../../render"
@@ -26,10 +27,26 @@ import {
 const defaultCamera = new PerspectiveCamera()
 const raycaster :Raycaster = new Raycaster()
 const raycasterResults :Intersection[] = []
+const raycastHits :RaycastHit[] = []
+
+const coords = vec2.create()
+const rayDirection = vec3.create()
+const tmpv = vec3.create()
+const tmpp = vec3.create()
+const tmpPlane = Plane.create()
+const worldMovement = vec3.create()
+const viewPosition = vec3.create()
+const viewMovement = vec3.create()
+
+type HoverMap = Map<number, Hover>
+let hovered :Map<ThreeObjectComponent, HoverMap> = new Map()
+let lastHovered :Map<ThreeObjectComponent, HoverMap> = new Map()
 
 /** A render engine that uses Three.js. */
 export class ThreeRenderEngine implements RenderEngine {
   private readonly _disposer = new Disposer()
+  private readonly _hand :Hand
+  private readonly _pressedObjects = new Map<number, ThreeObjectComponent>()
 
   readonly renderer = new WebGLRenderer()
   readonly domElement = this.renderer.domElement
@@ -62,7 +79,7 @@ export class ThreeRenderEngine implements RenderEngine {
     }))
 
     this._disposer.add(gameEngine.ctx.host.bind(this.renderer.domElement))
-    this._disposer.add(gameEngine.ctx.hand = new Hand(this.renderer.domElement))
+    this._disposer.add(gameEngine.ctx.hand = this._hand = new Hand(this.renderer.domElement))
 
     this.scene.autoUpdate = false
   }
@@ -97,7 +114,127 @@ export class ThreeRenderEngine implements RenderEngine {
     return target
   }
 
-  update () {
+  updateHovers () {
+    for (const camera of this.cameras) {
+      for (const [identifier, pointer] of this._hand.pointers) {
+        const rayOrigin = camera.transform.position
+        camera.screenPointToDirection(
+          vec2.set(coords, pointer.position[0], pointer.position[1]),
+          rayDirection,
+        )
+
+        // pressed objects stay hovered until the press ends
+        const pressedObject = this._pressedObjects.get(identifier)
+        if (pressedObject) {
+          if (pointer.pressed) {
+            // constrain motion to a plane aligned with the camera direction
+            const hover = pressedObject.hovers.get(identifier)
+            if (hover) {
+              Plane.setFromNormalAndCoplanarPoint(
+                tmpPlane,
+                camera.getDirection(tmpv),
+                vec3.transformMat4(tmpp, hover.viewPosition, camera.transform.localToWorldMatrix),
+              )
+              const distance = Plane.intersectRay(tmpPlane, rayOrigin, rayDirection)
+              if (distance >= 0) vec3.scaleAndAdd(tmpp, rayOrigin, rayDirection, distance)
+              else vec3.copy(tmpp, hover.worldPosition)
+              this._maybeNoteHovered(identifier, pointer, camera, pressedObject, tmpp)
+              continue
+            }
+          } else {
+            this._pressedObjects.delete(identifier)
+          }
+        }
+
+        raycastHits.length = 0
+        this.raycastAll(rayOrigin, rayDirection, 0, Infinity, raycastHits)
+        let noted = false
+        for (const hit of raycastHits) {
+          const objectComponent = hit.transform.requireComponent(ThreeObjectComponent)
+          if (this._maybeNoteHovered(identifier, pointer, camera, objectComponent, hit.point)) {
+            noted = true
+            break
+          }
+        }
+        // if we didn't hit anything else, "hover" on the camera
+        if (!noted) {
+          // use intersection with a plane one unit in front of the camera
+          const dp = vec3.dot(camera.getDirection(tmpv), rayDirection)
+          this._maybeNoteHovered(
+            identifier,
+            pointer,
+            camera,
+            camera,
+            vec3.scaleAndAdd(tmpp, rayOrigin, rayDirection, 1 / dp),
+          )
+        }
+      }
+    }
+    // remove any pressed objects whose pointers are no longer in the map
+    for (const identifier of this._pressedObjects.keys()) {
+      if (!this._hand.pointers.has(identifier)) this._pressedObjects.delete(identifier)
+    }
+    // clear the components of any entities not in the current map
+    for (const objectComponent of lastHovered.keys()) {
+      if (!hovered.has(objectComponent)) objectComponent._setHovers(new Map())
+    }
+    // update the components of any entities in the current map
+    for (const [objectComponent, map] of hovered) {
+      objectComponent._setHovers(map)
+    }
+    // swap for next time
+    [lastHovered, hovered] = [hovered, lastHovered]
+  }
+
+  private _maybeNoteHovered (
+    identifier :number,
+    pointer :Pointer,
+    camera :ThreeCamera,
+    objectComponent :ThreeObjectComponent,
+    worldPosition :vec3,
+  ) :boolean {
+    let map = hovered.get(objectComponent)
+    if (!map) hovered.set(objectComponent, map = new Map())
+    const ohover = objectComponent.hovers.get(identifier)
+    if (ohover) {
+      vec3.subtract(worldMovement, worldPosition, ohover.worldPosition)
+      vec3.transformMat4(viewPosition, worldPosition, camera.transform.worldToLocalMatrix)
+      vec3.subtract(viewMovement, viewPosition, ohover.viewPosition)
+      if (
+        vec3.equals(worldPosition, ohover.worldPosition) &&
+        vec3.equals(worldMovement, ohover.worldMovement) &&
+        vec3.equals(viewPosition, ohover.viewPosition) &&
+        vec3.equals(viewMovement, ohover.viewMovement) &&
+        pointer.pressed === ohover.pressed
+      ) {
+        map.set(identifier, ohover)
+      } else {
+        map.set(identifier, {
+          worldPosition: vec3.clone(worldPosition),
+          worldMovement: vec3.clone(worldMovement),
+          viewPosition: vec3.clone(viewPosition),
+          viewMovement: vec3.clone(viewMovement),
+          pressed: pointer.pressed,
+        })
+      }
+    } else {
+      map.set(identifier, {
+        worldPosition: vec3.clone(worldPosition),
+        worldMovement: vec3.create(),
+        viewPosition: vec3.transformMat4(
+          vec3.create(),
+          worldPosition,
+          camera.transform.worldToLocalMatrix,
+        ),
+        viewMovement: vec3.create(),
+        pressed: pointer.pressed,
+      })
+    }
+    if (pointer.pressed) this._pressedObjects.set(identifier, objectComponent)
+    return true
+  }
+
+  render () {
     this.renderer.render(
       this.scene,
       this.cameras.length > 0 ? this.cameras[0].camera : defaultCamera,
@@ -168,6 +305,7 @@ class ThreeMaterial implements Material {
 
 abstract class ThreeObjectComponent extends TypeScriptComponent {
   readonly objectValue = Mutable.local<Object3D|undefined>(undefined)
+  readonly hovers = MutableMap.local<number, Hover>()
 
   get renderEngine () :ThreeRenderEngine {
     return this.gameObject.gameEngine.renderEngine as ThreeRenderEngine
@@ -196,6 +334,21 @@ abstract class ThreeObjectComponent extends TypeScriptComponent {
   dispose () {
     this.objectValue.update(undefined)
     super.dispose()
+  }
+
+  _setHovers (map :HoverMap) {
+    // remove anything no longer in the map
+    for (const identifier of this.hovers.keys()) {
+      if (!map.has(identifier)) {
+        this.hovers.delete(identifier)
+        this.sendMessage("onHoverEnd", identifier)
+      }
+    }
+    // add/update everything in the map
+    for (const [identifier, hover] of map) {
+      this.hovers.set(identifier, hover)
+      this.sendMessage("onHover", identifier, hover)
+    }
   }
 
   protected _updateTransform () {
@@ -273,6 +426,7 @@ class ThreeMeshRenderer extends ThreeObjectComponent implements MeshRenderer {
 registerComponentType("meshRenderer", ThreeMeshRenderer)
 
 const tmpVector2 = new Vector2()
+const tmpc = vec2.create()
 
 class ThreeCamera extends ThreeObjectComponent implements Camera {
   private _perspectiveCamera = new PerspectiveCamera()
@@ -305,9 +459,27 @@ class ThreeCamera extends ThreeObjectComponent implements Camera {
     }))
   }
 
+  getDirection (target? :vec3) :vec3 {
+    return this.viewportPointToDirection(vec2.set(tmpc, 0.5, 0.5), target)
+  }
+
+  screenPointToDirection (coords :vec2, target? :vec3) :vec3 {
+    return this.viewportPointToDirection(
+      vec2.set(
+        tmpc,
+        coords[0] / this.renderEngine.domElement.clientWidth,
+        1 - coords[1] / this.renderEngine.domElement.clientHeight,
+      ),
+      target,
+    )
+  }
+
   viewportPointToDirection (coords :vec2, target? :vec3) :vec3 {
     if (!target) target = vec3.create()
-    raycaster.setFromCamera(tmpVector2.fromArray(coords), this._perspectiveCamera)
+    raycaster.setFromCamera(
+      tmpVector2.set(coords[0] * 2 - 1, coords[1] * 2 - 1),
+      this._perspectiveCamera,
+    )
     return raycaster.ray.direction.toArray(target) as vec3
   }
 
