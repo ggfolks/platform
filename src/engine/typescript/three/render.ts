@@ -116,6 +116,7 @@ export class ThreeRenderEngine implements RenderEngine {
 
   updateHovers () {
     this._hand.update()
+    hovered.clear()
     for (const camera of this.cameras) {
       for (const [identifier, pointer] of this._hand.pointers) {
         const rayOrigin = camera.transform.position
