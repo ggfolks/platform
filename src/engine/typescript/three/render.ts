@@ -12,6 +12,7 @@ import {Mutable, Subject, Value} from "../../../core/react"
 import {Disposer, NoopRemover, Remover} from "../../../core/util"
 import {windowSize} from "../../../scene2/gl"
 import {loadGLTF, loadGLTFAnimationClip} from "../../../scene3/entity"
+import {Hand} from "../../../input/hand"
 import {Animation, Model, Transform} from "../../game"
 import {
   Camera, Light, LightType, Material, MaterialType, MeshRenderer, RaycastHit, RenderEngine,
@@ -35,7 +36,7 @@ export class ThreeRenderEngine implements RenderEngine {
   readonly scene = new Scene()
   readonly cameras :ThreeCamera[] = []
 
-  constructor (readonly gameEngine :TypeScriptGameEngine, readonly root :HTMLElement) {
+  constructor (readonly gameEngine :TypeScriptGameEngine) {
     gameEngine._renderEngine = this
 
     this._disposer.add(this.renderer)
@@ -50,15 +51,18 @@ export class ThreeRenderEngine implements RenderEngine {
     this.renderer.domElement.style.width = "100%"
     this.renderer.domElement.style.height = "100%"
 
-    root.appendChild(this.renderer.domElement)
-    this._disposer.add(() => root.removeChild(this.renderer.domElement))
-    this._disposer.add(windowSize(window).onValue(() => {
+    gameEngine.root.appendChild(this.renderer.domElement)
+    this._disposer.add(() => gameEngine.root.removeChild(this.renderer.domElement))
+    this._disposer.add(gameEngine.ctx.screen.onValue(() => {
       this.renderer.setSize(
         this.renderer.domElement.clientWidth,
         this.renderer.domElement.clientHeight,
         false,
       )
     }))
+
+    this._disposer.add(gameEngine.ctx.host.bind(this.renderer.domElement))
+    this._disposer.add(gameEngine.ctx.hand = new Hand(this.renderer.domElement))
 
     this.scene.autoUpdate = false
   }

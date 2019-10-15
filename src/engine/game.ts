@@ -1,8 +1,8 @@
 import {Clock} from "../core/clock"
 import {mat4, quat, vec3} from "../core/math"
 import {Disposable, PMap} from "../core/util"
+import {UINodeContext} from "../ui/node"
 import {GraphConfig} from "../graph/graph"
-import {NodeContext} from "../graph/node"
 import {PhysicsEngine} from "./physics"
 import {RenderEngine} from "./render"
 
@@ -19,7 +19,7 @@ export type GameObjectConfig = PMap<ComponentConfig>
 export interface GameEngine extends Disposable {
 
   /** The context object. */
-  readonly ctx :NodeContext
+  readonly ctx :UINodeContext
 
   /** The active render engine. */
   readonly renderEngine :RenderEngine

@@ -1,3 +1,6 @@
+import {StyleDefs} from "./style"
+import {Theme} from "./ui"
+
 const textCorner = 2
 const checkBoxCorner = 2
 const tabCorner = [5, 5, 0, 0]
@@ -10,7 +13,7 @@ const nodeButtonCorner = 5
 const family = "Helvetica, sans-serif"
 
 /** A default set of styles to use as a base. */
-export const DefaultStyles = {
+export const DefaultStyles :StyleDefs = {
   colors: {},
   shadows: {},
   fonts: {
@@ -85,7 +88,7 @@ export const DefaultStyles = {
 }
 
 /** A default theme to use as a base. */
-export const DefaultTheme = {
+export const DefaultTheme :Theme = {
   default: {
     label: {
       font: "$base",
@@ -210,7 +213,7 @@ export const DefaultTheme = {
       hovered: {background: "$dropdownitemHovered"},
       hoverFocused: {background: "$dropdownitemHovered"},
       pressed: {background: "$dropdownitemPressed"},
-      separator: {background: null},
+      separator: {background: undefined},
     },
     label: {font: "$dropdown"},
   },
@@ -231,7 +234,7 @@ export const DefaultTheme = {
       hovered: {background: "$menuitemHovered"},
       hoverFocused: {background: "$menuitemHovered"},
       pressed: {background: "$menuitemPressed"},
-      separator: {background: null},
+      separator: {background: undefined},
     },
     label: {font: "$menu"},
   },
@@ -274,7 +277,7 @@ export const DefaultTheme = {
     label: {font: "$nodeProperty", fill: "$lightGray"},
   },
   nodeEdges: {
-    box: {padding: 0, background: null},
+    box: {padding: 0, background: undefined},
   },
   nodeInput: {
     box: {padding: [0, 0, 0, 5]},

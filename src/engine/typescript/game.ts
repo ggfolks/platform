@@ -1,21 +1,36 @@
+import {loadImage} from "../../core/assets"
 import {Clock} from "../../core/clock"
 import {mat4, quat, vec3} from "../../core/math"
 import {Mutable, Value} from "../../core/react"
 import {Disposer, PMap, getValue} from "../../core/util"
+import {windowSize} from "../../scene2/gl"
 import {Graph as GraphObject, GraphConfig} from "../../graph/graph"
-import {NodeContext} from "../../graph/node"
+import {NodeTypeRegistry} from "../../graph/node"
+import {registerLogicNodes} from "../../graph/logic"
+import {registerMathNodes} from "../../graph/math"
+import {registerSignalNodes} from "../../graph/signal"
+import {SubgraphRegistry, registerUtilNodes} from "../../graph/util"
+import {registerInputNodes} from "../../input/node"
+import {HTMLHost} from "../../ui/element"
+import {UINodeContext, registerUINodes} from "../../ui/node"
+import {DefaultStyles, DefaultTheme} from "../../ui/theme"
 import {
   Component, ComponentConfig, Coroutine, Cube, Cylinder, GameEngine, GameObject, GameObjectConfig,
   Graph, Mesh, MeshFilter, PrimitiveType, Quad, Sphere, Time, Transform,
 } from "../game"
 import {PhysicsEngine} from "../physics"
 import {RenderEngine} from "../render"
+import {registerEngineNodes, registerEngineSubgraphs} from "../node"
 
 interface Updatable { update (clock :Clock) :void }
 interface Wakeable { awake () :void }
 
 /** An implementation of the GameEngine interface in TypeScript. */
 export class TypeScriptGameEngine implements GameEngine {
+  private readonly _disposer = new Disposer()
+
+  readonly ctx :UINodeContext
+
   readonly dirtyTransforms = new Set<TypeScriptTransform>()
   readonly updatables = new Set<Updatable>()
 
@@ -32,7 +47,25 @@ export class TypeScriptGameEngine implements GameEngine {
     return this._physicsEngine
   }
 
-  constructor (readonly ctx :NodeContext) {}
+  constructor (readonly root :HTMLElement) {
+    this.ctx = {
+      types: new NodeTypeRegistry(
+        registerLogicNodes,
+        registerMathNodes,
+        registerSignalNodes,
+        registerUtilNodes,
+        registerInputNodes,
+        registerUINodes,
+        registerEngineNodes,
+      ),
+      subgraphs: new SubgraphRegistry(registerEngineSubgraphs),
+      host: this._disposer.add(new HTMLHost(root)),
+      theme: DefaultTheme,
+      styles: DefaultStyles,
+      image: {resolve: loadImage},
+      screen: windowSize(window),
+    }
+  }
 
   createPrimitive (
     type :PrimitiveType,
@@ -81,6 +114,7 @@ export class TypeScriptGameEngine implements GameEngine {
   }
 
   dispose () {
+    this._disposer.dispose()
     // TODO: dispose of all extant game objects?
   }
 }
