@@ -611,6 +611,12 @@ export class System {
     this._ids.forEach(fn)
   }
 
+  /** Returns the ID of the first entity that matches `pred`, or `-1` if no entity matches. */
+  findEntity (pred :(id :ID) => boolean) :ID {
+    // TODO: if we have a "primary" component, use that to determine iteration order
+    return this._ids.find(pred)
+  }
+
   protected added (id :ID, config :EntityConfig) {
     this._ids.add(id)
   }
