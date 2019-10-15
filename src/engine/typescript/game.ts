@@ -68,11 +68,7 @@ export class TypeScriptGameEngine implements GameEngine {
     }
   }
 
-  createPrimitive (
-    type :PrimitiveType,
-    materialConfig? :PMap<any>,
-    rigidBodyConfig? :PMap<any>,
-  ) :GameObject {
+  createPrimitive (type :PrimitiveType, config? :GameObjectConfig) :GameObject {
     let mesh :TypeScriptMesh
     switch (type) {
       case "sphere": mesh = new TypeScriptSphere() ; break
@@ -81,11 +77,12 @@ export class TypeScriptGameEngine implements GameEngine {
       case "quad": mesh = new TypeScriptQuad() ; break
       default: throw new Error(`Unknown primitive type "${type}"`)
     }
-    return this.createGameObject(type, {
+    const mergedConfig = {
       meshFilter: {mesh},
-      meshRenderer: {material: materialConfig || {}},
-      ...(rigidBodyConfig ? {rigidBody: rigidBodyConfig} : undefined),
-    })
+      meshRenderer: {},
+    }
+    if (config) applyConfig(mergedConfig, config)
+    return this.createGameObject(type, mergedConfig)
   }
 
   createGameObjects (configs :PMap<GameObjectConfig>) :void {

@@ -39,13 +39,8 @@ export interface GameEngine extends Disposable {
 
   /** Creates and returns a new game object containing a primitive.
     * @param type the type of primitive desired.
-    * @param [materialConfig] the configuration of the material to use, if not the default.
-    * @param [rigidBodyConfig] the configuration of the rigid body component, if desired. */
-  createPrimitive (
-    type :PrimitiveType,
-    materialConfig? :PMap<any>,
-    rigidBodyConfig? :PMap<any>,
-  ) :GameObject
+    * @param [config] additional configuration to merge in. */
+  createPrimitive (type :PrimitiveType, config? :GameObjectConfig) :GameObject
 
   /** Creates a set of game objects.
     * @param configs the map from name to config. */
