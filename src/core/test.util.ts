@@ -15,6 +15,9 @@ test("bitset", () => {
 
   for (let ii = 1; ii < 1024; ii += 2) expect(b.add(ii)).toBe(true)
   for (let ii = 0; ii < 1024; ii += 1) expect(b.has(ii)).toBe(ii%2 !== 0)
+
+  expect(b.find(v => v > 1000)).toBe(1001)
+  expect(b.find(v => v == 1000)).toBe(-1)
 })
 
 test("filter", () => {

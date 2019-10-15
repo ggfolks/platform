@@ -50,7 +50,7 @@ export class Disposer implements Disposable {
 /** An object used as a "property map", where all properties have the same type. */
 export type PMap<T> = {[key :string] :T}
 
-/** Maintains a set of integers using bits in a backing (typed array) vector. */
+/** Maintains a set of positive integers using bits in a backing (typed array) vector. */
 export class BitSet {
   private bits :Uint32Array
 
@@ -62,6 +62,7 @@ export class BitSet {
   /** Adds `value` to this set.
     * @return `true` if `value` was added, `false` if `value` was already in the set. */
   add (value :number) :boolean {
+    if (value < 0) throw new Error(`Negative integers not allowed in bit set.`)
     const idx = value >> 5, mask = 1 << (value & 0x1F)
     const bits = this.resize(idx)
     const word = bits[idx]
@@ -99,12 +100,26 @@ export class BitSet {
   forEach (fn :(v :number) => any) {
     const bits = this.bits
     for (let bb = 0; bb < bits.length; bb += 1) {
-      const word = bits[bb]
-      for (let mm = 0; mm < 32; mm += 1) {
+      const word = bits[bb], bpos = bb*32
+      for (let mm = 0, vv = bb*32; mm < 32; mm += 1, vv += 1) {
         const mask = 1 << mm
-        if ((word & mask) !== 0) fn(bb*32+mm)
+        if ((word & mask) !== 0) fn(bpos+mm)
       }
     }
+  }
+
+  /** Returns the first value (in ascending order) for which `pred` returns true, or `-1` if no
+    * value matched the predicate. */
+  find (pred :(v :number) => boolean) :number {
+    const bits = this.bits
+    for (let bb = 0; bb < bits.length; bb += 1) {
+      const word = bits[bb]
+      for (let mm = 0, vv = bb*32; mm < 32; mm += 1, vv += 1) {
+        const mask = 1 << mm
+        if ((word & mask) !== 0 && pred(vv)) return vv
+      }
+    }
+    return -1
   }
 
   private resize (idx :number) :Uint32Array {
