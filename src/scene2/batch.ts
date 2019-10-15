@@ -1,7 +1,7 @@
 import {dim2, mat2d, vec2} from "../core/math"
 import {Color} from "../core/color"
 import {Disposable} from "../core/util"
-import {GLC, Program, Texture, Tile, checkError} from "./gl"
+import {GLC, Program, Renderer, Texture, Tile, checkError} from "./gl"
 
 /** Manages the delivery of groups of drawing calls to the GPU. It is usually a combination of a
   * [[Program]] and one or more buffers. */
@@ -275,9 +275,10 @@ export class TriangleBatch extends QuadBatch {
   private vertPos = 0
   private elemPos = 0
 
-  constructor (glc :GLC, readonly config = DefaultTriangleBatchConfig) {
-    super(glc)
+  constructor (readonly renderer :Renderer, readonly config = DefaultTriangleBatchConfig) {
+    super(renderer.glc)
 
+    const glc = renderer.glc
     const vsrc = config.source.vertex().join("\n"), fsrc = config.source.fragment().join("\n")
     const prog = this.program = new Program(glc, vsrc, fsrc)
 
@@ -413,7 +414,10 @@ export class TriangleBatch extends QuadBatch {
   begin (fbufSize :dim2, flip :boolean) {
     super.begin(fbufSize, flip)
     this.program.activate()
-    this.glc.uniform2f(this.uHScreenSize, fbufSize[0]/2, fbufSize[1]/2)
+    // account for the logical to physical pixel scale
+    const hfbw = this.renderer.scale.inv.scaled(fbufSize[0]/2)
+    const hfbh = this.renderer.scale.inv.scaled(fbufSize[1]/2)
+    this.glc.uniform2f(this.uHScreenSize, hfbw, hfbh)
     this.glc.uniform1f(this.uFlip, flip ? -1 : 1)
 
     // TODO: avoid rebinding if this buffer is already bound?
@@ -655,8 +659,10 @@ export class UniformQuadBatch extends QuadBatch {
   private quadCounter = 0
 
   /** Creates a uniform quad batch with the supplied custom shader program builder. */
-  constructor (glc :GLC, readonly config = DefaultUniformQuadBatchConfig) {
-    super(glc)
+  constructor (readonly renderer :Renderer, readonly config = DefaultUniformQuadBatchConfig) {
+    super(renderer.glc)
+
+    const glc = renderer.glc
     const maxVecs = UniformQuadBatch.usableMaxUniformVectors(glc) - this.extraVec4s
     const v4s = this.vec4sPerQuad
     if (maxVecs < v4s) throw new Error(
@@ -741,7 +747,10 @@ export class UniformQuadBatch extends QuadBatch {
     // we can cache the last set values for all these glUniform calls and only set them anew if
     // they differ...
     const glc = this.glc
-    glc.uniform2f(this.uHScreenSize, fbufSize[0]/2, fbufSize[1]/2)
+    // account for the logical to physical pixel scale
+    const hfbw = this.renderer.scale.inv.scaled(fbufSize[0]/2)
+    const hfbh = this.renderer.scale.inv.scaled(fbufSize[1]/2)
+    glc.uniform2f(this.uHScreenSize, hfbw, hfbh)
     glc.uniform1f(this.uFlip, flip ? -1 : 1)
     glc.bindBuffer(GLC.ARRAY_BUFFER, this.vertBuffer)
     glc.enableVertexAttribArray(this.aVertex)

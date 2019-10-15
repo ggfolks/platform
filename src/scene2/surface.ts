@@ -46,7 +46,6 @@ export class Surface {
   /** Creates a surface which will render to `target` using `defaultBatch` as its default quad
     * renderer. */
   constructor (readonly target :RenderTarget, defaultBatch :QuadBatch) {
-    this.scale(target.scale)
     this.batch = defaultBatch
   }
 
