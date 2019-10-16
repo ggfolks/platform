@@ -78,6 +78,13 @@ export class TransformComponent extends Float32ArrayComponent {
     batch[start+DT] = 1
   }
 
+  /** Copies the origin of entity `id` into `into`.
+    * @return the supplied `into` vector. */
+  readOrigin (id :ID, into :vec2) :vec2 {
+    const batch = this.batch(id), start = this.start(id)
+    return vec2.set(into, batch[start+OX], batch[start+OY])
+  }
+
   /** Copies the translation of entity `id` into `into`.
     * @return the supplied `into` vector. */
   readTranslation (id :ID, into :vec2) :vec2 {
