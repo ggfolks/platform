@@ -1,11 +1,12 @@
 import {Clock} from "../core/clock"
-import {mat4, quat, vec3} from "../core/math"
+import {Euler, mat4, quat, vec3} from "../core/math"
 import {Value} from "../core/react"
 import {RMap} from "../core/rcollect"
 import {Disposable, PMap} from "../core/util"
 import {InputNodeContext} from "../input/node"
 import {UINodeContext} from "../ui/node"
 import {GraphConfig} from "../graph/graph"
+import {setEnumMeta} from "../graph/meta"
 import {PhysicsEngine} from "./physics"
 import {RenderEngine} from "./render"
 
@@ -182,6 +183,10 @@ export interface Hoverable extends Component {
 /** Represents a coroutine running on a component. */
 export interface Coroutine extends Disposable {}
 
+/** The different types of coordinate frames available. */
+export type CoordinateFrame = "world" | "local"
+setEnumMeta("CoordinateFrame", ["world", "local"])
+
 /** Represents a game object transform. */
 export interface Transform extends Component {
 
@@ -224,6 +229,16 @@ export interface Transform extends Component {
 
   /** The matrix that transforms from world to local space. */
   readonly worldToLocalMatrix :mat4
+
+  /** Rotates by a set of Euler angles in local (default) or world space.
+    * @param euler the angles by which to rotate.
+    * @param [frame] the coordinate frame in which to rotate (local by default). */
+  rotate (euler :Euler, frame? :CoordinateFrame) :void
+
+  /** Translates by a vector in local (default) or world space.
+    * @param vector the amount by which to translate.
+    * @param [frame] the coordinate frame in which to translate (local by default). */
+  translate (vector :vec3, frame? :CoordinateFrame) :void
 }
 
 /** Contains a mesh. */

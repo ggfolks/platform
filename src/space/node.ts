@@ -3,7 +3,9 @@ import {Color, Euler, Math as ThreeMath, Matrix4, Quaternion, Vector3} from "thr
 import {Value} from "../core/react"
 import {getValueStyleComponent} from "../core/ui"
 import {Graph} from "../graph/graph"
-import {inputEdge, inputEdges, outputEdge, property, setEnumMeta} from "../graph/meta"
+import {
+  activateNodeConfigs, inputEdge, inputEdges, outputEdge, property, setEnumMeta,
+} from "../graph/meta"
 import {Operator, OperatorConfig, Node, NodeConfig, NodeTypeRegistry} from "../graph/node"
 import {addPropertyTypes} from "../graph/util"
 import {EntityComponentConfig, EntityComponentNode} from "../entity/node"
@@ -625,6 +627,7 @@ export function registerSpaceNodes (registry :NodeTypeRegistry) {
     Color: ColorNode,
     "Color.constant": ColorConstant,
   })
+  activateNodeConfigs(TranslateConfig)
   registry.registerNodeTypes(["space"], {
     randomDirection: RandomDirection,
     rotate: Rotate,

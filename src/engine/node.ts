@@ -1,13 +1,13 @@
-import {dim2, vec3zero} from "../core/math"
+import {Euler, dim2, vec3, vec3zero} from "../core/math"
 import {Value} from "../core/react"
 import {getValue} from "../core/util"
 import {Graph} from "../graph/graph"
-import {activateNodeConfigs, property, outputEdge} from "../graph/meta"
+import {activateNodeConfigs, property, inputEdge, outputEdge} from "../graph/meta"
 import {Node, NodeConfig, NodeTypeRegistry} from "../graph/node"
 import {SubgraphRegistry} from "../graph/util"
 import {PointerConfig} from "../input/node"
 import {windowSize} from "../scene2/gl"
-import {Graph as GraphComponent, Hover, Hoverable} from "./game"
+import {CoordinateFrame, Graph as GraphComponent, Hover, Hoverable} from "./game"
 
 /** Emits information about a single hover point. */
 abstract class HoverConfig implements NodeConfig, PointerConfig {
@@ -65,16 +65,70 @@ class HoverNode extends Node {
   }
 }
 
+/** Rotates by an amount determined by the input. */
+abstract class RotateConfig implements NodeConfig {
+  type = "rotate"
+  @property("CoordinateFrame") frame = "local"
+  @inputEdge("Euler") input = undefined
+}
+
+class Rotate extends Node {
+
+  constructor (graph :Graph, id :string, readonly config :RotateConfig) {
+    super(graph, id, config)
+  }
+
+  connect () {
+    const component = this.graph.ctx.graphComponent as GraphComponent|undefined
+    if (!component) return
+    const input = this.graph.getValue(this.config.input, Euler.create())
+    this._disposer.add(this.graph.clock.onEmit(() => {
+      component.transform.rotate(input.current, this.config.frame as CoordinateFrame|undefined)
+    }))
+  }
+}
+
+/** Translates by an amount determined by the input. */
+abstract class TranslateConfig implements NodeConfig {
+  type = "translate"
+  @property("CoordinateFrame") frame = "local"
+  @inputEdge("vec3") input = undefined
+}
+
+class Translate extends Node {
+
+  constructor (graph :Graph, id :string, readonly config :TranslateConfig) {
+    super(graph, id, config)
+  }
+
+  connect () {
+    const component = this.graph.ctx.graphComponent as GraphComponent|undefined
+    if (!component) return
+    const input = this.graph.getValue(this.config.input, vec3.create())
+    this._disposer.add(this.graph.clock.onEmit(() => {
+      component.transform.translate(input.current, this.config.frame as CoordinateFrame|undefined)
+    }))
+  }
+}
+
 /** Registers the nodes in this module with the supplied registry. */
 export function registerEngineNodes (registry :NodeTypeRegistry) {
-  activateNodeConfigs(HoverConfig)
+  activateNodeConfigs(HoverConfig, TranslateConfig)
   registry.registerNodeTypes(["engine"], {
     hover: HoverNode,
+    rotate: Rotate,
+    translate: Translate,
   })
 }
 
 /** Registers the subgraphs in this module with the supplied registry. */
 export function registerEngineSubgraphs (registry :SubgraphRegistry) {
+  const draggable = {
+    hover: {type: "hover"},
+    drag: {type: "vec3.scale", vector: ["hover", "worldMovement"], scalar: ["hover", "pressed"]},
+    grabbed: {type: "output", name: "grabbed", input: ["hover", "pressed"]},
+    translate: {type: "translate", frame: "world", input: "drag"},
+  }
   registry.registerSubgraphs(["engine", "object"], {
     doubleClickToInspect: {
       doubleClick: {type: "doubleClick"},
@@ -97,5 +151,6 @@ export function registerEngineSubgraphs (registry :SubgraphRegistry) {
         },
       },
     },
+    pointerDraggable: draggable,
   })
 }

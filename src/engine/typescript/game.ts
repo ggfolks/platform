@@ -1,6 +1,6 @@
 import {loadImage} from "../../core/assets"
 import {Clock} from "../../core/clock"
-import {mat4, quat, vec3} from "../../core/math"
+import {Euler, mat4, quat, vec3} from "../../core/math"
 import {Mutable, Value} from "../../core/react"
 import {Disposer, PMap, getValue} from "../../core/util"
 import {windowSize} from "../../scene2/gl"
@@ -8,6 +8,7 @@ import {Graph as GraphObject, GraphConfig} from "../../graph/graph"
 import {NodeConfig, NodeTypeRegistry} from "../../graph/node"
 import {registerLogicNodes} from "../../graph/logic"
 import {registerMathNodes} from "../../graph/math"
+import {registerMatrixNodes} from "../../graph/matrix"
 import {registerSignalNodes} from "../../graph/signal"
 import {SubgraphRegistry, registerUtilNodes} from "../../graph/util"
 import {registerInputNodes} from "../../input/node"
@@ -15,9 +16,9 @@ import {HTMLHost} from "../../ui/element"
 import {registerUINodes} from "../../ui/node"
 import {DefaultStyles, DefaultTheme} from "../../ui/theme"
 import {
-  Component, ComponentConfig, ComponentConstructor, Coroutine, Cube, Cylinder, GameContext,
-  GameEngine, GameObject, GameObjectConfig, Graph, Mesh, MeshFilter, PrimitiveType, Quad, Sphere,
-  Time, Transform,
+  Component, ComponentConfig, ComponentConstructor, CoordinateFrame, Coroutine, Cube, Cylinder,
+  GameContext, GameEngine, GameObject, GameObjectConfig, Graph, Mesh, MeshFilter, PrimitiveType,
+  Quad, Sphere, Time, Transform,
 } from "../game"
 import {PhysicsEngine} from "../physics"
 import {RenderEngine} from "../render"
@@ -53,6 +54,7 @@ export class TypeScriptGameEngine implements GameEngine {
       types: new NodeTypeRegistry(
         registerLogicNodes,
         registerMathNodes,
+        registerMatrixNodes,
         registerSignalNodes,
         registerUtilNodes,
         registerInputNodes,
@@ -453,6 +455,17 @@ class TypeScriptTransform extends TypeScriptComponent implements Transform {
 
   get rotation () :quat { return this._rotation }
   set rotation (rot :quat) { quat.copy(this._rotation, rot) }
+
+  rotate (euler :Euler, frame? :CoordinateFrame) :void {
+    quat.fromEuler(tmpq, euler[0], euler[1], euler[2])
+    if (frame === "world") quat.multiply(this._rotation, tmpq, this._rotation)
+    else quat.multiply(this._localRotation, this._localRotation, tmpq)
+  }
+
+  translate (vector :vec3, frame? :CoordinateFrame) :void {
+    if (frame === "world") vec3.add(this._position, this._position, vector)
+    else vec3.add(this._localPosition, this._localPosition, vector)
+  }
 
   dispose () {
     super.dispose()
