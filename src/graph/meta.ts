@@ -53,7 +53,10 @@ export function property (type? :string, constraints? :PropertyConstraints) {
       type = typeof defaultValue
       if (type === "object" && defaultValue !== null) type = defaultValue.constructor.name as string
     }
-    getNodeMeta(instance.type).properties.set(name, {type, defaultValue, constraints})
+    getNodeMetaByPrototype(prototype, instance.type).properties.set(
+      name,
+      {type, defaultValue, constraints},
+    )
   }
 }
 
@@ -61,7 +64,7 @@ export function property (type? :string, constraints? :PropertyConstraints) {
 export function inputEdge (type :string) {
   return (prototype :NodeConfig, name :string) => {
     let instance = new (prototype as any).constructor()
-    getNodeMeta(instance.type).inputs.set(name, {type, multiple: false})
+    getNodeMetaByPrototype(prototype, instance.type).inputs.set(name, {type, multiple: false})
   }
 }
 
@@ -69,7 +72,7 @@ export function inputEdge (type :string) {
 export function inputEdges (type :string) {
   return (prototype :NodeConfig, name :string) => {
     let instance = new (prototype as any).constructor()
-    getNodeMeta(instance.type).inputs.set(name, {type, multiple: true})
+    getNodeMetaByPrototype(prototype, instance.type).inputs.set(name, {type, multiple: true})
   }
 }
 
@@ -77,11 +80,22 @@ export function inputEdges (type :string) {
 export function outputEdge (type :string, isDefault :boolean = false) {
   return (prototype :NodeConfig, name :string) => {
     let instance = new (prototype as any).constructor()
-    getNodeMeta(instance.type).outputs.set(name, {type, isDefault})
+    getNodeMetaByPrototype(prototype, instance.type).outputs.set(name, {type, isDefault})
   }
 }
 
+const nodeMetaByPrototype = new Map<NodeConfig, NodeMeta>()
 const nodeMeta :PMap<NodeMeta> = {}
+
+function getNodeMetaByPrototype (prototype :NodeConfig, type :string) :NodeMeta {
+  let meta = nodeMetaByPrototype.get(prototype)
+  if (!meta) nodeMetaByPrototype.set(prototype, meta = nodeMeta[type] = {
+    properties: MutableMap.local(),
+    inputs: MutableMap.local(),
+    outputs: MutableMap.local(),
+  })
+  return meta
+}
 
 /** Returns the metadata for the specified node type. */
 export function getNodeMeta (type :string) :NodeMeta {
@@ -92,6 +106,19 @@ export function getNodeMeta (type :string) :NodeMeta {
     outputs: MutableMap.local(),
   }
   return meta
+}
+
+type NodeConfigConstructor = Function & { prototype: NodeConfig }
+
+/** Activates a node configuration class, ensuring that its metadata is returned when metadata is
+  * requested by string.  This is necessary because there are (temporarily) different nodes with
+  * the same type identifier as we transition between systems.
+  * @param constructors the constructors of the config classes to activate. */
+export function activateNodeConfigs (...constructors :NodeConfigConstructor[]) {
+  for (const constructor of constructors) {
+    let instance = new (constructor as any)()
+    nodeMeta[instance.type] = getNodeMetaByPrototype(constructor.prototype, instance.type)
+  }
 }
 
 /** The metadata associated with an enum type. */

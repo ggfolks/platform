@@ -2,7 +2,7 @@ import {dim2, vec3zero} from "../core/math"
 import {Value} from "../core/react"
 import {getValue} from "../core/util"
 import {Graph} from "../graph/graph"
-import {property, outputEdge} from "../graph/meta"
+import {activateNodeConfigs, property, outputEdge} from "../graph/meta"
 import {Node, NodeConfig, NodeTypeRegistry} from "../graph/node"
 import {SubgraphRegistry} from "../graph/util"
 import {PointerConfig} from "../input/node"
@@ -67,6 +67,7 @@ class HoverNode extends Node {
 
 /** Registers the nodes in this module with the supplied registry. */
 export function registerEngineNodes (registry :NodeTypeRegistry) {
+  activateNodeConfigs(HoverConfig)
   registry.registerNodeTypes(["engine"], {
     hover: HoverNode,
   })

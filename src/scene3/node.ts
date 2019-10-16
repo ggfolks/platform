@@ -8,7 +8,7 @@ import {Subject, Value} from "../core/react"
 import {MutableMap} from "../core/rcollect"
 import {Noop, NoopRemover, getValue} from "../core/util"
 import {Graph} from "../graph/graph"
-import {InputEdgeMeta, inputEdge, outputEdge, property} from "../graph/meta"
+import {InputEdgeMeta, activateNodeConfigs, inputEdge, outputEdge, property} from "../graph/meta"
 import {NodeTypeRegistry, WrappedValue} from "../graph/node"
 import {SubgraphRegistry} from "../graph/util"
 import {Component} from "../entity/entity"
@@ -359,6 +359,7 @@ function cloneMaterial (material :Material) :Material {
 
 /** Registers the nodes in this module with the supplied registry. */
 export function registerScene3Nodes (registry :NodeTypeRegistry) {
+  activateNodeConfigs(HoverConfig)
   registry.registerNodeTypes(["scene3"], {
     hover: Hover,
     animationAction: AnimationActionNode,
