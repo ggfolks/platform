@@ -49,6 +49,13 @@ export function getValueStyle (value :any) :string {
     case "object":
       // we look for a getStyle function, as used in Three.js Color instances
       if (value.getStyle) return value.getStyle()
+      // vec3s are raw Float32Arrays
+      if (value instanceof Float32Array && value.length === 3) {
+        const r = getValueStyleComponent(value[0])
+        const g = getValueStyleComponent(value[1])
+        const b = getValueStyleComponent(value[2])
+        return `rgb(${r}, ${g}, ${b})`
+      }
   }
   return "#808080"
 }
