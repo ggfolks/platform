@@ -627,7 +627,7 @@ export function registerSpaceNodes (registry :NodeTypeRegistry) {
     Color: ColorNode,
     "Color.constant": ColorConstant,
   })
-  activateNodeConfigs(TranslateConfig)
+  activateNodeConfigs(RotateConfig, TranslateConfig)
   registry.registerNodeTypes(["space"], {
     randomDirection: RandomDirection,
     rotate: Rotate,

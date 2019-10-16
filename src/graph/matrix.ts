@@ -2,7 +2,7 @@ import {vec3} from "../core/math"
 import {Value} from "../core/react"
 import {Graph} from "./graph"
 import {Node, NodeConfig, NodeTypeRegistry} from "./node"
-import {inputEdge, outputEdge, property} from "./meta"
+import {inputEdge, inputEdges, outputEdge, property} from "./meta"
 
 /** Creates a vector from individual components. */
 abstract class Vec3FromValuesConfig implements NodeConfig {
@@ -34,11 +34,13 @@ class Vec3FromValues extends Node {
   * vector objects every time the function is called.
   * @param populator the function to populate the vector.
   * @return the wrapped function. */
-function createVec3Fn<T> (populator :(out :vec3, ...args :T[]) => vec3) :(...args :T[]) => vec3 {
+export function createVec3Fn (
+  populator :(out :vec3, arg? :any) => vec3,
+) :(arg? :any) => vec3 {
   const a = vec3.create()
   const b = vec3.create()
   let alternate = false
-  return (...args) => populator((alternate = !alternate) ? a : b, ...args)
+  return arg => populator((alternate = !alternate) ? a : b, arg)
 }
 
 /** A constant vector value. */
@@ -56,6 +58,31 @@ class Vec3Constant extends Node {
 
   protected _createOutput () {
     return Value.constant(this.config.value || vec3.create())
+  }
+}
+
+/** Adds a set of vectors. */
+abstract class Vec3AddConfig implements NodeConfig {
+  type = "vec3.add"
+  @inputEdges("vec3") inputs = undefined
+  @outputEdge("vec3") output = undefined
+}
+
+class Vec3Add extends Node {
+
+  constructor (graph :Graph, id :string, readonly config :Vec3AddConfig) {
+    super(graph, id, config)
+  }
+
+  protected _createOutput () {
+    return this.graph
+      .getValues(this.config.inputs, vec3.create())
+      .map(createVec3Fn((out, values) => {
+        // @ts-ignore vec3.zero not in type definition
+        vec3.zero(out)
+        for (const value of values) vec3.add(out, out, value)
+        return out
+      }))
   }
 }
 
@@ -88,6 +115,7 @@ export function registerMatrixNodes (registry :NodeTypeRegistry) {
   registry.registerNodeTypes(["matrix", "vec3"], {
     "vec3.fromValues": Vec3FromValues,
     "vec3.constant": Vec3Constant,
+    "vec3.add": Vec3Add,
     "vec3.scale": Vec3Scale,
   })
 }

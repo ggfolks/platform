@@ -8,6 +8,32 @@ import {SubgraphRegistry} from "../graph/util"
 import {PointerConfig} from "../input/node"
 import {windowSize} from "../scene2/gl"
 import {CoordinateFrame, Graph as GraphComponent, Hover, Hoverable} from "./game"
+import {RaycastHit} from "./render"
+
+/** Exposes the properties of a component as inputs and outputs. */
+abstract class ComponentConfig implements NodeConfig {
+  type = "component"
+  @property() compType = "transform" // TODO: special property type to select from existing
+}
+
+class ComponentNode extends Node {
+
+  constructor (graph :Graph, id :string, readonly config :ComponentConfig) {
+    super(graph, id, config)
+  }
+
+  protected _createOutput (name :string, defaultValue :any) :Value<any> {
+    const graphComponent = this.graph.ctx.graphComponent as GraphComponent|undefined
+    if (!graphComponent) return Value.constant(defaultValue)
+    return graphComponent.gameObject
+      .getComponentValue(getValue(this.config.compType, "transform"))
+      .switchMap(
+        component => component
+          ? component.getProperty(name, defaultValue)
+          : Value.constant(defaultValue)
+      )
+  }
+}
 
 /** Emits information about a single hover point. */
 abstract class HoverConfig implements NodeConfig, PointerConfig {
@@ -65,6 +91,48 @@ class HoverNode extends Node {
   }
 }
 
+/** Casts a ray into the scene. */
+abstract class RaycastConfig implements NodeConfig {
+  type = "raycast"
+  @property("CoordinateFrame") frame = "local"
+  @inputEdge("vec3") origin = undefined
+  @inputEdge("vec3") direction = undefined
+  @outputEdge("number") distance = undefined
+}
+
+class Raycast extends Node {
+
+  constructor (graph :Graph, id :string, readonly config :RaycastConfig) {
+    super(graph, id, config)
+  }
+
+  protected _createOutput () {
+    const component = this.graph.ctx.graphComponent as GraphComponent|undefined
+    if (!component) return Value.constant(Infinity)
+    const origin = this.graph.getValue(this.config.origin, vec3.create())
+    const direction = this.graph.getValue(this.config.direction, vec3.fromValues(0, 0, 1))
+    const worldOrigin = vec3.create()
+    const worldDirection = vec3.create()
+    const hits :RaycastHit[] = []
+    return this.graph.clock.fold(Infinity, () => {
+      vec3.copy(worldOrigin, origin.current)
+      vec3.copy(worldDirection, direction.current)
+      if (this.config.frame !== "world") {
+        component.transform.transformPoint(worldOrigin, worldOrigin)
+        component.transform.transformDirection(worldDirection, worldDirection)
+      }
+      component.gameObject.gameEngine.renderEngine.raycastAll(
+        worldOrigin,
+        worldDirection,
+        0,
+        Infinity,
+        hits,
+      )
+      return hits.length === 0 ? Infinity : hits[0].distance
+    })
+  }
+}
+
 /** Rotates by an amount determined by the input. */
 abstract class RotateConfig implements NodeConfig {
   type = "rotate"
@@ -113,9 +181,11 @@ class Translate extends Node {
 
 /** Registers the nodes in this module with the supplied registry. */
 export function registerEngineNodes (registry :NodeTypeRegistry) {
-  activateNodeConfigs(HoverConfig, TranslateConfig)
+  activateNodeConfigs(HoverConfig, RotateConfig, TranslateConfig)
   registry.registerNodeTypes(["engine"], {
+    component :ComponentNode,
     hover: HoverNode,
+    raycast: Raycast,
     rotate: Rotate,
     translate: Translate,
   })
@@ -125,9 +195,47 @@ export function registerEngineNodes (registry :NodeTypeRegistry) {
 export function registerEngineSubgraphs (registry :SubgraphRegistry) {
   const draggable = {
     hover: {type: "hover"},
-    drag: {type: "vec3.scale", vector: ["hover", "worldMovement"], scalar: ["hover", "pressed"]},
     grabbed: {type: "output", name: "grabbed", input: ["hover", "pressed"]},
-    translate: {type: "translate", frame: "world", input: "drag"},
+    translate: {
+      type: "translate",
+      frame: "world",
+      input: {type: "vec3.scale", vector: ["hover", "worldMovement"], scalar: ["hover", "pressed"]},
+    },
+  }
+  const fallable = {
+    transform: {type: "component", compType: "transform"},
+    offsetPosition: {
+      type: "vec3.add",
+      inputs: [["transform", "position"], vec3.fromValues(0, 1, 0)],
+    },
+    raycast: {
+      type: "raycast",
+      frame: "world",
+      origin: "offsetPosition",
+      direction: vec3.fromValues(0, -1, 0),
+    },
+    height: {type: "property", name: "height"},
+    heightPlusOne: {type: "add", inputs: [1, "height"]},
+    offset: {type: "subtract", a: "heightPlusOne", b: ["raycast", "distance"]},
+    clock: {type: "clock"},
+    aboveGround: {type: "lessThan", a: "offset", b: -0.0001},
+    grabbed: {type: "input", name: "grabbed"},
+    notGrabbed: {type: "not", input: "grabbed"},
+    falling: {type: "and", inputs: ["aboveGround", "notGrabbed"]},
+    dv: {type: "multiply", inputs: ["clock", -9.8]},
+    baseVelocity: {type: "add", inputs: ["velocity", "dv"]},
+    jump: {type: "input", name: "jump"},
+    velocity: {
+      type: "conditional",
+      condition: "falling",
+      ifTrue: "baseVelocity",
+      ifFalse: "jump",
+    },
+    fall: {type: "multiply", inputs: ["clock", "velocity"]},
+    delta: {type: "max", inputs: ["offset", "fall"]},
+    translation: {type: "vec3.fromValues", y: "delta"},
+    translate: {type: "translate", input: "translation"},
+    aboveGroundOutput: {type: "output", name: "aboveGround", input: "aboveGround"},
   }
   registry.registerSubgraphs(["engine", "object"], {
     doubleClickToInspect: {
@@ -152,5 +260,18 @@ export function registerEngineSubgraphs (registry :SubgraphRegistry) {
       },
     },
     pointerDraggable: draggable,
+    fallable,
+    draggableFallable: {
+      draggable: {type: "subgraph", title: "draggable", graph: draggable},
+      fallable: {
+        type: "subgraph",
+        title: "fallable",
+        grabbed: ["draggable", "grabbed"],
+        jump: 0,
+        height: 0,
+        graph: fallable,
+      },
+      aboveGround: {type: "output", name: "aboveGround", input: ["fallable", "aboveGround"]},
+    },
   })
 }

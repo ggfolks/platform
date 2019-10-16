@@ -127,9 +127,16 @@ export class Graph implements Disposable {
     if (!node) {
       let value :any = input
       if (value && value.value !== undefined) value = value.value
-      let type = typeof value
+      let type = typeof value as string
       if (type === "object") {
         if (value && value.nodeType) type = value.nodeType
+        else if (value instanceof Float32Array) {
+          // special handling for raw arrays used by gl-matrix
+          switch (value.length) {
+            case 3: type = "vec3.constant" ; break
+            default: throw new Error("No node type for array length: " + value.length)
+          }
+        }
         else throw new Error(log.format("Constant value of unsupported type", "value", value))
       }
       this._nodes.set(id, node = this.ctx.types.createNode(this, id, {type, value}))

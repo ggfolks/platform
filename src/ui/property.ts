@@ -1,5 +1,6 @@
 import {Color, Euler, Math as M, Vector3} from "three"
 
+import {vec3} from "../core/math"
 import {Mutable, Value} from "../core/react"
 import {PMap, toLimitedString} from "../core/util"
 import {EnumMeta, NumberConstraints, getEnumMeta} from "../graph/meta"
@@ -98,6 +99,33 @@ const propertyConfigCreators :PMap<PropertyConfigCreator> = {
         scopeId: "checkBoxChecked",
         contents: {type: "label", text: Value.constant("✔︎")},
       },
+    })
+  },
+  vec3: (model, editable) => {
+    const value = model.resolve<Mutable<vec3>>("value")
+    return createPropertyRowConfig(model, {
+      type: "row",
+      constraints: {stretch: true},
+      contents: [
+        {
+          type: "numbertext",
+          constraints: {stretch: true},
+          number: value.bimap(v => v[0], (v, x) => vec3.fromValues(x, v[1], v[2])),
+          contents: NumberBox,
+        },
+        {
+          type: "numbertext",
+          constraints: {stretch: true},
+          number: value.bimap(v => v[1], (v, y) => vec3.fromValues(v[0], y, v[2])),
+          contents: NumberBox,
+        },
+        {
+          type: "numbertext",
+          constraints: {stretch: true},
+          number: value.bimap(v => v[2], (v, z) => vec3.fromValues(v[0], v[1], z)),
+          contents: NumberBox,
+        },
+      ],
     })
   },
   Vector3: (model, editable) => {

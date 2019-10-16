@@ -1,6 +1,6 @@
 import {Clock} from "../core/clock"
 import {Euler, mat4, quat, vec3} from "../core/math"
-import {Value} from "../core/react"
+import {Mutable, Value} from "../core/react"
 import {RMap} from "../core/rcollect"
 import {Disposable, PMap} from "../core/util"
 import {InputNodeContext} from "../input/node"
@@ -138,6 +138,12 @@ export interface Component extends Disposable {
     * @return the coroutine object. */
   startCoroutine (fnOrGenerator :(() => Generator<void>)|Generator<void>) :Coroutine
 
+  /** Returns a reactive view of the specified property.
+    * @param name the name of the desired property.
+    * @param [overrideDefault] if specified, a value that will override the default default.
+    * @return the reactive value, which may or may not be writable. */
+  getProperty<T> (name :string, overrideDefault? :any) :Value<T|undefined>|Mutable<T|undefined>
+
   /** Optional wake function. */
   readonly awake? :() => void
 
@@ -239,6 +245,26 @@ export interface Transform extends Component {
     * @param vector the amount by which to translate.
     * @param [frame] the coordinate frame in which to translate (local by default). */
   translate (vector :vec3, frame? :CoordinateFrame) :void
+
+  /** Transforms a point from local to world space.
+    * @param point the point to transform.
+    * @param [target] an optional vector to hold the result.
+    * @return the result point. */
+  transformPoint (point :vec3, target? :vec3) :vec3
+
+  /** Transforms a vector from local to world space.  Won't be affected by translation, will be
+    * affected by scale.
+    * @param vector the vector to transform.
+    * @param [target] an optional vector to hold the result.
+    * @return the result vector. */
+  transformVector (vector :vec3, target? :vec3) :vec3
+
+  /** Transforms a direction from local to world space.  Won't be affected by translation and will
+    * be normalized after transform.
+    * @param direction the direction to transform.
+    * @param [target] an optional vector to hold the result.
+    * @return the result direction. */
+  transformDirection (direction :vec3, target? :vec3) :vec3
 }
 
 /** Contains a mesh. */

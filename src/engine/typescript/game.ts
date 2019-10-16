@@ -1,14 +1,15 @@
 import {loadImage} from "../../core/assets"
 import {Clock} from "../../core/clock"
-import {Euler, mat4, quat, vec3} from "../../core/math"
+import {refEquals} from "../../core/data"
+import {Euler, mat4, quat, vec3, vec4} from "../../core/math"
 import {Mutable, Value} from "../../core/react"
-import {Disposer, PMap, getValue} from "../../core/util"
+import {Disposer, NoopRemover, PMap, getValue} from "../../core/util"
 import {windowSize} from "../../scene2/gl"
 import {Graph as GraphObject, GraphConfig} from "../../graph/graph"
 import {NodeConfig, NodeTypeRegistry} from "../../graph/node"
 import {registerLogicNodes} from "../../graph/logic"
 import {registerMathNodes} from "../../graph/math"
-import {registerMatrixNodes} from "../../graph/matrix"
+import {createVec3Fn, registerMatrixNodes} from "../../graph/matrix"
 import {registerSignalNodes} from "../../graph/signal"
 import {SubgraphRegistry, registerUtilNodes} from "../../graph/util"
 import {registerInputNodes} from "../../input/node"
@@ -135,10 +136,13 @@ export function registerComponentType (type :string, constructor :TypeScriptComp
   componentConstructors.set(type, constructor)
 }
 
+type MessageHandler = (...args :any[]) => void
+
 export class TypeScriptGameObject implements GameObject {
   readonly transform :Transform
 
   private readonly _componentValues = new Map<string, Mutable<Component|undefined>>()
+  private readonly _messageHandlers = new Map<string, MessageHandler[]>()
 
   constructor (
     public gameEngine :TypeScriptGameEngine,
@@ -190,16 +194,36 @@ export class TypeScriptGameObject implements GameObject {
   }
 
   hasMessageHandler (message :string) :boolean {
+    if (this._messageHandlers.has(message)) return true
     for (const key in this) {
       if (this[key][message]) return true
     }
     return false
   }
 
+  addMessageHandler (message :string, handler :MessageHandler) {
+    let handlers = this._messageHandlers.get(message)
+    if (!handlers) this._messageHandlers.set(message, handlers = [])
+    handlers.push(handler)
+  }
+
+  removeMessageHandler (message :string, handler :MessageHandler) {
+    const handlers = this._messageHandlers.get(message)
+    if (!handlers) return
+    const idx = handlers.indexOf(handler)
+    if (idx === -1) return
+    handlers.splice(idx, 1)
+    if (handlers.length === 0) this._messageHandlers.delete(message)
+  }
+
   sendMessage (message :string, ...args :any[]) :void {
     for (const key in this) {
       const component = this[key]
       if (component[message]) component[message](...args)
+    }
+    const handlers = this._messageHandlers.get(message)
+    if (handlers) {
+      for (const handler of handlers) handler(...args)
     }
   }
 
@@ -278,6 +302,16 @@ export class TypeScriptComponent implements Component {
     )
   }
 
+  getProperty<T> (name :string, overrideDefault? :any) :Value<T|undefined>|Mutable<T|undefined> {
+    // default implementation doesn't know about changes
+    return Mutable.deriveMutable(
+      dispatch => NoopRemover,
+      () => this[name] as T|undefined,
+      newValue => this[name] = newValue,
+      refEquals,
+    )
+  }
+
   dispose () {
     this._disposer.dispose()
     this.gameObject._deleteComponent(this.type)
@@ -317,6 +351,7 @@ export class TypeScriptCoroutine implements Coroutine {
 }
 
 const tmpq = quat.create()
+const tmpv4 = vec4.create()
 
 const LOCAL_POSITION_INVALID = (1 << 0)
 const LOCAL_ROTATION_INVALID = (1 << 1)
@@ -465,6 +500,51 @@ class TypeScriptTransform extends TypeScriptComponent implements Transform {
   translate (vector :vec3, frame? :CoordinateFrame) :void {
     if (frame === "world") vec3.add(this._position, this._position, vector)
     else vec3.add(this._localPosition, this._localPosition, vector)
+  }
+
+  transformPoint (point :vec3, target? :vec3) :vec3 {
+    if (!target) target = vec3.create()
+    return vec3.transformMat4(target, point, this.localToWorldMatrix)
+  }
+
+  transformVector (vector :vec3, target? :vec3) :vec3 {
+    if (!target) target = vec3.create()
+    vec4.set(tmpv4, vector[0], vector[1], vector[2], 0)
+    vec4.transformMat4(tmpv4, tmpv4, this.localToWorldMatrix)
+    return vec3.set(target, tmpv4[0], tmpv4[1], tmpv4[2])
+  }
+
+  transformDirection (direction :vec3, target? :vec3) :vec3 {
+    target = this.transformVector(direction, target)
+    return vec3.normalize(target, target)
+  }
+
+  getProperty<T> (name :string, overrideDefault? :any) :Value<T|undefined>|Mutable<T|undefined> {
+    switch (name) {
+      case "localPosition":
+      case "localScale":
+      case "position":
+        const propertyName = `_${name}Property`
+        const property = this[propertyName]
+        if (property) return property
+        const current = createVec3Fn(out => vec3.copy(out, this[name]))
+        return this[propertyName] = Mutable.deriveMutable<any>(
+          dispatch => {
+            let value = current()
+            const handler = () => {
+              const oldValue = value
+              value = current()
+              dispatch(value, oldValue)
+            }
+            this.gameObject.addMessageHandler("onTransformChanged", handler)
+            return () => this.gameObject.removeMessageHandler("onTransformChanged", handler)
+          },
+          current,
+          value => vec3.copy(this[name], value),
+          refEquals,
+        )
+    }
+    return super.getProperty(name, overrideDefault)
   }
 
   dispose () {
