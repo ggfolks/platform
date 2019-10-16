@@ -311,13 +311,14 @@ export class SparseValueComponent<T> extends Component<T> {
   }
   update (id :ID, value :T) {
     const oldValue = this.values.get(id) as T
-    this.values.set(id, value)
+    if (value === undefined) this.values.delete(id)
+    else this.values.set(id, value)
     this._noteUpdated(id, value, oldValue)
   }
 
   added (id :ID, config? :ValueComponentConfig<T>) {
     const init = config && 'initial' in config ? config.initial : this.defval
-    this.values.set(id, init as T)
+    if (init !== undefined) this.values.set(id, init as T)
   }
   removed (id :ID) {
     this.values.delete(id)
