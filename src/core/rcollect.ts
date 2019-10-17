@@ -315,6 +315,41 @@ export type MapChange<K,V> =
 export abstract class RMap<K,V> extends Source<ReadonlyMap<K,V>> implements ReadonlyMap<K,V> {
   protected abstract get data () :ReadonlyMap<K,V>
 
+  /** Creates a map from a reactive value and a function that gets an RMap for that value. */
+  static fromValue<T, K, V> (value :Value<T>, fn :(v :T) => RMap<K, V>) :RMap<K, V> {
+    class SwitchMap extends RMap<K, V> {
+      protected get data () :ReadonlyMap<K, V> {
+        return (fn(value.current) as any).data
+      }
+      onChange (changeFn :(change :MapChange<K, V>) => any) :Remover {
+        let map = fn(value.current)
+        let mapRemover = map.onChange(changeFn)
+        const valueRemover = value.onChange(value => {
+          const newMap = fn(value)
+          if (newMap !== map) {
+            mapRemover()
+            // anything not present in the new map is "deleted"
+            for (const [key, prev] of map) {
+              if (!newMap.has(key)) changeFn({type: "deleted", key, prev})
+            }
+            // anything that changed in the new map is "set"
+            for (const [key, value] of newMap) {
+              const prev = map.get(key)
+              if (prev !== value) changeFn({type: "set", key, value, prev})
+            }
+            map = newMap
+            mapRemover = map.onChange(changeFn)
+          }
+        })
+        return () => {
+          mapRemover()
+          valueRemover()
+        }
+      }
+    }
+    return new SwitchMap()
+  }
+
   /** The number of entries in this map. */
   get size () :number { return this.data.size }
 

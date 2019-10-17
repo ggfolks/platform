@@ -10,9 +10,21 @@ import {Node, NodeConfig, NodeTypeRegistry} from "../graph/node"
 import {SubgraphRegistry} from "../graph/util"
 import {PointerConfig} from "../input/node"
 import {windowSize} from "../scene2/gl"
-import {CoordinateFrame, Graph as GraphComponent, Hover, Hoverable} from "./game"
+import {Component, CoordinateFrame, Graph as GraphComponent, Hover, Hoverable} from "./game"
 import {getComponentMeta} from "./meta"
 import {RaycastHit} from "./render"
+
+abstract class AbstractComponentNode<T extends Component> extends Node {
+
+  protected get _componentValue () :Value<T|undefined> {
+    const graphComponent = this.graph.ctx.graphComponent as GraphComponent|undefined
+    return graphComponent
+      ? graphComponent.gameObject.getComponentValue(this._componentType)
+      : Value.constant<T|undefined>(undefined)
+  }
+
+  protected abstract get _componentType () :string
+}
 
 /** Exposes the properties of a component as inputs and outputs. */
 abstract class ComponentConfig implements NodeConfig {
@@ -20,49 +32,67 @@ abstract class ComponentConfig implements NodeConfig {
   @property() compType = "transform" // TODO: special property type to select from existing
 }
 
-class ComponentNode extends Node {
-  private readonly _inputsMeta = MutableMap.local<string, InputEdgeMeta>()
-  private readonly _outputsMeta = MutableMap.local<string, OutputEdgeMeta>()
+class ComponentNode extends AbstractComponentNode<Component> {
 
-  get inputsMeta () :RMap<string, InputEdgeMeta> { return this._inputsMeta }
-  get outputsMeta () :RMap<string, OutputEdgeMeta> { return this._outputsMeta }
+  get inputsMeta () :RMap<string, InputEdgeMeta> {
+    return RMap.fromValue(this._componentValue, component => getComponentInputsMeta(component))
+  }
+
+  get outputsMeta () :RMap<string, OutputEdgeMeta> {
+    return RMap.fromValue(this._componentValue, component => getComponentOutputsMeta(component))
+  }
 
   constructor (graph :Graph, id :string, readonly config :ComponentConfig) {
     super(graph, id, config)
   }
 
-  connect () {
-    const graphComponent = this.graph.ctx.graphComponent as GraphComponent|undefined
-    if (!graphComponent) return
-    this._disposer.add(
-      graphComponent.gameObject
-      .getComponentValue(getValue(this.config.compType, "transform"))
-      .onValue(component => {
-        this._inputsMeta.clear()
-        this._outputsMeta.clear()
-        for (let prototype = component; prototype; prototype = Object.getPrototypeOf(prototype)) {
-          for (const [name, property] of getComponentMeta(prototype).properties) {
-            this._outputsMeta.set(name, {type: property.type})
-            if (!(property.constraints && property.constraints.readonly)) {
-              this._inputsMeta.set(name, {type: property.type})
-            }
-          }
-        }
-      })
-    )
+  protected get _componentType () :string {
+    return getValue(this.config.compType, "transform")
   }
 
   protected _createOutput (name :string, defaultValue :any) :Value<any> {
-    const graphComponent = this.graph.ctx.graphComponent as GraphComponent|undefined
-    if (!graphComponent) return Value.constant(defaultValue)
-    return graphComponent.gameObject
-      .getComponentValue(getValue(this.config.compType, "transform"))
-      .switchMap(
-        component => component
-          ? component.getProperty(name, defaultValue)
-          : Value.constant(defaultValue)
-      )
+    return this._componentValue.switchMap(
+      component => component
+        ? component.getProperty(name, defaultValue)
+        : Value.constant(defaultValue)
+    )
   }
+}
+
+const componentInputsMeta = new Map<Component|undefined, RMap<string, InputEdgeMeta>>()
+
+function getComponentInputsMeta (component :Component|undefined) :RMap<string, InputEdgeMeta> {
+  let prototype = component && Object.getPrototypeOf(component)
+  let meta = componentInputsMeta.get(prototype)
+  if (!meta) {
+    const map = MutableMap.local<string, InputEdgeMeta>()
+    for (; prototype; prototype = Object.getPrototypeOf(prototype)) {
+      for (const [name, property] of getComponentMeta(prototype).properties) {
+        if (!(property.constraints && property.constraints.readonly)) {
+          map.set(name, {type: property.type})
+        }
+      }
+    }
+    componentInputsMeta.set(prototype, meta = map)
+  }
+  return meta
+}
+
+const componentOutputsMeta = new Map<Component|undefined, RMap<string, OutputEdgeMeta>>()
+
+function getComponentOutputsMeta (component :Component|undefined) :RMap<string, OutputEdgeMeta> {
+  let prototype = component && Object.getPrototypeOf(component)
+  let meta = componentOutputsMeta.get(prototype)
+  if (!meta) {
+    const map = MutableMap.local<string, OutputEdgeMeta>()
+    for (; prototype; prototype = Object.getPrototypeOf(prototype)) {
+      for (const [name, property] of getComponentMeta(prototype).properties) {
+        map.set(name, {type: property.type})
+      }
+    }
+    componentOutputsMeta.set(prototype, meta = map)
+  }
+  return meta
 }
 
 /** Emits information about a single hover point. */
@@ -78,10 +108,14 @@ abstract class HoverConfig implements NodeConfig, PointerConfig {
   @outputEdge("boolean", true) hovered = undefined
 }
 
-class HoverNode extends Node {
+class HoverNode extends AbstractComponentNode<Hoverable> {
 
   constructor (graph :Graph, id :string, readonly config :HoverConfig) {
     super(graph, id, config)
+  }
+
+  protected get _componentType () :string {
+    return "hoverable"
   }
 
   protected _createOutput (name :string) {
@@ -96,20 +130,13 @@ class HoverNode extends Node {
       }
       return undefined
     }
-    let hover :Value<Hover|undefined>
-    const component = this.graph.ctx.graphComponent as GraphComponent|undefined
-    if (component) {
-      hover = component.gameObject.getComponentValue<Hoverable>("hoverable")
-        .switchMap(hoverable => {
-          if (!hoverable) return Value.constant<Hover|undefined>(undefined)
-          return hoverable.hovers.fold(
-            getHover(hoverable.hovers),
-            (hover, hovers) => getHover(hovers),
-          )
-        })
-    } else {
-      hover = Value.constant<Hover|undefined>(undefined)
-    }
+    const hover :Value<Hover|undefined> = this._componentValue.switchMap(hoverable => {
+      if (!hoverable) return Value.constant<Hover|undefined>(undefined)
+      return hoverable.hovers.fold(
+        getHover(hoverable.hovers),
+        (hover, hovers) => getHover(hovers),
+      )
+    })
     switch (name) {
       case "worldPosition":
       case "worldMovement":
