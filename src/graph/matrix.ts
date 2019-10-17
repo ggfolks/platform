@@ -37,10 +37,14 @@ class Vec3FromValues extends Node {
 export function createVec3Fn (
   populator :(out :vec3, arg? :any) => vec3,
 ) :(arg? :any) => vec3 {
-  const a = vec3.create()
-  const b = vec3.create()
-  let alternate = false
-  return arg => populator((alternate = !alternate) ? a : b, arg)
+  const values = [vec3.create(), vec3.create()]
+  let index = 0
+  return arg => {
+    const value = populator(values[index], arg)
+    if (vec3.exactEquals(values[0], values[1])) return values[1 - index]
+    index = 1 - index
+    return value
+  }
 }
 
 /** A constant vector value. */

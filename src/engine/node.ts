@@ -109,8 +109,8 @@ class Raycast extends Node {
   protected _createOutput () {
     const component = this.graph.ctx.graphComponent as GraphComponent|undefined
     if (!component) return Value.constant(Infinity)
-    const origin = this.graph.getValue(this.config.origin, vec3.create())
-    const direction = this.graph.getValue(this.config.direction, vec3.fromValues(0, 0, 1))
+    const origin = this._getConnectedValue(this.config.origin, vec3.create())
+    const direction = this._getConnectedValue(this.config.direction, vec3.fromValues(0, 0, 1))
     const worldOrigin = vec3.create()
     const worldDirection = vec3.create()
     const hits :RaycastHit[] = []
@@ -152,7 +152,7 @@ class Rotate extends Node {
   connect () {
     const component = this.graph.ctx.graphComponent as GraphComponent|undefined
     if (!component) return
-    const input = this.graph.getValue(this.config.input, Euler.create())
+    const input = this._getConnectedValue(this.config.input, Euler.create())
     this._disposer.add(this.graph.clock.onEmit(() => {
       component.transform.rotate(input.current, this.config.frame as CoordinateFrame|undefined)
     }))
@@ -175,7 +175,7 @@ class Translate extends Node {
   connect () {
     const component = this.graph.ctx.graphComponent as GraphComponent|undefined
     if (!component) return
-    const input = this.graph.getValue(this.config.input, vec3.create())
+    const input = this._getConnectedValue(this.config.input, vec3.create())
     this._disposer.add(this.graph.clock.onEmit(() => {
       component.transform.translate(input.current, this.config.frame as CoordinateFrame|undefined)
     }))

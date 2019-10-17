@@ -195,6 +195,14 @@ export abstract class Node implements Disposable {
     this._disposer.dispose()
   }
 
+  /** Gets a value from the graph and ensures that it stays "connected" (that is, it receives
+    * notifications for new values--push rather than pull) until the disposer is invoked. */
+  protected _getConnectedValue<T> (input :InputEdge<T>, defaultValue :T) :Value<T> {
+    const value = this.graph.getValue(input, defaultValue)
+    this._disposer.add(value.onChange(Noop))
+    return value
+  }
+  
   /** Gives subclasses a chance to overrule the default value provided by the output consumer.  For
    * example, in a multiply node, 1 makes a better default than zero. */
   protected _maybeOverrideDefaultValue (name :string, defaultValue :any) {

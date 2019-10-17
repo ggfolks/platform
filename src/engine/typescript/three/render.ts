@@ -101,7 +101,8 @@ export class ThreeRenderEngine implements RenderEngine {
     raycaster.ray.direction.fromArray(direction)
     raycasterResults.length = 0
     raycaster.intersectObject(this.scene, true, raycasterResults)
-    if (!target) target = []
+    if (target) target.length = 0
+    else target = []
     for (const result of raycasterResults) {
       target.push({
         distance: result.distance,
@@ -148,7 +149,6 @@ export class ThreeRenderEngine implements RenderEngine {
           }
         }
 
-        raycastHits.length = 0
         this.raycastAll(rayOrigin, rayDirection, 0, Infinity, raycastHits)
         let noted = false
         for (const hit of raycastHits) {

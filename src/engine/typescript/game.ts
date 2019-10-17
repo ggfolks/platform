@@ -400,8 +400,10 @@ class TypeScriptTransform extends TypeScriptComponent implements Transform {
       validateFlags :number,
     ) => new Proxy(target, {
       set: (obj, prop, value) => {
-        obj[prop] = value
-        this._invalidate(invalidateFlags)
+        if (obj[prop] !== value) {
+          obj[prop] = value
+          this._invalidate(invalidateFlags)
+        }
         return true
       },
       get: (obj, prop) => {
