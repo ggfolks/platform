@@ -46,7 +46,7 @@ export function createVec3Fn (
 /** A constant vector value. */
 abstract class Vec3ConstantConfig implements NodeConfig {
   type = "vec3.constant"
-  @property() value = vec3.create()
+  @property("vec3") value = vec3.create()
   @outputEdge("vec3") output = undefined
 }
 

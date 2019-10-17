@@ -128,7 +128,10 @@ class Raycast extends Node {
         Infinity,
         hits,
       )
-      return hits.length === 0 ? Infinity : hits[0].distance
+      for (const hit of hits) {
+        if (hit.transform !== component.transform) return hit.distance
+      }
+      return Infinity
     })
   }
 }
