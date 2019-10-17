@@ -511,12 +511,12 @@ function createPageModelData (
             )
           }
           const createPropertyValue = createPropertyValueCreator(node, applyEdit, page)
-          if (!node.config.position) node.config.position = [0, 0]
+          if (!node.config._position) node.config._position = [0, 0]
           nodeModels.set(key, model = new Model({
             id: Value.constant(node.id),
             type: Value.constant(type),
             title: node.title,
-            position: createPropertyValue("position"),
+            position: createPropertyValue("_position"),
             ...subgraphElement,
             propertyKeys: node.propertiesMeta.keysValue.map(Array.from),
             inputKeys: node.inputsMeta.keysValue.map(Array.from),

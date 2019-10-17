@@ -21,6 +21,7 @@ import {
   GameContext, GameEngine, GameObject, GameObjectConfig, Graph, Mesh, MeshFilter, PrimitiveType,
   Quad, Sphere, Time, Transform,
 } from "../game"
+import {property} from "../meta"
 import {PhysicsEngine} from "../physics"
 import {RenderEngine} from "../render"
 import {registerEngineNodes, registerEngineSubgraphs} from "../node"
@@ -487,7 +488,7 @@ class TypeScriptTransform extends TypeScriptComponent implements Transform {
   get localScale () :vec3 { return this._localScale }
   set localScale (scale :vec3) { vec3.copy(this._localScale, scale) }
 
-  get position () :vec3 { return this._position }
+  @property("vec3") get position () :vec3 { return this._position }
   set position (pos :vec3) { vec3.copy(this._position, pos) }
 
   get rotation () :quat { return this._rotation }

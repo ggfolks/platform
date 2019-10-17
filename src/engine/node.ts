@@ -1,13 +1,17 @@
 import {Euler, dim2, vec3, vec3zero} from "../core/math"
 import {Value} from "../core/react"
+import {MutableMap, RMap} from "../core/rcollect"
 import {getValue} from "../core/util"
 import {Graph} from "../graph/graph"
-import {activateNodeConfigs, property, inputEdge, outputEdge} from "../graph/meta"
+import {
+  InputEdgeMeta, OutputEdgeMeta, activateNodeConfigs, property, inputEdge, outputEdge,
+} from "../graph/meta"
 import {Node, NodeConfig, NodeTypeRegistry} from "../graph/node"
 import {SubgraphRegistry} from "../graph/util"
 import {PointerConfig} from "../input/node"
 import {windowSize} from "../scene2/gl"
 import {CoordinateFrame, Graph as GraphComponent, Hover, Hoverable} from "./game"
+import {getComponentMeta} from "./meta"
 import {RaycastHit} from "./render"
 
 /** Exposes the properties of a component as inputs and outputs. */
@@ -17,9 +21,35 @@ abstract class ComponentConfig implements NodeConfig {
 }
 
 class ComponentNode extends Node {
+  private readonly _inputsMeta = MutableMap.local<string, InputEdgeMeta>()
+  private readonly _outputsMeta = MutableMap.local<string, OutputEdgeMeta>()
+
+  get inputsMeta () :RMap<string, InputEdgeMeta> { return this._inputsMeta }
+  get outputsMeta () :RMap<string, OutputEdgeMeta> { return this._outputsMeta }
 
   constructor (graph :Graph, id :string, readonly config :ComponentConfig) {
     super(graph, id, config)
+  }
+
+  connect () {
+    const graphComponent = this.graph.ctx.graphComponent as GraphComponent|undefined
+    if (!graphComponent) return
+    this._disposer.add(
+      graphComponent.gameObject
+      .getComponentValue(getValue(this.config.compType, "transform"))
+      .onValue(component => {
+        this._inputsMeta.clear()
+        this._outputsMeta.clear()
+        for (let prototype = component; prototype; prototype = Object.getPrototypeOf(prototype)) {
+          for (const [name, property] of getComponentMeta(prototype).properties) {
+            this._outputsMeta.set(name, {type: property.type})
+            if (!(property.constraints && property.constraints.readonly)) {
+              this._inputsMeta.set(name, {type: property.type})
+            }
+          }
+        }
+      })
+    )
   }
 
   protected _createOutput (name :string, defaultValue :any) :Value<any> {
