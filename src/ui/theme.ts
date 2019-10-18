@@ -1,3 +1,4 @@
+import {makeConfig} from "../core/config"
 import {StyleDefs} from "./style"
 import {Theme} from "./ui"
 
@@ -85,6 +86,11 @@ export const DefaultStyles :StyleDefs = {
     nodeButtonHovered: {fill: {type: "color", color: "#383838"}, cornerRadius: nodeButtonCorner},
     nodeButtonPressed: {fill: {type: "color", color: "#303030"}, cornerRadius: nodeButtonCorner},
   },
+}
+
+/** Customizes the default styles with those specified in `styles`. */
+export function customStyles (styles :StyleDefs) :StyleDefs {
+  return makeConfig([styles as any, DefaultStyles as any]) as any
 }
 
 /** A default theme to use as a base. */
@@ -288,4 +294,9 @@ export const DefaultTheme :Theme = {
     label: {font: "$edgeName"},
   },
   terminal: {},
+}
+
+/** Customizes the default theme with the config specified in `theme`. */
+export function customTheme (theme :Theme) :Theme {
+  return makeConfig([theme, DefaultTheme]) as Theme
 }
