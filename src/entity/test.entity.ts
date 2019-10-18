@@ -1,4 +1,5 @@
-import {ID, Domain, LifecycleEvent, EntityConfig, DenseValueComponent, Matcher, System} from "./entity"
+import {ID, Domain, LifecycleEvent, EntityConfig, SparseValueComponent, DenseValueComponent,
+        Matcher, System} from "./entity"
 
 function mkEv<T> (type :T, id :ID) { return {type, id} }
 
@@ -92,4 +93,34 @@ test("system iteration", () => {
   let sys2count = 0
   sys2.onEntities(id => { sys2count += 1 ; expect(ids[0].has(id) || ids[2].has(id)).toBe(true) })
   expect(sys2count).toBe(ids[0].size + ids[2].size)
+})
+
+test("value observer", () => {
+  const DefaultName = "default"
+  const name = new SparseValueComponent<string>("name", DefaultName)
+  const age = new DenseValueComponent<number>("age", 0)
+  const domain = new Domain({}, {name, age})
+
+  const id0 = domain.add({components: {name: {}, age: {}}})
+  const nv0 = name.getValue(id0)
+  const nvh :string[] = []
+  nv0.onValue(n => nvh.push(n))
+  expect(nvh).toStrictEqual([DefaultName])
+
+  name.update(id0, "foo")
+  expect(name.read(id0)).toEqual("foo")
+  expect(nvh).toStrictEqual([DefaultName, "foo"])
+
+  const av0 = age.getValue(id0)
+  const avh :number[] = []
+  av0.onValue(n => avh.push(n))
+  expect(avh).toStrictEqual([0])
+
+  age.update(id0, 42)
+  expect(age.read(id0)).toEqual(42)
+  expect(avh).toStrictEqual([0, 42])
+
+  age.update(id0, 42)
+  expect(age.read(id0)).toEqual(42)
+  expect(avh).toStrictEqual([0, 42])
 })

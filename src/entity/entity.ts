@@ -157,12 +157,38 @@ export class Domain {
 
 export interface ComponentConfig<T> {}
 
+type ComponentObserver<T> = (id :ID, value :T, oldValue :T) => void
+
+class ValueObserver<T> {
+  private _values :Map<ID, Value<T>> = new Map()
+  private _changeFns :Map<ID, ChangeFn<T>> = new Map()
+
+  constructor (readonly comp :Component<T>, readonly eq :Eq<T>) {}
+
+  getValue (id :ID) {
+    let value = this._values.get(id)
+    if (!value) this._values.set(id, value = Value.deriveValue(
+      this.eq,
+      changeFn => {
+        this._changeFns.set(id, changeFn)
+        return () => { this._changeFns.delete(id) }
+      },
+      () => this.comp.read(id),
+    ))
+    return value
+  }
+
+  onChange (id :ID, value :T, oldValue :T) {
+    const changeFn = this._changeFns.get(id)
+    if (changeFn && !this.eq(value, oldValue)) changeFn(value, oldValue)
+  }
+}
+
 /** Maintains the values (numbers, strings, objects, typed arrays) for a particular component, for
   * all entities in a single domain. */
 export abstract class Component<T> {
-
-  private _values :Map<ID, Value<T>> = new Map()
-  private _changeFns :Map<ID, ChangeFn<T>> = new Map()
+  private _observers :ComponentObserver<T>[] = []
+  private _valueobs? :ValueObserver<T>
 
   /** Creates a component that returns `value` for all entities. Calls to `update` will throw an
     * error. */
@@ -190,21 +216,21 @@ export abstract class Component<T> {
 
   /** Returns a reactive view of the value for entity `id`. */
   getValue (id :ID) {
-    let value = this._values.get(id)
-    if (!value) {
-      this._values.set(id, value = Value.deriveValue(
-        this._eq,
-        changeFn => {
-          this._changeFns.set(id, changeFn)
-          return () => {
-            this._changeFns.delete(id)
-            this._values.delete(id)
-          }
-        },
-        () => this.read(id),
-      ))
+    let vobs = this._valueobs
+    if (!vobs) {
+      vobs = this._valueobs = new ValueObserver<T>(this, this._eq)
+      this.addObserver(vobs.onChange.bind(vobs))
     }
-    return value
+    return vobs.getValue(id)
+  }
+
+  /** Adds an observer that is notified whenever a component value changes. */
+  addObserver (obs :ComponentObserver<T>) :Remover {
+    this._observers.push(obs)
+    return () => {
+      const idx = this._observers.indexOf(obs)
+      if (idx >= 0) this._observers.splice(idx, 1)
+    }
   }
 
   protected get _eq () :Eq<T> { return refEquals }
@@ -215,8 +241,8 @@ export abstract class Component<T> {
   abstract update (id :ID, value :T) :void
 
   protected _noteUpdated (id :ID, value :T, oldValue :T) {
-    const changeFn = this._changeFns.get(id)
-    if (changeFn) changeFn(value, oldValue)
+    const obs = this._observers
+    for (let ii = 0, ll = obs.length; ii < ll; ii += 1) obs[ii](id, value, oldValue)
   }
 
   /** Called when an entity which has this component is added to the owning domain.
@@ -300,25 +326,26 @@ export class DenseValueComponent<T> extends Component<T> {
 }
 
 /** Maintains simple JavaScript values in a hash map. Useful for components that are sparsely
-  * occupied. */
+  * occupied. Note that `undefined` is handled specially in that updating a component to `undefined`
+  * will remove its value mapping and revert its value back to the default. */
 export class SparseValueComponent<T> extends Component<T> {
   private readonly values :Map<ID, T> = new Map()
 
   constructor (readonly id :string, private readonly defval :T) { super() }
 
   read (id :ID) :T {
-    return this.values.get(id) as T
+    const value = this.values.get(id)
+    return value === undefined ? this.defval : value
   }
   update (id :ID, value :T) {
-    const oldValue = this.values.get(id) as T
+    const oldValue = this.read(id)
     if (value === undefined) this.values.delete(id)
     else this.values.set(id, value)
     this._noteUpdated(id, value, oldValue)
   }
 
   added (id :ID, config? :ValueComponentConfig<T>) {
-    const init = config && 'initial' in config ? config.initial : this.defval
-    if (init !== undefined) this.values.set(id, init as T)
+    if (config && 'initial' in config) this.values.set(id, config.initial as T)
   }
   removed (id :ID) {
     this.values.delete(id)
