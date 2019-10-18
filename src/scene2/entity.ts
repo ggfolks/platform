@@ -1,7 +1,7 @@
 import {Clock} from "../core/clock"
 import {Color} from "../core/color"
-import {ArrayComponent, Component, Domain, ID, Matcher, System, Float32ArrayComponent}
-from "../entity/entity"
+import {ArrayComponent, Component, Domain, EntityConfig, ID, Matcher, System,
+        Float32ArrayComponent} from "../entity/entity"
 import {QuadBatch} from "./batch"
 import {Tile} from "./gl"
 import {mat2d, vec2, vec2zero} from "../core/math"
@@ -273,22 +273,47 @@ const noTint = Color.fromRGB(1, 1, 1)
 const ttrans = mat2d.create()
 const ttint = Color.create()
 
-/** Renders textured quads based on a [[TransformComponent]] a component providing a [[Tile]] for
-  * each quad, and an optional [[Color]] component for tint. Users of this system must call
-  * [[RenderSystem.update]] on every frame, and then [[RenderSystem.render]] with the [[QuadBatch]]
-  * into which to render. */
+/** The components used by the render system. */
+export type RenderComponents = {
+  trans :TransformComponent
+  tile :Component<Tile>
+  tint? :ArrayComponent<Color>
+  layer? :Component<number>
+}
+
+function makeMatcher (comps :RenderComponents) {
+  const ids = [comps.trans.id, comps.tile.id]
+  if (comps.tint) ids.push(comps.tint.id)
+  if (comps.layer) ids.push(comps.layer.id)
+  return Matcher.hasAllC(...ids)
+}
+
+/** Renders textured quads based on a [[TransformComponent]] and a component providing a [[Tile]]
+  * for each quad. Optionally a [[Color]] component can be provided to tint the rendered quads.
+  *
+  * A `layer` component may also be provided to define the render order of the quads (lower layers
+  * rendered before higher layers). Note: layers must be positive integers and should ideally not
+  * have large gaps as the render system will attempt to render every layer starting at 0 up to the
+  * highest numbered layer. Though it is relatively cheap to skip a layer with zero elements, you
+  * don't want to unnecessarily add a 10,000 iteration NOOP loop by needlessly sticking things on
+  * very high layers.
+  *
+  * Users of this system must call [[RenderSystem.update]] on every frame, and then
+  * [[RenderSystem.render]] with the [[QuadBatch]] into which to render. */
 export class RenderSystem extends System {
+  private readonly layerCounts :number[] = []
 
   /** A parent transform for this render system. It will be pre-multiplied to the transform of all
     * entities in the system. */
   readonly systrans = new Transform()
 
-  constructor (domain :Domain,
-               readonly trans :TransformComponent,
-               readonly tile :Component<Tile>,
-               readonly tint? :ArrayComponent<Color>) {
-    super(domain, tint ? Matcher.hasAllC(trans.id, tile.id, tint.id) :
-          Matcher.hasAllC(trans.id, tile.id))
+  constructor (domain :Domain, readonly comps :RenderComponents) {
+    super(domain, makeMatcher(comps))
+
+    if (comps.layer) comps.layer.addObserver((id, v, ov) => {
+      this.layerCounts[ov] -= 1
+      this.layerCounts[v] = (this.layerCounts[v] || 0) + 1
+    })
   }
 
   update () {
@@ -296,15 +321,38 @@ export class RenderSystem extends System {
     const systrans = this.systrans
     const sysdirty = systrans.data[DT] === 1
     if (sysdirty) updateMatrix(systrans.data, 0)
-    this.trans.updateMatrices(sysdirty, systrans)
+    this.comps.trans.updateMatrices(sysdirty, systrans)
   }
 
   render (batch :QuadBatch) {
-    this.onEntities(id => {
-      const tile = this.tile.read(id)
-      const trans = this.trans.readMatrix(id, ttrans)
-      const tint = this.tint ? this.tint.read(id, ttint) : noTint
-      batch.addTile(tile, tint, trans, vec2zero, tile.size)
-    })
+    const {tile, trans, tint, layer} = this.comps
+    const render = (id :ID) => {
+      const etile = tile.read(id)
+      const etrans = trans.readMatrix(id, ttrans)
+      const etint = tint ? tint.read(id, ttint) : noTint
+      batch.addTile(etile, etint, etrans, vec2zero, etile.size)
+    }
+    if (!layer) this.onEntities(render)
+    else {
+      for (let ll = 0, lc = this.layerCounts.length; ll < lc; ll += 1) {
+        if (this.layerCounts[ll] > 0) this.onEntities(id => {
+          const elayer = layer.read(id)
+          if (elayer === ll) render(id)
+        })
+      }
+    }
+  }
+
+  protected added (id :ID, config :EntityConfig) {
+    super.added(id, config)
+    if (this.comps.layer) {
+      const layer = this.comps.layer.read(id)
+      this.layerCounts[layer] = (this.layerCounts[layer] || 0) + 1
+    }
+  }
+
+  protected deleted (id :ID) {
+    super.deleted(id)
+    if (this.comps.layer) this.layerCounts[this.comps.layer.read(id)] -= 1
   }
 }
