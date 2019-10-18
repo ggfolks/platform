@@ -9,7 +9,7 @@ import {Graph as GraphObject, GraphConfig} from "../../graph/graph"
 import {NodeConfig, NodeTypeRegistry} from "../../graph/node"
 import {registerLogicNodes} from "../../graph/logic"
 import {registerMathNodes} from "../../graph/math"
-import {createVec3Fn, registerMatrixNodes} from "../../graph/matrix"
+import {createQuatFn, createVec3Fn, registerMatrixNodes} from "../../graph/matrix"
 import {registerSignalNodes} from "../../graph/signal"
 import {SubgraphRegistry, registerUtilNodes} from "../../graph/util"
 import {registerInputNodes} from "../../input/node"
@@ -492,7 +492,7 @@ class TypeScriptTransform extends TypeScriptComponent implements Transform {
   @property("vec3") get position () :vec3 { return this._position }
   set position (pos :vec3) { vec3.copy(this._position, pos) }
 
-  get rotation () :quat { return this._rotation }
+  @property("quat") get rotation () :quat { return this._rotation }
   set rotation (rot :quat) { quat.copy(this._rotation, rot) }
 
   rotate (euler :vec3, frame? :CoordinateFrame) :void {
@@ -530,13 +530,13 @@ class TypeScriptTransform extends TypeScriptComponent implements Transform {
   }
 
   getProperty<T> (name :string, overrideDefault? :any) :Value<T|undefined>|Mutable<T|undefined> {
+    const propertyName = `_${name}Property`
+    const property = this[propertyName]
+    if (property) return property
     switch (name) {
       case "localPosition":
       case "localScale":
-      case "position":
-        const propertyName = `_${name}Property`
-        const property = this[propertyName]
-        if (property) return property
+      case "position": {
         const current = createVec3Fn(out => vec3.copy(out, this[name]))
         return this[propertyName] = Mutable.deriveMutable<any>(
           dispatch => {
@@ -553,6 +553,26 @@ class TypeScriptTransform extends TypeScriptComponent implements Transform {
           value => vec3.copy(this[name], value),
           refEquals,
         )
+      }
+      case "localRotation":
+      case "rotation": {
+        const current = createQuatFn(out => quat.copy(out, this[name]))
+        return this[propertyName] = Mutable.deriveMutable<any>(
+          dispatch => {
+            let value = current()
+            const handler = () => {
+              const oldValue = value
+              value = current()
+              dispatch(value, oldValue)
+            }
+            this.gameObject.addMessageHandler("onTransformChanged", handler)
+            return () => this.gameObject.removeMessageHandler("onTransformChanged", handler)
+          },
+          current,
+          value => quat.copy(this[name], value),
+          refEquals,
+        )
+      }
     }
     return super.getProperty(name, overrideDefault)
   }

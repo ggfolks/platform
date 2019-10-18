@@ -1,5 +1,6 @@
-import {vec3} from "../core/math"
+import {quat, vec3} from "../core/math"
 import {Value} from "../core/react"
+import {getValue} from "../core/util"
 import {Graph} from "./graph"
 import {Node, NodeConfig, NodeTypeRegistry} from "./node"
 import {inputEdge, inputEdges, outputEdge, property} from "./meta"
@@ -42,6 +43,23 @@ export function createVec3Fn (
   return arg => {
     const value = populator(values[index], arg)
     if (vec3.exactEquals(values[0], values[1])) return values[1 - index]
+    index = 1 - index
+    return value
+  }
+}
+
+/** Creates a function that alternates between two output quaternions, so as to avoid creating new
+  * quaternion objects every time the function is called.
+  * @param populator the function to populate the quaternion.
+  * @return the wrapped function. */
+export function createQuatFn (
+  populator :(out :quat, arg? :any) => quat,
+) :(arg? :any) => quat {
+  const values = [quat.create(), quat.create()]
+  let index = 0
+  return arg => {
+    const value = populator(values[index], arg)
+    if (quat.exactEquals(values[0], values[1])) return values[1 - index]
     index = 1 - index
     return value
   }
@@ -114,6 +132,57 @@ class Vec3Scale extends Node {
   }
 }
 
+/** Transforms a vector by a quaternion. */
+abstract class Vec3TransformQuatConfig implements NodeConfig {
+  type = "vec3.transformQuat"
+  @inputEdge("vec3") vector = undefined
+  @inputEdge("quat") quaternion = undefined
+  @outputEdge("vec3") output = undefined
+}
+
+class Vec3TransformQuat extends Node {
+
+  constructor (graph :Graph, id :string, readonly config :Vec3TransformQuatConfig) {
+    super(graph, id, config)
+  }
+
+  protected _createOutput () {
+    return Value
+      .join2(
+        this.graph.getValue(this.config.vector, vec3.create()),
+        this.graph.getValue(this.config.quaternion, quat.create()),
+      )
+      .map(createVec3Fn((out, [vector, quaternion]) => vec3.transformQuat(out, vector, quaternion)))
+  }
+}
+
+/** Projects a vector onto a plane. */
+abstract class Vec3ProjectOnPlaneConfig implements NodeConfig {
+  type = "vec3.projectOnPlane"
+  @property("vec3") planeNormal = vec3.fromValues(0, 1, 0)
+  @inputEdge("vec3") input = undefined
+  @outputEdge("vec3") output = undefined
+}
+
+class Vec3ProjectOnPlane extends Node {
+
+  constructor (graph :Graph, id :string, readonly config :Vec3ProjectOnPlaneConfig) {
+    super(graph, id, config)
+  }
+
+  protected _createOutput () {
+    const planeNormal = getValue(this.config.planeNormal, vec3.fromValues(0, 1, 0))
+    return this.graph
+      .getValue(this.config.input, vec3.create())
+      .map(createVec3Fn((out, input) => {
+        vec3.cross(out, input, planeNormal)
+        vec3.cross(out, planeNormal, out)
+        vec3.normalize(out, out)
+        return vec3.scale(out, out, vec3.dot(out, input))
+      }))
+  }
+}
+
 /** Registers the nodes in this module with the supplied registry. */
 export function registerMatrixNodes (registry :NodeTypeRegistry) {
   registry.registerNodeTypes(["matrix", "vec3"], {
@@ -121,5 +190,7 @@ export function registerMatrixNodes (registry :NodeTypeRegistry) {
     "vec3.constant": Vec3Constant,
     "vec3.add": Vec3Add,
     "vec3.scale": Vec3Scale,
+    "vec3.transformQuat": Vec3TransformQuat,
+    "vec3.projectOnPlane": Vec3ProjectOnPlane,
   })
 }

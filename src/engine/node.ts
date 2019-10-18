@@ -354,4 +354,48 @@ export function registerEngineSubgraphs (registry :SubgraphRegistry) {
       translate: {type: "translate", input: "translation"},
     },
   })
+
+  registry.registerSubgraphs(["engine", "camera"], {
+    wasdMovement: {
+      translate: {
+        type: "translate",
+        frame: "world",
+        input: {
+          type: "vec3.projectOnPlane",
+          input: {
+            type: "vec3.transformQuat",
+            vector: {
+              type: "vec3.scale",
+              vector: {
+                type: "vec3.fromValues",
+                x: {type: "subtract", a: {type: "key", code: 68}, b: {type: "key", code: 65}},
+                z: {type: "subtract", a: {type: "key", code: 83}, b: {type: "key", code: 87}},
+              },
+              scalar: {
+                type: "multiply",
+                inputs: [{type: "clock"}, {type: "property", name: "speed", defaultValue: 10}],
+              },
+            },
+            quaternion: [{type: "component"}, "rotation"],
+          },
+        },
+      },
+    },
+    spaceToJump: {
+      fallable: {
+        type: "subgraph",
+        title: "fallable",
+        grabbed: false,
+        jump: {
+          type: "multiply",
+          inputs: [
+            {type: "key", code: 32},
+            {type: "property", name: "speed", defaultValue: 3},
+          ],
+        },
+        height: 1,
+        graph: fallable,
+      },
+    },
+  })
 }
