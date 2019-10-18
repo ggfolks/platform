@@ -46,6 +46,22 @@ class ComponentNode extends AbstractComponentNode<Component> {
     super(graph, id, config)
   }
 
+  connect () {
+    for (const key in this.config) {
+      if (key === "type" || key === "compType") continue
+      this._disposer.add(
+        Value
+          .join2(
+            this._componentValue,
+            this.graph.getValue(this.config[key], undefined),
+          )
+          .onValue(([component, value]) => {
+            if (component && value !== undefined) component[key] = value
+          })
+      )
+    }
+  }
+
   protected get _componentType () :string {
     return getValue(this.config.compType, "transform")
   }
@@ -356,6 +372,27 @@ export function registerEngineSubgraphs (registry :SubgraphRegistry) {
   })
 
   registry.registerSubgraphs(["engine", "camera"], {
+    dragToRotate: {
+      hover: {type: "hover"},
+      viewMovement: {type: "vec3.split", input: ["hover", "viewMovement"]},
+      updateRotation: {
+        type: "component",
+        compType: "transform",
+        rotation: {
+          type: "quat.fromEuler",
+          x: {
+            type: "accumulate",
+            min: -90,
+            max: 90,
+            input: {type: "multiply", inputs: [["hover", "pressed"], ["viewMovement", "y"], -60]},
+          },
+          y: {
+            type: "accumulate",
+            input: {type: "multiply", inputs: [["hover", "pressed"], ["viewMovement", "x"], 60]},
+          },
+        },
+      },
+    },
     wasdMovement: {
       translate: {
         type: "translate",

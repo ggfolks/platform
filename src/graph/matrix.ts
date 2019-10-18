@@ -67,6 +67,27 @@ export function createDoubleBufferedFn<T> (
   }
 }
 
+/** Splits a vector into its components. */
+abstract class Vec3SplitConfig implements NodeConfig {
+  type = "vec3.split"
+  @inputEdge("vec3") input = undefined
+  @outputEdge("number") x = undefined
+  @outputEdge("number") y = undefined
+  @outputEdge("number") z = undefined
+}
+
+class Vec3Split extends Node {
+
+  constructor (graph :Graph, id :string, readonly config :Vec3SplitConfig) {
+    super(graph, id, config)
+  }
+
+  protected _createOutput (name :string) {
+    const idx = ["x", "y", "z"].indexOf(name)
+    return this.graph.getValue(this.config.input, vec3.create()).map(value => value[idx])
+  }
+}
+
 /** A constant vector value. */
 abstract class Vec3ConstantConfig implements NodeConfig {
   type = "vec3.constant"
@@ -185,14 +206,44 @@ class Vec3ProjectOnPlane extends Node {
   }
 }
 
+/** Creates a quaternion from a set of Euler angles in degrees. */
+abstract class QuatFromEulerConfig implements NodeConfig {
+  type = "quat.fromEuler"
+  @inputEdge("number") x = undefined
+  @inputEdge("number") y = undefined
+  @inputEdge("number") z = undefined
+  @outputEdge("quat") output = undefined
+}
+
+class QuatFromEuler extends Node {
+
+  constructor (graph :Graph, id :string, readonly config :QuatFromEulerConfig) {
+    super(graph, id, config)
+  }
+
+  protected _createOutput () {
+    return Value
+      .join(
+        this.graph.getValue(this.config.x, 0),
+        this.graph.getValue(this.config.y, 0),
+        this.graph.getValue(this.config.z, 0),
+      )
+      .map(createQuatFn((out, [x, y, z]) => quat.fromEuler(out, x, y, z)))
+  }
+}
+
 /** Registers the nodes in this module with the supplied registry. */
 export function registerMatrixNodes (registry :NodeTypeRegistry) {
   registry.registerNodeTypes(["matrix", "vec3"], {
     "vec3.fromValues": Vec3FromValues,
+    "vec3.split": Vec3Split,
     "vec3.constant": Vec3Constant,
     "vec3.add": Vec3Add,
     "vec3.scale": Vec3Scale,
     "vec3.transformQuat": Vec3TransformQuat,
     "vec3.projectOnPlane": Vec3ProjectOnPlane,
+  })
+  registry.registerNodeTypes(["matrix", "quat"], {
+    "quat.fromEuler": QuatFromEuler,
   })
 }
