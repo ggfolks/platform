@@ -85,6 +85,27 @@ export class Transform {
 
   get rotation () :number { return this.data[RO] }
 
+  /** Copies the origin of entity `id` into `into`.
+    * @return the supplied `into` vector. */
+  readOrigin (into :vec2) :vec2 {
+    const data = this.data
+    return vec2.set(into, data[OX], data[OY])
+  }
+
+  /** Copies the translation of entity `id` into `into`.
+    * @return the supplied `into` vector. */
+  readTranslation (into :vec2) :vec2 {
+    const data = this.data
+    return vec2.set(into, data[TX], data[TY])
+  }
+
+  /** Copies the scale of entity `id` into `into`.
+    * @return the supplied `into` vector. */
+  readScale (id :ID, into :vec2) :vec2 {
+    const data = this.data
+    return vec2.set(into, data[SX], data[SY])
+  }
+
   /** Sets the origin to `ox, oy`. */
   updateOrigin (ox :number, oy :number) {
     const data = this.data
@@ -101,18 +122,18 @@ export class Transform {
     data[DT] = 1
   }
 
-  /** Sets the rotation to `rot` (in radians). */
-  updateRotation (rot :number) {
-    const data = this.data
-    data[RO] = rot
-    data[DT] = 1
-  }
-
   /** Sets the scale of entity `id` to `sx, sy`. */
   updateScale (sx :number, sy :number) {
     const data = this.data
     data[SX] = sx
     data[SY] = sy
+    data[DT] = 1
+  }
+
+  /** Sets the rotation to `rot` (in radians). */
+  updateRotation (rot :number) {
+    const data = this.data
+    data[RO] = rot
     data[DT] = 1
   }
 
