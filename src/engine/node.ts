@@ -1,4 +1,4 @@
-import {Euler, dim2, vec3, vec3zero} from "../core/math"
+import {dim2, vec3, vec3zero} from "../core/math"
 import {Value} from "../core/react"
 import {MutableMap, RMap} from "../core/rcollect"
 import {getValue} from "../core/util"
@@ -197,7 +197,7 @@ class Raycast extends Node {
 abstract class RotateConfig implements NodeConfig {
   type = "rotate"
   @property("CoordinateFrame") frame = "local"
-  @inputEdge("Euler") input = undefined
+  @inputEdge("vec3") input = undefined
 }
 
 class Rotate extends Node {
@@ -209,7 +209,7 @@ class Rotate extends Node {
   connect () {
     const component = this.graph.ctx.graphComponent as GraphComponent|undefined
     if (!component) return
-    const input = this._getConnectedValue(this.config.input, Euler.create())
+    const input = this._getConnectedValue(this.config.input, vec3.create())
     this._disposer.add(this.graph.clock.onEmit(() => {
       component.transform.rotate(input.current, this.config.frame as CoordinateFrame|undefined)
     }))
@@ -332,6 +332,26 @@ export function registerEngineSubgraphs (registry :SubgraphRegistry) {
         graph: fallable,
       },
       aboveGround: {type: "output", name: "aboveGround", input: ["fallable", "aboveGround"]},
+    },
+    leftRightArrowsRotate: {
+      left: {type: "key", code: 37},
+      right: {type: "key", code: 39},
+      leftRight: {type: "subtract", a: "left", b: "right"},
+      speed: {type: "property", name: "speed", defaultValue: 120},
+      clock: {type: "clock"},
+      leftRightDelta: {type: "multiply", inputs: ["leftRight", "speed", "clock"]},
+      rotation: {type: "vec3.fromValues", y: "leftRightDelta"},
+      rotate: {type: "rotate", input: "rotation"},
+    },
+    forwardBackArrowsMove: {
+      forward: {type: "key", code: 38},
+      back: {type: "key", code: 40},
+      forwardBack: {type: "subtract", a: "forward", b: "back"},
+      speed: {type: "property", name: "speed", defaultValue: 2},
+      clock: {type: "clock"},
+      forwardBackDelta: {type: "multiply", inputs: ["forwardBack", "speed", "clock"]},
+      translation: {type: "vec3.fromValues", z: "forwardBackDelta"},
+      translate: {type: "translate", input: "translation"},
     },
   })
 }

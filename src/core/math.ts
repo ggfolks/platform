@@ -190,17 +190,6 @@ export class rect extends Float32Array {
   }
 }
 
-/** A set of Euler angles specified in degrees. */
-export class Euler extends Float32Array {
-
-  private constructor () {
-    super(3)
-  }
-
-  /** Creates a set of Euler angles set to zero. */
-  static create () :Euler { return new Euler() }
-}
-
 /** A 3D plane. */
 export class Plane extends Float32Array {
 

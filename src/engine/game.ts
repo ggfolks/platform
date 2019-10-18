@@ -1,5 +1,5 @@
 import {Clock} from "../core/clock"
-import {Euler, mat4, quat, vec3} from "../core/math"
+import {mat4, quat, vec3} from "../core/math"
 import {Mutable, Value} from "../core/react"
 import {RMap} from "../core/rcollect"
 import {Disposable, PMap} from "../core/util"
@@ -237,9 +237,9 @@ export interface Transform extends Component {
   readonly worldToLocalMatrix :mat4
 
   /** Rotates by a set of Euler angles in local (default) or world space.
-    * @param euler the angles by which to rotate.
+    * @param euler the angles by which to rotate, in degrees.
     * @param [frame] the coordinate frame in which to rotate (local by default). */
-  rotate (euler :Euler, frame? :CoordinateFrame) :void
+  rotate (euler :vec3, frame? :CoordinateFrame) :void
 
   /** Translates by a vector in local (default) or world space.
     * @param vector the amount by which to translate.

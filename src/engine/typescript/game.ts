@@ -1,7 +1,7 @@
 import {loadImage} from "../../core/assets"
 import {Clock} from "../../core/clock"
 import {refEquals} from "../../core/data"
-import {Euler, mat4, quat, vec3, vec4} from "../../core/math"
+import {mat4, quat, vec3, vec4} from "../../core/math"
 import {Mutable, Value} from "../../core/react"
 import {Disposer, NoopRemover, PMap, getValue} from "../../core/util"
 import {windowSize} from "../../scene2/gl"
@@ -352,6 +352,7 @@ export class TypeScriptCoroutine implements Coroutine {
 }
 
 const tmpq = quat.create()
+const tmpv = vec3.create()
 const tmpv4 = vec4.create()
 
 const LOCAL_POSITION_INVALID = (1 << 0)
@@ -494,7 +495,7 @@ class TypeScriptTransform extends TypeScriptComponent implements Transform {
   get rotation () :quat { return this._rotation }
   set rotation (rot :quat) { quat.copy(this._rotation, rot) }
 
-  rotate (euler :Euler, frame? :CoordinateFrame) :void {
+  rotate (euler :vec3, frame? :CoordinateFrame) :void {
     quat.fromEuler(tmpq, euler[0], euler[1], euler[2])
     if (frame === "world") quat.multiply(this._rotation, tmpq, this._rotation)
     else quat.multiply(this._localRotation, this._localRotation, tmpq)
@@ -502,7 +503,13 @@ class TypeScriptTransform extends TypeScriptComponent implements Transform {
 
   translate (vector :vec3, frame? :CoordinateFrame) :void {
     if (frame === "world") vec3.add(this._position, this._position, vector)
-    else vec3.add(this._localPosition, this._localPosition, vector)
+    else {
+      vec3.add(
+        this._localPosition,
+        vec3.transformQuat(tmpv, vector, this._localRotation),
+        this._localPosition,
+      )
+    }
   }
 
   transformPoint (point :vec3, target? :vec3) :vec3 {
