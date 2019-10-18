@@ -33,33 +33,35 @@ class Vec3FromValues extends Node {
 
 /** Creates a function that alternates between two output vectors, so as to avoid creating new
   * vector objects every time the function is called.
-  * @param populator the function to populate the vector.
+  * @param populate the function to populate the vector.
   * @return the wrapped function. */
-export function createVec3Fn (
-  populator :(out :vec3, arg? :any) => vec3,
-) :(arg? :any) => vec3 {
-  const values = [vec3.create(), vec3.create()]
-  let index = 0
-  return arg => {
-    const value = populator(values[index], arg)
-    if (vec3.exactEquals(values[0], values[1])) return values[1 - index]
-    index = 1 - index
-    return value
-  }
+export function createVec3Fn (populate :(out :vec3, arg? :any) => vec3) :(arg? :any) => vec3 {
+  return createDoubleBufferedFn(vec3.create, populate, vec3.exactEquals)
 }
 
 /** Creates a function that alternates between two output quaternions, so as to avoid creating new
   * quaternion objects every time the function is called.
-  * @param populator the function to populate the quaternion.
+  * @param populate the function to populate the quaternion.
   * @return the wrapped function. */
-export function createQuatFn (
-  populator :(out :quat, arg? :any) => quat,
-) :(arg? :any) => quat {
-  const values = [quat.create(), quat.create()]
+export function createQuatFn (populate :(out :quat, arg? :any) => quat) :(arg? :any) => quat {
+  return createDoubleBufferedFn(quat.create, populate, quat.exactEquals)
+}
+
+/** Creates a function that alternates between two output objects, so as to avoid creating new
+  * objects every time the function is called.
+  * @param creator the function create the objects.
+  * @param populator the function to populate the object.
+  * @return the wrapped function. */
+export function createDoubleBufferedFn<T> (
+  create :() => T,
+  populate :(out :T, arg? :any) => T,
+  equals :(a :T, b :T) => boolean,
+) :(arg? :any) => T {
+  const values = [create(), create()]
   let index = 0
   return arg => {
-    const value = populator(values[index], arg)
-    if (quat.exactEquals(values[0], values[1])) return values[1 - index]
+    const value = populate(values[index], arg)
+    if (equals(values[0], values[1])) return values[1 - index]
     index = 1 - index
     return value
   }

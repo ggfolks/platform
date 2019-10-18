@@ -536,45 +536,37 @@ class TypeScriptTransform extends TypeScriptComponent implements Transform {
     switch (name) {
       case "localPosition":
       case "localScale":
-      case "position": {
-        const current = createVec3Fn(out => vec3.copy(out, this[name]))
-        return this[propertyName] = Mutable.deriveMutable<any>(
-          dispatch => {
-            let value = current()
-            const handler = () => {
-              const oldValue = value
-              value = current()
-              dispatch(value, oldValue)
-            }
-            this.gameObject.addMessageHandler("onTransformChanged", handler)
-            return () => this.gameObject.removeMessageHandler("onTransformChanged", handler)
-          },
-          current,
-          value => vec3.copy(this[name], value),
-          refEquals,
-        )
-      }
+      case "position":
+        return this._createTransformProperty(propertyName, createVec3Fn, vec3.copy)
+
       case "localRotation":
-      case "rotation": {
-        const current = createQuatFn(out => quat.copy(out, this[name]))
-        return this[propertyName] = Mutable.deriveMutable<any>(
-          dispatch => {
-            let value = current()
-            const handler = () => {
-              const oldValue = value
-              value = current()
-              dispatch(value, oldValue)
-            }
-            this.gameObject.addMessageHandler("onTransformChanged", handler)
-            return () => this.gameObject.removeMessageHandler("onTransformChanged", handler)
-          },
-          current,
-          value => quat.copy(this[name], value),
-          refEquals,
-        )
-      }
+      case "rotation":
+        return this._createTransformProperty(propertyName, createQuatFn, quat.copy)
     }
     return super.getProperty(name, overrideDefault)
+  }
+
+  private _createTransformProperty<T> (
+    propertyName :string,
+    createFn :(populate :(out :T, arg? :any) => T) => ((arg? :any) => T),
+    copyFn :(out :T, source :T) => T,
+  ) :Mutable<any> {
+    const current = createFn(out => copyFn(out, this[name]))
+    return this[propertyName] = Mutable.deriveMutable<any>(
+      dispatch => {
+        let value = current()
+        const handler = () => {
+          const oldValue = value
+          value = current()
+          dispatch(value, oldValue)
+        }
+        this.gameObject.addMessageHandler("onTransformChanged", handler)
+        return () => this.gameObject.removeMessageHandler("onTransformChanged", handler)
+      },
+      current,
+      value => copyFn(this[name], value),
+      refEquals,
+    )
   }
 
   dispose () {
