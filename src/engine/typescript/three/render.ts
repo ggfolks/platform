@@ -237,10 +237,8 @@ export class ThreeRenderEngine implements RenderEngine {
   }
 
   render () {
-    this.renderer.render(
-      this.scene,
-      this.cameras.length > 0 ? this.cameras[0].camera : defaultCamera,
-    )
+    const camera = this.cameras.length > 0 ? this.cameras[0].camera : defaultCamera
+    this.renderer.render(this.scene, camera)
   }
 
   dispose () {
@@ -485,6 +483,11 @@ class ThreeCamera extends ThreeObjectComponent implements Camera {
     return raycaster.ray.direction.toArray(target) as vec3
   }
 
+  onTransformChanged () {
+    super.onTransformChanged()
+    this._perspectiveCamera.matrixWorldInverse.fromArray(this.transform.worldToLocalMatrix)
+  }
+  
   dispose () {
     super.dispose()
     this.renderEngine.cameras.splice(this.renderEngine.cameras.indexOf(this), 1)

@@ -530,27 +530,27 @@ class TypeScriptTransform extends TypeScriptComponent implements Transform {
   }
 
   getProperty<T> (name :string, overrideDefault? :any) :Value<T|undefined>|Mutable<T|undefined> {
-    const propertyName = `_${name}Property`
-    const property = this[propertyName]
-    if (property) return property
     switch (name) {
       case "localPosition":
       case "localScale":
       case "position":
-        return this._createTransformProperty(propertyName, createVec3Fn, vec3.copy)
+        return this._getTransformProperty(name, createVec3Fn, vec3.copy)
 
       case "localRotation":
       case "rotation":
-        return this._createTransformProperty(propertyName, createQuatFn, quat.copy)
+        return this._getTransformProperty(name, createQuatFn, quat.copy)
     }
     return super.getProperty(name, overrideDefault)
   }
 
-  private _createTransformProperty<T> (
-    propertyName :string,
+  private _getTransformProperty<T> (
+    name :string,
     createFn :(populate :(out :T, arg? :any) => T) => ((arg? :any) => T),
     copyFn :(out :T, source :T) => T,
   ) :Mutable<any> {
+    const propertyName = `_${name}Property`
+    const property = this[propertyName]
+    if (property) return property
     const current = createFn(out => copyFn(out, this[name]))
     return this[propertyName] = Mutable.deriveMutable<any>(
       dispatch => {

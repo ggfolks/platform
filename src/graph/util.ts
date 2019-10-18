@@ -318,6 +318,16 @@ export class SubgraphRegistry {
     }
   }
 
+  /** Creates and returns a new graph config with instances of the named subgraphs.
+    * @param names the names of the desired subgraphs.
+    * @param [extra] any extra nodes to add to the graph.
+    * @return the graph config. */
+  createGraphConfig (names :string[], extra? :GraphConfig) :GraphConfig {
+    const config = {}
+    for (const name of names) config[name] = this.createNodeConfig(name)
+    return Object.assign(config, extra)
+  }
+
   /** Creates and returns a new node config for a subgraph of the specified registered name.
     * @param [props] optional additional properties to add to the node config. */
   createNodeConfig (name :string, props? :PMap<any>) :NodeConfig {
