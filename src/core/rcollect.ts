@@ -315,6 +315,20 @@ export type MapChange<K,V> =
 export abstract class RMap<K,V> extends Source<ReadonlyMap<K,V>> implements ReadonlyMap<K,V> {
   protected abstract get data () :ReadonlyMap<K,V>
 
+  /** Creates an empty map. */
+  static empty<K, V> () :RMap<K, V> {
+    const data = new Map<K, V>()
+    class EmptyMap extends RMap<K, V> {
+      protected get data () :ReadonlyMap<K, V> {
+        return data
+      }
+      onChange (changeFn :(change :MapChange<K, V>) => any) :Remover {
+        return NoopRemover
+      }
+    }
+    return new EmptyMap()
+  }
+
   /** Creates a map from a reactive value and a function that gets an RMap for that value. */
   static fromValue<T, K, V> (value :Value<T>, fn :(v :T) => RMap<K, V>) :RMap<K, V> {
     class SwitchMap extends RMap<K, V> {

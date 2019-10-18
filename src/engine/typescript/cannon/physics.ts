@@ -118,16 +118,16 @@ class CannonRigidBody extends TypeScriptComponent implements RigidBody {
   constructor (gameObject :TypeScriptGameObject, type :string) {
     super(gameObject, type)
 
+    const component =
+      this.gameObject.components.getValue("meshFilter") as Value<TypeScriptMeshFilter|undefined>
     this._disposer.add(
       Value
         .join2(
-          this.gameObject
-            .getComponentValue<TypeScriptMeshFilter>("meshFilter")
-            .switchMap(
-              meshFilter => meshFilter
-                ? meshFilter.meshValue
-                : Value.constant<TypeScriptMesh|undefined>(undefined),
-            ),
+          component.switchMap(
+            meshFilter => meshFilter
+              ? meshFilter.meshValue
+              : Value.constant<TypeScriptMesh|undefined>(undefined),
+          ),
           this._scale,
         )
         .onValue(([mesh, scale]) => {

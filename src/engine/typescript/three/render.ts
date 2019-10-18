@@ -403,14 +403,15 @@ class ThreeMeshRenderer extends ThreeObjectComponent implements MeshRenderer {
     this._disposer.add(() => {
       for (const material of this._materials) material.dispose()
     })
+    const component =
+      this.gameObject.components.getValue("meshFilter") as Value<TypeScriptMeshFilter|undefined>
     this._disposer.add(
-      this.gameObject
-        .getComponentValue<TypeScriptMeshFilter>("meshFilter")
+      component
         .switchMap(
           meshFilter => meshFilter
             ? meshFilter.meshValue
             : Value.constant<TypeScriptMesh|undefined>(undefined),
-        )
+          )
         .onValue((mesh :any) => {
           this._mesh.geometry = (mesh && mesh._bufferGeometry) || emptyGeometry
         }),
@@ -487,7 +488,7 @@ class ThreeCamera extends ThreeObjectComponent implements Camera {
     super.onTransformChanged()
     this._perspectiveCamera.matrixWorldInverse.fromArray(this.transform.worldToLocalMatrix)
   }
-  
+
   dispose () {
     super.dispose()
     this.renderEngine.cameras.splice(this.renderEngine.cameras.indexOf(this), 1)
@@ -611,8 +612,8 @@ class ThreeAnimation extends TypeScriptComponent implements Animation {
     })
 
     this._mixerSubject = Subject.deriveSubject(dispatch => {
-      return this.gameObject
-        .getComponentValue<ThreeModel>("model")
+      const component = this.gameObject.components.getValue("model") as Value<ThreeModel|undefined>
+      return component
         .switchMap(
           model => model ? model.objectValue : Value.constant<Object3D|undefined>(undefined),
         )

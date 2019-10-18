@@ -4,7 +4,7 @@ import {MutableMap, RMap} from "../core/rcollect"
 import {getValue} from "../core/util"
 import {Graph} from "../graph/graph"
 import {
-  InputEdgeMeta, OutputEdgeMeta, activateNodeConfigs, property, inputEdge, outputEdge,
+  InputEdgeMeta, OutputEdgeMeta, PropertyMeta, activateNodeConfigs, property, inputEdge, outputEdge,
 } from "../graph/meta"
 import {Node, NodeConfig, NodeTypeRegistry} from "../graph/node"
 import {SubgraphRegistry} from "../graph/util"
@@ -19,7 +19,7 @@ abstract class AbstractComponentNode<T extends Component> extends Node {
   protected get _componentValue () :Value<T|undefined> {
     const graphComponent = this.graph.ctx.graphComponent as GraphComponent|undefined
     return graphComponent
-      ? graphComponent.gameObject.getComponentValue(this._componentType)
+      ? graphComponent.gameObject.components.getValue(this._componentType) as Value<T|undefined>
       : Value.constant<T|undefined>(undefined)
   }
 
@@ -29,10 +29,27 @@ abstract class AbstractComponentNode<T extends Component> extends Node {
 /** Exposes the properties of a component as inputs and outputs. */
 abstract class ComponentConfig implements NodeConfig {
   type = "component"
-  @property() compType = "transform" // TODO: special property type to select from existing
+  @property("select") compType = "transform"
 }
 
 class ComponentNode extends AbstractComponentNode<Component> {
+
+  get propertiesMeta () :RMap<string, PropertyMeta> {
+    const graphComponent = this.graph.ctx.graphComponent as GraphComponent|undefined
+    if (!graphComponent) return RMap.empty()
+    return RMap.fromValue(
+      graphComponent.gameObject.components.keysValue,
+      types => {
+        const map = MutableMap.local<string, PropertyMeta>()
+        map.set("compType", {
+          type: "select",
+          defaultValue: "transform",
+          constraints: {options: types},
+        })
+        return map
+      },
+    )
+  }
 
   get inputsMeta () :RMap<string, InputEdgeMeta> {
     return RMap.fromValue(this._componentValue, component => getComponentInputsMeta(component))
@@ -47,14 +64,12 @@ class ComponentNode extends AbstractComponentNode<Component> {
   }
 
   connect () {
-    for (const key in this.config) {
-      if (key === "type" || key === "compType") continue
+    for (const key of this.inputsMeta.keys()) {
+      const value = this.config[key]
+      if (value === undefined) continue
       this._disposer.add(
         Value
-          .join2(
-            this._componentValue,
-            this.graph.getValue(this.config[key], undefined),
-          )
+          .join2(this._componentValue, this.graph.getValue(value, undefined))
           .onValue(([component, value]) => {
             if (component && value !== undefined) component[key] = value
           })

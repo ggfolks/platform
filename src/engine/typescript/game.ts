@@ -3,6 +3,7 @@ import {Clock} from "../../core/clock"
 import {refEquals} from "../../core/data"
 import {mat4, quat, vec3, vec4} from "../../core/math"
 import {Mutable, Value} from "../../core/react"
+import {MutableMap, RMap} from "../../core/rcollect"
 import {Disposer, NoopRemover, PMap, getValue} from "../../core/util"
 import {windowSize} from "../../scene2/gl"
 import {Graph as GraphObject, GraphConfig} from "../../graph/graph"
@@ -142,8 +143,10 @@ type MessageHandler = (...args :any[]) => void
 export class TypeScriptGameObject implements GameObject {
   readonly transform :Transform
 
-  private readonly _componentValues = new Map<string, Mutable<Component|undefined>>()
+  private readonly _components = MutableMap.local<string, Component>()
   private readonly _messageHandlers = new Map<string, MessageHandler[]>()
+
+  get components () :RMap<string, Component> { return this._components }
 
   constructor (
     public gameEngine :TypeScriptGameEngine,
@@ -188,12 +191,6 @@ export class TypeScriptGameObject implements GameObject {
     return undefined
   }
 
-  getComponentValue<T extends Component> (type :string) :Value<T|undefined> {
-    let value = this._componentValues.get(type)
-    if (!value) this._componentValues.set(type, value = Mutable.local(this[type]))
-    return value as Value<T|undefined>
-  }
-
   hasMessageHandler (message :string) :boolean {
     if (this._messageHandlers.has(message)) return true
     for (const key in this) {
@@ -236,16 +233,16 @@ export class TypeScriptGameObject implements GameObject {
   }
 
   _setComponent (type :string, component :Component) {
-    const value = this._componentValues.get(type)
-    if (value) value.update(component)
-    if (type === "transform") return // transform is handled as a special case
-    Object.defineProperty(this, type, {configurable: true, enumerable: true, value: component})
+    // transform is set in constructor
+    if (type !== "transform") {
+      Object.defineProperty(this, type, {configurable: true, enumerable: true, value: component})
+    }
+    this._components.set(type, component)
   }
 
   _deleteComponent (type :string) {
+    this._components.delete(type)
     delete this[type]
-    const value = this._componentValues.get(type)
-    if (value) value.update(undefined)
   }
 }
 

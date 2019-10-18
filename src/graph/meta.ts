@@ -22,6 +22,11 @@ export interface NumberConstraints {
   wheelStep? :number
 }
 
+/** Constraints on select properties. */
+export interface SelectConstraints {
+  options: string[]
+}
+
 /** The metadata associated with a graph edge. */
 export interface EdgeMeta {
   type :string

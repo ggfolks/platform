@@ -3,7 +3,7 @@ import {Color, Euler, Math as M, Vector3} from "three"
 import {vec3} from "../core/math"
 import {Mutable, Value} from "../core/react"
 import {PMap, toLimitedString} from "../core/util"
-import {EnumMeta, NumberConstraints, getEnumMeta} from "../graph/meta"
+import {NumberConstraints, SelectConstraints, getEnumMeta} from "../graph/meta"
 import {Element, ElementConfig, ElementContext} from "./element"
 import {AxisConfig, VGroup} from "./group"
 import {Model, ModelKey, ModelProvider, Spec} from "./model"
@@ -204,6 +204,14 @@ const propertyConfigCreators :PMap<PropertyConfigCreator> = {
       },
     })
   },
+  select: (model, editable) => {
+    const constraints = model.resolve<Value<SelectConstraints>>("constraints")
+    return createEnumPropertyConfig(
+      model,
+      editable,
+      constraints.map(constraints => constraints.options),
+    )
+  },
 }
 
 function createPropertyElementConfig (model :Model, editable :Value<boolean>) {
@@ -211,7 +219,7 @@ function createPropertyElementConfig (model :Model, editable :Value<boolean>) {
   const creator = propertyConfigCreators[type.current]
   if (creator) return creator(model, editable)
   const enumMeta = getEnumMeta(type.current)
-  if (enumMeta) return createEnumPropertyConfig(model, editable, enumMeta)
+  if (enumMeta) return createEnumPropertyConfig(model, editable, Value.constant(enumMeta.values))
   return createPropertyRowConfig(model, {
     type: "label",
     constraints: {stretch: true},
@@ -219,7 +227,7 @@ function createPropertyElementConfig (model :Model, editable :Value<boolean>) {
   })
 }
 
-function createEnumPropertyConfig (model :Model, editable :Value<boolean>, enumMeta :EnumMeta) {
+function createEnumPropertyConfig (model :Model, editable :Value<boolean>, keys :Value<string[]>) {
   const value = model.resolve<Mutable<string>>("value")
   return createPropertyRowConfig(model, {
     type: "dropdown",
@@ -237,7 +245,7 @@ function createEnumPropertyConfig (model :Model, editable :Value<boolean>, enumM
       },
       action: "action",
     },
-    keys: Value.constant(enumMeta.values),
+    keys,
     data: {
       resolve: (key :ModelKey) => new Model({
         name: Value.constant(key as string),

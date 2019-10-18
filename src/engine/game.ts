@@ -71,6 +71,9 @@ export interface GameObject extends Disposable {
   /** The game object's transform component. */
   readonly transform :Transform
 
+  /** A reactive view of the component map. */
+  readonly components :RMap<string, Component>
+
   /** Adds a set of components to the game object.
     * @param config the object mapping component types to configurations. */
   addComponents (config :PMap<ComponentConfig>) :void
@@ -91,11 +94,6 @@ export interface GameObject extends Disposable {
     * @param type the type of component desired.
     * @return the component reference. */
   getComponent<T extends Component> (type :string|ComponentConstructor<T>) :T|undefined
-
-  /** Gets a reactive view of a component.
-    * @param type the type of component desired.
-    * @return the reactive value. */
-  getComponentValue<T extends Component> (type :string) :Value<T|undefined>
 
   /** Sends a message to all components on the game object.
     * @param message the name of the message to send.
