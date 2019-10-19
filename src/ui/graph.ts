@@ -700,8 +700,8 @@ export class GraphView extends AbsGroup {
       const inputData = model.resolve<ModelProvider>("inputData")
       const inputs :string[] = []
       const pushInput = (edge :InputEdge<any>) => {
-        if (edge === undefined || edge === null) return
         let nodeId = Array.isArray(edge) ? edge[0] : edge
+        if (nodeId === undefined || nodeId === null) return
         if (typeof nodeId !== "string") nodeId = getImplicitNodeId(nodeId)
         inputs.push(nodeId)
         roots.delete(nodeId)
@@ -1124,13 +1124,14 @@ export class EdgeView extends Element {
     const value = input.resolve<Mutable<InputValue>>("value")
     if (multiple.current) {
       for (let ii = 0; ii < value.current.length; ii++) {
-        const element = value.current[ii]
+        let element = value.current[ii]
+        let elementOutputKey :string|undefined
+        if (Array.isArray(element)) [element, elementOutputKey] = element
+        if (element === undefined || element === null) continue
+        if (typeof element !== "string") element = getImplicitNodeId(element)
         if (
-          typeof element === "string"
-            ? element === targetId
-            : Array.isArray(element)
-            ? element[0] === targetId && element[1] === outputKey
-            : element !== undefined && getImplicitNodeId(element) === targetId
+          element === targetId &&
+          (elementOutputKey === undefined || elementOutputKey === outputKey)
         ) {
           const newValue = value.current.slice()
           newValue.splice(ii, 1)
@@ -1182,9 +1183,8 @@ export class EdgeView extends Element {
       const addEdge = (input :InputEdge<any>) => {
         let targetId :string
         let outputKey :string|undefined
-        if (Array.isArray(input)) {
-          [targetId, outputKey] = input
-        } else if (typeof input === "string") {
+        if (Array.isArray(input)) [input, outputKey] = input
+        if (typeof input === "string") {
           targetId = input
         } else if (input !== undefined && input !== null) {
           targetId = getImplicitNodeId(input)
