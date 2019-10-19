@@ -18,12 +18,13 @@ abstract class AbstractComponentNode<T extends Component> extends Node {
 
   protected get _componentValue () :Value<T|undefined> {
     const graphComponent = this.graph.ctx.graphComponent as GraphComponent|undefined
-    return graphComponent
-      ? graphComponent.gameObject.components.getValue(this._componentType) as Value<T|undefined>
-      : Value.constant<T|undefined>(undefined)
+    if (!graphComponent) return Value.constant<T|undefined>(undefined)
+    return this._componentType.switchMap(
+      type => graphComponent.gameObject.components.getValue(type) as Value<T|undefined>,
+    )
   }
 
-  protected abstract get _componentType () :string
+  protected abstract get _componentType () :Value<string>
 }
 
 /** Exposes the properties of a component as inputs and outputs. */
@@ -77,8 +78,8 @@ class ComponentNode extends AbstractComponentNode<Component> {
     }
   }
 
-  protected get _componentType () :string {
-    return getValue(this.config.compType, "transform")
+  protected get _componentType () :Value<string> {
+    return this.getProperty("compType") as Value<string>
   }
 
   protected _createOutput (name :string, defaultValue :any) :Value<any> {
@@ -145,8 +146,8 @@ class HoverNode extends AbstractComponentNode<Hoverable> {
     super(graph, id, config)
   }
 
-  protected get _componentType () :string {
-    return "hoverable"
+  protected get _componentType () :Value<string> {
+    return Value.constant("hoverable")
   }
 
   protected _createOutput (name :string) {
