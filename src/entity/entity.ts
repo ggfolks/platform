@@ -1,3 +1,4 @@
+import {log} from "../core/util"
 import {Clock} from "../core/clock"
 import {refEquals} from "../core/data"
 import {BitSet, Disposable, PMap, Remover} from "../core/util"
@@ -88,6 +89,11 @@ export class Domain {
     // state, in which case we'll override that change on the next line... maybe that's OK?
     if (enabled) this.enable(id)
     return id
+  }
+
+  /** Returns `true` if entity `id` is enabled, false otherwise. */
+  enabled (id :ID) :boolean {
+    return this._enabled.has(id)
   }
 
   /** Enables entity `id`. Does nothing if entity is already enabled. */
@@ -309,7 +315,7 @@ export class DeferredComponent<T> extends Component<T> implements Disposable {
 export class DenseValueComponent<T> extends Component<T> {
   private values :T[] = []
 
-  constructor (readonly id :string, private readonly defval :T) { super() }
+  constructor (readonly id :string, private readonly defval? :T) { super() }
 
   read (index :number) :T { return this.values[index] }
   update (index :number, value :T) {
@@ -320,6 +326,8 @@ export class DenseValueComponent<T> extends Component<T> {
 
   added (id :ID, config? :ValueComponentConfig<T>) {
     const init = config && 'initial' in config ? config.initial : this.defval
+    if (init === undefined) throw new Error(
+      log.format("Missing required initial value for entity", "comp", this.id, "id", id, "config", config))
     this.values[id] = init as T
   }
   removed (id :ID) { delete this.values[id] }
@@ -620,15 +628,18 @@ export class Matcher {
 /** Defines a subset of entities (based on a supplied matching function) and enables bulk operation
   * on them. */
 export class System {
-  private _ids = new BitSet()
+  private readonly _ids = new BitSet()
+  private readonly _enabled = new BitSet()
 
   /** Creates a system in `domain` that operates on entites that match `matchFn`. */
   constructor (readonly domain :Domain, matchFn :MatchFn) {
     domain.events.onEmit(event => {
       const id = event.id, config = domain.entityConfig(id)
       switch (event.type) {
-      case   "added": if (matchFn(config)) this.added(id, config) ; break
-      case "deleted": if (this._ids.has(id)) this.deleted(id) ; break
+      case    "added": if (matchFn(config)) this.added(id, config) ; break
+      case  "deleted": if (this._ids.has(id)) this.deleted(id) ; break
+      case  "enabled": if (this._ids.has(id)) this._enabled.add(id) ; break
+      case "disabled": if (this._ids.has(id)) this._enabled.delete(id) ; break
       }
     })
   }
@@ -636,13 +647,13 @@ export class System {
   /** Applies `fn` to all (enabled) entities matched by this system. */
   onEntities (fn :(id :ID) => any) {
     // TODO: if we have a "primary" component, use that to determine iteration order
-    this._ids.forEach(fn)
+    this._enabled.forEach(fn)
   }
 
   /** Returns the ID of the first entity that matches `pred`, or `-1` if no entity matches. */
   findEntity (pred :(id :ID) => boolean) :ID {
     // TODO: if we have a "primary" component, use that to determine iteration order
-    return this._ids.find(pred)
+    return this._enabled.find(pred)
   }
 
   protected added (id :ID, config :EntityConfig) {
