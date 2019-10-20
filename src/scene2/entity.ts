@@ -106,27 +106,27 @@ export class Transform {
     return vec2.set(into, data[SX], data[SY])
   }
 
-  /** Sets the origin to `ox, oy`. */
-  updateOrigin (ox :number, oy :number) {
+  /** Sets the origin to `origin`. */
+  updateOrigin (origin :vec2) {
     const data = this.data
-    data[OX] = ox
-    data[OY] = oy
+    data[OX] = origin[0]
+    data[OY] = origin[1]
     data[DT] = 1
   }
 
-  /** Sets the translation to `tx, ty`. */
-  updateTranslation (tx :number, ty :number) {
+  /** Sets the translation to `trans`. */
+  updateTranslation (trans :vec2) {
     const data = this.data
-    data[TX] = tx
-    data[TY] = ty
+    data[TX] = trans[0]
+    data[TY] = trans[1]
     data[DT] = 1
   }
 
-  /** Sets the scale of entity `id` to `sx, sy`. */
-  updateScale (sx :number, sy :number) {
+  /** Sets the scale of entity `id` to `scale`. */
+  updateScale (scale :vec2) {
     const data = this.data
-    data[SX] = sx
-    data[SY] = sy
+    data[SX] = scale[0]
+    data[SY] = scale[1]
     data[DT] = 1
   }
 
@@ -220,19 +220,27 @@ export class TransformComponent extends Float32ArrayComponent {
     else return batch.subarray(start, start+6) as mat2d
   }
 
-  /** Sets the origin of entity `id` to `ox, oy`. */
-  updateOrigin (id :ID, ox :number, oy :number) {
+  /** Sets the origin of entity `id` to `origin`. */
+  updateOrigin (id :ID, origin :vec2) {
     const batch = this.batch(id), start = this.start(id)
-    batch[start+OX] = ox
-    batch[start+OY] = oy
+    batch[start+OX] = origin[0]
+    batch[start+OY] = origin[1]
     batch[start+DT] = 1
   }
 
-  /** Sets the translation of entity `id` to `tx, ty`. */
-  updateTranslation (id :ID, tx :number, ty :number) {
+  /** Sets the translation of entity `id` to `trans`. */
+  updateTranslation (id :ID, trans :vec2) {
     const batch = this.batch(id), start = this.start(id)
-    batch[start+TX] = tx
-    batch[start+TY] = ty
+    batch[start+TX] = trans[0]
+    batch[start+TY] = trans[1]
+    batch[start+DT] = 1
+  }
+
+  /** Sets the scale of entity `id` to `scale`. */
+  updateScale (id :ID, scale :vec2) {
+    const batch = this.batch(id), start = this.start(id)
+    batch[start+SX] = scale[0]
+    batch[start+SY] = scale[1]
     batch[start+DT] = 1
   }
 
@@ -240,14 +248,6 @@ export class TransformComponent extends Float32ArrayComponent {
   updateRotation (id :ID, rot :number) {
     const batch = this.batch(id), start = this.start(id)
     batch[start+RO] = rot
-    batch[start+DT] = 1
-  }
-
-  /** Sets the scale of entity `id` to `sx, sy`. */
-  updateScale (id :ID, sx :number, sy :number) {
-    const batch = this.batch(id), start = this.start(id)
-    batch[start+SX] = sx
-    batch[start+SY] = sy
     batch[start+DT] = 1
   }
 
@@ -262,11 +262,12 @@ export class TransformComponent extends Float32ArrayComponent {
   }
 }
 
+const tmppos = vec2.create(), tmpvel = vec2.create(), tmpacc = vec2.create()
+
 /** Handles simple dynamics for an entity. Applies (optional) acceleration to velocity on every
   * frame, then applies velocity to the translation of a [[TransformComponent]]. Users of this
   * system must call [[DynamicsSystem.update]] on every frame with the [[Clock]]. */
 export class DynamicsSystem extends System {
-  private readonly tvec = vec2.create()
 
   constructor (domain :Domain,
                readonly trans :TransformComponent,
@@ -277,15 +278,17 @@ export class DynamicsSystem extends System {
   }
 
   update (clock :Clock) {
+    const dt = clock.dt
     this.onEntities(id => {
-      const dt = clock.dt
-      const acc = this.acc ? this.acc.read(id, this.tvec) : vec2zero, ax = acc[0], ay = acc[1]
-      const vel = this.vel.read(id, this.tvec), vx = vel[0], vy = vel[1]
-      const nvx = vx + ax*dt, nvy = vy + ay*dt
-      if (nvx !== vx || nvy !== vy) this.vel.update(id, vec2.set(this.tvec, nvx, nvy))
-      const tv = this.trans.readTranslation(id, this.tvec), tx = tv[0], ty = tv[1]
-      const ntx = tx + nvx*dt, nty = ty + nvy*dt
-      this.trans.updateTranslation(id, ntx, nty)
+      const vel = this.vel.read(id, tmpvel)
+      if (this.acc) {
+        const acc = this.acc.read(id, tmpacc)
+        if (acc[0] !== 0 || acc[1] !== 0) this.vel.update(id, vec2.scaleAndAdd(vel, vel, acc, dt))
+      }
+      if (vel[0] !== 0 || vel[1] !== 0) {
+        const pos = this.trans.readTranslation(id, tmppos)
+        this.trans.updateTranslation(id, vec2.scaleAndAdd(pos, pos, vel, dt))
+      }
     })
   }
 }
