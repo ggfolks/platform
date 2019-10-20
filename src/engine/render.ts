@@ -118,3 +118,10 @@ export interface Light extends Component {
   /** The light color. */
   color :Color
 }
+
+/** Represents a (GLTF) model loaded from a URL. */
+export interface Model extends Component, Hoverable {
+
+  /** The URL of the model to load. */
+  url? :string
+}

@@ -14,9 +14,11 @@ import {Disposer, NoopRemover, Remover} from "../../../core/util"
 import {windowSize} from "../../../scene2/gl"
 import {loadGLTF, loadGLTFAnimationClip} from "../../../scene3/entity"
 import {Hand, Pointer} from "../../../input/hand"
-import {Animation, Hover, Model, Transform} from "../../game"
+import {Hover, Transform} from "../../game"
+import {Animation} from "../../animation"
 import {
-  Camera, Light, LightType, Material, MaterialType, MeshRenderer, RaycastHit, RenderEngine,
+  Camera, Light, LightType, Material, MaterialType,
+  MeshRenderer, Model, RaycastHit, RenderEngine,
 } from "../../render"
 import {
   TypeScriptComponent, TypeScriptCube, TypeScriptCylinder, TypeScriptGameEngine,

@@ -287,30 +287,6 @@ export interface Cube extends Mesh {}
 /** A quad mesh. */
 export interface Quad extends Mesh {}
 
-/** Represents a (GLTF) model loaded from a URL. */
-export interface Model extends Component, Hoverable {
-
-  /** The URL of the model to load. */
-  url? :string
-}
-
-/** Represents a set of (GLTF) animations loaded from URLs. */
-export interface Animation extends Component {
-
-  /** The URL of the first animation, if any. */
-  url? :string
-
-  /** The URLs of the animations to load. */
-  urls :string[]
-
-  /** Whether or not to play the animation automatically on startup. */
-  playAutomatically :boolean
-
-  /** Plays an animation
-    * @param [name] the name of the animation to play, if not the default. */
-  play (name? :string) :void
-}
-
 /** Manages the object's behavior graph. */
 export interface Graph extends Component {
 
