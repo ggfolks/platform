@@ -167,13 +167,12 @@ export class Transform {
   /** Performs the inverse of this transform on `point`, storing the result in `into`.
     * @return the vector passed as `into`. */
   inverseTransform (into :vec2, point :vec2) :vec2 {
-    const x = point[0] - this.tx, y = point[1] - this.ty, data = this.data
-    const m00 = data[0], m01 = data[1], m10 = data[2], m11 = data[3]
-    const det = m00 * m11 - m01 * m10
+    const data = this.data
+    const m00 = data[0], m01 = data[1], m10 = data[2], m11 = data[3], tx = data[4], ty = data[5]
+    const x = point[0] - tx, y = point[1] - ty, det = m00 * m11 - m01 * m10
     // determinant is zero; matrix is not invertible
     if (Math.abs(det) === 0) throw new Error(`Can't invert transform`)
     const rdet = 1 / det
-    return vec2.set(into, (x * m11 - y * m10) * rdet + this.originX,
-                    (y * m00 - x * m01) * rdet + this.originY)
+    return vec2.set(into, (x * m11 - y * m10) * rdet, (y * m00 - x * m01) * rdet)
   }
 }
