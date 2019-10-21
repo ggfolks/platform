@@ -9,6 +9,7 @@ import {Box} from "./box"
 import {Element, ElementConfig, ElementContext, PointerInteraction, Observer} from "./element"
 import {AbsConstraints, AbsGroup, AxisConfig, VGroup, OffAxisPolicy} from "./group"
 import {VList} from "./list"
+import {createMenuItemConfig} from "./menu"
 import {Action, Model, ModelProvider, Spec, dataProvider} from "./model"
 import {InputValue, NodeCopier, NodeCreator, NodeEdit} from "./node"
 import {Panner} from "./scroll"
@@ -52,32 +53,6 @@ export class GraphViewer extends VGroup {
     const editableSelection = Value.join(haveSelection, this._editable).map(
       ([selection, editable]) => selection && editable,
     )
-    function createMenuItem (element :ElementConfig) {
-      return {
-        type: "menuitem",
-        enabled: "enabled",
-        shortcut: "shortcut",
-        contents: {
-          type: "box",
-          contents: {
-            type: "row",
-            offPolicy: "stretch",
-            contents: [
-              {type: "label", text: "name"},
-              {type: "spacer", width: 15, constraints: {stretch: true}},
-              {type: "label", text: Value.constant("▸"), visible: "submenu"},
-              {type: "shortcut", command: "shortcut"},
-            ],
-          },
-          style: {halign: "stretch"},
-        },
-        element,
-        keys: "keys",
-        data: "data",
-        action: "action",
-        separator: "separator",
-      }
-    }
     this.contents.push(
       ctx.elem.create(ctx, this, {
         type: "box",
@@ -97,20 +72,13 @@ export class GraphViewer extends VGroup {
                   contents: {type: "label", text: "title"},
                 },
                 // max category depth of two for the moment
-                element: createMenuItem(createMenuItem({
-                  type: "menuitem",
-                  contents: {
-                    type: "box",
-                    contents: {type: "label", text: "name"},
-                    style: {halign: "left"},
-                  },
-                  action: "action",
-                })),
+                element: createMenuItemConfig(2),
                 keys: "keys",
                 data: "data",
                 shortcutKeys: "shortcutKeys",
                 shortcutData: "shortcutData",
               },
+              keys: Value.constant(["graph", "edit", "view", "node", "subgraph"]),
               data: dataProvider({
                 graph: {
                   title: Value.constant("Graph"),
@@ -279,7 +247,6 @@ export class GraphViewer extends VGroup {
                   data: subgraphCategoryData,
                 },
               }),
-              keys: Value.constant(["graph", "edit", "view", "node", "subgraph"]),
             },
             {
               type: "spacer",

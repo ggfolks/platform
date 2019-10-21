@@ -16,6 +16,7 @@ import {loadGLTF, loadGLTFAnimationClip} from "../../../scene3/entity"
 import {Hand, Pointer} from "../../../input/hand"
 import {Hover, Transform} from "../../game"
 import {Animation} from "../../animation"
+import {property} from "../../meta"
 import {
   Camera, Light, LightType, Material, MaterialType,
   MeshRenderer, Model, RaycastHit, RenderEngine,
@@ -377,10 +378,10 @@ class ThreeMeshRenderer extends ThreeObjectComponent implements MeshRenderer {
   private _mesh = new Mesh()
   private _materials :ThreeMaterial[]
 
-  get material () :Material { return this.materials[0] }
+  @property("Material") get material () :Material { return this.materials[0] }
   set material (mat :Material) { this.materials[0] = mat as ThreeMaterial }
 
-  get materials () :Material[] { return this._materials }
+  @property("Material[]") get materials () :Material[] { return this._materials }
   set materials (mats :Material[]) {
     this._materials.length = mats.length
     for (let ii = 0; ii < mats.length; ii++) this._materials[ii] = mats[ii] as ThreeMaterial
@@ -549,7 +550,7 @@ class ThreeModel extends ThreeObjectComponent implements Model {
   private _url? :string
   private _urlRemover :Remover = NoopRemover
 
-  get url () :string|undefined { return this._url }
+  @property("url") get url () :string|undefined { return this._url }
   set url (url :string|undefined) {
     if (this._url === url) return
     this._url = url

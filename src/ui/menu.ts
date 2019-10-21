@@ -136,6 +136,49 @@ export interface MenuItemConfig extends AbstractDropdownItemConfig {
   shortcut? :Spec<Value<string>>
 }
 
+/** Creates and returns a generic menu item config with support for submenus and separators.
+  * @param maxDepth the maximum submenu depth. */
+export function createMenuItemConfig (maxDepth :number) :MenuItemConfig {
+  let element :MenuItemConfig = {
+    type: "menuitem",
+    contents: {
+      type: "box",
+      contents: {type: "label", text: "name"},
+      style: {halign: "left"},
+    },
+    action: "action",
+    style: {},
+  }
+  for (; maxDepth > 0; maxDepth--) {
+    element = {
+      type: "menuitem",
+      enabled: "enabled",
+      shortcut: "shortcut",
+      contents: {
+        type: "box",
+        contents: {
+          type: "row",
+          offPolicy: "stretch",
+          contents: [
+            {type: "label", text: "name"},
+            {type: "spacer", width: 15, constraints: {stretch: true}},
+            {type: "label", text: Value.constant("▸"), visible: "submenu"},
+            {type: "shortcut", command: "shortcut"},
+          ],
+        },
+        style: {halign: "stretch"},
+      },
+      element,
+      keys: "keys",
+      data: "data",
+      action: "action",
+      separator: "separator",
+      style: {},
+    }
+  }
+  return element
+}
+
 const MenuItemStyleScope = {id: "menuitem", states: [...ButtonStates, "separator"]}
 
 /** A menu item within a menu. */

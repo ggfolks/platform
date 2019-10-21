@@ -839,7 +839,7 @@ export class Control extends Element {
   * Clients will generally not use this class directly but rather use the `Host2` or `Host3`
   * subclasses which integrate more tightly with the `scene2` and `scene3` libraries. */
 export class Host implements Disposable {
-  private _canvas? :HTMLCanvasElement
+  private _canvas? :HTMLElement
   protected readonly roots :Root[] = []
 
   addRoot (root :Root) {
@@ -861,7 +861,7 @@ export class Host implements Disposable {
     }
   }
 
-  bind (canvas :HTMLCanvasElement) :Remover {
+  bind (canvas :HTMLElement) :Remover {
     this._canvas = canvas
     const unmouse = mouseEvents(canvas, "mousedown", "mousemove", "mouseup", "dblclick").
       onEmit(ev => this.handleMouseEvent(ev))
