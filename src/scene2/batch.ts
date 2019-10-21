@@ -311,7 +311,12 @@ export class TriangleBatch extends QuadBatch {
     * [[stableAttrs]] with all of the attributes that are the same for every vertex. */
   prepare (tint :Color, xf :mat2d) {
     const stables = this.stableAttrs
-    stables.set(xf, 0)
+    stables[0] = xf[0]
+    stables[1] = xf[1]
+    stables[2] = xf[2]
+    stables[3] = xf[3]
+    stables[4] = xf[4]
+    stables[5] = xf[5]
     stables[6] = Color.toAR(tint)
     stables[7] = Color.toGB(tint)
     this.addExtraStableAttrs(stables, 8)
