@@ -5,16 +5,10 @@ import {ArrayComponent, Component, Domain, EntityConfig, ID, Matcher, System,
 import {QuadBatch} from "./batch"
 import {Tile} from "./gl"
 import {mat2d, vec2, vec2zero} from "../core/math"
-
-const DefaultTransform = new Float32Array([
-  1, 0, 0, 1, 0, 0, // mat2d transform
-  0, 0, // origin x/y
-  0, 0, // translation x/y
-  1, 1, // scale x/y
-  0, 0, // rotation, dirty
-])
+import {Transform, updateMatrix, multiplyMatrix} from "./transform"
 
 // offsets into the transform buffer for our various properties
+// note: these must be kept in sync with transform.ts
 const OX = 6
 const OY = 7
 const TX = 8
@@ -24,138 +18,12 @@ const SY = 11
 const RO  = 12
 const DT  = 13
 
-/** Creates a transform array with the supplied initial values. Used to specify initial values for
-  * transform components. */
-export function makeTransform (ox :number, oy :number, tx :number, ty :number,
-                               sx :number, sy :number, rot :number) :Float32Array {
-  const trans = DefaultTransform.slice(0)
-  trans[OX] = ox
-  trans[OY] = oy
-  trans[TX] = tx
-  trans[TY] = ty
-  trans[SX] = sx
-  trans[SY] = sy
-  trans[RO] = rot
-  trans[DT] = 1
-  return trans
-}
-
-function updateMatrix (data :Float32Array, offset :number) {
-  const ox = data[offset+OX], oy = data[offset+OY]
-  const tx = data[offset+TX], ty = data[offset+TY]
-  const sx = data[offset+SX], sy = data[offset+SY]
-  const rot = data[offset+RO], sina = Math.sin(rot), cosa = Math.cos(rot)
-  const sxc = sx * cosa, syc = sy * cosa, sxs = sx * sina, sys = -sy * sina
-  data[offset+0] = sxc
-  data[offset+1] = sxs
-  data[offset+2] = sys
-  data[offset+3] = syc
-  data[offset+4] = tx - ox*sxc - oy*sys
-  data[offset+5] = ty - ox*sxs - oy*syc
-  data[offset+DT] = 0
-}
-
-function multiplyMatrix (a :Float32Array, ao :number,
-                         b :Float32Array, bo :number,
-                         i :Float32Array, io :number) {
-  const a0 = a[ao+0], a1 = a[ao+1], a2 = a[ao+2], a3 = a[ao+3], a4 = a[ao+4], a5 = a[ao+5]
-  const b0 = b[bo+0], b1 = b[bo+1], b2 = b[bo+2], b3 = b[bo+3], b4 = b[bo+4], b5 = b[bo+5]
-  i[io+0] = a0 * b0 + a2 * b1
-  i[io+1] = a1 * b0 + a3 * b1
-  i[io+2] = a0 * b2 + a2 * b3
-  i[io+3] = a1 * b2 + a3 * b3
-  i[io+4] = a0 * b4 + a2 * b5 + a4
-  i[io+5] = a1 * b4 + a3 * b5 + a5
-}
-
-/** A 2D transform for a sprite-like entity. This includes translation, rotation, scale and origin.
-  * These individual components are combined into a transform matrix. */
-export class Transform {
-
-  constructor (readonly data :Float32Array = makeTransform(0, 0, 0, 0, 1, 1, 0)) {}
-
-  get originX () :number { return this.data[OX] }
-  get originY () :number { return this.data[OY] }
-
-  get tx () :number { return this.data[TX] }
-  get ty () :number { return this.data[TY] }
-
-  get scaleX () :number { return this.data[SX] }
-  get scaleY () :number { return this.data[SY] }
-
-  get rotation () :number { return this.data[RO] }
-
-  /** Copies the origin of entity `id` into `into`.
-    * @return the supplied `into` vector. */
-  readOrigin (into :vec2) :vec2 {
-    const data = this.data
-    return vec2.set(into, data[OX], data[OY])
-  }
-
-  /** Copies the translation of entity `id` into `into`.
-    * @return the supplied `into` vector. */
-  readTranslation (into :vec2) :vec2 {
-    const data = this.data
-    return vec2.set(into, data[TX], data[TY])
-  }
-
-  /** Copies the scale of entity `id` into `into`.
-    * @return the supplied `into` vector. */
-  readScale (id :ID, into :vec2) :vec2 {
-    const data = this.data
-    return vec2.set(into, data[SX], data[SY])
-  }
-
-  /** Sets the origin to `origin`. */
-  updateOrigin (origin :vec2) {
-    const data = this.data
-    data[OX] = origin[0]
-    data[OY] = origin[1]
-    data[DT] = 1
-  }
-
-  /** Sets the translation to `trans`. */
-  updateTranslation (trans :vec2) {
-    const data = this.data
-    data[TX] = trans[0]
-    data[TY] = trans[1]
-    data[DT] = 1
-  }
-
-  /** Sets the scale of entity `id` to `scale`. */
-  updateScale (scale :vec2) {
-    const data = this.data
-    data[SX] = scale[0]
-    data[SY] = scale[1]
-    data[DT] = 1
-  }
-
-  /** Sets the rotation to `rot` (in radians). */
-  updateRotation (rot :number) {
-    const data = this.data
-    data[RO] = rot
-    data[DT] = 1
-  }
-
-  /** Performs the inverse of this transform on `point`, storing the result in `into`.
-    * @return the vector passed as `into`. */
-  inverseTransform (into :vec2, point :vec2) :vec2 {
-    const x = point[0] - this.tx, y = point[1] - this.ty, data = this.data
-    const m00 = data[0], m01 = data[1], m10 = data[2], m11 = data[3]
-    const det = m00 * m11 - m01 * m10
-    // determinant is zero; matrix is not invertible
-    if (Math.abs(det) === 0) throw new Error(`Can't invert transform`)
-    const rdet = 1 / det
-    return vec2.set(into, (x * m11 - y * m10) * rdet + this.originX, (y * m00 - x * m01) * rdet + this.originY)
-  }
-}
-
 /** A collection of 2D transforms for sprite-like entities. A transform includes translation,
   * rotation, scale and origin. These individual components are combined into a transform matrix
   * which can then be used to render the sprite using [[RenderSystem]]. */
 export class TransformComponent extends Float32ArrayComponent {
 
-  constructor (id :string, batchBits :number = 8) { super(id, DefaultTransform, batchBits) }
+  constructor (id :string, batchBits :number = 8) { super(id, Transform.Default, batchBits) }
 
   /** Returns the `Transform` for entity `id`. */
   readTransform (id :ID) :Transform {
@@ -256,7 +124,7 @@ export class TransformComponent extends Float32ArrayComponent {
     this.onComponents((id, data, offset, size) => {
       if (force || data[offset+DT] === 1) {
         updateMatrix(data, offset)
-        multiplyMatrix(parent.data, 0, data, offset, data, offset)
+        multiplyMatrix(data, offset, parent.data, 0, data, offset)
       }
     })
   }
