@@ -19,15 +19,17 @@ export class Loop {
   private wasRunning = false
   private onFrame = (time :number) => {
     const {stamp, wasRunning} = this
-    const dt = wasRunning ? time-this.stamp.time : 0, dts = dt/1000
+    const dt = wasRunning ? time-stamp.time : 0, dts = Math.min(dt/1000, this.maxDeltaT)
     stamp.time = time
     stamp.elapsed += dts
     stamp.dt = dts
     const clock = this.clock as Emitter<Clock>
-    clock.emit(this.stamp)
+    clock.emit(stamp)
     if (!wasRunning) this.wasRunning = true
     if (this.running) requestAnimationFrame(this.onFrame)
   }
+
+  constructor (readonly maxDeltaT = 1/15) {}
 
   /** Emits a `clock` on every frame, while this loop is running. */
   clock :Stream<Clock> = new Emitter<Clock>()
