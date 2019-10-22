@@ -1,5 +1,5 @@
 import {MutableSet} from "../core/rcollect"
-import {Element, ElementContext} from "./element"
+import {Control, ControlConfig, ControlStates, Element, ElementContext} from "./element"
 import {VGroup} from "./group"
 import {AbstractList, AbstractListConfig, syncListContents} from "./list"
 import {ModelKey, Spec} from "./model"
@@ -22,4 +22,21 @@ export class TreeView extends VGroup implements AbstractList {
     super(ctx, parent, config)
     this.disposer.add(syncListContents(ctx, this))
   }
+}
+
+/** Defines configuration for [[TreeViewNode]] elements. */
+export interface TreeViewNodeConfig extends ControlConfig {
+  type :"treeviewnode"
+}
+
+const TreeViewNodeStyleScope = {id: "treeviewnode", states: [...ControlStates, "selected"]}
+
+/** Represents a single node in a tree view. */
+export class TreeViewNode extends Control {
+
+  constructor (ctx :ElementContext, parent :Element, readonly config :TreeViewNodeConfig) {
+    super(ctx, parent, config)
+  }
+
+  get styleScope () { return TreeViewNodeStyleScope }
 }

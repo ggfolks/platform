@@ -125,6 +125,7 @@ export class UI {
       case           "tab": return new TA.Tab(ctx, parent, rconfig as TA.TabConfig)
       case    "tabbedpane": return new TA.TabbedPane(ctx, parent, rconfig as TA.TabbedPaneConfig)
       case      "treeview": return new TR.TreeView(ctx, parent, rconfig as TR.TreeViewConfig)
+      case  "treeviewnode": return new TR.TreeViewNode(ctx, parent, rconfig as TR.TreeViewNodeConfig)
       case      "dropdown": return new D.Dropdown(ctx, parent, rconfig as D.DropdownConfig)
       case  "dropdownitem": return new D.DropdownItem(ctx, parent, rconfig as D.DropdownItemConfig)
       case       "menubar": return new M.MenuBar(ctx, parent, rconfig as M.MenuBarConfig)
