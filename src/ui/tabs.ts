@@ -10,7 +10,7 @@ import {ModelKey, ModelProvider, Spec} from "./model"
 import {DefaultPaint, PaintConfig} from "./style"
 import {strokeLinePath} from "./util"
 
-type OrderUpdater = (key :string, index :number) => void
+type OrderUpdater = (key :ModelKey, index :number) => void
 
 /** Defines configuration for [[TabbedPane]] elements. */
 export interface TabbedPaneConfig extends AxisConfig {
@@ -101,7 +101,7 @@ const dropBounds = rect.create()
 
 /** A single tab in a row. */
 export class Tab extends Control {
-  private readonly _key :Value<string>
+  private readonly _key :Value<ModelKey>
   private readonly _activeKey :Mutable<ModelKey>
   private readonly _orderUpdater? :OrderUpdater
   private _dragX? :number
@@ -111,7 +111,7 @@ export class Tab extends Control {
 
   constructor (ctx :ElementContext, parent :Element, readonly config :TabConfig) {
     super(ctx, parent, config)
-    this._key = ctx.model.resolve<Value<string>>(config.key)
+    this._key = ctx.model.resolve<Value<ModelKey>>(config.key)
     this._activeKey = ctx.model.resolve(config.activeKey)
     this.disposer.add(this._activeKey.onValue(_ => this._state.update(this.computeState)))
     if (config.updateOrder) this._orderUpdater = ctx.model.resolve(config.updateOrder)

@@ -24,6 +24,7 @@ import * as P from "./property"
 import * as S from "./scroll"
 import * as TA from "./tabs"
 import * as T from "./text"
+import * as TR from "./tree"
 import * as X from "./box"
 
 /** Defines a set of styles for elements. This is something like:
@@ -123,6 +124,7 @@ export class UI {
       case         "vlist": return new L.VList(ctx, parent, rconfig as L.VListConfig)
       case           "tab": return new TA.Tab(ctx, parent, rconfig as TA.TabConfig)
       case    "tabbedpane": return new TA.TabbedPane(ctx, parent, rconfig as TA.TabbedPaneConfig)
+      case      "treeview": return new TR.TreeView(ctx, parent, rconfig as TR.TreeViewConfig)
       case      "dropdown": return new D.Dropdown(ctx, parent, rconfig as D.DropdownConfig)
       case  "dropdownitem": return new D.DropdownItem(ctx, parent, rconfig as D.DropdownItemConfig)
       case       "menubar": return new M.MenuBar(ctx, parent, rconfig as M.MenuBarConfig)

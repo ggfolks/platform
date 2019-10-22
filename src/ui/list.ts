@@ -53,7 +53,11 @@ export class VList extends VGroup implements AbstractList {
 }
 
 /** Synchronizes a list's contents with its data source. */
-export function syncListContents (ctx :ElementContext, list :Element & AbstractList) :Remover {
+export function syncListContents (
+  ctx :ElementContext,
+  list :Element & AbstractList,
+  elementConfig = list.config.element,
+) :Remover {
   const config = list.config as AbstractListConfig
   const keys = ctx.model.resolveOpt(config.keys)
   const data = ctx.model.resolveOpt(config.data)
@@ -73,7 +77,7 @@ export function syncListContents (ctx :ElementContext, list :Element & AbstractL
     for (const key of keys) {
       let elem = elements.get(key)
       if (!elem) {
-        elem = ctx.elem.create(ctx.remodel(data.resolve(key)), list, config.element)
+        elem = ctx.elem.create(ctx.remodel(data.resolve(key)), list, elementConfig)
         list.elements.set(key, elem)
       }
       contents.push(elem)
