@@ -1,4 +1,5 @@
 import {vec2, mat2d} from "../core/math"
+import {Prop, VProp} from "../core/util"
 
 // offsets into the transform buffer for our various properties
 // note: these must be kept in sync with entity.ts
@@ -74,13 +75,27 @@ export class Transform {
   get originX () :number { return this.data[OX] }
   get originY () :number { return this.data[OY] }
 
+  get oxProp () :Prop<number> { return this.prop(OX) }
+  get oyProp () :Prop<number> { return this.prop(OY) }
+  get originProp () :VProp<vec2> { return this.vprop(OX) }
+
   get tx () :number { return this.data[TX] }
   get ty () :number { return this.data[TY] }
+
+  get txProp () :Prop<number> { return this.prop(TX) }
+  get tyProp () :Prop<number> { return this.prop(TY) }
+  get translationProp () :VProp<vec2> { return this.vprop(TX) }
 
   get scaleX () :number { return this.data[SX] }
   get scaleY () :number { return this.data[SY] }
 
+  get scaleXProp () :Prop<number> { return this.prop(SX) }
+  get scaleYProp () :Prop<number> { return this.prop(SY) }
+  get scaleProp () :VProp<vec2> { return this.vprop(SX) }
+
   get rotation () :number { return this.data[RO] }
+  get rotationProp () :Prop<number> { return this.prop(RO) }
+
   get dirty () :boolean { return this.data[DT] !== 0 }
 
   /** Copies the origin of this transform into `into`.
@@ -174,5 +189,29 @@ export class Transform {
     if (Math.abs(det) === 0) throw new Error(`Can't invert transform`)
     const rdet = 1 / det
     return vec2.set(into, (x * m11 - y * m10) * rdet, (y * m00 - x * m01) * rdet)
+  }
+
+  private prop (field :number) :Prop<number> {
+    const data = this.data
+    return {
+      get current () { return data[field] },
+      update (v :number) { data[field] = v ; data[DT] = 1 }
+    }
+  }
+
+  private vprop (field :number) :VProp<vec2> {
+    const data = this.data
+    return {
+      read (into :vec2) {
+        into[0] = data[field]
+        into[1] = data[field+1]
+        return into
+      },
+      update (v :vec2) {
+        data[field] = v[0]
+        data[field+1] = v[1]
+        data[DT] = 1
+      }
+    }
   }
 }

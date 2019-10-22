@@ -1,4 +1,4 @@
-import {Remover, NoopRemover} from "./util"
+import {Remover, NoopRemover, RProp, Prop} from "./util"
 import {Data, dataEquals, refEquals} from "./data"
 
 // TypeScript infers literal types for type parameters with bounds, so when we bound our reactive
@@ -447,7 +447,7 @@ let lastValueId = 0
 
 /** A reactive primitive that contains a value, which may subsequently change. The current value may
   * be observed by listening via [[Value.onValue]], or by calling [[Value.current]]. */
-export class Value<T> extends Source<T> {
+export class Value<T> extends Source<T> implements RProp<T> {
   private _id? :number
 
   /** Creates a constant value which always contains `value`. */
@@ -683,7 +683,7 @@ export class Value<T> extends Source<T> {
 }
 
 /** A `Value` which can be mutated by external callers. */
-export class Mutable<T> extends Value<T> {
+export class Mutable<T> extends Value<T> implements Prop<T> {
 
   /** Creates a local mutable value, which starts with value `start`.
     * Changes to this value will be determined using `eq` which defaults to `refEquals`. */

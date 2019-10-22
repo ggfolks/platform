@@ -50,6 +50,27 @@ export class Disposer implements Disposable {
 /** An object used as a "property map", where all properties have the same type. */
 export type PMap<T> = {[key :string] :T}
 
+/** An interface for readable properties. */
+export interface RProp<T> {
+  current :T
+}
+
+/** An interface for readable and updatable properties. */
+export interface Prop<T> extends RProp<T> {
+  update (v :T) :void
+}
+
+/** An interface for readable "vector" properties. These properties are usually views into an array
+  * of bulk data, and are thus read into a temporary array provided by the caller. */
+export interface RVProp<T> {
+  read (into :T) :T
+}
+
+/** An interface for readable and updatable "vector" properties. */
+export interface VProp<T> extends RVProp<T> {
+  update (v :T) :void
+}
+
 /** Maintains a set of positive integers using bits in a backing (typed array) vector. */
 export class BitSet {
   private bits :Uint32Array
