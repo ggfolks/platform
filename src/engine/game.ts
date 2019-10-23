@@ -17,7 +17,14 @@ export type PrimitiveType = "sphere" | "cylinder" | "cube" | "quad"
 export type ComponentConfig = PMap<any>
 
 /** The type used to configure game objects. */
-export type GameObjectConfig = PMap<ComponentConfig>
+export interface GameObjectConfig {
+  name? :string
+  order? :number
+  [extra :string] :any
+}
+
+/** The type used to configure spaces. */
+export type SpaceConfig = PMap<GameObjectConfig>
 
 /** Context container. */
 export interface GameContext extends UINodeContext, InputNodeContext {
@@ -61,7 +68,7 @@ export interface GameEngine extends Disposable {
 
   /** Creates a set of game objects on the current page.
     * @param configs the map from name to config. */
-  createGameObjects (configs :PMap<GameObjectConfig>) :void
+  createGameObjects (configs :SpaceConfig) :void
 
   /** Creates and returns a new (empty) game object on the current page.
     * @param [name] the name of the object.
@@ -128,6 +135,15 @@ export interface GameObject extends Disposable {
     * @param args the arguments to pass along with the message. */
   sendMessage (message :string, ...args :any[]) :void
 
+  /** Returns a reactive view of the specified property.
+    * @param name the name of the desired property.
+    * @param [overrideDefault] if specified, a value that will override the default default.
+    * @return the reactive value, which may or may not be writable. */
+  getProperty<T> (name :string, overrideDefault? :any) :Value<T|undefined>|Mutable<T|undefined>
+
+  /** Returns the configuration of this game object as a new object. */
+  getConfig () :GameObjectConfig
+
   /** Anything else is an untyped component. */
   readonly [type :string] :any
 }
@@ -172,6 +188,9 @@ export interface Component extends Disposable {
     * @param [overrideDefault] if specified, a value that will override the default default.
     * @return the reactive value, which may or may not be writable. */
   getProperty<T> (name :string, overrideDefault? :any) :Value<T|undefined>|Mutable<T|undefined>
+
+  /** Returns the configuration of this component as a new object. */
+  getConfig () :ComponentConfig
 
   /** Optional wake function. */
   readonly awake? :() => void

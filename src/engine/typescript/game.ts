@@ -20,7 +20,7 @@ import {DefaultStyles, DefaultTheme} from "../../ui/theme"
 import {
   DEFAULT_PAGE, Component, ComponentConfig, ComponentConstructor, CoordinateFrame, Coroutine, Cube,
   Cylinder, GameContext, GameEngine, GameObject, GameObjectConfig, Graph, Mesh, MeshFilter, Page,
-  PrimitiveType, Quad, Sphere, Time, Transform,
+  PrimitiveType, Quad, SpaceConfig, Sphere, Time, Transform,
 } from "../game"
 import {property} from "../meta"
 import {PhysicsEngine} from "../physics"
@@ -101,7 +101,7 @@ export class TypeScriptGameEngine implements GameEngine {
     return this.createGameObject(type, mergedConfig)
   }
 
-  createGameObjects (configs :PMap<GameObjectConfig>) :void {
+  createGameObjects (configs :SpaceConfig) :void {
     for (const name in configs) this.createGameObject(name, configs[name])
   }
 
@@ -131,9 +131,35 @@ export class TypeScriptGameEngine implements GameEngine {
   }
 
   _pageDisposed (page :Page) {
+    const idx = this._getPageIndex(page)
     const pages = this._pages.current.slice()
-    pages.splice(pages.indexOf(page.gameObject.id), 1)
+    pages.splice(idx, 1)
+    this.activePage.update(pages[idx < pages.length ? idx : idx - 1])
     this._pages.update(pages)
+  }
+
+  _pageReordered (page :Page) {
+    const idx = this._getPageIndex(page)
+    const pages = this._pages.current.slice()
+    pages.splice(idx, 1)
+    const order = page.gameObject.order
+    let ii = 0
+    for (; ii < pages.length; ii++) {
+      const id = pages[ii]
+      const otherOrder = (id === DEFAULT_PAGE) ? 0 : this.gameObjects.require(id).order
+      if (order < otherOrder) {
+        pages.splice(ii, 0, page.gameObject.id)
+        break
+      }
+    }
+    if (ii === pages.length) pages.push(page.gameObject.id)
+    this._pages.update(pages)
+  }
+
+  private _getPageIndex (page :Page) {
+    const idx = this._pages.current.indexOf(page.gameObject.id)
+    if (idx === -1) throw new Error(`Page "${page.gameObject.id}" missing from list`)
+    return idx
   }
 
   _validateDirtyTransforms () {
@@ -261,6 +287,20 @@ export class TypeScriptGameObject implements GameObject {
     }
   }
 
+  getProperty<T> (name :string, overrideDefault? :any) :Value<T|undefined>|Mutable<T|undefined> {
+    switch (name) {
+      case "id": return Value.constant(this.id) as unknown as Value<T|undefined>
+      case "name": return this.nameValue as unknown as Value<T|undefined>
+      case "order": return this.orderValue as unknown as Value<T|undefined>
+      default: return this.components.getValue(name) as unknown as Value<T|undefined>
+    }
+  }
+
+  getConfig () :GameObjectConfig {
+    const config :GameObjectConfig = {name: this.name, order: this.order}
+    return config
+  }
+
   dispose () {
     this.gameEngine._gameObjects.delete(this.id)
     for (const key in this) {
@@ -349,6 +389,11 @@ export class TypeScriptComponent implements Component {
       newValue => this[name] = newValue,
       refEquals,
     )
+  }
+
+  getConfig () :ComponentConfig {
+    const config = {type: this.type}
+    return config
   }
 
   dispose () {
@@ -699,6 +744,9 @@ class TypeScriptPage extends TypeScriptComponent implements Page {
     super(gameObject, type)
     gameObject.gameEngine._pageCreated(this)
     this._disposer.add(() => gameObject.gameEngine._pageDisposed(this))
+    this._disposer.add(gameObject.orderValue.onChange(
+      () => gameObject.gameEngine._pageReordered(this),
+    ))
   }
 }
 registerComponentType("page", TypeScriptPage)
