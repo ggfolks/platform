@@ -1,7 +1,7 @@
+import {Disposable, Remover} from "../core/util"
 import {refEquals} from "../core/data"
 import {dim2, vec2} from "../core/math"
 import {Scale} from "../core/ui"
-import {Disposable} from "../core/util"
 import {Value, Subject} from "../core/react"
 
 //
@@ -371,7 +371,9 @@ export type RendererConfig = {
   gl? :WebGLContextAttributes
 }
 
-export class Renderer {
+export class Renderer implements Disposable {
+  private unsize :Remover
+
   /** The canvas element that displays the main frame buffer. */
   readonly canvas :HTMLCanvasElement
   /** The GL context used by this renderer. */
@@ -410,7 +412,7 @@ export class Renderer {
     const target = this.target = new DefaultRenderTarget()
     const size = this.size = config.size
     const scale = this.scale = new Scale(config.scaleFactor)
-    size.onValue(rsize => {
+    this.unsize = size.onValue(rsize => {
       // the frame buffer may be larger (or smaller) than the logical size, depending on whether
       // we're on a HiDPI display, or how the game has configured things (maybe they're scaling down
       // from native resolution to improve performance)
@@ -422,5 +424,9 @@ export class Renderer {
       canvas.style.width = `${rsize[0]}px`
       canvas.style.height = `${rsize[1]}px`
     })
+  }
+
+  dispose () {
+    this.unsize()
   }
 }
