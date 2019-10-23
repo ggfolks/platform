@@ -3,23 +3,18 @@ import {Color} from "../core/color"
 import {GLC, RenderTarget, Texture, Tile, checkError, createTexture, imageToTexture} from "./gl"
 import {QuadBatch} from "./batch"
 
-let _colorTex :Texture|null = null
-
-function colorTex (glc :GLC) :Texture {
-  if (_colorTex == null) {
-    const scaled = document.createElement("canvas")
-    scaled.width = 1
-    scaled.height = 1
-    const ctx = scaled.getContext("2d")
-    if (!ctx) console.warn(`Failed to obtain Canvas2DContext`)
-    else {
-      ctx.fillStyle = 'white'
-      ctx.fillRect(0, 0, 1, 1)
-    }
-    const tcfg = Texture.DefaultConfig
-    _colorTex = imageToTexture(glc, scaled, tcfg, createTexture(glc, tcfg))
+function makeColorTex (glc :GLC) :Texture {
+  const scaled = document.createElement("canvas")
+  scaled.width = 1
+  scaled.height = 1
+  const ctx = scaled.getContext("2d")
+  if (!ctx) console.warn(`Failed to obtain Canvas2DContext`)
+  else {
+    ctx.fillStyle = 'white'
+    ctx.fillRect(0, 0, 1, 1)
   }
-  return _colorTex
+  const tcfg = Texture.DefaultConfig
+  return imageToTexture(glc, scaled, tcfg, createTexture(glc, tcfg))
 }
 
 /** Provides a simple drawing API to a GPU accelerated render target. This can be either the main
@@ -38,6 +33,7 @@ export class Surface {
   private fillColor = Color.fromRGB(0, 0, 0)
   private tempColor = Color.fromRGB(0, 0, 0)
   private patternTex :Texture|null = null
+  private _colorTex :Texture|null = null
 
   private checkIntersection = false
   private intersectionTestPoint = vec2.create()
@@ -270,7 +266,7 @@ export class Surface {
     mat2d.multiply(xf, this.tx, xf)
 
     const patTex = this.patternTex
-    const tex = patTex == null ? colorTex(this.glc) : patTex
+    const tex = patTex == null ? this.colorTex : patTex
     const tint = patTex == null ?
       Color.combine(Color.copy(this.tempColor, this.fillColor), this.tint) : this.tint
     this.batch.addTexQuad(tex, tint, xf, vec2zero, dim2.fromValues(length, width))
@@ -280,11 +276,16 @@ export class Surface {
   /** Fills the specified rectangle. */
   fillRect (pos :vec2, size :dim2) :Surface {
     const patTex = this.patternTex
-    const tex = patTex == null ? colorTex(this.glc) : patTex
+    const tex = patTex == null ? this.colorTex : patTex
     const tint = patTex == null ?
       Color.combine(Color.copy(this.tempColor, this.fillColor), this.tint) : this.tint
     this.batch.addTexQuad(tex, tint, this.tx, pos, size)
     return this
+  }
+
+  private get colorTex () {
+    if (this._colorTex != null) return this._colorTex
+    return this._colorTex = makeColorTex(this.glc)
   }
 
   private beginBatch (batch :QuadBatch) :QuadBatch {
