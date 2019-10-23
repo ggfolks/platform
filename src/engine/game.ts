@@ -26,6 +26,9 @@ export interface GameContext extends UINodeContext, InputNodeContext {
   graphComponent? :Graph
 }
 
+/** The id of the default page. */
+export const DEFAULT_PAGE = "default"
+
 /** Top-level interface to game engine. */
 export interface GameEngine extends Disposable {
 
@@ -38,16 +41,29 @@ export interface GameEngine extends Disposable {
   /** The active physics engine. */
   readonly physicsEngine :PhysicsEngine
 
-  /** Creates and returns a new game object containing a primitive.
+  /** The keys of the pages. */
+  readonly pages :Value<string[]>
+
+  /** The currently active page. */
+  readonly activePage :Mutable<string>
+
+  /** All game objects, mapped by id. */
+  readonly gameObjects :RMap<string, GameObject>
+
+  /** Creates a page object.
+    * @param [name] the name of the page. */
+  createPage (name? :string) :GameObject
+
+  /** Creates and returns a new game object containing a primitive (on the current page).
     * @param type the type of primitive desired.
     * @param [config] additional configuration to merge in. */
   createPrimitive (type :PrimitiveType, config? :GameObjectConfig) :GameObject
 
-  /** Creates a set of game objects.
+  /** Creates a set of game objects on the current page.
     * @param configs the map from name to config. */
   createGameObjects (configs :PMap<GameObjectConfig>) :void
 
-  /** Creates and returns a new (empty) game object.
+  /** Creates and returns a new (empty) game object on the current page.
     * @param [name] the name of the object.
     * @param [config] the configuration of the object's components. */
   createGameObject (name? :string, config? :GameObjectConfig) :GameObject
@@ -65,8 +81,20 @@ export type ComponentConstructor<T extends Component> = Function & { prototype: 
 /** Represents an object in the game hierarchy. */
 export interface GameObject extends Disposable {
 
+  /** The game object's unique id. */
+  readonly id :string
+
   /** The game object's name. */
   name :string
+
+  /** Reactive view of the game object's name. */
+  readonly nameValue :Mutable<string>
+
+  /** The object's sort order. */
+  order :number
+
+  /** Reactive view of the game object's sort order. */
+  readonly orderValue :Mutable<number>
 
   /** The game object's transform component. */
   readonly transform :Transform
@@ -115,6 +143,9 @@ export interface Component extends Disposable {
 
   /** The component type. */
   readonly type :string
+
+  /** The sort order of the component. */
+  order :number
 
   /** Gets a typed reference to a component, throwing an exception if not present.
     * @param type the type of component desired.
@@ -263,6 +294,13 @@ export interface Transform extends Component {
     * @param [target] an optional vector to hold the result.
     * @return the result direction. */
   transformDirection (direction :vec3, target? :vec3) :vec3
+}
+
+/** Represents a top-level page. */
+export interface Page extends Component {
+
+  /** Checks/sets whether or not this page is active. */
+  active :boolean
 }
 
 /** Contains a mesh. */

@@ -1,5 +1,5 @@
 import {rect} from "../core/math"
-import {Mutable, Source} from "../core/react"
+import {Mutable, Source, Value} from "../core/react"
 import {Element, ElementConfig, ElementContext} from "./element"
 import {AxisConfig, OffAxisPolicy, VGroup} from "./group"
 import {DraggableElementConfig, DraggableElement, DraggableElementStates, HList} from "./list"
@@ -15,7 +15,7 @@ export interface TabbedPaneConfig extends AxisConfig {
   contentElement :ElementConfig
   data :Spec<ModelProvider>
   keys :Spec<Source<ModelKey[]>>
-  key :string
+  key :Spec<Value<ModelKey>>
   activeKey :Spec<Mutable<ModelKey>>
   updateOrder? :Spec<OrderUpdater>
 }
@@ -78,6 +78,7 @@ export class TabbedPane extends VGroup {
 /** Defines configuration for [[Tab]] elements. */
 export interface TabConfig extends DraggableElementConfig {
   type :"tab"
+  key :Spec<Value<ModelKey>>
   activeKey :Spec<Mutable<ModelKey>>
   updateOrder? :Spec<OrderUpdater>
 }
@@ -86,17 +87,21 @@ const TabStyleScope = {id: "tab", states: DraggableElementStates}
 
 /** A single tab in a row. */
 export class Tab extends DraggableElement {
+  private readonly _key :Value<ModelKey>
   private readonly _activeKey :Mutable<ModelKey>
   private readonly _orderUpdater? :OrderUpdater
 
   constructor (ctx :ElementContext, parent :Element, readonly config :TabConfig) {
     super(ctx, parent, config)
+    this._key = ctx.model.resolve(config.key)
     this._activeKey = ctx.model.resolve(config.activeKey)
     this.disposer.add(this._activeKey.onValue(_ => this._state.update(this.computeState)))
     if (config.updateOrder) this._orderUpdater = ctx.model.resolve(config.updateOrder)
   }
 
   get styleScope () { return TabStyleScope }
+
+  get horizontal () :boolean { return true }
 
   get selected () :boolean {
     // can be called before constructor is complete

@@ -18,9 +18,9 @@ import {HTMLHost} from "../../ui/element"
 import {registerUINodes} from "../../ui/node"
 import {DefaultStyles, DefaultTheme} from "../../ui/theme"
 import {
-  Component, ComponentConfig, ComponentConstructor, CoordinateFrame, Coroutine, Cube, Cylinder,
-  GameContext, GameEngine, GameObject, GameObjectConfig, Graph, Mesh, MeshFilter, PrimitiveType,
-  Quad, Sphere, Time, Transform,
+  DEFAULT_PAGE, Component, ComponentConfig, ComponentConstructor, CoordinateFrame, Coroutine, Cube,
+  Cylinder, GameContext, GameEngine, GameObject, GameObjectConfig, Graph, Mesh, MeshFilter, Page,
+  PrimitiveType, Quad, Sphere, Time, Transform,
 } from "../game"
 import {property} from "../meta"
 import {PhysicsEngine} from "../physics"
@@ -33,14 +33,17 @@ interface Wakeable { awake () :void }
 /** An implementation of the GameEngine interface in TypeScript. */
 export class TypeScriptGameEngine implements GameEngine {
   private readonly _disposer = new Disposer()
+  private readonly _pages = Mutable.local([DEFAULT_PAGE])
 
   readonly ctx :GameContext
-
+  readonly activePage = Mutable.local<string>(DEFAULT_PAGE)
   readonly dirtyTransforms = new Set<TypeScriptTransform>()
   readonly updatables = new Set<Updatable>()
 
   _renderEngine? :RenderEngine
   _physicsEngine? :PhysicsEngine
+
+  readonly _gameObjects = MutableMap.local<string, GameObject>()
 
   get renderEngine () :RenderEngine {
     if (!this._renderEngine) throw new Error("Missing render engine")
@@ -51,6 +54,10 @@ export class TypeScriptGameEngine implements GameEngine {
     if (!this._physicsEngine) throw new Error("Missing physics engine")
     return this._physicsEngine
   }
+
+  get pages () :Value<string[]> { return this._pages }
+
+  get gameObjects () :RMap<string, GameObject> { return this._gameObjects }
 
   constructor (readonly root :HTMLElement) {
     this.ctx = {
@@ -71,6 +78,10 @@ export class TypeScriptGameEngine implements GameEngine {
       image: {resolve: loadImage},
       screen: windowSize(window),
     }
+  }
+
+  createPage (name? :string) :GameObject {
+    return this.createGameObject(name || "page", {page: {}})
   }
 
   createPrimitive (type :PrimitiveType, config? :GameObjectConfig) :GameObject {
@@ -113,6 +124,18 @@ export class TypeScriptGameEngine implements GameEngine {
     this.renderEngine.render()
   }
 
+  _pageCreated (page :Page) {
+    const pages = this._pages.current.slice()
+    pages.push(page.gameObject.id)
+    this._pages.update(pages)
+  }
+
+  _pageDisposed (page :Page) {
+    const pages = this._pages.current.slice()
+    pages.splice(pages.indexOf(page.gameObject.id), 1)
+    this._pages.update(pages)
+  }
+
   _validateDirtyTransforms () {
     for (const transform of this.dirtyTransforms) transform._validate(LOCAL_TO_WORLD_MATRIX_INVALID)
     this.dirtyTransforms.clear()
@@ -141,18 +164,31 @@ export function registerComponentType (type :string, constructor :TypeScriptComp
 type MessageHandler = (...args :any[]) => void
 
 export class TypeScriptGameObject implements GameObject {
+  readonly id :string
+  readonly nameValue :Mutable<string>
+  readonly orderValue = Mutable.local(0)
   readonly transform :Transform
 
   private readonly _components = MutableMap.local<string, Component>()
   private readonly _messageHandlers = new Map<string, MessageHandler[]>()
 
+  get name () :string { return this.nameValue.current }
+  set name (name :string) { this.nameValue.update(name) }
+
+  get order () :number { return this.orderValue.current }
+  set order (order :number) { this.orderValue.update(order) }
+
   get components () :RMap<string, Component> { return this._components }
 
   constructor (
     public gameEngine :TypeScriptGameEngine,
-    public name :string,
+    name :string,
     config :GameObjectConfig,
   ) {
+    this.id = name
+    for (let ii = 2; gameEngine._gameObjects.has(this.id); ii++) this.id = name + ii
+    gameEngine._gameObjects.set(this.id, this)
+    this.nameValue = Mutable.local(name)
     this.transform = this.addComponent("transform", {}, false)
     this.addComponents(config, false)
     this.sendMessage("awake")
@@ -226,6 +262,7 @@ export class TypeScriptGameObject implements GameObject {
   }
 
   dispose () {
+    this.gameEngine._gameObjects.delete(this.id)
     for (const key in this) {
       const value = this[key]
       if (value instanceof TypeScriptComponent) value.dispose()
@@ -266,6 +303,10 @@ export class TypeScriptComponent implements Component {
 
   protected readonly _disposer = new Disposer()
   private readonly _coroutines :Coroutine[] = []
+  private _order = 0
+
+  get order () :number { return this._order }
+  set order (order :number) { this._order = order }
 
   get transform () :Transform { return this.gameObject.transform }
 
@@ -645,6 +686,22 @@ class TypeScriptTransform extends TypeScriptComponent implements Transform {
   }
 }
 registerComponentType("transform", TypeScriptTransform)
+
+class TypeScriptPage extends TypeScriptComponent implements Page {
+
+  get active () { return this.gameObject.gameEngine.activePage.current === this.gameObject.id }
+  set active (active :boolean) {
+    if (active) this.gameObject.gameEngine.activePage.update(this.gameObject.id)
+    else if (this.active) this.gameObject.gameEngine.activePage.update(DEFAULT_PAGE)
+  }
+
+  constructor (gameObject :TypeScriptGameObject, type :string) {
+    super(gameObject, type)
+    gameObject.gameEngine._pageCreated(this)
+    this._disposer.add(() => gameObject.gameEngine._pageDisposed(this))
+  }
+}
+registerComponentType("page", TypeScriptPage)
 
 export class TypeScriptMeshFilter extends TypeScriptComponent implements MeshFilter {
   meshValue = Mutable.local<TypeScriptMesh|undefined>(undefined)

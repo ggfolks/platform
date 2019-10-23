@@ -1,5 +1,5 @@
 import {rect, vec2} from "../core/math"
-import {Source, Value} from "../core/react"
+import {Source} from "../core/react"
 import {Noop, NoopRemover, PMap, Remover} from "../core/util"
 import {ModelKey, ModelProvider} from "./model"
 import {
@@ -63,7 +63,6 @@ export interface DraggableElementStyle {
 
 /** Defines configuration for [[Tab]] elements. */
 export interface DraggableElementConfig extends ControlConfig {
-  key :Spec<Value<ModelKey>>
   style :PMap<DraggableElementStyle>
 }
 
@@ -75,23 +74,21 @@ const dropBounds = rect.create()
 
 /** Base class for draggable list elements. */
 export abstract class DraggableElement extends Control {
-  protected readonly _key :Value<ModelKey>
-
   private _stroke = this.observe(DefaultPaint)
-  private _dragPos? :vec2
-  private _dropStart? :vec2
-  private _dropEnd? :vec2
-  private _dropData? :any
+  
+  protected _dragPos? :vec2
+  protected _dropStart? :vec2
+  protected _dropEnd? :vec2
+  protected _dropData? :any
 
   constructor (ctx :ElementContext, parent :Element, readonly config :DraggableElementConfig) {
     super(ctx, parent, config)
-    this._key = ctx.model.resolve(config.key)
     const style = this.getStyle(this.config.style, "normal")
     if (style.stroke) this._stroke.observe(ctx.style.resolvePaint(style.stroke))
   }
 
   /** Checks whether dragging happens horizontally. */
-  get horizontal () :boolean { return true }
+  get horizontal () :boolean { return false }
 
   /** Checks whether to constrain dragging to our axis. */
   get constrain () :boolean { return true }
@@ -178,7 +175,7 @@ export abstract class DraggableElement extends Control {
     }
     if (this._dropData === undefined) return
     this._dropStart = vec2.fromValues(this.x, this.y)
-    this._dropEnd = vec2.fromValues(this.x + this.width, this.y + this.height)
+    this._dropEnd = vec2.fromValues(this.x + this.width - 1, this.y + this.height - 1)
     this._dropStart[posIdx] = dropPos
     this._dropEnd[posIdx] = dropPos
   }
@@ -227,14 +224,12 @@ export abstract class DraggableElement extends Control {
 
     if (this._dropStart === undefined || this._dropEnd === undefined) return
     this._stroke.current.prepStroke(canvas)
-    // we offset by 0.5 in order to hit the center of the pixel
-    const [xoff, yoff] = this.horizontal ? [0.5, 0] : [0, 0.5]
     strokeLinePath(
       canvas,
-      this._dropStart[0] + xoff,
-      this._dropStart[1] + yoff,
-      this._dropEnd[0] + xoff,
-      this._dropEnd[1] + yoff,
+      this._dropStart[0] + 0.5,
+      this._dropStart[1] + 0.5,
+      this._dropEnd[0] + 0.5,
+      this._dropEnd[1] + 0.5,
       1,
     )
   }
