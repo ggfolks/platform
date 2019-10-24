@@ -682,18 +682,21 @@ export class Value<T> extends Source<T> implements RProp<T> {
   toString () { return `Value(${this.current})` }
 }
 
+/** An update function used to update local mutable values. */
+export type Update<T> = (ov :T, nv :T) => T
+
 /** A `Value` which can be mutated by external callers. */
 export class Mutable<T> extends Value<T> implements Prop<T> {
 
   /** Creates a local mutable value, which starts with value `start`.
     * Changes to this value will be determined using `eq` which defaults to `refEquals`. */
-  static local<T> (start :T, eq :Eq<T> = refEquals) :Mutable<T> {
+  static local<T> (start :T, eq :Eq<T> = refEquals, update? :Update<T>) :Mutable<T> {
     const listeners :ValueFn<T>[] = []
     let current = start
     return new Mutable(eq, lner => addListener(listeners, lner), () => current, newValue => {
       const oldValue = current
       if (!eq(oldValue, newValue)) {
-        current = newValue
+        current = update ? update(current, newValue) : newValue
         dispatchChange(listeners, newValue, oldValue)
       }
     })
