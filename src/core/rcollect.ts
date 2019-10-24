@@ -216,7 +216,7 @@ export abstract class RSet<E> extends Source<ReadonlySet<E>> implements Readonly
       }
     }), () => this.has(elem))
   }
-  
+
   /** The size of this set as a reactive value. */
   get sizeValue () :Value<number> {
     const value = this.map(s => s.size).fold(0, (_, s) => s)

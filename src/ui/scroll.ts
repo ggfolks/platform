@@ -1,4 +1,7 @@
+import {NoopRemover} from "../core/util"
+import {Interp, Easing} from "../core/interp"
 import {clamp, dim2, rect, vec2, vec2zero} from "../core/math"
+import {Clock} from "../core/clock"
 import {Mutable} from "../core/react"
 import {Control, ControlConfig, Element, ElementContext, PointerInteraction} from "./element"
 
@@ -181,55 +184,156 @@ export class Panner extends TransformedContainer {
   }
 }
 
+class Anim {
+  done = false
+  constructor (readonly scroller :Scroller) {}
+  start (pos :number, time :number) {}
+  move (pos :number, time :number) {}
+  release (pos :number, time :number) {}
+  update (clock :Clock, offset :number) { return offset }
+}
+
+class TweenAnim extends Anim {
+  private elapsed = 0
+  private time :number
+  private init :number
+  private range :number
+
+  constructor (scroller :Scroller, targetOffset :number, readonly interp :Interp) {
+    super(scroller)
+    const init = this.init = scroller.axisOffset
+    const range = this.range = targetOffset - init
+    this.time = Math.min(range / 1000, 1)
+  }
+
+  update (clock :Clock, offset :number) {
+    const elapsed = this.elapsed += clock.dt
+    const pct = this.interp(elapsed/this.time)
+    this.done = pct >= 1
+    return this.init + this.range*pct
+  }
+}
+
+const InertialFriction = 1000
+const MinInertialVel = 50
+
+class InertialAnim extends Anim {
+  private poshist = [0, 0, 0, 0]
+  private timehist = [0, 0, 0, 0]
+  private samples = 0
+  private vel = 0
+  private dir = 0
+
+  private _notePos (pos :number, time :number) {
+    const idx = this.samples % this.poshist.length
+    this.poshist[idx] = pos
+    this.timehist[idx] = time
+    this.samples += 1
+  }
+
+  start (pos :number, time :number) { this._notePos(pos, time) }
+  move (pos :number, time :number) { this._notePos(pos, time) }
+  release (pos :number, time :number) {
+    this._notePos(pos, time)
+    const {samples, poshist, timehist} = this, window = poshist.length
+    const first = samples >= window ? samples % window : 0
+    const last = samples >= window ? (samples-1 + window) % window : samples-1
+    const deltat = (timehist[last] - timehist[first])/1000 // stamps are in millis
+    const deltap = poshist[last] - poshist[first]
+    const vel = this.vel = Math.abs(deltap/deltat)
+    this.dir = deltap < 0 ? 1 : -1
+    this.done = (vel < MinInertialVel)
+  }
+
+  update (clock :Clock, offset :number) {
+    const vel = this.vel, noff = offset + clock.dt * vel * this.dir
+    if (noff <= 0 || noff >= this.scroller.maxAxis) this.done = true
+    const nvel = this.vel = vel - InertialFriction * clock.dt
+    if (nvel <= 0) this.done = true
+    return noff
+  }
+}
+
 export interface ScrollerConfig extends ControlConfig {
   type :"scroller"
   orient :"horiz"|"vert"
-  scrollDelta? :number
+  wheelDelta? :number
+  noInertial? :boolean
 }
 
 export class Scroller extends TransformedContainer {
+  private unanim = NoopRemover
 
   constructor (ctx :ElementContext, parent :Element, readonly config :ScrollerConfig) {
     super(ctx, parent, config)
     this.invalidateOnChange(this._offset)
   }
 
+  get axisOffset () { return this.offset[this.horiz ? 0 : 1] }
+  get maxAxis () { return this.horiz ? this.maxX : this.maxY }
+
   /** Scrolls to the specified offset from the top/left-most scroll position. */
-  scrollTo (offset :number) {
-    const horiz = this.config.horiz
-    this._updateOffset(vec2.fromValues(horiz ? offset : 0, horiz ? 0 : offset))
+  scrollTo (offset :number, animate = true) {
+    if (!animate) this._updateAxisOffset(offset)
+    else this.setAnim(new TweenAnim(this, offset, Easing.quadIn))
   }
 
   /** Scrolls to the top/left-most scroll position. */
-  scrollToStart () { this.scrollTo(0) }
+  scrollToStart (animate = true) { this.scrollTo(0, animate) }
 
   /** Scrolls to the bottom/right-most scroll position. */
-  scrollToEnd () { this.scrollTo(this.config.horiz ? this.maxX : this.maxY) }
+  scrollToEnd (animate = true) { this.scrollTo(this.maxAxis, animate) }
 
   handleWheel (event :WheelEvent, pos :vec2) {
     const transformedPos = this._transformPos(pos)
     if (!this.contents.maybeHandleWheel(event, transformedPos)) {
-      const horiz = this.config.orient == "horiz"
-      const delta = (this.config.scrollDelta || 10) * (event.deltaY > 0 ? 1 : -1)
-      const deltav = vec2.set(tmpv, horiz ? delta : 0, horiz ? 0 : delta)
-      this._updateOffset(vec2.add(tmpv, this._offset.current, deltav))
+      this._adjustAxisOffset((this.config.wheelDelta || 10) * (event.deltaY > 0 ? 1 : -1))
     }
     return true
   }
 
+  protected setAnim (anim :Anim|undefined) {
+    const offset = this._offset, idx = this.horiz ? 0 : 1
+    this.unanim()
+    if (anim) {
+      const unanim = this.unanim = this.root.clock.onEmit(clock => {
+        this._updateAxisOffset(anim.update(clock, offset.current[idx]))
+        if (anim.done) unanim()
+      })
+    }
+  }
+
+  protected get horiz () :boolean { return this.config.orient == "horiz" }
+
   protected startScroll (event :MouseEvent|TouchEvent, pos :vec2) :PointerInteraction|undefined {
-    const basePos = vec2.clone(pos), baseOffset = vec2.clone(this._offset.current)
     const cancel = () => this.clearCursor(this)
-    const horiz = this.config.orient == "horiz"
+    const oidx = this.horiz ? 0 : 1, basePos = pos[oidx], baseOffset = this._offset.current[oidx]
+    this.unanim()
+    const anim = this.config.noInertial ? undefined : new InertialAnim(this)
+    anim && anim.start(basePos, event.timeStamp)
     return {
       move: (event, pos) => {
         this.setCursor(this, "all-scroll")
-        const offset = vec2.add(tmpv, baseOffset, vec2.subtract(tmpv, basePos, pos))
-        offset[horiz ? 1 : 0] = 0
-        this._updateOffset(offset)
+        anim && anim.move(pos[oidx], event.timeStamp)
+        const offset = baseOffset + basePos - pos[oidx]
+        this._updateAxisOffset(offset)
       },
-      release: cancel,
+      release: (event, pos) => {
+        anim && anim.release(pos[oidx], event.timeStamp)
+        this.setAnim(anim)
+        cancel()
+      },
       cancel,
     }
+  }
+
+  protected _updateAxisOffset (offset :number) {
+    const horiz = this.horiz
+    this._updateOffset(vec2.set(tmpv, horiz ? offset : 0, horiz ? 0 : offset))
+  }
+
+  protected _adjustAxisOffset (delta :number) {
+    const horiz = this.horiz, deltav = vec2.set(tmpv, horiz ? delta : 0, horiz ? 0 : delta)
+    this._updateOffset(vec2.add(tmpv, this._offset.current, deltav))
   }
 }
