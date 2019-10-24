@@ -172,7 +172,7 @@ function reorderChildId (
   ids :Mutable<string[]>,
   child :TypeScriptTransform,
   gameObjects :RMap<string, GameObject>,
-) {
+) :number {
   const idx = ids.current.indexOf(child.gameObject.id)
   const newIds = ids.current.slice()
   if (idx !== -1) newIds.splice(idx, 1)
@@ -188,6 +188,7 @@ function reorderChildId (
   }
   if (ii === newIds.length) newIds.push(child.gameObject.id)
   ids.update(newIds)
+  return idx
 }
 
 /** Constructor interface for TypeScript components. */
@@ -698,7 +699,9 @@ class TypeScriptTransform extends TypeScriptComponent implements Transform {
   }
 
   _childReordered (child :TypeScriptTransform) {
-    reorderChildId(this._childIds, child, this.gameObject.gameEngine.gameObjects)
+    if (reorderChildId(this._childIds, child, this.gameObject.gameEngine.gameObjects) === -1) {
+      this._children.push(child)
+    }
   }
 
   private _invalidate (flags :number) {

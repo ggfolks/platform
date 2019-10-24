@@ -21,6 +21,7 @@ export const DefaultStyles :StyleDefs = {
     base: {family, size: 24},
     menu: {family, size: 16},
     tab: {family, size: 16},
+    treeviewnode: {family, size: 16},
     nodeTitle: {family, size: 16},
     nodeButton: {family, size: 14},
     nodeProperty: {family, size: 14},
@@ -72,6 +73,9 @@ export const DefaultStyles :StyleDefs = {
     dropdownitemHovered: {fill: {type: "color", color: "#282828"}},
     dropdownitemPressed: {fill: {type: "color", color: "#202020"}},
     tabSelected: {fill: {type: "color", color: "#303030"}, cornerRadius: tabCorner},
+    treeviewnodeHovered: {fill: {type: "color", color: "#303030"}},
+    treeviewnodeSelected: {fill: {type: "color", color: "#282828"}},
+    treeviewnodePressed: {fill: {type: "color", color: "#202020"}},
     menu: {fill: {type: "color", color: "#303030"}, cornerRadius: menuCorner},
     menuHovered: {fill: {type: "color", color: "#282828"}, cornerRadius: menuCorner},
     menuPressed: {fill: {type: "color", color: "#202020"}, cornerRadius: menuCorner},
@@ -115,6 +119,7 @@ export const DefaultTheme :Theme = {
     },
     menuitem: {},
     tab: {stroke: "$white"},
+    treeviewnode: {stroke: "$white"},
     shortcut: {font: "$menu", fill: "$mediumGray"},
     graphview: {
       selectBackground: "$graphViewSelect",
@@ -156,6 +161,14 @@ export const DefaultTheme :Theme = {
       pressed: {border: "$tabHovered", background: "$tabSelected"},
     },
     label: {font: "$tab"},
+  },
+  treeviewnode: {
+    box: {
+      hovered: {background: "$treeviewnodeHovered"},
+      selected: {background: "$treeviewnodeSelected"},
+      pressed: {background: "$treeviewnodePressed"},
+    },
+    label: {font: "$treeviewnode"},
   },
   addTabButton: {
     box: {

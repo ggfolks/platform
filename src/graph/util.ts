@@ -136,7 +136,7 @@ class ClockNode extends Node {
 
 /** An encapsulated graph. */
 interface AbstractSubgraphConfig extends NodeConfig {
-  title? :string
+  name? :string
   graph :GraphConfig
 }
 
@@ -144,13 +144,13 @@ export abstract class AbstractSubgraph extends Node {
   readonly containedGraph :Graph
 
   private _containedOutputs :Map<string, Value<InputEdge<any>>> = new Map()
-  private _title :Mutable<string>
+  private _name :Mutable<string>
   private _propertiesMeta = MutableMap.local<string, PropertyMeta>()
   private _inputsMeta = MutableMap.local<string, InputEdgeMeta>()
   private _outputsMeta = MutableMap.local<string, EdgeMeta>()
 
-  get title () :Value<string> {
-    return this._title
+  get name () :Value<string> {
+    return this._name
   }
 
   get propertiesMeta () {
@@ -170,7 +170,7 @@ export abstract class AbstractSubgraph extends Node {
 
     const subctx = Object.create(graph.ctx)
     subctx.subgraph = this
-    this._title = this.getProperty("title", config.type) as Mutable<string>
+    this._name = this.getProperty("name", config.type) as Mutable<string>
     this._disposer.add(this.containedGraph = new Graph(subctx, config.graph || {}))
     // we don't bother with disposers for the values that we listen to on the contained graph
     // because the contained graph will never outlive this node
@@ -280,7 +280,7 @@ export abstract class AbstractSubgraph extends Node {
 /** An encapsulated graph. */
 abstract class SubgraphConfig implements NodeConfig {
   type = "subgraph"
-  title? :string
+  name? :string
   graph :GraphConfig = {}
 }
 
@@ -336,7 +336,7 @@ export class SubgraphRegistry {
     return {
       ...props,
       type: "subgraph",
-      title: name,
+      name,
       graph: graphConfig,
     }
   }
@@ -416,7 +416,7 @@ class Output extends Node {
 /** A subgraph displayed as a page (tab) in the viewer. */
 abstract class PageConfig implements AbstractSubgraphConfig {
   type = "page"
-  title? :string
+  name? :string
   order? :number
   graph :GraphConfig = {}
 }

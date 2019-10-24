@@ -69,7 +69,7 @@ export class GraphViewer extends VGroup {
                 type: "menu",
                 contents: {
                   type: "box",
-                  contents: {type: "label", text: "title"},
+                  contents: {type: "label", text: "name"},
                 },
                 // max category depth of two for the moment
                 element: createMenuItemConfig(2),
@@ -81,7 +81,7 @@ export class GraphViewer extends VGroup {
               keys: Value.constant(["graph", "edit", "view", "node", "subgraph"]),
               data: dataProvider({
                 graph: {
-                  title: Value.constant("Graph"),
+                  name: Value.constant("Graph"),
                   keys: Value.constant(["clearAll", "sep1", "import", "export", "sep2", "close"]),
                   data: dataProvider({
                     clearAll: {
@@ -113,7 +113,7 @@ export class GraphViewer extends VGroup {
                   }),
                 },
                 edit: {
-                  title: Value.constant("Edit"),
+                  name: Value.constant("Edit"),
                   keys: Value.constant(
                     ["undo", "redo", "sep1", "cut", "copy", "paste", "delete", "sep2", "selectAll"],
                   ),
@@ -200,7 +200,7 @@ export class GraphViewer extends VGroup {
                   }),
                 },
                 view: {
-                  title: Value.constant("View"),
+                  name: Value.constant("View"),
                   keys: Value.constant(["zoomIn", "zoomOut", "zoomReset", "zoomToFit"]),
                   data: dataProvider({
                     zoomIn: {
@@ -237,12 +237,12 @@ export class GraphViewer extends VGroup {
                   }),
                 },
                 node: {
-                  title: Value.constant("Node"),
+                  name: Value.constant("Node"),
                   keys: typeCategoryKeys,
                   data: typeCategoryData,
                 },
                 subgraph: {
-                  title: Value.constant("Subgraph"),
+                  name: Value.constant("Subgraph"),
                   keys: subgraphCategoryKeys,
                   data: subgraphCategoryData,
                 },
@@ -347,7 +347,7 @@ export class GraphViewer extends VGroup {
           contents: [
             {
               type: "editablelabel",
-              text: "title",
+              text: "name",
               contents: {
                 type: "box",
                 contents: {type: "label", overrideParentState: "normal", scopeId: "tab"},
@@ -839,20 +839,20 @@ export class NodeView extends VGroup {
         }
       ],
     })
-    const title = ctx.model.resolve<Value<string>>("title")
+    const name = ctx.model.resolve<Value<string>>("name")
     this.contents.push(
       ctx.elem.create(ctx, this, {
         type: "box",
         scopeId: "nodeHeader",
-        contents: title instanceof Mutable
+        contents: name instanceof Mutable
           ? {
             type: "editablelabel",
-            text: title,
+            text: name,
             contents: {
               type: "box",
               contents: {type: "label", overrideParentState: "normal", scopeId: "nodeHeader"},
             },
-          } : {type: "label", overrideParentState: "normal", text: title},
+          } : {type: "label", overrideParentState: "normal", text: name},
       }),
       ctx.elem.create(ctx, this, {
         type: "box",

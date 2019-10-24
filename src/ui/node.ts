@@ -327,12 +327,12 @@ function createGraphModelData (
         const id = key as string
         let containedGraph = graph
         let remove = Noop
-        let title = Value.constant(id)
+        let name = Value.constant(id)
         if (key !== "default") {
           const page = graph.nodes.require(id) as Page
           containedGraph = page.containedGraph
           const createPropertyValue = createPropertyValueCreator(page, applyEdit)
-          title = createPropertyValue("title")
+          name = createPropertyValue("name")
           remove = () => {
             let newActivePage = activePage.current
             if (activePage.current === id) {
@@ -350,7 +350,7 @@ function createGraphModelData (
           applyEdit,
           reloadPath,
           id,
-          title,
+          name,
           remove,
         )))
       }
@@ -374,7 +374,7 @@ function createGraphModelData (
       applyEdit({activePage: pageId, add: {
         [pageId]: {
           type: "page",
-          title: pageId,
+          name: pageId,
           order: getOrder(currentPageKeys[currentPageKeys.length - 1]) + 1,
           graph: {},
         },
@@ -441,13 +441,13 @@ function createPageModelData (
   applyEdit :(edit :NodeEdit) => void,
   reloadPath :Action,
   page :string,
-  title :Value<string>,
+  name :Value<string>,
   remove :Action,
 ) :ModelData {
   const nodeModels = new Map<ModelKey, Model>()
   return {
     id: Value.constant(page),
-    title,
+    name,
     removable: Value.constant(remove !== Noop),
     remove,
     createNodes: (config :GraphConfig) => {
@@ -515,7 +515,7 @@ function createPageModelData (
           nodeModels.set(key, model = new Model({
             id: Value.constant(node.id),
             type: Value.constant(type),
-            title: node.title,
+            name: node.name,
             position: createPropertyValue("_position"),
             ...subgraphElement,
             propertyKeys: node.propertiesMeta.keysValue.map(Array.from),

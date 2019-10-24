@@ -9,7 +9,7 @@ import {Subgraph, SubgraphRegistry} from "./util"
 /** Configuration shared by all [[Node]]s. */
 export interface NodeConfig {
   type :string
-  position? :[number, number]
+  _position? :[number, number]
   // this allows NodeConfig to contain "extra" stuff that TypeScript will ignore
   [extra :string] :any
 }
@@ -50,8 +50,8 @@ export abstract class Node implements Disposable {
 
   constructor (readonly graph :Graph, readonly id :string, public config :NodeConfig) {}
 
-  /** The node's title (usually just the type). */
-  get title () :Value<string> {
+  /** The node's name (usually just the type). */
+  get name () :Value<string> {
     return Value.constant(this.config.type)
   }
 
@@ -202,7 +202,7 @@ export abstract class Node implements Disposable {
     this._disposer.add(value.onChange(Noop))
     return value
   }
-  
+
   /** Gives subclasses a chance to overrule the default value provided by the output consumer.  For
    * example, in a multiply node, 1 makes a better default than zero. */
   protected _maybeOverrideDefaultValue (name :string, defaultValue :any) {

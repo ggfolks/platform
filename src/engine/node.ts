@@ -354,10 +354,10 @@ export function registerEngineSubgraphs (registry :SubgraphRegistry) {
     pointerDraggable: draggable,
     fallable,
     draggableFallable: {
-      draggable: {type: "subgraph", title: "draggable", graph: draggable},
+      draggable: {type: "subgraph", name: "draggable", graph: draggable},
       fallable: {
         type: "subgraph",
-        title: "fallable",
+        name: "fallable",
         grabbed: ["draggable", "grabbed"],
         jump: 0,
         height: 0,
@@ -437,7 +437,7 @@ export function registerEngineSubgraphs (registry :SubgraphRegistry) {
     spaceToJump: {
       fallable: {
         type: "subgraph",
-        title: "fallable",
+        name: "fallable",
         grabbed: false,
         jump: {
           type: "multiply",

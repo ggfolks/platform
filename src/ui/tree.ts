@@ -24,12 +24,38 @@ export class TreeView extends VGroup implements AbstractList {
 
   constructor (ctx :ElementContext, parent :Element, readonly config :TreeViewConfig) {
     super(ctx, parent, config)
+    const selectedKeys = ctx.model.resolve(config.selectedKeys)
+    const updateParentOrder = ctx.model.resolveOpt(config.updateParentOrder)
     this.disposer.add(syncListContents(ctx, this, {
-      type: "column",
+      type: "row",
       contents: [
         {
-          type: "row",
-          contents: [],
+          type: "toggle",
+          checked: "expanded",
+          onClick: "toggleExpanded",
+          contents: {
+            type: "box",
+            contents: {type: "label", text: Value.constant("▶")},
+          },
+          checkedContents: {
+            type: "box",
+            contents: {type: "label", text: Value.constant("▼")},
+          },
+        },
+        {
+          type: "column",
+          contents: [
+            config.element,
+            {
+              type: "treeview",
+              visible: "expanded",
+              element: config.element,
+              keys: "childKeys",
+              data: "childData",
+              selectedKeys,
+              updateParentOrder,
+            },
+          ],
         },
       ],
     }))

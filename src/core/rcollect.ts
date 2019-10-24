@@ -206,6 +206,17 @@ export abstract class RSet<E> extends Source<ReadonlySet<E>> implements Readonly
   /** Returns an iterator over the entries of this set, in insertion order. */
   [Symbol.iterator] () :IterableIterator<E> { return this.data[Symbol.iterator]() }
 
+  /** Returns a [[Value]] that reflects whether `elem` is a member of this set. When its membership
+    * changes, the value will emit a change. */
+  hasValue (elem :E) :Value<boolean> {
+    return Value.deriveValue(refEquals, disp => this.onChange(change => {
+      if (change.elem === elem) {
+        const has = change.type === "added"
+        disp(has, !has)
+      }
+    }), () => this.has(elem))
+  }
+  
   /** The size of this set as a reactive value. */
   get sizeValue () :Value<number> {
     const value = this.map(s => s.size).fold(0, (_, s) => s)
@@ -241,17 +252,6 @@ export abstract class MutableSet<E> extends RSet<E> implements Set<E> {
 
   /** Creates a local mutable set. */
   static local<E> () :MutableSet<E> { return new LocalMutableSet() }
-
-  /** Returns a [[Value]] that reflects whether `elem` is a member of this set. When its membership
-    * changes, the value will emit a change. */
-  hasValue (elem :E) :Value<boolean> {
-    return Value.deriveValue(refEquals, disp => this.onChange(change => {
-      if (change.elem === elem) {
-        const has = change.type === "added"
-        disp(has, !has)
-      }
-    }), () => this.has(elem))
-  }
 
   /** Adds `elem` to this set. If it was not already a member of this set, listeners will be
     * notified of the addition. */
