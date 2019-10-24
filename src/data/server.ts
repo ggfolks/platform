@@ -198,8 +198,9 @@ export abstract class DataStore {
       try {
         const meta = object.metas[queue.index]
         if (meta.type !== "queue") throw new Error(`Not a queue prop at path [type=${meta.type}]`)
+        if (meta.system && !auth.isSystem) throw new Error("Access denied.")
         // TODO: check canSubscribe permission?
-        meta.handler({auth, post: (queue, msg) => this.post(auth, queue, msg)}, object, msg)
+        meta.handler({auth, post: (queue, msg) => this.post(sysAuth, queue, msg)}, object, msg)
       } catch (err) {
         log.warn("Failed to post", "auth", auth, "queue", queue, "msg", msg, err)
       }

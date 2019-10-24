@@ -29,7 +29,7 @@ export type MapMeta = {type: "map", ktype: KeyType, vtype: ValueType, persist :b
 export type CollectionMeta = {type: "collection", otype: DObjectType<any>}
 export type TableMeta = {type: "table"}
 export type ViewMeta = {type: "view", table :string, where :WhereClause[], order :OrderClause[]}
-export type QueueMeta = {type: "queue", handler :DHandler<any,any>}
+export type QueueMeta = {type: "queue", handler :DHandler<any,any>, system :boolean}
 export type Meta = ValueMeta | SetMeta | MapMeta | CollectionMeta | TableMeta | ViewMeta | QueueMeta
 
 export type Named<T> = T & {name :string, index :number}
@@ -88,5 +88,5 @@ export const dtable = () =>
   propAdder({type: "table"})
 export const dview = (table :string, where :WhereClause[], order :OrderClause[] = []) =>
   propAdder({type: "view", table, where, order})
-export const dqueue = <O extends DObject,M extends Record>(handler :DHandler<O,M>) =>
-  propAdder({type: "queue", handler})
+export const dqueue = <O extends DObject,M extends Record>(
+  handler :DHandler<O,M>, system = false) => propAdder({type: "queue", handler, system})
