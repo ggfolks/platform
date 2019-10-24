@@ -205,7 +205,6 @@ export class Scroller extends TransformedContainer {
   /** Scrolls to the specified offset from the top/left-most scroll position. */
   scrollTo (offset :number) {
     const horiz = this.config.horiz
-    console.log(`scrollTo ${horiz ? offset : 0} ${horiz ? 0 : offset}`)
     this._updateOffset(horiz ? offset : 0, horiz ? 0 : offset)
   }
 
