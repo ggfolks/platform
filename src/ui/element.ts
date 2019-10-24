@@ -1000,6 +1000,7 @@ export class HTMLHost extends Host {
     const unfocus = root.focus.onValue(focus => {
       const text = this._textOverlay
       if (focus && focus.config.type === "text") {
+        this._clearText()
         this._clearText = (focus as any).configInput(text) // avoid importing Text here
         this._container.appendChild(text)
         text.focus() // for mobile (has to happen while handling touch event)
