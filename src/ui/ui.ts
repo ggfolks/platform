@@ -133,6 +133,7 @@ export class UI {
       case      "menuitem": return new M.MenuItem(ctx, parent, rconfig as M.MenuItemConfig)
       case      "shortcut": return new M.Shortcut(ctx, parent, rconfig as M.ShortcutConfig)
       case        "panner": return new S.Panner(ctx, parent, rconfig as S.PannerConfig)
+      case      "scroller": return new S.Scroller(ctx, parent, rconfig as S.ScrollerConfig)
       case   "graphviewer": return new GR.GraphViewer(ctx, parent, rconfig as GR.GraphViewerConfig)
       case     "graphview": return new GR.GraphView(ctx, parent, rconfig as GR.GraphViewConfig)
       case      "nodeview": return new GR.NodeView(ctx, parent, rconfig as GR.NodeViewConfig)
@@ -144,6 +145,7 @@ export class UI {
     } catch (error) {
       log.warn(`Failed to create '${config.type}' element: ${error}`)
       log.warn(`- path to element: ${parent.configPath.concat(config.type)}`)
+      log.warn(`- element config: ${JSON.stringify(config)}`)
       if (error instanceof MissingModelElem) {
         log.warn(`- path to model value: ${error.path} (missing @ ${error.pos})`)
       }

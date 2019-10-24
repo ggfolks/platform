@@ -103,7 +103,7 @@ abstract class TransformedContainer extends Control {
 
 /** Provides a pannable, zoomable window onto its contents. */
 export class Panner extends TransformedContainer {
-  private readonly _offset = Mutable.local(vec2.create())
+  private readonly _offset = Mutable.local(vec2.create(), vec2.equals)
   private readonly _scale = Mutable.local(1)
   private _laidOut = false
 
@@ -183,5 +183,73 @@ export class Panner extends TransformedContainer {
     if (this._laidOut) return
     this._laidOut = true
     this.zoomToFit()
+  }
+}
+
+export interface ScrollerConfig extends ControlConfig {
+  type :"scroller"
+  orient :"horiz"|"vert"
+  scrollDelta? :number
+}
+
+export class Scroller extends TransformedContainer {
+  private readonly _offset = Mutable.local(vec2.create())
+
+  constructor (ctx :ElementContext, parent :Element, readonly config :ScrollerConfig) {
+    super(ctx, parent, config)
+    this.invalidateOnChange(this._offset)
+  }
+
+  get offset () { return this._offset ? this._offset.current : vec2zero }
+
+  /** Scrolls to the specified offset from the top/left-most scroll position. */
+  scrollTo (offset :number) {
+    const horiz = this.config.horiz
+    console.log(`scrollTo ${horiz ? offset : 0} ${horiz ? 0 : offset}`)
+    this._updateOffset(horiz ? offset : 0, horiz ? 0 : offset)
+  }
+
+  /** Scrolls to the top/left-most scroll position. */
+  scrollToStart () { this.scrollTo(0) }
+
+  /** Scrolls to the bottom/right-most scroll position. */
+  scrollToEnd () { this.scrollTo(this.config.horiz ?
+                                 this.contents.width - this.width :
+                                 this.contents.height - this.height) }
+
+  handleWheel (event :WheelEvent, pos :vec2) {
+    const transformedPos = this._transformPos(pos)
+    if (!this.contents.maybeHandleWheel(event, transformedPos)) {
+      const horiz = this.config.orient == "horiz"
+      const delta = (this.config.scrollDelta || 10) * (event.deltaY > 0 ? 1 : -1)
+      const dx = horiz ? delta : 0, dy = horiz ? 0 : delta
+      const offset = this._offset.current
+      this._updateOffset(offset[0] + dx, offset[1] + dy)
+    }
+    return true
+  }
+
+  protected startScroll (event :MouseEvent|TouchEvent, pos :vec2) :PointerInteraction|undefined {
+    const basePos = vec2.clone(pos)
+    const baseOffset = this._offset.current
+    const cancel = () => this.clearCursor(this)
+    const horiz = this.config.orient == "horiz"
+    return {
+      move: (event, pos) => {
+        this.setCursor(this, "all-scroll")
+        const ox = horiz ? baseOffset[0] + (basePos[0] - pos[0]) : 0
+        const oy = horiz ? 0 : baseOffset[1] + (basePos[1] - pos[1])
+        this._updateOffset(ox, oy)
+      },
+      release: cancel,
+      cancel,
+    }
+  }
+
+  private _updateOffset (ox :number, oy :number) {
+    this._offset.update(vec2.fromValues(
+      clamp(ox, 0, Math.max(this.contents.width - this.width, 0)),
+      clamp(oy, 0, Math.max(this.contents.height - this.height, 0)),
+    ))
   }
 }
