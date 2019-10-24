@@ -97,7 +97,7 @@ export abstract class DraggableElement extends Control {
   abstract get selected () :boolean
 
   /** Selects this element. */
-  abstract select () :void
+  abstract select (event :MouseEvent|TouchEvent) :void
 
   /** Checks whether we can reorder the elements. */
   abstract get canReorder () :boolean
@@ -115,7 +115,7 @@ export abstract class DraggableElement extends Control {
     ) {
       return undefined
     }
-    this.select()
+    this.select(event)
     if (!this.canReorder) return {move: Noop, release: Noop, cancel: Noop}
     const startPos = vec2.clone(pos)
     const offsetPos = vec2.fromValues(this.x - startPos[0], this.y - startPos[1])

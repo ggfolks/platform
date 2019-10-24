@@ -73,9 +73,9 @@ export const DefaultStyles :StyleDefs = {
     dropdownItemHovered: {fill: {type: "color", color: "#282828"}},
     dropdownItemPressed: {fill: {type: "color", color: "#202020"}},
     tabSelected: {fill: {type: "color", color: "#303030"}, cornerRadius: tabCorner},
-    treeViewNodeHovered: {fill: {type: "color", color: "#303030"}},
+    treeViewNodeHovered: {fill: {type: "color", color: "#202020"}},
     treeViewNodeSelected: {fill: {type: "color", color: "#282828"}},
-    treeViewNodePressed: {fill: {type: "color", color: "#202020"}},
+    treeViewNodePressed: {fill: {type: "color", color: "#303030"}},
     menu: {fill: {type: "color", color: "#303030"}, cornerRadius: menuCorner},
     menuHovered: {fill: {type: "color", color: "#282828"}, cornerRadius: menuCorner},
     menuPressed: {fill: {type: "color", color: "#202020"}, cornerRadius: menuCorner},
@@ -161,6 +161,9 @@ export const DefaultTheme :Theme = {
       pressed: {border: "$tabHovered", background: "$tabSelected"},
     },
     label: {font: "$tab"},
+  },
+  treeViewToggle: {
+    label: {font: "$treeViewNode"},
   },
   treeViewNode: {
     box: {

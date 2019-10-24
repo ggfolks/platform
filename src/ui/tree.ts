@@ -1,7 +1,7 @@
 import {Value} from "../core/react"
 import {MutableSet} from "../core/rcollect"
 import {Element, ElementContext} from "./element"
-import {VGroup} from "./group"
+import {OffAxisPolicy, VGroup} from "./group"
 import {
   AbstractList, AbstractListConfig, DraggableElement, DraggableElementConfig,
   DraggableElementStates, syncListContents,
@@ -13,6 +13,7 @@ type ParentOrderUpdater = (key :ModelKey, parent :ModelKey|undefined, index :num
 /** Defines configuration for [[TreeView]] elements. */
 export interface TreeViewConfig extends AbstractListConfig {
   type :"treeView"
+  key :Spec<Value<ModelKey>>
   selectedKeys :Spec<MutableSet<ModelKey>>
   updateParentOrder? :Spec<ParentOrderUpdater>
 }
@@ -35,17 +36,26 @@ export class TreeView extends VGroup implements AbstractList {
           onClick: "toggleExpanded",
           contents: {
             type: "box",
-            contents: {type: "label", text: Value.constant("▶")},
+            scopeId: "treeViewToggle",
+            contents: {type: "label", text: Value.constant("▸")},
           },
           checkedContents: {
             type: "box",
-            contents: {type: "label", text: Value.constant("▼")},
+            scopeId: "treeViewToggle",
+            contents: {type: "label", text: Value.constant("▾")},
           },
         },
         {
           type: "column",
+          offPolicy: "stretch",
           contents: [
-            config.element,
+            {
+              type: "treeViewNode",
+              contents: config.element,
+              key: config.key,
+              selectedKeys,
+              updateParentOrder,
+            },
             {
               type: "treeView",
               visible: "expanded",
@@ -60,6 +70,17 @@ export class TreeView extends VGroup implements AbstractList {
       ],
     }))
   }
+
+  visitNodeKeys (op :(key :ModelKey) => void) {
+    for (const element of this.contents) {
+      const node = element.findChild("treeViewNode") as TreeViewNode
+      op(node.key)
+      const treeView = element.findChild("treeView") as TreeView
+      treeView.visitNodeKeys(op)
+    }
+  }
+
+  protected get defaultOffPolicy () :OffAxisPolicy { return "stretch" }
 }
 
 /** Defines configuration for [[TreeViewNode]] elements. */
@@ -77,6 +98,8 @@ export class TreeViewNode extends DraggableElement {
   private readonly _key :Value<ModelKey>
   private readonly _selectedKeys :MutableSet<ModelKey>
   private readonly _parentOrderUpdater? :ParentOrderUpdater
+
+  get key () :ModelKey { return this._key.current }
 
   constructor (ctx :ElementContext, parent :Element, readonly config :TreeViewNodeConfig) {
     super(ctx, parent, config)
@@ -97,8 +120,41 @@ export class TreeViewNode extends DraggableElement {
     return this._key && this._selectedKeys && this._selectedKeys.has(this._key.current)
   }
 
-  select () :void {
-    this._selectedKeys.add(this._key.current)
+  select (event :MouseEvent|TouchEvent) :void {
+    if (event.ctrlKey) {
+      if (this._selectedKeys.has(this._key.current)) this._selectedKeys.delete(this._key.current)
+      else this._selectedKeys.add(this._key.current)
+
+    } else if (event.shiftKey) {
+      let select = this._selectedKeys.size === 0
+      this._root.visitNodeKeys(key => {
+        if (select) {
+          if (this._selectedKeys.has(key)) select = false
+          else {
+            this._selectedKeys.add(key)
+            if (key === this.key) select = false
+          }
+        } else if (this._selectedKeys.has(key)) {
+          select = true
+
+        } else if (key === this.key) {
+          this._selectedKeys.add(key)
+          select = true
+        }
+      })
+    } else {
+      this._selectedKeys.clear()
+      this._selectedKeys.add(this._key.current)
+    }
+  }
+
+  private get _root () :TreeView {
+    let lastTreeView :TreeView|undefined
+    for (let ancestor = this.parent; ancestor; ancestor = ancestor.parent) {
+      if (ancestor instanceof TreeView) lastTreeView = ancestor
+    }
+    if (!lastTreeView) throw new Error("TreeViewNode used outside TreeView")
+    return lastTreeView
   }
 
   get canReorder () :boolean {
@@ -111,6 +167,5 @@ export class TreeViewNode extends DraggableElement {
   }
 
   protected _updateDropPosition () {
-    super._updateDropPosition()
   }
 }
