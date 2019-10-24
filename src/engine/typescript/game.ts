@@ -36,6 +36,7 @@ export class TypeScriptGameEngine implements GameEngine {
   private readonly _pages = Mutable.local([DEFAULT_PAGE])
 
   readonly ctx :GameContext
+  readonly rootIds :Value<string[]>
   readonly activePage = Mutable.local<string>(DEFAULT_PAGE)
   readonly dirtyTransforms = new Set<TypeScriptTransform>()
   readonly updatables = new Set<Updatable>()
@@ -44,6 +45,8 @@ export class TypeScriptGameEngine implements GameEngine {
   _physicsEngine? :PhysicsEngine
 
   readonly _gameObjects = MutableMap.local<string, GameObject>()
+
+  readonly _defaultRootIds = Mutable.local<string[]>([])
 
   get renderEngine () :RenderEngine {
     if (!this._renderEngine) throw new Error("Missing render engine")
@@ -78,6 +81,11 @@ export class TypeScriptGameEngine implements GameEngine {
       image: {resolve: loadImage},
       screen: windowSize(window),
     }
+    this.rootIds = this.activePage.switchMap(
+      page => page === DEFAULT_PAGE
+        ? this._defaultRootIds
+        : this.gameObjects.require(page).transform.childIds,
+    )
   }
 
   createPage (name? :string) :GameObject {
@@ -124,42 +132,20 @@ export class TypeScriptGameEngine implements GameEngine {
     this.renderEngine.render()
   }
 
-  _pageCreated (page :Page) {
-    const pages = this._pages.current.slice()
-    pages.push(page.gameObject.id)
-    this._pages.update(pages)
-  }
-
-  _pageDisposed (page :Page) {
-    const idx = this._getPageIndex(page)
-    const pages = this._pages.current.slice()
-    pages.splice(idx, 1)
-    this.activePage.update(pages[idx < pages.length ? idx : idx - 1])
-    this._pages.update(pages)
-  }
-
-  _pageReordered (page :Page) {
-    const idx = this._getPageIndex(page)
-    const pages = this._pages.current.slice()
-    pages.splice(idx, 1)
-    const order = page.gameObject.order
-    let ii = 0
-    for (; ii < pages.length; ii++) {
-      const id = pages[ii]
-      const otherOrder = (id === DEFAULT_PAGE) ? 0 : this.gameObjects.require(id).order
-      if (order < otherOrder) {
-        pages.splice(ii, 0, page.gameObject.id)
-        break
-      }
+  _rootRemoved (root :TypeScriptTransform) {
+    const idx = removeChildId(this._getRootIds(root), root)
+    if (this.activePage.current === root.gameObject.id) {
+      const pages = this._pages.current
+      this.activePage.update(pages[idx < pages.length ? idx : idx - 1])
     }
-    if (ii === pages.length) pages.push(page.gameObject.id)
-    this._pages.update(pages)
   }
 
-  private _getPageIndex (page :Page) {
-    const idx = this._pages.current.indexOf(page.gameObject.id)
-    if (idx === -1) throw new Error(`Page "${page.gameObject.id}" missing from list`)
-    return idx
+  _rootReordered (root :TypeScriptTransform) {
+    reorderChildId(this._getRootIds(root), root, this.gameObjects)
+  }
+
+  private _getRootIds (root :TypeScriptTransform) :Mutable<string[]> {
+    return root.gameObject.page ? this._pages : this._defaultRootIds
   }
 
   _validateDirtyTransforms () {
@@ -171,6 +157,37 @@ export class TypeScriptGameEngine implements GameEngine {
     this._disposer.dispose()
     // TODO: dispose of all extant game objects?
   }
+}
+
+function removeChildId (ids :Mutable<string[]>, child :TypeScriptTransform) :number {
+  const idx = ids.current.indexOf(child.gameObject.id)
+  if (idx === -1) throw new Error(`Child "${child.gameObject.id}" missing from list`)
+  const newIds = ids.current.slice()
+  newIds.splice(idx, 1)
+  ids.update(newIds)
+  return idx
+}
+
+function reorderChildId (
+  ids :Mutable<string[]>,
+  child :TypeScriptTransform,
+  gameObjects :RMap<string, GameObject>,
+) {
+  const idx = ids.current.indexOf(child.gameObject.id)
+  const newIds = ids.current.slice()
+  if (idx !== -1) newIds.splice(idx, 1)
+  const order = child.gameObject.order
+  let ii = 0
+  for (; ii < newIds.length; ii++) {
+    const id = newIds[ii]
+    const otherOrder = (id === DEFAULT_PAGE) ? 0 : gameObjects.require(id).order
+    if (order < otherOrder) {
+      newIds.splice(ii, 0, child.gameObject.id)
+      break
+    }
+  }
+  if (ii === newIds.length) newIds.push(child.gameObject.id)
+  ids.update(newIds)
 }
 
 /** Constructor interface for TypeScript components. */
@@ -194,6 +211,7 @@ export class TypeScriptGameObject implements GameObject {
   readonly nameValue :Mutable<string>
   readonly orderValue = Mutable.local(0)
   readonly transform :Transform
+  readonly page? :Page
 
   private readonly _components = MutableMap.local<string, Component>()
   private readonly _messageHandlers = new Map<string, MessageHandler[]>()
@@ -461,19 +479,20 @@ class TypeScriptTransform extends TypeScriptComponent implements Transform {
   readonly worldToLocalMatrix :mat4
 
   private _parent? :TypeScriptTransform
-  private _children :TypeScriptTransform[] = []
-  private _localPosition :vec3
-  private _localRotation :quat
-  private _localScale :vec3
-  private _position :vec3
-  private _rotation :quat
-  private _localPositionTarget :vec3
-  private _localRotationTarget :quat
-  private _positionTarget :vec3
-  private _rotationTarget :quat
-  private _lossyScaleTarget :vec3
-  private _localToWorldMatrixTarget :mat4
-  private _worldToLocalMatrixTarget :mat4
+  private readonly _children :TypeScriptTransform[] = []
+  private readonly _childIds = Mutable.local<string[]>([])
+  private readonly _localPosition :vec3
+  private readonly _localRotation :quat
+  private readonly _localScale :vec3
+  private readonly _position :vec3
+  private readonly _rotation :quat
+  private readonly _localPositionTarget :vec3
+  private readonly _localRotationTarget :quat
+  private readonly _positionTarget :vec3
+  private readonly _rotationTarget :quat
+  private readonly _lossyScaleTarget :vec3
+  private readonly _localToWorldMatrixTarget :mat4
+  private readonly _worldToLocalMatrixTarget :mat4
   private _invalidFlags = 0
 
   constructor (gameObject :TypeScriptGameObject, type :string) {
@@ -553,9 +572,12 @@ class TypeScriptTransform extends TypeScriptComponent implements Transform {
     if (this._parent === parent) return
     this._maybeRemoveFromParent()
     this._parent = parent as TypeScriptTransform|undefined
-    if (this._parent) this._parent._children.push(this)
+    if (this._parent) this._parent._childReordered(this)
+    else this.gameObject.gameEngine._rootReordered(this)
     this._invalidate(worldPositionStays ? LOCAL_INVALID : WORLD_INVALID)
   }
+
+  get childIds () :Value<string[]> { return this._childIds }
 
   get childCount () :number { return this._children.length }
 
@@ -652,6 +674,13 @@ class TypeScriptTransform extends TypeScriptComponent implements Transform {
     )
   }
 
+  awake () {
+    this._disposer.add(this.gameObject.orderValue.onValue(() => {
+      if (this._parent) this._parent._childReordered(this)
+      else this.gameObject.gameEngine._rootReordered(this)
+    }))
+  }
+
   dispose () {
     super.dispose()
     this._maybeRemoveFromParent()
@@ -659,7 +688,17 @@ class TypeScriptTransform extends TypeScriptComponent implements Transform {
   }
 
   private _maybeRemoveFromParent () {
-    if (this._parent) this._parent._children.splice(this._parent._children.indexOf(this), 1)
+    if (this._parent) this._parent._childRemoved(this)
+    else this.gameObject.gameEngine._rootRemoved(this)
+  }
+
+  _childRemoved (child :TypeScriptTransform) {
+    this._children.splice(this._children.indexOf(child), 1)
+    removeChildId(this._childIds, child)
+  }
+
+  _childReordered (child :TypeScriptTransform) {
+    reorderChildId(this._childIds, child, this.gameObject.gameEngine.gameObjects)
   }
 
   private _invalidate (flags :number) {
@@ -738,15 +777,6 @@ class TypeScriptPage extends TypeScriptComponent implements Page {
   set active (active :boolean) {
     if (active) this.gameObject.gameEngine.activePage.update(this.gameObject.id)
     else if (this.active) this.gameObject.gameEngine.activePage.update(DEFAULT_PAGE)
-  }
-
-  constructor (gameObject :TypeScriptGameObject, type :string) {
-    super(gameObject, type)
-    gameObject.gameEngine._pageCreated(this)
-    this._disposer.add(() => gameObject.gameEngine._pageDisposed(this))
-    this._disposer.add(gameObject.orderValue.onChange(
-      () => gameObject.gameEngine._pageReordered(this),
-    ))
   }
 }
 registerComponentType("page", TypeScriptPage)

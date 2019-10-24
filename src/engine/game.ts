@@ -48,11 +48,14 @@ export interface GameEngine extends Disposable {
   /** The active physics engine. */
   readonly physicsEngine :PhysicsEngine
 
-  /** The keys of the pages. */
+  /** The keys of the pages in sorted order. */
   readonly pages :Value<string[]>
 
   /** The currently active page. */
   readonly activePage :Mutable<string>
+
+  /** The ids of the roots of the current page in sorted order. */
+  readonly rootIds :Value<string[]>
 
   /** All game objects, mapped by id. */
   readonly gameObjects :RMap<string, GameObject>
@@ -251,6 +254,9 @@ export interface Transform extends Component {
     * @param parent the new parent, if any.
     * @param [worldPositionStays=true] whether or not to retain the world position. */
   setParent (parent :Transform|undefined, worldPositionStays? :boolean) :void
+
+  /** The ids of the transform children in sorted order. */
+  readonly childIds :Value<string[]>
 
   /** The number of children of the transform. */
   readonly childCount :number
