@@ -16,7 +16,7 @@ import {
 
 /** Defines configuration for [[MenuBar]] elements. */
 export interface MenuBarConfig extends AbstractListConfig {
-  type :"menubar"
+  type :"menuBar"
 }
 
 /** A horizontal menu bar. */
@@ -132,7 +132,7 @@ export class Menu extends AbstractDropdown {
 
 /** Defines configuration for [[MenuItem]] elements. */
 export interface MenuItemConfig extends AbstractDropdownItemConfig {
-  type :"menuitem"
+  type :"menuItem"
   shortcut? :Spec<Value<string>>
 }
 
@@ -140,7 +140,7 @@ export interface MenuItemConfig extends AbstractDropdownItemConfig {
   * @param maxDepth the maximum submenu depth. */
 export function createMenuItemConfig (maxDepth :number) :MenuItemConfig {
   let element :MenuItemConfig = {
-    type: "menuitem",
+    type: "menuItem",
     contents: {
       type: "box",
       contents: {type: "label", text: "name"},
@@ -151,7 +151,7 @@ export function createMenuItemConfig (maxDepth :number) :MenuItemConfig {
   }
   for (; maxDepth > 0; maxDepth--) {
     element = {
-      type: "menuitem",
+      type: "menuItem",
       enabled: "enabled",
       shortcut: "shortcut",
       contents: {
@@ -179,7 +179,7 @@ export function createMenuItemConfig (maxDepth :number) :MenuItemConfig {
   return element
 }
 
-const MenuItemStyleScope = {id: "menuitem", states: [...ButtonStates, "separator"]}
+const MenuItemStyleScope = {id: "menuItem", states: [...ButtonStates, "separator"]}
 
 /** A menu item within a menu. */
 export class MenuItem extends AbstractDropdownItem {

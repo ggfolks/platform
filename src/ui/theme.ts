@@ -21,7 +21,7 @@ export const DefaultStyles :StyleDefs = {
     base: {family, size: 24},
     menu: {family, size: 16},
     tab: {family, size: 16},
-    treeviewnode: {family, size: 16},
+    treeViewNode: {family, size: 16},
     nodeTitle: {family, size: 16},
     nodeButton: {family, size: 14},
     nodeProperty: {family, size: 14},
@@ -69,19 +69,19 @@ export const DefaultStyles :StyleDefs = {
     dropdown: {fill: {type: "color", color: "#303030"}, cornerRadius: dropdownCorner},
     dropdownHovered: {fill: {type: "color", color: "#282828"}, cornerRadius: dropdownCorner},
     dropdownPressed: {fill: {type: "color", color: "#202020"}, cornerRadius: dropdownCorner},
-    dropdownitem: {fill: {type: "color", color: "#303030"}},
-    dropdownitemHovered: {fill: {type: "color", color: "#282828"}},
-    dropdownitemPressed: {fill: {type: "color", color: "#202020"}},
+    dropdownItem: {fill: {type: "color", color: "#303030"}},
+    dropdownItemHovered: {fill: {type: "color", color: "#282828"}},
+    dropdownItemPressed: {fill: {type: "color", color: "#202020"}},
     tabSelected: {fill: {type: "color", color: "#303030"}, cornerRadius: tabCorner},
-    treeviewnodeHovered: {fill: {type: "color", color: "#303030"}},
-    treeviewnodeSelected: {fill: {type: "color", color: "#282828"}},
-    treeviewnodePressed: {fill: {type: "color", color: "#202020"}},
+    treeViewNodeHovered: {fill: {type: "color", color: "#303030"}},
+    treeViewNodeSelected: {fill: {type: "color", color: "#282828"}},
+    treeViewNodePressed: {fill: {type: "color", color: "#202020"}},
     menu: {fill: {type: "color", color: "#303030"}, cornerRadius: menuCorner},
     menuHovered: {fill: {type: "color", color: "#282828"}, cornerRadius: menuCorner},
     menuPressed: {fill: {type: "color", color: "#202020"}, cornerRadius: menuCorner},
-    menuitem: {fill: {type: "color", color: "#303030"}},
-    menuitemHovered: {fill: {type: "color", color: "#282828"}},
-    menuitemPressed: {fill: {type: "color", color: "#202020"}},
+    menuItem: {fill: {type: "color", color: "#303030"}},
+    menuItemHovered: {fill: {type: "color", color: "#282828"}},
+    menuItemPressed: {fill: {type: "color", color: "#202020"}},
     graphViewerHeader: {fill: {type: "color", color: "#303030"}, cornerRadius: [5, 5, 0, 0]},
     graphViewSelect: {fill: {type: "color", color: "rgba(64, 64, 64, 0.25)"}},
     nodeHeader: {fill: {type: "color", color: "#404040"}, cornerRadius: nodeHeaderCorner},
@@ -112,20 +112,20 @@ export const DefaultTheme :Theme = {
       pressed: {cursor: "pointer"},
     },
     dropdown: {},
-    dropdownitem: {},
+    dropdownItem: {},
     menu: {
       hovered: {},
       hoverFocused: {},
     },
-    menuitem: {},
+    menuItem: {},
     tab: {stroke: "$white"},
-    treeviewnode: {stroke: "$white"},
+    treeViewNode: {stroke: "$white"},
     shortcut: {font: "$menu", fill: "$mediumGray"},
-    graphview: {
+    graphView: {
       selectBackground: "$graphViewSelect",
       selectBorder: "$graphViewSelect",
     },
-    edgeview: {
+    edgeView: {
       lineWidth: 3,
       hovered: {outlineWidth: 5, outlineAlpha: 0.5, cursor: "pointer"},
     },
@@ -162,13 +162,13 @@ export const DefaultTheme :Theme = {
     },
     label: {font: "$tab"},
   },
-  treeviewnode: {
+  treeViewNode: {
     box: {
-      hovered: {background: "$treeviewnodeHovered"},
-      selected: {background: "$treeviewnodeSelected"},
-      pressed: {background: "$treeviewnodePressed"},
+      hovered: {background: "$treeViewNodeHovered"},
+      selected: {background: "$treeViewNodeSelected"},
+      pressed: {background: "$treeViewNodePressed"},
     },
-    label: {font: "$treeviewnode"},
+    label: {font: "$treeViewNode"},
   },
   addTabButton: {
     box: {
@@ -207,7 +207,7 @@ export const DefaultTheme :Theme = {
     label: {font: "$text", fill: "$black"},
     cursor: {stroke: "$black"},
   },
-  editablelabel: {
+  editableLabel: {
     box: {
       focused: {cursor: "text"},
       hoverFocused: {cursor: "text"},
@@ -225,13 +225,13 @@ export const DefaultTheme :Theme = {
     },
     label: {font: "$dropdown"},
   },
-  dropdownitem: {
+  dropdownItem: {
     box: {
       padding: [3, 8, 3, 8],
-      background: "$dropdownitem",
-      hovered: {background: "$dropdownitemHovered"},
-      hoverFocused: {background: "$dropdownitemHovered"},
-      pressed: {background: "$dropdownitemPressed"},
+      background: "$dropdownItem",
+      hovered: {background: "$dropdownItemHovered"},
+      hoverFocused: {background: "$dropdownItemHovered"},
+      pressed: {background: "$dropdownItemPressed"},
       separator: {background: undefined},
     },
     label: {font: "$dropdown"},
@@ -246,13 +246,13 @@ export const DefaultTheme :Theme = {
     },
     label: {font: "$menu"},
   },
-  menuitem: {
+  menuItem: {
     box: {
       padding: [5, 5, 5, 15],
-      background: "$menuitem",
-      hovered: {background: "$menuitemHovered"},
-      hoverFocused: {background: "$menuitemHovered"},
-      pressed: {background: "$menuitemPressed"},
+      background: "$menuItem",
+      hovered: {background: "$menuItemHovered"},
+      hoverFocused: {background: "$menuItemHovered"},
+      pressed: {background: "$menuItemPressed"},
       separator: {background: undefined},
     },
     label: {font: "$menu"},

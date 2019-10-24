@@ -171,7 +171,7 @@ export abstract class AbsGroup extends Group {
 }
 
 export interface AbsLayoutConfig extends ElementConfig {
-  type :"abslayout"
+  type :"absLayout"
   contents: ElementConfig[]
 }
 

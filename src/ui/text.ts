@@ -567,7 +567,7 @@ export class Text extends AbstractText {
 
 /** Defines configuration for [[NumberText]]. */
 export interface NumberTextConfig extends AbstractTextConfig {
-  type :"numbertext"
+  type :"numberText"
   min? :number
   max? :number
   maxDecimals? :number
@@ -628,7 +628,7 @@ function numberToString (value :number, maxDecimals :number) :string {
 
 /** Defines configuration for [[ColorText]]. */
 export interface ColorTextConfig extends AbstractTextConfig {
-  type :"colortext"
+  type :"colorText"
   color :Spec<Mutable<string>>
 }
 
@@ -663,11 +663,11 @@ export class ColorText extends AbstractText {
 
 /** Defines configuration for [[EditableLabel]]. */
 export interface EditableLabelConfig extends AbstractTextConfig {
-  type :"editablelabel"
+  type :"editableLabel"
   text :Spec<Mutable<string>>
 }
 
-const EditableLabelStyleScope = {id: "editablelabel", states: ControlStates}
+const EditableLabelStyleScope = {id: "editableLabel", states: ControlStates}
 
 /** A label that one can edit by double-clicking. */
 export class EditableLabel extends AbstractText {

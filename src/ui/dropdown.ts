@@ -232,10 +232,10 @@ export class AbstractDropdownItem extends AbstractDropdown {
 
 /** Defines configuration for [[DropdownItem]] elements. */
 export interface DropdownItemConfig extends AbstractDropdownItemConfig {
-  type :"dropdownitem"
+  type :"dropdownItem"
 }
 
-const DropdownItemStyleScope = {id: "dropdownitem", states: [...ButtonStates, "separator"]}
+const DropdownItemStyleScope = {id: "dropdownItem", states: [...ButtonStates, "separator"]}
 
 /** An item in a dropdown menu. */
 export class DropdownItem extends AbstractDropdownItem {

@@ -345,7 +345,7 @@ export function registerEngineSubgraphs (registry :SubgraphRegistry) {
           ),
           contents: {
             type: "box",
-            contents: {type: "graphviewer", editable: Value.constant(true)},
+            contents: {type: "graphViewer", editable: Value.constant(true)},
             style: {halign: "stretch", valign: "stretch", background: "$root"},
           },
         },

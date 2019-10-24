@@ -12,7 +12,7 @@ type ParentOrderUpdater = (key :ModelKey, parent :ModelKey|undefined, index :num
 
 /** Defines configuration for [[TreeView]] elements. */
 export interface TreeViewConfig extends AbstractListConfig {
-  type :"treeview"
+  type :"treeView"
   selectedKeys :Spec<MutableSet<ModelKey>>
   updateParentOrder? :Spec<ParentOrderUpdater>
 }
@@ -47,7 +47,7 @@ export class TreeView extends VGroup implements AbstractList {
           contents: [
             config.element,
             {
-              type: "treeview",
+              type: "treeView",
               visible: "expanded",
               element: config.element,
               keys: "childKeys",
@@ -64,13 +64,13 @@ export class TreeView extends VGroup implements AbstractList {
 
 /** Defines configuration for [[TreeViewNode]] elements. */
 export interface TreeViewNodeConfig extends DraggableElementConfig {
-  type :"treeviewnode"
+  type :"treeViewNode"
   key :Spec<Value<ModelKey>>
   selectedKeys :Spec<MutableSet<ModelKey>>
   updateParentOrder? :Spec<ParentOrderUpdater>
 }
 
-const TreeViewNodeStyleScope = {id: "treeviewnode", states: DraggableElementStates}
+const TreeViewNodeStyleScope = {id: "treeViewNode", states: DraggableElementStates}
 
 /** Represents a single node in a tree view. */
 export class TreeViewNode extends DraggableElement {

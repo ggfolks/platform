@@ -17,7 +17,7 @@ import {BackgroundConfig, BorderConfig, NoopDecor, addDecorationBounds} from "./
 
 /** A navigable graph viewer. */
 export interface GraphViewerConfig extends ElementConfig {
-  type :"graphviewer"
+  type :"graphViewer"
   editable? :Spec<Value<boolean>>
 }
 
@@ -63,7 +63,7 @@ export class GraphViewer extends VGroup {
           offPolicy: "stretch",
           contents: [
             {
-              type: "menubar",
+              type: "menuBar",
               offPolicy: "stretch",
               element: {
                 type: "menu",
@@ -297,7 +297,7 @@ export class GraphViewer extends VGroup {
       const createNodes = pageModel.resolve<NodeCreator>("createNodes")
       this._nodeCreator.update((config :GraphConfig) => {
         const ids = createNodes(config)
-        const graphView = this.findChild("graphview") as GraphView
+        const graphView = this.findChild("graphView") as GraphView
         graphView.repositionNodes(ids)
         return ids
       })
@@ -339,14 +339,14 @@ export class GraphViewer extends VGroup {
 
   private _createElement (model :Model) :Element {
     return this.ctx.elem.create(this.ctx.remodel(model), this, {
-      type: "tabbedpane",
+      type: "tabbedPane",
       tabElement: {
         type: "box",
         contents: {
           type: "row",
           contents: [
             {
-              type: "editablelabel",
+              type: "editableLabel",
               text: "name",
               contents: {
                 type: "box",
@@ -368,7 +368,7 @@ export class GraphViewer extends VGroup {
       },
       contentElement: {
         type: "panner",
-        contents: {type: "graphview", editable: this._editable},
+        contents: {type: "graphView", editable: this._editable},
         constraints: {stretch: true},
       },
       addTabElement: {
@@ -400,7 +400,7 @@ export class GraphViewer extends VGroup {
 
 /** Visualizes a graph. */
 export interface GraphViewConfig extends ElementConfig {
-  type :"graphview"
+  type :"graphView"
   style :PMap<GraphViewStyle>
   editable :Spec<Value<boolean>>
 }
@@ -457,9 +457,9 @@ export class GraphView extends AbsGroup {
               type: "box",
               constraints: {position},
               scopeId: "node",
-              contents: {type: "nodeview", offPolicy: "stretch", editable},
+              contents: {type: "nodeView", offPolicy: "stretch", editable},
             }) as Box,
-            edges: ctx.elem.create(subctx, this, {type: "edgeview", editable}) as EdgeView,
+            edges: ctx.elem.create(subctx, this, {type: "edgeView", editable}) as EdgeView,
           }
           this.elements.set(key, elem)
         }
@@ -701,11 +701,11 @@ export class GraphView extends AbsGroup {
 
 /** Depicts a single node. */
 export interface NodeViewConfig extends AxisConfig {
-  type :"nodeview"
+  type :"nodeView"
   editable :Spec<Value<boolean>>
 }
 
-export const NodeViewStyleScope = {id: "nodeview", states: ["normal", "hovered", "selected"]}
+export const NodeViewStyleScope = {id: "nodeView", states: ["normal", "hovered", "selected"]}
 
 export class NodeView extends VGroup {
   readonly id :string
@@ -746,7 +746,7 @@ export class NodeView extends VGroup {
     const propertiesVisible = Mutable.local(false)
     this.disposer.add(propertyKeys.onValue(value => propertiesVisible.update(value.length > 0)))
     bodyContents.push({
-      type: "propertyview",
+      type: "propertyView",
       visible: propertiesVisible,
       gap: 2,
       scopeId: "nodeProperties",
@@ -846,7 +846,7 @@ export class NodeView extends VGroup {
         scopeId: "nodeHeader",
         contents: name instanceof Mutable
           ? {
-            type: "editablelabel",
+            type: "editableLabel",
             text: name,
             contents: {
               type: "box",
@@ -947,7 +947,7 @@ function getGraphView (element :Element) :GraphView {
 
 /** Visualizes a node's input edges. */
 export interface EdgeViewConfig extends ElementConfig {
-  type :"edgeview"
+  type :"edgeView"
   style :PMap<EdgeViewStyle>
   editable :Spec<Value<boolean>>
 }
@@ -964,7 +964,7 @@ export interface EdgeViewStyle extends EdgeStyle {
   cursor? :string
 }
 
-export const EdgeViewStyleScope = {id: "edgeview", states: ["normal", "hovered"]}
+export const EdgeViewStyleScope = {id: "edgeView", states: ["normal", "hovered"]}
 
 const offsetFrom = vec2.create()
 const offsetTo = vec2.create()

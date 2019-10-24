@@ -9,7 +9,7 @@ type OrderUpdater = (key :ModelKey, index :number) => void
 
 /** Defines configuration for [[TabbedPane]] elements. */
 export interface TabbedPaneConfig extends AxisConfig {
-  type :"tabbedpane"
+  type :"tabbedPane"
   tabElement :ElementConfig
   addTabElement? :ElementConfig
   contentElement :ElementConfig

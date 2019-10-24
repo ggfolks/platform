@@ -10,7 +10,7 @@ import {Model, ModelKey, ModelProvider, Spec} from "./model"
 
 /** Configuration for [[PropertyView]]. */
 export interface PropertyViewConfig extends AxisConfig {
-  type :"propertyview"
+  type :"propertyView"
   editable :Spec<Value<boolean>>
   keys :Spec<Value<string[]>>
   data :Spec<ModelProvider>
@@ -74,7 +74,7 @@ const propertyConfigCreators :PMap<PropertyConfigCreator> = {
   number: (model, editable) => {
     const constraints = model.resolve<Value<NumberConstraints>>("constraints").current
     return createPropertyRowConfig(model, {
-      type: "numbertext",
+      type: "numberText",
       constraints: {stretch: true},
       number: "value",
       enabled: editable,
@@ -108,19 +108,19 @@ const propertyConfigCreators :PMap<PropertyConfigCreator> = {
       constraints: {stretch: true},
       contents: [
         {
-          type: "numbertext",
+          type: "numberText",
           constraints: {stretch: true},
           number: value.bimap(v => v[0], (v, x) => vec3.fromValues(x, v[1], v[2])),
           contents: NumberBox,
         },
         {
-          type: "numbertext",
+          type: "numberText",
           constraints: {stretch: true},
           number: value.bimap(v => v[1], (v, y) => vec3.fromValues(v[0], y, v[2])),
           contents: NumberBox,
         },
         {
-          type: "numbertext",
+          type: "numberText",
           constraints: {stretch: true},
           number: value.bimap(v => v[2], (v, z) => vec3.fromValues(v[0], v[1], z)),
           contents: NumberBox,
@@ -135,19 +135,19 @@ const propertyConfigCreators :PMap<PropertyConfigCreator> = {
       constraints: {stretch: true},
       contents: [
         {
-          type: "numbertext",
+          type: "numberText",
           constraints: {stretch: true},
           number: value.bimap(v => v.x, (v, x) => new Vector3(x, v.y, v.z)),
           contents: NumberBox,
         },
         {
-          type: "numbertext",
+          type: "numberText",
           constraints: {stretch: true},
           number: value.bimap(v => v.y, (v, y) => new Vector3(v.x, y, v.z)),
           contents: NumberBox,
         },
         {
-          type: "numbertext",
+          type: "numberText",
           constraints: {stretch: true},
           number: value.bimap(v => v.z, (v, z) => new Vector3(v.x, v.y, z)),
           contents: NumberBox,
@@ -161,7 +161,7 @@ const propertyConfigCreators :PMap<PropertyConfigCreator> = {
       type: "row",
       contents: [
         {
-          type: "numbertext",
+          type: "numberText",
           constraints: {stretch: true},
           number: value.bimap(e => M.radToDeg(e.x), (e, x) => new Euler(M.degToRad(x), e.y, e.z)),
           contents: NumberBox,
@@ -170,7 +170,7 @@ const propertyConfigCreators :PMap<PropertyConfigCreator> = {
           maxDecimals: 0,
         },
         {
-          type: "numbertext",
+          type: "numberText",
           constraints: {stretch: true},
           number: value.bimap(e => M.radToDeg(e.y), (e, y) => new Euler(e.x, M.degToRad(y), e.z)),
           contents: NumberBox,
@@ -179,7 +179,7 @@ const propertyConfigCreators :PMap<PropertyConfigCreator> = {
           maxDecimals: 0,
         },
         {
-          type: "numbertext",
+          type: "numberText",
           constraints: {stretch: true},
           number: value.bimap(e => M.radToDeg(e.z), (e, z) => new Euler(e.x, e.y, M.degToRad(z))),
           contents: NumberBox,
@@ -193,7 +193,7 @@ const propertyConfigCreators :PMap<PropertyConfigCreator> = {
   Color: (model, editable) => {
     const value = model.resolve<Mutable<Color>>("value")
     return createPropertyRowConfig(model, {
-      type: "colortext",
+      type: "colorText",
       constraints: {stretch: true},
       color: value.bimap(c => c.getHexString(), (c, s) => new Color("#" + s)),
       enabled: editable,
@@ -237,7 +237,7 @@ function createEnumPropertyConfig (model :Model, editable :Value<boolean>, keys 
       contents: {type: "label", text: "value"},
     },
     element: {
-      type: "dropdownitem",
+      type: "dropdownItem",
       contents: {
         type: "box",
         contents: {type: "label", text: "name"},
