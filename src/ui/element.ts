@@ -1,4 +1,4 @@
-import {Disposable, Disposer, Remover, NoopRemover, PMap} from "../core/util"
+import {Disposable, Disposer, Remover, NoopRemover, PMap, log} from "../core/util"
 import {Clock} from "../core/clock"
 import {dim2, rect, vec2} from "../core/math"
 import {Record} from "../core/data"
@@ -333,7 +333,7 @@ export abstract class Element implements Disposable {
   protected getStyle<S> (styles :PMap<S>, state :string) :S {
     const style = styles[state]
     if (style) return style
-    console.warn(`Missing styles for state '${state}' in ${this}.`)
+    log.warn(`Missing styles for state '${state}'`, "elem", this)
     return {} as S
   }
 
@@ -546,6 +546,10 @@ export class Root extends Element {
     return changed
   }
 
+  findChild (type :string) :Element|undefined {
+    return super.findChild(type) || this.contents.findChild(type)
+  }
+
   dispose () {
     super.dispose()
     this.focus.update(undefined)
@@ -567,7 +571,7 @@ export class Root extends Element {
     case "mousedown":
       if (rect.contains(this.bounds, pos)) event.cancelBubble = true
       if (iact) {
-        console.warn(`Got mouse down but have active interaction? [button=${button}]`)
+        log.warn("Got mouse down but have active interaction?", "button", button)
         iact.cancel()
       }
       const niact = this.interacts[button] = this.contents.maybeHandlePointerDown(event, pos)
@@ -610,7 +614,7 @@ export class Root extends Element {
           event.preventDefault()
         }
         if (iact) {
-          console.warn("Got touch start but have active interaction?")
+          log.warn("Got touch start but have active interaction?")
           iact.cancel()
         }
         const niact = this.interacts[0] = this.contents.maybeHandlePointerDown(event, pos)
