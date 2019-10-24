@@ -1,10 +1,11 @@
+import {rect} from "../core/math"
 import {Value} from "../core/react"
 import {MutableSet} from "../core/rcollect"
 import {Element, ElementContext} from "./element"
 import {OffAxisPolicy, VGroup} from "./group"
 import {
-  AbstractList, AbstractListConfig, DraggableElement, DraggableElementConfig,
-  DraggableElementStates, syncListContents,
+  AbstractList, AbstractListConfig, DragElement, DragElementConfig,
+  DragElementStates, syncListContents,
 } from "./list"
 import {ModelKey, Spec} from "./model"
 
@@ -81,20 +82,28 @@ export class TreeView extends VGroup implements AbstractList {
   }
 
   protected get defaultOffPolicy () :OffAxisPolicy { return "stretch" }
+
+  protected rerender (canvas :CanvasRenderingContext2D, region :rect) {
+    super.rerender(canvas, region)
+    for (const element of this.contents) {
+      const treeViewNode = element.findChild("treeViewNode") as TreeViewNode
+      treeViewNode.maybeRenderDrag(canvas, region)
+    }
+  }
 }
 
 /** Defines configuration for [[TreeViewNode]] elements. */
-export interface TreeViewNodeConfig extends DraggableElementConfig {
+export interface TreeViewNodeConfig extends DragElementConfig {
   type :"treeViewNode"
   key :Spec<Value<ModelKey>>
   selectedKeys :Spec<MutableSet<ModelKey>>
   updateParentOrder? :Spec<ParentOrderUpdater>
 }
 
-const TreeViewNodeStyleScope = {id: "treeViewNode", states: DraggableElementStates}
+const TreeViewNodeStyleScope = {id: "treeViewNode", states: DragElementStates}
 
 /** Represents a single node in a tree view. */
-export class TreeViewNode extends DraggableElement {
+export class TreeViewNode extends DragElement {
   private readonly _key :Value<ModelKey>
   private readonly _selectedKeys :MutableSet<ModelKey>
   private readonly _parentOrderUpdater? :ParentOrderUpdater

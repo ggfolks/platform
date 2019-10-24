@@ -2,10 +2,8 @@ import {rect} from "../core/math"
 import {Mutable, Source, Value} from "../core/react"
 import {Element, ElementConfig, ElementContext} from "./element"
 import {AxisConfig, OffAxisPolicy, VGroup} from "./group"
-import {DraggableElementConfig, DraggableElement, DraggableElementStates, HList} from "./list"
+import {DragElementConfig, DragElement, DragElementStates, HList, OrderUpdater} from "./list"
 import {ModelKey, ModelProvider, Spec} from "./model"
-
-type OrderUpdater = (key :ModelKey, index :number) => void
 
 /** Defines configuration for [[TabbedPane]] elements. */
 export interface TabbedPaneConfig extends AxisConfig {
@@ -76,17 +74,17 @@ export class TabbedPane extends VGroup {
 }
 
 /** Defines configuration for [[Tab]] elements. */
-export interface TabConfig extends DraggableElementConfig {
+export interface TabConfig extends DragElementConfig {
   type :"tab"
   key :Spec<Value<ModelKey>>
   activeKey :Spec<Mutable<ModelKey>>
   updateOrder? :Spec<OrderUpdater>
 }
 
-const TabStyleScope = {id: "tab", states: DraggableElementStates}
+const TabStyleScope = {id: "tab", states: DragElementStates}
 
 /** A single tab in a row. */
-export class Tab extends DraggableElement {
+export class Tab extends DragElement {
   private readonly _key :Value<ModelKey>
   private readonly _activeKey :Mutable<ModelKey>
   private readonly _orderUpdater? :OrderUpdater

@@ -11,7 +11,8 @@ const menuCorner = [5, 5, 0, 0]
 const dropdownCorner = 5
 const nodeButtonCorner = 5
 
-const family = "Helvetica, sans-serif"
+/** The font family. */
+export const family = "Helvetica, sans-serif"
 
 /** A default set of styles to use as a base. */
 export const DefaultStyles :StyleDefs = {
@@ -22,6 +23,7 @@ export const DefaultStyles :StyleDefs = {
     menu: {family, size: 16},
     tab: {family, size: 16},
     treeViewNode: {family, size: 16},
+    dragVElement: {family, size: 16},
     nodeTitle: {family, size: 16},
     nodeButton: {family, size: 14},
     nodeProperty: {family, size: 14},
@@ -120,6 +122,7 @@ export const DefaultTheme :Theme = {
     menuItem: {},
     tab: {stroke: "$white"},
     treeViewNode: {stroke: "$white"},
+    dragVElement: {stroke: "$white"},
     shortcut: {font: "$menu", fill: "$mediumGray"},
     graphView: {
       selectBackground: "$graphViewSelect",
@@ -172,6 +175,9 @@ export const DefaultTheme :Theme = {
       pressed: {background: "$treeViewNodePressed"},
     },
     label: {font: "$treeViewNode"},
+  },
+  dragVElement: {
+    label: {font: "$dragVElement"},
   },
   addTabButton: {
     box: {

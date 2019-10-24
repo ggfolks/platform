@@ -35,6 +35,8 @@ export interface BoxStyle {
   padding? :Insets
   halign? :HAlign
   valign? :VAlign
+  minWidth? :number
+  minHeight? :number
   cursor? :string
 }
 
@@ -142,11 +144,13 @@ export class Box extends Element {
   }
 
   protected computePreferredSize (hintX :number, hintY :number, into :dim2) {
-    const {padding, margin} = this.style
+    const {padding, margin, minWidth, minHeight} = this.style
     const edgeWidth = insetWidth(padding || 0) + insetWidth(margin || 0)
     const edgeHeight = insetHeight(padding || 0) + insetHeight(margin || 0)
     const psize = this.contents.preferredSize(hintX-edgeWidth, hintY-edgeHeight)
     dim2.set(into, psize[0] + edgeWidth, psize[1] + edgeHeight)
+    if (minWidth !== undefined) into[0] = Math.max(into[0], minWidth)
+    if (minHeight !== undefined) into[1] = Math.max(into[1], minHeight)
   }
 
   protected relayout () {

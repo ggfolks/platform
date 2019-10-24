@@ -122,6 +122,8 @@ export class UI {
       case        "toggle": return new B.Toggle(ctx, parent, rconfig as B.ToggleConfig)
       case         "hlist": return new L.HList(ctx, parent, rconfig as L.HListConfig)
       case         "vlist": return new L.VList(ctx, parent, rconfig as L.VListConfig)
+      case     "dragVList": return new L.DragVList(ctx, parent, rconfig as L.DragVListConfig)
+      case  "dragVElement": return new L.DragVElement(ctx, parent, rconfig as L.DragVElementConfig)
       case           "tab": return new TA.Tab(ctx, parent, rconfig as TA.TabConfig)
       case    "tabbedPane": return new TA.TabbedPane(ctx, parent, rconfig as TA.TabbedPaneConfig)
       case      "treeView": return new TR.TreeView(ctx, parent, rconfig as TR.TreeViewConfig)

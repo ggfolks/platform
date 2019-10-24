@@ -1,12 +1,12 @@
 import {rect, vec2} from "../core/math"
-import {Source} from "../core/react"
+import {Source, Value} from "../core/react"
 import {Noop, NoopRemover, PMap, Remover} from "../core/util"
 import {ModelKey, ModelProvider} from "./model"
 import {
   Control, ControlConfig, ControlStates, Element, ElementConfig, ElementContext, PointerInteraction,
 } from "./element"
 import {DefaultPaint, PaintConfig, Spec} from "./style"
-import {AxisConfig, HGroup, VGroup} from "./group"
+import {AxisConfig, HGroup, OffAxisPolicy, VGroup} from "./group"
 import {strokeLinePath} from "./util"
 
 /** Base interface for list-like elements. */
@@ -30,7 +30,7 @@ export interface AbstractList {
 /** An hlist displays a dynamic list of elements, each instantiated from a sub-model and a list
   * element template. The elements are arrayed along a horizontal axis like a [[Row]]. */
 export class HList extends HGroup implements AbstractList {
-  readonly elements = new Map<ModelKey,Element>()
+  readonly elements = new Map<ModelKey, Element>()
   readonly contents :Element[] = []
 
   constructor (ctx :ElementContext, parent :Element, readonly config :HListConfig) {
@@ -47,7 +47,7 @@ export interface VListConfig extends AbstractListConfig {
 /** A vlist displays a dynamic list of elements, each instantiated from a sub-model and a list
   * element template. The elements are arrayed along a vertical axis like a [[Column]]. */
 export class VList extends VGroup implements AbstractList {
-  readonly elements = new Map<ModelKey,Element>()
+  readonly elements = new Map<ModelKey, Element>()
   readonly contents :Element[] = []
 
   constructor (ctx :ElementContext, parent :Element, readonly config :VListConfig) {
@@ -56,24 +56,58 @@ export class VList extends VGroup implements AbstractList {
   }
 }
 
+/** Defines configuration for [[DragVList]] elements. */
+export interface DragVListConfig extends AbstractListConfig {
+  type :"dragVList"
+  key :Spec<Value<ModelKey>>
+  updateOrder :Spec<OrderUpdater>
+}
+
+/** A vlist with draggable elements. */
+export class DragVList extends VGroup implements AbstractList {
+  readonly elements = new Map<ModelKey, Element>()
+  readonly contents :Element[] = []
+
+  constructor (ctx :ElementContext, parent :Element, readonly config :DragVListConfig) {
+    super(ctx, parent, config)
+    const updateOrder = ctx.model.resolve(config.updateOrder)
+    this.disposer.add(syncListContents(ctx, this, {
+      type: "dragVElement",
+      contents: config.element,
+      key: config.key,
+      updateOrder,
+    }))
+  }
+
+  protected rerender (canvas :CanvasRenderingContext2D, region :rect) {
+    super.rerender(canvas, region)
+    for (const element of this.contents) {
+      const dragVElement = element as DragVElement
+      dragVElement.maybeRenderDrag(canvas, region)
+    }
+  }
+
+  protected get defaultOffPolicy () :OffAxisPolicy { return "stretch" }
+}
+
 /** The style used for draggable elements. */
-export interface DraggableElementStyle {
+export interface DragElementStyle {
   stroke :Spec<PaintConfig>
 }
 
-/** Defines configuration for [[Tab]] elements. */
-export interface DraggableElementConfig extends ControlConfig {
-  style :PMap<DraggableElementStyle>
+/** Defines configuration for [[DragElement]] elements. */
+export interface DragElementConfig extends ControlConfig {
+  style :PMap<DragElementStyle>
 }
 
 /** The states used for draggable elements. */
-export const DraggableElementStates = [...ControlStates, "selected"]
+export const DragElementStates = [...ControlStates, "selected"]
 
 const dragBounds = rect.create()
 const dropBounds = rect.create()
 
 /** Base class for draggable list elements. */
-export abstract class DraggableElement extends Control {
+export abstract class DragElement extends Control {
   private _stroke = this.observe(DefaultPaint)
 
   protected _dragPos? :vec2
@@ -81,7 +115,7 @@ export abstract class DraggableElement extends Control {
   protected _dropEnd? :vec2
   protected _dropData? :any
 
-  constructor (ctx :ElementContext, parent :Element, readonly config :DraggableElementConfig) {
+  constructor (ctx :ElementContext, parent :Element, readonly config :DragElementConfig) {
     super(ctx, parent, config)
     const style = this.getStyle(this.config.style, "normal")
     if (style.stroke) this._stroke.observe(ctx.style.resolvePaint(style.stroke))
@@ -94,10 +128,10 @@ export abstract class DraggableElement extends Control {
   get constrain () :boolean { return true }
 
   /** Checks whether this element is selected. */
-  abstract get selected () :boolean
+  get selected () :boolean { return false }
 
   /** Selects this element. */
-  abstract select (event :MouseEvent|TouchEvent) :void
+  select (event :MouseEvent|TouchEvent) :void {}
 
   /** Checks whether we can reorder the elements. */
   abstract get canReorder () :boolean
@@ -236,6 +270,38 @@ export abstract class DraggableElement extends Control {
 
   protected get computeState () {
     return this.enabled.current && this.selected ? "selected" : super.computeState
+  }
+}
+
+/** A function that changes the order of a list element. */
+export type OrderUpdater = (key :ModelKey, index :number) => void
+
+/** Defines configuration for [[DragVElement]] elements. */
+export interface DragVElementConfig extends DragElementConfig {
+  type :"dragVElement"
+  key :Spec<Value<ModelKey>>
+  updateOrder :Spec<OrderUpdater>
+}
+
+const DragVElementStyleScope = {id: "dragVElement", states: DragElementStates}
+
+/** A non-selectable draggable element to use in [[DragVList]]. */
+export class DragVElement extends DragElement {
+  private readonly _key :Value<ModelKey>
+  private readonly _orderUpdater :OrderUpdater
+
+  constructor (ctx :ElementContext, parent :Element, readonly config :DragVElementConfig) {
+    super(ctx, parent, config)
+    this._key = ctx.model.resolve(config.key)
+    this._orderUpdater = ctx.model.resolve(config.updateOrder)
+  }
+
+  get styleScope () { return DragVElementStyleScope }
+
+  get canReorder () :boolean { return true }
+
+  reorder (data :any) :void {
+    this._orderUpdater(this._key.current, data)
   }
 }
 
