@@ -154,15 +154,15 @@ export class Panner extends TransformedContainer {
   }
 
   protected startScroll (event :MouseEvent|TouchEvent, pos :vec2) :PointerInteraction|undefined {
+    const clearCursor = () => this.clearCursor(this)
     const basePos = vec2.clone(pos), baseOffset = vec2.clone(this._offset.current)
-    const cancel = () => this.clearCursor(this)
     return {
       move: (event, pos) => {
         this.setCursor(this, "all-scroll")
         this._updateOffset(vec2.add(tmpv, baseOffset, vec2.subtract(tmpv, basePos, pos)))
       },
-      release: cancel,
-      cancel,
+      release: clearCursor,
+      cancel: clearCursor,
     }
   }
 
@@ -285,7 +285,9 @@ export class Scroller extends TransformedContainer {
   handleWheel (event :WheelEvent, pos :vec2) {
     const transformedPos = this._transformPos(pos)
     if (!this.contents.maybeHandleWheel(event, transformedPos)) {
-      this._adjustAxisOffset((this.config.wheelDelta || 10) * (event.deltaY > 0 ? 1 : -1))
+      const delta = (this.config.wheelDelta || 10) * (event.deltaY > 0 ? 1 : -1)
+      const horiz = this.horiz, deltav = vec2.set(tmpv, horiz ? delta : 0, horiz ? 0 : delta)
+      this._updateOffset(vec2.add(tmpv, this._offset.current, deltav))
     }
     return true
   }
@@ -304,7 +306,7 @@ export class Scroller extends TransformedContainer {
   protected get horiz () :boolean { return this.config.orient == "horiz" }
 
   protected startScroll (event :MouseEvent|TouchEvent, pos :vec2) :PointerInteraction|undefined {
-    const cancel = () => this.clearCursor(this)
+    const clearCursor = () => this.clearCursor(this)
     const oidx = this.horiz ? 0 : 1, basePos = pos[oidx], baseOffset = this._offset.current[oidx]
     this.unanim()
     const anim = this.config.noInertial ? undefined : new InertialAnim(this)
@@ -319,19 +321,14 @@ export class Scroller extends TransformedContainer {
       release: (event, pos) => {
         anim && anim.release(pos[oidx], event.timeStamp)
         this.setAnim(anim)
-        cancel()
+        clearCursor()
       },
-      cancel,
+      cancel: clearCursor,
     }
   }
 
   protected _updateAxisOffset (offset :number) {
     const horiz = this.horiz
     this._updateOffset(vec2.set(tmpv, horiz ? offset : 0, horiz ? 0 : offset))
-  }
-
-  protected _adjustAxisOffset (delta :number) {
-    const horiz = this.horiz, deltav = vec2.set(tmpv, horiz ? delta : 0, horiz ? 0 : delta)
-    this._updateOffset(vec2.add(tmpv, this._offset.current, deltav))
   }
 }
