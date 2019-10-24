@@ -186,10 +186,6 @@ export class Panner extends TransformedContainer {
 
 class Anim {
   done = false
-  constructor (readonly scroller :Scroller) {}
-  start (pos :number, time :number) {}
-  move (pos :number, time :number) {}
-  release (pos :number, time :number) {}
   update (clock :Clock, offset :number) { return offset }
 }
 
@@ -200,7 +196,7 @@ class TweenAnim extends Anim {
   private range :number
 
   constructor (scroller :Scroller, targetOffset :number, readonly interp :Interp) {
-    super(scroller)
+    super()
     const init = this.init = scroller.axisOffset
     const range = this.range = targetOffset - init
     this.time = Math.min(range / 1000, 1)
@@ -230,6 +226,8 @@ class InertialAnim extends Anim {
     this.timehist[idx] = time
     this.samples += 1
   }
+
+  constructor (readonly scroller :Scroller) { super() }
 
   start (pos :number, time :number) { this._notePos(pos, time) }
   move (pos :number, time :number) { this._notePos(pos, time) }
