@@ -255,7 +255,6 @@ class InertialAnim extends Anim {
 export interface ScrollerConfig extends ControlConfig {
   type :"scroller"
   orient :"horiz"|"vert"
-  wheelDelta? :number
   noInertial? :boolean
 }
 
@@ -285,8 +284,8 @@ export class Scroller extends TransformedContainer {
   handleWheel (event :WheelEvent, pos :vec2) {
     const transformedPos = this._transformPos(pos)
     if (!this.contents.maybeHandleWheel(event, transformedPos)) {
-      const delta = (this.config.wheelDelta || 10) * (event.deltaY > 0 ? 1 : -1)
-      const horiz = this.horiz, deltav = vec2.set(tmpv, horiz ? delta : 0, horiz ? 0 : delta)
+      const horiz = this.horiz, deltav = vec2.set(
+        tmpv, horiz ? event.deltaY : 0, horiz ? 0 : event.deltaY)
       this._updateOffset(vec2.add(tmpv, this._offset.current, deltav))
     }
     return true
