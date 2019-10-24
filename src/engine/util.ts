@@ -1,18 +1,19 @@
 import {Color} from "../core/color"
 import {quat, vec3} from "../core/math"
-import {EaseFn, PMap, easeLinear} from "../core/util"
+import {Interp, Easing} from "../core/interp"
+import {PMap} from "../core/util"
 import {Time, Transform} from "./game"
 
 /** A coroutine that moves a transform over time from its current position to a new one.
   * @param transform the transform to modify.
   * @param position the new position (in local space).
   * @param duration the duration, in seconds, over which to move.
-  * @param [easing=easeLinear] the type of easing to use. */
+  * @param [easing=linear] the type of easing to use. */
 export function* moveTo (
   transform :Transform,
   position :vec3,
   duration :number,
-  ease :EaseFn = easeLinear,
+  ease :Interp = Easing.linear,
 ) {
   yield* animateTo(transform, "localPosition", position, duration, ease)
 }
@@ -21,12 +22,12 @@ export function* moveTo (
   * @param transform the transform to modify.
   * @param rotation the new rotation (in local space).
   * @param duration the duration, in seconds, over which to rotate.
-  * @param [ease=easeLinear] the type of easing to use. */
+  * @param [ease=linear] the type of easing to use. */
 export function* rotateTo (
   transform :Transform,
   rotation :quat,
   duration :number,
-  ease :EaseFn = easeLinear,
+  ease :Interp = Easing.linear,
 ) {
   yield* animateTo(transform, "localRotation", rotation, duration, ease)
 }
@@ -52,12 +53,12 @@ export function* spin (transform :Transform, vel :vec3) {
   * @param transform the transform to modify.
   * @param rotation the new scale (in local space).
   * @param duration the duration, in seconds, over which to scale.
-  * @param [ease=easeLinear] the type of easing to use. */
+  * @param [ease=linear] the type of easing to use. */
 export function* uniformScaleTo (
   transform :Transform,
   scale :number,
   duration :number,
-  ease :EaseFn = easeLinear,
+  ease :Interp = Easing.linear,
 ) {
   yield* scaleTo(transform, vec3.fromValues(scale, scale, scale), duration, ease)
 }
@@ -66,12 +67,12 @@ export function* uniformScaleTo (
   * @param transform the transform to modify.
   * @param rotation the new scale (in local space).
   * @param duration the duration, in seconds, over which to scale.
-  * @param [ease=easeLinear] the type of easing to use. */
+  * @param [ease=linear] the type of easing to use. */
 export function* scaleTo (
   transform :Transform,
   scale :vec3,
   duration :number,
-  ease :EaseFn = easeLinear,
+  ease :Interp = Easing.linear,
 ) {
   yield* animateTo(transform, "localScale", scale, duration, ease)
 }
@@ -81,13 +82,13 @@ export function* scaleTo (
   * @param name the name of the property to modify.
   * @param value the new value of the property.
   * @param duration the duration, in seconds, over which to animate the property.
-  * @param [ease=easeLinear] the type of easing to use in animating. */
+  * @param [ease=linear] the type of easing to use in animating. */
 export function* animateTo (
   object :PMap<any>,
   name :string,
   value :any,
   duration :number,
-  ease :EaseFn = easeLinear,
+  ease :Interp = Easing.linear,
 ) {
   const startValue = copy(object[name])
   const interpolate = getInterpolateFn(value)
