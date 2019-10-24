@@ -508,8 +508,26 @@ export class Root extends Element {
     this.setBounds(rect.set(tmpr, 0, 0, size[0], size[1]))
   }
 
-  sizeToFit (maxX :number = 64000, maxY :number = 32000) {
-    this.computePreferredSize(maxX, maxY, tmpd)
+  /** Sizes this root to its preferred width and height (which is computed using the supplied
+    * `maxWidth` and `maxHeight` hints). */
+  sizeToFit (maxWidth :number = 64000, maxHeight :number = 32000) {
+    this.computePreferredSize(maxWidth, maxHeight, tmpd)
+    this.setSize(tmpd)
+  }
+
+  /** Sizes this root to `width` pixels and its preferred height (which is computed using the
+    * supplied `maxHeight` hint). */
+  sizeToWidth (width :number, maxHeight :number = 32000) {
+    this.computePreferredSize(width, maxHeight, tmpd)
+    tmpd[0] = width
+    this.setSize(tmpd)
+  }
+
+  /** Sizes this root to `height` pixels and its preferred width (which is computed using the
+    * supplied `maxWidth` hint). */
+  sizeToHeight (height :number, maxWidth :number = 64000) {
+    this.computePreferredSize(maxWidth, height, tmpd)
+    tmpd[1] = height
     this.setSize(tmpd)
   }
 
