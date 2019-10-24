@@ -8,11 +8,13 @@ export interface PannerConfig extends ControlConfig {
 
 const transformedPos = vec2.create()
 const transformedRegion = rect.create()
+const tmpsize = vec2.create(), tmpv = vec2.create(), tmpv2 = vec2.create()
 
 /** Base class for containers that transform their child. */
 abstract class TransformedContainer extends Control {
+  protected readonly _offset = Mutable.local(vec2.create(), vec2.equals, vec2.copy)
 
-  get offset () :vec2 { return vec2zero }
+  get offset () { return this._offset ? this._offset.current : vec2zero }
   get scale () :number { return 1 }
 
   applyToContaining (canvas :CanvasRenderingContext2D, pos :vec2, op :(element :Element) => void) {
@@ -84,6 +86,15 @@ abstract class TransformedContainer extends Control {
     return undefined
   }
 
+  protected get maxX () { return this.contents.width * this.scale - this.width }
+  protected get maxY () { return this.contents.height * this.scale - this.height }
+
+  protected _updateOffset (offset :vec2) {
+    offset[0] = clamp(offset[0], 0, Math.max(this.maxX, 0))
+    offset[1] = clamp(offset[1], 0, Math.max(this.maxY, 0))
+    this._offset.update(offset)
+  }
+
   /** Transforms the supplied position into the space of the contents. */
   protected _transformPos (pos :vec2) {
     const {x, y, offset, scale} = this
@@ -103,7 +114,6 @@ abstract class TransformedContainer extends Control {
 
 /** Provides a pannable, zoomable window onto its contents. */
 export class Panner extends TransformedContainer {
-  private readonly _offset = Mutable.local(vec2.create(), vec2.equals)
   private readonly _scale = Mutable.local(1)
   private _laidOut = false
 
@@ -113,17 +123,7 @@ export class Panner extends TransformedContainer {
     this.invalidateOnChange(this._scale)
   }
 
-  get offset () { return this._offset ? this._offset.current : vec2zero }
   get scale () { return this._scale ? this._scale.current : 1 }
-
-  handleWheel (event :WheelEvent, pos :vec2) {
-    const transformedPos = this._transformPos(pos)
-    if (!this.contents.maybeHandleWheel(event, transformedPos)) {
-      // TODO: different delta scales for different devices
-      this.zoom(event.deltaY > 0 ? -1 : 1)
-    }
-    return true
-  }
 
   /** Zooms in or out by the specified delta. */
   zoom (delta :number) {
@@ -141,17 +141,22 @@ export class Panner extends TransformedContainer {
     this._updateScale(Math.min(1, this.width / size[0], this.height / size[1]))
   }
 
+  handleWheel (event :WheelEvent, pos :vec2) {
+    const transformedPos = this._transformPos(pos)
+    if (!this.contents.maybeHandleWheel(event, transformedPos)) {
+      // TODO: different delta scales for different devices
+      this.zoom(event.deltaY > 0 ? -1 : 1)
+    }
+    return true
+  }
+
   protected startScroll (event :MouseEvent|TouchEvent, pos :vec2) :PointerInteraction|undefined {
-    const basePos = vec2.clone(pos)
-    const baseOffset = this._offset.current
+    const basePos = vec2.clone(pos), baseOffset = vec2.clone(this._offset.current)
     const cancel = () => this.clearCursor(this)
     return {
       move: (event, pos) => {
         this.setCursor(this, "all-scroll")
-        this._updateOffset(
-          baseOffset[0] + (basePos[0] - pos[0]),
-          baseOffset[1] + (basePos[1] - pos[1]),
-        )
+        this._updateOffset(vec2.add(tmpv, baseOffset, vec2.subtract(tmpv, basePos, pos)))
       },
       release: cancel,
       cancel,
@@ -159,22 +164,12 @@ export class Panner extends TransformedContainer {
   }
 
   private _updateScale (scale :number) {
-    const beforeX = (this._offset.current[0] + this.width / 2) / this._scale.current
-    const beforeY = (this._offset.current[1] + this.height / 2) / this._scale.current
+    const offset = this._offset, size = this.size(tmpsize) as vec2, oscale = this.scale
+    const ocenter = vec2.scaleAndAdd(tmpv, offset.current, size, 0.5)
     this._scale.update(scale)
-    const afterX = this._offset.current[0] + this.width / 2
-    const afterY = this._offset.current[1] + this.height / 2
-    this._updateOffset(
-      this._offset.current[0] + (beforeX * this._scale.current) - afterX,
-      this._offset.current[1] + (beforeY * this._scale.current) - afterY,
-    )
-  }
-
-  private _updateOffset (ox :number, oy :number) {
-    this._offset.update(vec2.fromValues(
-      clamp(ox, 0, Math.max(this.contents.width * this._scale.current - this.width, 0)),
-      clamp(oy, 0, Math.max(this.contents.height * this._scale.current - this.height, 0)),
-    ))
+    const ncenter = vec2.scaleAndAdd(tmpv2, offset.current, size, 0.5)
+    const nocenter = vec2.scale(tmpv, ocenter, scale/oscale)
+    this._updateOffset(vec2.add(tmpv, offset.current, vec2.subtract(tmpv, nocenter, ncenter)))
   }
 
   protected relayout () {
@@ -193,62 +188,48 @@ export interface ScrollerConfig extends ControlConfig {
 }
 
 export class Scroller extends TransformedContainer {
-  private readonly _offset = Mutable.local(vec2.create())
 
   constructor (ctx :ElementContext, parent :Element, readonly config :ScrollerConfig) {
     super(ctx, parent, config)
     this.invalidateOnChange(this._offset)
   }
 
-  get offset () { return this._offset ? this._offset.current : vec2zero }
-
   /** Scrolls to the specified offset from the top/left-most scroll position. */
   scrollTo (offset :number) {
     const horiz = this.config.horiz
-    this._updateOffset(horiz ? offset : 0, horiz ? 0 : offset)
+    this._updateOffset(vec2.fromValues(horiz ? offset : 0, horiz ? 0 : offset))
   }
 
   /** Scrolls to the top/left-most scroll position. */
   scrollToStart () { this.scrollTo(0) }
 
   /** Scrolls to the bottom/right-most scroll position. */
-  scrollToEnd () { this.scrollTo(this.config.horiz ?
-                                 this.contents.width - this.width :
-                                 this.contents.height - this.height) }
+  scrollToEnd () { this.scrollTo(this.config.horiz ? this.maxX : this.maxY) }
 
   handleWheel (event :WheelEvent, pos :vec2) {
     const transformedPos = this._transformPos(pos)
     if (!this.contents.maybeHandleWheel(event, transformedPos)) {
       const horiz = this.config.orient == "horiz"
       const delta = (this.config.scrollDelta || 10) * (event.deltaY > 0 ? 1 : -1)
-      const dx = horiz ? delta : 0, dy = horiz ? 0 : delta
-      const offset = this._offset.current
-      this._updateOffset(offset[0] + dx, offset[1] + dy)
+      const deltav = vec2.set(tmpv, horiz ? delta : 0, horiz ? 0 : delta)
+      this._updateOffset(vec2.add(tmpv, this._offset.current, deltav))
     }
     return true
   }
 
   protected startScroll (event :MouseEvent|TouchEvent, pos :vec2) :PointerInteraction|undefined {
-    const basePos = vec2.clone(pos)
-    const baseOffset = this._offset.current
+    const basePos = vec2.clone(pos), baseOffset = vec2.clone(this._offset.current)
     const cancel = () => this.clearCursor(this)
     const horiz = this.config.orient == "horiz"
     return {
       move: (event, pos) => {
         this.setCursor(this, "all-scroll")
-        const ox = horiz ? baseOffset[0] + (basePos[0] - pos[0]) : 0
-        const oy = horiz ? 0 : baseOffset[1] + (basePos[1] - pos[1])
-        this._updateOffset(ox, oy)
+        const offset = vec2.add(tmpv, baseOffset, vec2.subtract(tmpv, basePos, pos))
+        offset[horiz ? 1 : 0] = 0
+        this._updateOffset(offset)
       },
       release: cancel,
       cancel,
     }
-  }
-
-  private _updateOffset (ox :number, oy :number) {
-    this._offset.update(vec2.fromValues(
-      clamp(ox, 0, Math.max(this.contents.width - this.width, 0)),
-      clamp(oy, 0, Math.max(this.contents.height - this.height, 0)),
-    ))
   }
 }
