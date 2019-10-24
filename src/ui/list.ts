@@ -75,7 +75,7 @@ const dropBounds = rect.create()
 /** Base class for draggable list elements. */
 export abstract class DraggableElement extends Control {
   private _stroke = this.observe(DefaultPaint)
-  
+
   protected _dragPos? :vec2
   protected _dropStart? :vec2
   protected _dropEnd? :vec2

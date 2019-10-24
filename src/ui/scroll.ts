@@ -292,6 +292,11 @@ export class Scroller extends TransformedContainer {
     return true
   }
 
+  protected computePreferredSize (hintX :number, hintY :number, into :dim2) {
+    const horiz = this.horiz, size = this.contents.preferredSize(hintX, hintY)
+    dim2.set(into, horiz ? hintX : size[1], horiz ? size[0] : hintY)
+  }
+
   protected setAnim (anim :Anim|undefined) {
     const offset = this._offset, idx = this.horiz ? 0 : 1
     this.unanim()
