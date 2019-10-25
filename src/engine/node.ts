@@ -329,6 +329,9 @@ export function registerEngineSubgraphs (registry :SubgraphRegistry) {
     translate: {type: "translate", input: "translation"},
     aboveGroundOutput: {type: "output", name: "aboveGround", input: "aboveGround"},
   }
+  const rootSize = windowSize(window).map(
+    size => dim2.fromValues(Math.round(size[0] * 0.9), Math.round(size[1] * 0.9)),
+  )
   registry.registerSubgraphs(["engine", "object"], {
     doubleClickToInspect: {
       doubleClick: {type: "doubleClick"},
@@ -340,9 +343,8 @@ export function registerEngineSubgraphs (registry :SubgraphRegistry) {
         root: {
           type: "root",
           autoSize: true,
-          hintSize: windowSize(window).map(
-            size => dim2.fromValues(Math.round(size[0] * 0.9), Math.round(size[1] * 0.9)),
-          ),
+          hintSize: rootSize,
+          minSize: rootSize,
           contents: {
             type: "box",
             contents: {type: "graphViewer", editable: Value.constant(true)},

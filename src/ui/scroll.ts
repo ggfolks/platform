@@ -1,6 +1,6 @@
 import {NoopRemover} from "../core/util"
 import {Interp, Easing} from "../core/interp"
-import {clamp, dim2, rect, vec2} from "../core/math"
+import {clamp, rect, vec2} from "../core/math"
 import {Clock} from "../core/clock"
 import {Mutable, Buffer} from "../core/react"
 import {Control, ControlConfig, Element, ElementContext, PointerInteraction} from "./element"
@@ -81,10 +81,6 @@ abstract class TransformedContainer extends Control {
   protected relayout () {
     const size = this.contents.preferredSize(this.width, this.height)
     this.contents.setBounds(rect.fromValues(this.x, this.y, size[0], size[1]))
-  }
-
-  protected computePreferredSize (hintX :number, hintY :number, into :dim2) {
-    dim2.set(into, hintX, hintY)
   }
 
   protected startScroll (event :MouseEvent|TouchEvent, pos :vec2) :PointerInteraction|undefined {
@@ -291,11 +287,6 @@ export class Scroller extends TransformedContainer {
       this._updateOffset(vec2.add(tmpv, this._offset.current, deltav))
     }
     return true
-  }
-
-  protected computePreferredSize (hintX :number, hintY :number, into :dim2) {
-    const horiz = this.horiz, size = this.contents.preferredSize(hintX, hintY)
-    dim2.set(into, horiz ? hintX : size[1], horiz ? size[0] : hintY)
   }
 
   protected setAnim (anim :Anim|undefined) {
