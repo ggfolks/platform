@@ -110,7 +110,7 @@ export type DispatchFn<T> = (value :T) => void
 /** A predicate which tests something about a `value`. */
 export type Pred<T> = (value :T) => boolean
 
-/** A reactive source: an API that abstracts over `Stream`, `Subject` and `Value`. */
+/** A reactive source: an API that abstracts over `Stream`, `Subject`, `Value` and `Buffer`. */
 export abstract class Source<T> {
 
   /** Registers `fn` to be called when `source` contains or emits non-`undefined` values.
@@ -188,6 +188,58 @@ export abstract class Source<T> {
         disp(nvalue, ovalue)
       }
     }), () => current)
+  }
+}
+
+/** A [[Source]] whose current value can be read immediately. Both `Value` and `Buffer` are readable
+  * sources. */
+export abstract class ReadableSource<T> extends Source<T> implements RProp<T> {
+
+  /** The current value of this source. */
+  abstract get current () :T
+
+  /** Returns a source which transforms the values of this source via `fn`. Whenever `this` sourceq
+    * emits a `value`, the returned source will emit `fn(value)`. */
+  abstract map<U> (fn :(v:T) => U) :ReadableSource<U>
+
+  /** Returns a `Subject` that contains this buffer's current value and changes whenever this
+    * buffer's value changes. */
+  toSubject () :Subject<T> {
+    return new Subject((lner, wantBuffer) => {
+      const remover = this.onEmit(lner)
+      if (wantBuffer) lner(this.current)
+      return remover
+    })
+  }
+
+  /** Returns a `Promise` that completes when this value's current value satisfies `pred`. If the
+    * current value satisfies pred, a completed promise will be returned. Otherwise an uncompleted
+    * promise is returned and that promise is completed when this value next changes to a
+    * satisfying value. */
+  toPromise (pred :Pred<T>) :Promise<T> {
+    let current = this.current
+    if (pred(current)) {
+      return Promise.resolve(current)
+    }
+    return new Promise((resolve, reject) => {
+      let remover = this.onEmit(value => {
+        if (pred(value)) {
+          remover()
+          resolve(value)
+        }
+      })
+    })
+  }
+
+  once (fn :ValueFn<T>) :Remover {
+    fn(this.current)
+    return NoopRemover
+  }
+
+  whenOnce (pred :Pred<T>, fn :ValueFn<T>) :Remover {
+    if (!pred(this.current)) return super.whenOnce(pred, fn)
+    fn(this.current)
+    return NoopRemover
   }
 }
 
@@ -447,7 +499,7 @@ let lastValueId = 0
 
 /** A reactive primitive that contains a value, which may subsequently change. The current value may
   * be observed by listening via [[Value.onValue]], or by calling [[Value.current]]. */
-export class Value<T> extends Source<T> implements RProp<T> {
+export class Value<T> extends ReadableSource<T> {
   private _id? :number
 
   /** Creates a constant value which always contains `value`. */
@@ -637,66 +689,21 @@ export class Value<T> extends Source<T> implements RProp<T> {
     return new Stream<T>(this._onChange)
   }
 
-  /** Returns a `Subject` that contains this value's current value and changes values whenever this
-    * value changes. */
-  toSubject () :Subject<T> {
-    const {_current, _onChange} = this
-    return new Subject((lner, wantValue) => {
-      const remover = _onChange(lner)
-      if (wantValue) lner(_current())
-      return remover
-    })
-  }
-
-  /** Returns a `Promise` that completes when this value's current value satisfies `pred`. If the
-    * current value satisfies pred, a completed promise will be returned. Otherwise an uncompleted
-    * promise is returned and that promise is completed when this value next changes to a
-    * satisfying value. */
-  toPromise (pred :Pred<T>) :Promise<T> {
-    let current = this.current
-    if (pred(current)) {
-      return Promise.resolve(current)
-    }
-    const onChange = this._onChange
-    return new Promise((resolve, reject) => {
-      let remover = onChange(value => {
-        if (pred(value)) {
-          remover()
-          resolve(value)
-        }
-      })
-    })
-  }
-
-  once (fn :ValueFn<T>) :Remover {
-    fn(this.current)
-    return NoopRemover
-  }
-
-  whenOnce (pred :Pred<T>, fn :ValueFn<T>) :Remover {
-    if (!pred(this.current)) return super.whenOnce(pred, fn)
-    fn(this.current)
-    return NoopRemover
-  }
-
   toString () { return `Value(${this.current})` }
 }
-
-/** An update function used to update local mutable values. */
-export type Update<T> = (ov :T, nv :T) => T
 
 /** A `Value` which can be mutated by external callers. */
 export class Mutable<T> extends Value<T> implements Prop<T> {
 
   /** Creates a local mutable value, which starts with value `start`.
     * Changes to this value will be determined using `eq` which defaults to `refEquals`. */
-  static local<T> (start :T, eq :Eq<T> = refEquals, update? :Update<T>) :Mutable<T> {
+  static local<T> (start :T, eq :Eq<T> = refEquals) :Mutable<T> {
     const listeners :ValueFn<T>[] = []
     let current = start
     return new Mutable(eq, lner => addListener(listeners, lner), () => current, newValue => {
       const oldValue = current
       if (!eq(oldValue, newValue)) {
-        current = update ? update(current, newValue) : newValue
+        current = newValue
         dispatchChange(listeners, newValue, oldValue)
       }
     })
@@ -771,4 +778,95 @@ export class Mutable<T> extends Value<T> implements Prop<T> {
       if (!eqU(current, previous)) disp(current, previous)
     }), () => project(_current()), (u:U) => _update(inject(_current(), u)))
   }
+}
+
+let lastBufferId = 0
+
+/** A reactive primitive that contains a changing value. It is similar to [[Value]] except that it
+  * is designed for values which are mutated in place. For reactive values which must change every
+  * frame, for example, it may be desirable to use a buffer instead of a value to avoid generating a
+  * lot of garbage. */
+export class Buffer<T> extends ReadableSource<T> implements Prop<T> {
+  private _id? :number
+  private _listeners :ValueFn<T>[] = []
+
+  constructor (public current :T, private readonly updater? :(o :T, n :T) => T) { super() }
+
+  /** A lazily-created unique id for this buffer. */
+  get id () :number {
+    if (!this._id) this._id = ++lastBufferId
+    return this._id
+  }
+
+  /** Registers `fn` to be called with the updated value whenever this buffer changes.
+    * @return a remover thunk (invoke with no args to unregister `fn`). */
+  onEmit (fn :ValueFn<T>) :Remover { return addListener(this._listeners, fn) }
+
+  /** Registers `fn` to be called with the current value and again whenever this buffer's value changes.
+    * @return a remover thunk (invoke with no args to unregister `fn`). */
+  onValue (fn :ValueFn<T>) :Remover {
+    if (fn(this.current) === Remove) return NoopRemover
+    return this.onEmit(fn)
+  }
+
+  /** Updates this buffer to `newValue` and notifies listeners. */
+  update (newValue :T) {
+    const updater = this.updater
+    const updated = this.current = updater ? updater(this.current, newValue) : newValue
+    dispatchValue(this._listeners, updated)
+  }
+
+  /** Updates this buffer's current value with `fn` (which presumably mutates it in place) and then
+    * notifies listeners of the change. */
+  updateVia (fn :(v:T) => void) {
+    fn(this.current)
+    dispatchValue(this._listeners, this.current)
+  }
+
+  /** Notifies listeners that this buffer's value was updated. If the value was mutated in place
+    * this should be called to notify listeners of the change. */
+  updated () {
+    dispatchValue(this._listeners, this.current)
+  }
+
+  /** Creates a source which transforms this buffer via `fn`. The source will emit changes whenever
+    * this buffer changes. Note that no check is made to ensure that the mapped value differs from
+    * the previous mapped value. `Buffer`s do not check equality like [[Value]]s do.
+    * @param fn a referentially transparent transformer function. */
+  map<U> (fn :(v:T) => U) :ReadableSource<U> {
+    let connected = false, latest :U
+    return Value.deriveValue(refEquals, disp => {
+      connected = true
+      latest = fn(this.current)
+      const unlisten = this.onEmit(value => {
+        let current = fn(value)
+        latest = current
+        disp(current, current)
+      })
+      return () => { connected = false ; unlisten() }
+    }, () => connected ? latest : fn(this.current))
+  }
+
+  /** Creates a two way mapping between `this` buffer and some part of it, given a projection and
+    * injection function. Changes to `this` value will be projected out and used to update the
+    * bimapped value, and changes to the bimapped value will be injected back into `this` value
+    * which will then be updated. Equality for the projected value is tested using the supplied
+    * equality function (defaulting to `refEquals`).
+    * @param project a function that projects out from `this` value, for example, one that projects
+    * a single property of an object.
+    * @param inject a function that injects the projected value `u` back into the buffer value `t`.
+    * Because the buffer value can be mutated in place, this is usually a simple assignment.
+    */
+  bimap<U> (project :(t:T) => U, inject :(t:T, u:U) => void, eq :Eq<U> = refEquals) :Mutable<U> {
+    let previous = project(this.current)
+    return new Mutable(eq, disp => this.onEmit(value => {
+      let current = project(value)
+      if (!eq(current, previous)) disp(current, previous)
+    }), () => project(this.current), (u:U) => {
+      inject(this.current, u)
+      this.updated()
+    })
+  }
+
+  toString () { return `Buffer(${this.current})` }
 }

@@ -1,33 +1,46 @@
-import {Emitter, Mutable, Stream, Subject, Value} from "./react"
+import {dataCopy, dataEquals} from "./data"
+import {vec2, vec2one} from "./math"
+import {Buffer, Emitter, Mutable, ReadableSource, Source, Stream, Subject, Value} from "./react"
 
 //
 // Reactive stream tests
 
+function testSource (source :Source<string>, emit :(v :string) => any) {
+  const history :string[] = []
+  const remover = source.onEmit(a => history.push(a))
+  emit("a")
+  expect(history).toEqual(["a"])
+  emit("b")
+  expect(history).toEqual(["a", "b"])
+  emit("c")
+  expect(history).toEqual(["a", "b", "c"])
+  remover()
+  emit("d")
+  expect(history).toEqual(["a", "b", "c"])
+
+  let mapHistory :number[] = []
+  let mapRemover = source.map(a => a.length).onEmit(l => mapHistory.push(l))
+  emit("ant")
+  expect(mapHistory).toEqual([3])
+  emit("bear")
+  expect(mapHistory).toEqual([3, 4])
+  emit("condor")
+  expect(mapHistory).toEqual([3, 4, 6])
+  mapRemover()
+  emit("iguana")
+  expect(mapHistory).toEqual([3, 4, 6])
+
+  let onceCount = 0
+  source.next(c => onceCount++)
+  emit("hello")
+  expect(onceCount).toBe(1)
+  emit("goodbye")
+  expect(onceCount).toBe(1)
+}
+
 test("basic stream", () => {
   function testStream (stream :Stream<string>, emit :(v :string) => any) {
-    const history :string[] = []
-    const remover = stream.onValue(a => history.push(a))
-    emit("a")
-    expect(history).toEqual(["a"])
-    emit("b")
-    expect(history).toEqual(["a", "b"])
-    emit("c")
-    expect(history).toEqual(["a", "b", "c"])
-    remover()
-    emit("d")
-    expect(history).toEqual(["a", "b", "c"])
-
-    let mapHistory :number[] = []
-    let mapRemover = stream.map(a => a.length).onValue(l => mapHistory.push(l))
-    emit("ant")
-    expect(mapHistory).toEqual([3])
-    emit("bear")
-    expect(mapHistory).toEqual([3, 4])
-    emit("condor")
-    expect(mapHistory).toEqual([3, 4, 6])
-    mapRemover()
-    emit("iguana")
-    expect(mapHistory).toEqual([3, 4, 6])
+    testSource(stream, emit)
 
     let filterHistory :string[] = []
     let filterRemover = stream.filter(b => b.length % 2 == 0).onValue(b => filterHistory.push(b))
@@ -42,13 +55,6 @@ test("basic stream", () => {
     filterRemover()
     emit("four")
     expect(filterHistory).toEqual(["five", "nineteen"])
-
-    let onceCount = 0
-    stream.next(c => onceCount++)
-    emit("hello")
-    expect(onceCount).toBe(1)
-    emit("goodbye")
-    expect(onceCount).toBe(1)
   }
 
   const em = new Emitter<string>()
@@ -84,12 +90,7 @@ test("merged stream", () => {
 
 test("basic subject", () => {
   function testSubject (subject :Subject<string>, update :(v :string) => any) {
-    let onceCount = 0
-    subject.next(c => onceCount++)
-    update("hello")
-    expect(onceCount).toBe(1)
-    update("goodbye")
-    expect(onceCount).toBe(1)
+    testSource(subject, update)
 
     const history :string[] = []
     subject.onValue(nv => history.push(nv))
@@ -154,14 +155,55 @@ test("constant once", () => {
 //
 // Reactive value tests
 
+function testReadableSource (source :ReadableSource<string>, update :(v :string) => any) {
+  let mapped = source.map(a => a.length)
+  expect(mapped.current).toEqual(source.current.length)
+  let mapHistory :number[] = []
+  let expMapHistory :number[] = []
+  let mapRemover = mapped.onValue(l => mapHistory.push(l))
+  expMapHistory.push(source.current.length)
+  expect(mapHistory).toEqual(expMapHistory)
+  update("ant")
+  expMapHistory.push(3)
+  expect(mapHistory).toEqual(expMapHistory)
+  expect(mapped.current).toEqual(source.current.length)
+  update("bear")
+  expMapHistory.push(4)
+  expect(mapHistory).toEqual(expMapHistory)
+  update("condor")
+  expMapHistory.push(6)
+  expect(mapHistory).toEqual(expMapHistory)
+  mapRemover()
+  update("iguanae")
+  expect(mapHistory).toEqual(expMapHistory)
+  // make sure mapped values reflect changes to their underlying value even when they have no
+  // listeners
+  expect(mapped.current).toEqual(source.current.length)
+
+  let filterHistory :string[] = []
+  let expFiltHistory :string[] = []
+  const pred = (b :string) => b.length % 2 == 0
+  let filterRemover = source.when(pred, b => filterHistory.push(b))
+  if (pred(source.current)) expFiltHistory.push(source.current)
+  update("one")
+  expect(filterHistory).toEqual(expFiltHistory)
+  update("five")
+  expFiltHistory.push("five")
+  expect(filterHistory).toEqual(expFiltHistory)
+  update("nineteen")
+  expFiltHistory.push("nineteen")
+  expect(filterHistory).toEqual(expFiltHistory)
+  update("seven")
+  expect(filterHistory).toEqual(expFiltHistory)
+  filterRemover()
+  update("four")
+  expect(filterHistory).toEqual(expFiltHistory)
+}
+
 test("basic value", () => {
   function testValue (value :Value<string>, update :(v :string) => any) {
-    let onceCount = 0
-    value.next(c => onceCount++)
-    update("hello")
-    expect(onceCount).toBe(1)
-    update("goodbye")
-    expect(onceCount).toBe(1)
+    testSource(value, update)
+    testReadableSource(value, update)
 
     let prev = value.current
     const history :string[] = []
@@ -183,39 +225,6 @@ test("basic value", () => {
     update("c")
     expect(value.current).toEqual("c")
     expect(history).toEqual(["a", "b", "c"])
-
-    let mapValue = value.map(a => a.length)
-    expect(mapValue.current).toEqual(value.current.length)
-    let mapHistory :number[] = []
-    let mapRemover = mapValue.onValue(l => mapHistory.push(l))
-    expect(mapHistory).toEqual([1])
-    update("ant")
-    expect(mapHistory).toEqual([1, 3])
-    expect(mapValue.current).toEqual(value.current.length)
-    update("bear")
-    expect(mapHistory).toEqual([1, 3, 4])
-    update("condor")
-    expect(mapHistory).toEqual([1, 3, 4, 6])
-    mapRemover()
-    update("iguanae")
-    expect(mapHistory).toEqual([1, 3, 4, 6])
-    // make sure mapped values reflect changes to their underlying value even when they have no
-    // listeners
-    expect(mapValue.current).toEqual(value.current.length)
-
-    let filterHistory :string[] = []
-    let filterRemover = value.when(b => b.length % 2 == 0, b => filterHistory.push(b))
-    update("one")
-    expect(filterHistory).toEqual([])
-    update("five")
-    expect(filterHistory).toEqual(["five"])
-    update("nineteen")
-    expect(filterHistory).toEqual(["five", "nineteen"])
-    update("seven")
-    expect(filterHistory).toEqual(["five", "nineteen"])
-    filterRemover()
-    update("four")
-    expect(filterHistory).toEqual(["five", "nineteen"])
   }
 
   const rm = Mutable.local("")
@@ -223,6 +232,34 @@ test("basic value", () => {
 
   const em = new Emitter<string>()
   testValue(Value.fromStream(em, ""), v => em.emit(v))
+})
+
+test("basic buffer", () => {
+  function testBuffer (value :Buffer<string>, update :(v :string) => any) {
+    testSource(value, update)
+    testReadableSource(value, update)
+  }
+
+  const str = new Buffer("")
+  testBuffer(str, v => str.update(v))
+
+  let updates = 0
+  const buf = new Buffer({foo: "bar", baz: 3})
+  buf.onEmit(v => updates += 1)
+  buf.updateVia(v => v.baz = 25)
+  expect(buf.current).toEqual({foo: "bar", baz: 25})
+  expect(updates).toBe(1)
+  buf.current.foo = "pickle"
+  buf.updated()
+  expect(buf.current).toEqual({foo: "pickle", baz: 25})
+  expect(updates).toBe(2)
+
+  const vbuf = new Buffer(vec2.create(), vec2.copy)
+  vbuf.update(vec2.fromValues(10, 10))
+  expect(vbuf.current).toEqual(vec2.fromValues(10, 10))
+  vbuf.update(vec2one)
+  expect(vbuf.current).toEqual(vec2one)
+  expect(vbuf.current === vec2one).toBe(false)
 })
 
 test("value as promise", () => {
@@ -362,6 +399,50 @@ test("bimapped values", () => {
   const bar = obj.bimap(o => o.bar, (o, bar) => ({...o, bar}))
   const barhist :Array<typeof data.bar> = []
   bar.onValue(b => barhist.push(b))
+
+  const xbarhist = [data.bar]
+  expect(barhist).toEqual(xbarhist)
+
+  const baz = bar.bimap(b => b.baz, (b, baz) => ({...b, baz}))
+  const bazhist :number[] = []
+  baz.onValue(b => bazhist.push(b))
+
+  const xbazhist = [data.bar.baz]
+  expect(bazhist).toEqual(xbazhist)
+
+  baz.update(5)
+  xbazhist.push(5)
+  expect(bazhist).toEqual(xbazhist)
+
+  xobjhist.push({...data, foo: "foozle", bar: {...data.bar, baz: 5}})
+  expect(objhist).toEqual(xobjhist)
+})
+
+test("bimapped buffers", () => {
+  const data = {foo: "foo", bar: {baz: 3, berry: false}}
+  const obj = new Buffer(dataCopy(data))
+  const objhist :Array<typeof data> = []
+  obj.onValue(v => objhist.push(dataCopy(v)))
+
+  const xobjhist = [data]
+  expect(objhist).toEqual(xobjhist)
+
+  const foo = obj.bimap(o => o.foo, (o, foo) => o.foo = foo)
+  const foohist :string[] = []
+  foo.onValue(f => foohist.push(f))
+
+  const xfoohist = [data.foo]
+  expect(foohist).toEqual(xfoohist)
+
+  foo.update("foozle")
+  xfoohist.push("foozle")
+  expect(foohist).toEqual(xfoohist)
+  xobjhist.push({...data, foo: "foozle"})
+  expect(objhist).toEqual(xobjhist)
+
+  const bar = obj.bimap(o => o.bar, (o, bar) => o.bar = bar, dataEquals)
+  const barhist :Array<typeof data.bar> = []
+  bar.onValue(b => barhist.push(dataCopy(b)))
 
   const xbarhist = [data.bar]
   expect(barhist).toEqual(xbarhist)
