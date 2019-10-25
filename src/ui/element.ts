@@ -504,8 +504,12 @@ export class Root extends Element {
     return remover
   }
 
+  /** Sizes this root to `size` and immediately revalidates and rerenders it. */
   setSize (size :dim2) {
-    this.setBounds(rect.set(tmpr, 0, 0, size[0], size[1]))
+    if (size[0] !== this.width || size[1] !== this.height) {
+      this.setBounds(rect.set(tmpr, 0, 0, size[0], size[1]))
+      this._validateAndRender()
+    }
   }
 
   /** Sizes this root to its preferred width and height (which is computed using the supplied
@@ -541,9 +545,7 @@ export class Root extends Element {
       const height = Math.min(hint[1], min[1] > 0 ? Math.max(tmpd[1], min[1]) : tmpd[1])
       this.setBounds(rect.set(tmpr, 0, 0, width, height))
     }
-    const changed = this.validate() || !rect.isEmpty(this._dirtyRegion)
-    if (changed) this.render(this.canvas, this._dirtyRegion)
-    return changed
+    return this._validateAndRender()
   }
 
   findChild (type :string) :Element|undefined {
@@ -649,6 +651,12 @@ export class Root extends Element {
       currentEditNumber++
       break
     }
+  }
+
+  private _validateAndRender () {
+    const changed = this.validate() || !rect.isEmpty(this._dirtyRegion)
+    if (changed) this.render(this.canvas, this._dirtyRegion)
+    return changed
   }
 
   private _updateElementsOver (event :MouseEvent, pos :vec2) {
