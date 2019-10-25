@@ -258,7 +258,7 @@ test("metas", () => {
   expect(rmetas[0]).toEqual({
     type: "map", name: "publicRooms", index: 0, ktype: "uuid", vtype: "record", persist: false})
   expect(rmetas[1]).toEqual({type: "collection", name: "users", index: 1, otype: UserObject})
-  expect(rmetas[3]).toEqual({type: "queue", name: "chatq", index: 3, handler: handleChatReq})
+  expect(rmetas[3]).toEqual({type: "queue", name: "chatq", system: false, index: 3, handler: handleChatReq})
 
   const umetas = getPropMetas(UserObject.prototype)
   expect(umetas[0]).toEqual({
