@@ -113,6 +113,9 @@ export interface GameObject extends Disposable {
   /** The game object's transform component. */
   readonly transform :Transform
 
+  /** The types of the components of the object in sorted order. */
+  readonly componentTypes :Value<string[]>
+
   /** A reactive view of the component map. */
   readonly components :RMap<string, Component>
 
@@ -166,6 +169,9 @@ export interface Component extends Disposable {
 
   /** The component type. */
   readonly type :string
+
+  /** The component's type aliases, under which it is also registered. */
+  readonly aliases :string[]
 
   /** The sort order of the component. */
   order :number

@@ -137,7 +137,7 @@ export class TypeScriptGameEngine implements GameEngine {
   }
 
   _rootRemoved (root :TypeScriptTransform) {
-    const idx = removeChildId(this._getRootIds(root), root)
+    const idx = removeId(this._getRootIds(root), root.gameObject.id)
     if (this.activePage.current === root.gameObject.id) {
       const pages = this._pages.current
       this.activePage.update(pages[idx < pages.length ? idx : idx - 1])
@@ -163,9 +163,9 @@ export class TypeScriptGameEngine implements GameEngine {
   }
 }
 
-function removeChildId (ids :Mutable<string[]>, child :TypeScriptTransform) :number {
-  const idx = ids.current.indexOf(child.gameObject.id)
-  if (idx === -1) throw new Error(`Child "${child.gameObject.id}" missing from list`)
+function removeId (ids :Mutable<string[]>, id :string) :number {
+  const idx = ids.current.indexOf(id)
+  if (idx === -1) throw new Error(`Child "${id}" missing from list`)
   const newIds = ids.current.slice()
   newIds.splice(idx, 1)
   ids.update(newIds)
@@ -177,20 +177,26 @@ function reorderChildId (
   child :TypeScriptTransform,
   gameObjects :RMap<string, GameObject>,
 ) :number {
-  const idx = ids.current.indexOf(child.gameObject.id)
+  return reorderId(
+    ids,
+    child.gameObject.id,
+    id => id === DEFAULT_PAGE ? 0 : gameObjects.require(id).order,
+  )
+}
+
+function reorderId (ids :Mutable<string[]>, id :string, getOrder: (id :string) => number) :number {
+  const idx = ids.current.indexOf(id)
   const newIds = ids.current.slice()
   if (idx !== -1) newIds.splice(idx, 1)
-  const order = child.gameObject.order
+  const order = getOrder(id)
   let ii = 0
   for (; ii < newIds.length; ii++) {
-    const id = newIds[ii]
-    const otherOrder = (id === DEFAULT_PAGE) ? 0 : gameObjects.require(id).order
-    if (order < otherOrder) {
-      newIds.splice(ii, 0, child.gameObject.id)
+    if (order < getOrder(newIds[ii])) {
+      newIds.splice(ii, 0, id)
       break
     }
   }
-  if (ii === newIds.length) newIds.push(child.gameObject.id)
+  if (ii === newIds.length) newIds.push(id)
   ids.update(newIds)
   return idx
 }
@@ -224,6 +230,7 @@ export class TypeScriptGameObject implements GameObject {
   readonly transform :Transform
   readonly page? :Page
 
+  private readonly _componentTypes = Mutable.local<string[]>([])
   private readonly _components = MutableMap.local<string, Component>()
   private readonly _messageHandlers = new Map<string, MessageHandler[]>()
 
@@ -233,6 +240,7 @@ export class TypeScriptGameObject implements GameObject {
   get order () :number { return this.orderValue.current }
   set order (order :number) { this.orderValue.update(order) }
 
+  get componentTypes () :Value<string[]> { return this._componentTypes }
   get components () :RMap<string, Component> { return this._components }
 
   constructor (
@@ -241,7 +249,11 @@ export class TypeScriptGameObject implements GameObject {
     config :GameObjectConfig,
   ) {
     this.id = name
-    for (let ii = 2; gameEngine._gameObjects.has(this.id); ii++) this.id = name + ii
+    for (
+      let ii = 2;
+      gameEngine._gameObjects.has(this.id) || this.id === DEFAULT_PAGE;
+      ii++
+    ) this.id = name + ii
     gameEngine._gameObjects.set(this.id, this)
     this.nameValue = Mutable.local(name)
     this.transform = this.addComponent("transform", {}, false)
@@ -338,17 +350,23 @@ export class TypeScriptGameObject implements GameObject {
     }
   }
 
-  _setComponent (type :string, component :Component) {
-    // transform is set in constructor
-    if (type !== "transform") {
-      Object.defineProperty(this, type, {configurable: true, enumerable: true, value: component})
+  _componentReordered (component :Component) {
+    for (const alias of component.aliases.concat([component.type])) {
+      this._components.set(alias, component)
+      if (alias !== "transform") {
+        // transform is set in constructor
+        Object.defineProperty(this, alias, {configurable: true, enumerable: true, value: component})
+      }
     }
-    this._components.set(type, component)
+    reorderId(this._componentTypes, component.type, type => this._components.require(type).order)
   }
 
-  _deleteComponent (type :string) {
-    this._components.delete(type)
-    delete this[type]
+  _componentRemoved (component :Component) {
+    removeId(this._componentTypes, component.type)
+    for (const alias of component.aliases.concat([component.type])) {
+      this._components.delete(alias)
+      delete this[alias]
+    }
   }
 }
 
@@ -369,13 +387,13 @@ function applyConfig (target :PMap<any>, config :PMap<any>) {
 
 export class TypeScriptComponent implements Component {
   readonly aliases :string[]
+  readonly orderValue = Mutable.local(0)
 
   protected readonly _disposer = new Disposer()
   private readonly _coroutines :Coroutine[] = []
-  private _order = 0
 
-  get order () :number { return this._order }
-  set order (order :number) { this._order = order }
+  get order () :number { return this.orderValue.current }
+  set order (order :number) { this.orderValue.update(order) }
 
   get transform () :Transform { return this.gameObject.transform }
 
@@ -384,9 +402,8 @@ export class TypeScriptComponent implements Component {
     readonly type :string,
     ...aliases :string[]
   ) {
-    gameObject._setComponent(type, this)
     this.aliases = aliases
-    for (const alias of aliases) gameObject._setComponent(alias, this)
+    this._disposer.add(this.orderValue.onValue(() => gameObject._componentReordered(this)))
     const updatable = this as unknown as Updatable
     if (updatable.update) gameObject.gameEngine.updatables.add(updatable)
   }
@@ -427,8 +444,7 @@ export class TypeScriptComponent implements Component {
 
   dispose () {
     this._disposer.dispose()
-    this.gameObject._deleteComponent(this.type)
-    for (const alias of this.aliases) this.gameObject._deleteComponent(alias)
+    this.gameObject._componentRemoved(this)
     for (const coroutine of this._coroutines) coroutine.dispose()
     const updatable = this as unknown as Updatable
     if (updatable.update) this.gameObject.gameEngine.updatables.delete(updatable)
@@ -705,7 +721,7 @@ class TypeScriptTransform extends TypeScriptComponent implements Transform {
 
   _childRemoved (child :TypeScriptTransform) {
     this._children.splice(this._children.indexOf(child), 1)
-    removeChildId(this._childIds, child)
+    removeId(this._childIds, child.gameObject.id)
   }
 
   _childReordered (child :TypeScriptTransform) {
