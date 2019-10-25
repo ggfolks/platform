@@ -2,7 +2,7 @@ import {NoopRemover} from "../core/util"
 import {Interp, Easing} from "../core/interp"
 import {clamp, dim2, rect, vec2, vec2zero} from "../core/math"
 import {Clock} from "../core/clock"
-import {Mutable} from "../core/react"
+import {Mutable, Buffer} from "../core/react"
 import {Control, ControlConfig, Element, ElementContext, PointerInteraction} from "./element"
 
 export interface PannerConfig extends ControlConfig {
@@ -15,7 +15,7 @@ const tmpsize = vec2.create(), tmpv = vec2.create(), tmpv2 = vec2.create()
 
 /** Base class for containers that transform their child. */
 abstract class TransformedContainer extends Control {
-  protected readonly _offset = Mutable.local(vec2.create(), vec2.equals, vec2.copy)
+  protected readonly _offset = new Buffer(vec2.create(), vec2.copy)
 
   get offset () { return this._offset ? this._offset.current : vec2zero }
   get scale () :number { return 1 }
