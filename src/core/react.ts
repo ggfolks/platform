@@ -202,20 +202,20 @@ export abstract class ReadableSource<T> extends Source<T> implements RProp<T> {
     * emits a `value`, the returned source will emit `fn(value)`. */
   abstract map<U> (fn :(v:T) => U) :ReadableSource<U>
 
-  /** Returns a `Subject` that contains this buffer's current value and changes whenever this
-    * buffer's value changes. */
+  /** Returns a `Subject` that contains this source's current value and changes whenever this
+    * source's value changes. */
   toSubject () :Subject<T> {
-    return new Subject((lner, wantBuffer) => {
+    return new Subject((lner, wantValue) => {
       const remover = this.onEmit(lner)
-      if (wantBuffer) lner(this.current)
+      if (wantValue) lner(this.current)
       return remover
     })
   }
 
-  /** Returns a `Promise` that completes when this value's current value satisfies `pred`. If the
+  /** Returns a `Promise` that completes when this source's current value satisfies `pred`. If the
     * current value satisfies pred, a completed promise will be returned. Otherwise an uncompleted
-    * promise is returned and that promise is completed when this value next changes to a
-    * satisfying value. */
+    * promise is returned and that promise is completed when this value next changes to a satisfying
+    * value. */
   toPromise (pred :Pred<T>) :Promise<T> {
     let current = this.current
     if (pred(current)) {
