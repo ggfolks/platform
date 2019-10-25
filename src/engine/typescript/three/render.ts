@@ -427,7 +427,7 @@ class ThreeMeshRenderer extends ThreeObjectComponent implements MeshRenderer {
       : this._materials.map(mat => mat.object)
   }
 }
-registerComponentType("meshRenderer", ThreeMeshRenderer)
+registerComponentType(["render"], "meshRenderer", ThreeMeshRenderer)
 
 const tmpVector2 = new Vector2()
 const tmpc = vec2.create()
@@ -497,7 +497,7 @@ class ThreeCamera extends ThreeObjectComponent implements Camera {
     this.renderEngine.cameras.splice(this.renderEngine.cameras.indexOf(this), 1)
   }
 }
-registerComponentType("camera", ThreeCamera)
+registerComponentType(["render"], "camera", ThreeCamera)
 
 class ThreeLight extends ThreeObjectComponent implements Light {
   private _lightType :LightType = "ambient"
@@ -544,7 +544,7 @@ class ThreeLight extends ThreeObjectComponent implements Light {
     this._lightObject!.color.fromArray(this._color, 1)
   }
 }
-registerComponentType("light", ThreeLight)
+registerComponentType(["render"], "light", ThreeLight)
 
 class ThreeModel extends ThreeObjectComponent implements Model {
   private _url? :string
@@ -577,7 +577,7 @@ class ThreeModel extends ThreeObjectComponent implements Model {
     if (object) updateChildren(object)
   }
 }
-registerComponentType("model", ThreeModel)
+registerComponentType(["render"], "model", ThreeModel)
 
 class ThreeAnimation extends TypeScriptComponent implements Animation {
   playAutomatically = true
@@ -667,7 +667,7 @@ class ThreeAnimation extends TypeScriptComponent implements Animation {
     }
   }
 }
-registerComponentType("animation", ThreeAnimation)
+registerComponentType(["render"], "animation", ThreeAnimation)
 
 function updateChildren (object :Object3D) {
   for (const child of object.children) child.updateMatrixWorld(true)

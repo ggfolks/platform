@@ -7,7 +7,7 @@ import {MutableMap, RMap} from "../../core/rcollect"
 import {Disposer, NoopRemover, PMap, getValue} from "../../core/util"
 import {windowSize} from "../../scene2/gl"
 import {Graph as GraphObject, GraphConfig} from "../../graph/graph"
-import {NodeConfig, NodeTypeRegistry} from "../../graph/node"
+import {CategoryNode, NodeConfig, NodeTypeRegistry} from "../../graph/node"
 import {registerLogicNodes} from "../../graph/logic"
 import {registerMathNodes} from "../../graph/math"
 import {createQuatFn, createVec3Fn, registerMatrixNodes} from "../../graph/matrix"
@@ -29,6 +29,8 @@ import {registerEngineNodes, registerEngineSubgraphs} from "../node"
 
 interface Updatable { update (clock :Clock) :void }
 interface Wakeable { awake () :void }
+
+const componentTypeRoot = new CategoryNode("")
 
 /** An implementation of the GameEngine interface in TypeScript. */
 export class TypeScriptGameEngine implements GameEngine {
@@ -57,6 +59,8 @@ export class TypeScriptGameEngine implements GameEngine {
     if (!this._physicsEngine) throw new Error("Missing physics engine")
     return this._physicsEngine
   }
+
+  get componentTypeRoot () :CategoryNode { return componentTypeRoot }
 
   get pages () :Value<string[]> { return this._pages }
 
@@ -199,10 +203,16 @@ export interface TypeScriptComponentConstructor {
 const componentConstructors = new Map<string, TypeScriptComponentConstructor>()
 
 /** Registers a component type's constructor with the TypeScript engine.
+  * @param categories the category path under which to list the component, if any.
   * @param type the component type name.
   * @param constructor the component constructor. */
-export function registerComponentType (type :string, constructor :TypeScriptComponentConstructor) {
+export function registerComponentType (
+  categories: string[]|undefined,
+  type :string,
+  constructor :TypeScriptComponentConstructor,
+) {
   componentConstructors.set(type, constructor)
+  if (categories) componentTypeRoot.getCategoryNode(categories).addLeafNode(type)
 }
 
 type MessageHandler = (...args :any[]) => void
@@ -772,7 +782,7 @@ class TypeScriptTransform extends TypeScriptComponent implements Transform {
     }
   }
 }
-registerComponentType("transform", TypeScriptTransform)
+registerComponentType(undefined, "transform", TypeScriptTransform)
 
 class TypeScriptPage extends TypeScriptComponent implements Page {
 
@@ -782,7 +792,7 @@ class TypeScriptPage extends TypeScriptComponent implements Page {
     else if (this.active) this.gameObject.gameEngine.activePage.update(DEFAULT_PAGE)
   }
 }
-registerComponentType("page", TypeScriptPage)
+registerComponentType(undefined, "page", TypeScriptPage)
 
 export class TypeScriptMeshFilter extends TypeScriptComponent implements MeshFilter {
   meshValue = Mutable.local<TypeScriptMesh|undefined>(undefined)
@@ -790,7 +800,7 @@ export class TypeScriptMeshFilter extends TypeScriptComponent implements MeshFil
   get mesh () :Mesh|undefined { return this.meshValue.current }
   set mesh (mesh :Mesh|undefined) { this.meshValue.update(mesh as TypeScriptMesh) }
 }
-registerComponentType("meshFilter", TypeScriptMeshFilter)
+registerComponentType(["engine"], "meshFilter", TypeScriptMeshFilter)
 
 export class TypeScriptMesh implements Mesh {
   dispose () {}
@@ -840,4 +850,4 @@ export class TypeScriptGraph extends TypeScriptComponent implements Graph {
     this._graph.update(clock)
   }
 }
-registerComponentType("graph", TypeScriptGraph)
+registerComponentType(["engine"], "graph", TypeScriptGraph)

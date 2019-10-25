@@ -6,6 +6,7 @@ import {Disposable, PMap} from "../core/util"
 import {InputNodeContext} from "../input/node"
 import {UINodeContext} from "../ui/node"
 import {GraphConfig} from "../graph/graph"
+import {CategoryNode} from "../graph/node"
 import {setEnumMeta} from "../graph/meta"
 import {PhysicsEngine} from "./physics"
 import {RenderEngine} from "./render"
@@ -47,6 +48,9 @@ export interface GameEngine extends Disposable {
 
   /** The active physics engine. */
   readonly physicsEngine :PhysicsEngine
+
+  /** The root of the component type tree. */
+  readonly componentTypeRoot :CategoryNode
 
   /** The keys of the pages in sorted order. */
   readonly pages :Value<string[]>

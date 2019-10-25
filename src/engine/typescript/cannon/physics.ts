@@ -175,4 +175,4 @@ class CannonRigidBody extends TypeScriptComponent implements RigidBody {
     this._body.updateMassProperties()
   }
 }
-registerComponentType("rigidBody", CannonRigidBody)
+registerComponentType(["physics"], "rigidBody", CannonRigidBody)

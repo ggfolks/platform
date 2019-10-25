@@ -11,4 +11,4 @@ class TypeScriptAnimationController extends TypeScriptComponent implements Anima
 
   get state () :Value<string> { return this._state }
 }
-registerComponentType("animationController", TypeScriptAnimationController)
+registerComponentType(["animation"], "animationController", TypeScriptAnimationController)
