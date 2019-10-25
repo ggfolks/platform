@@ -1,6 +1,6 @@
 import {NoopRemover} from "../core/util"
 import {Interp, Easing} from "../core/interp"
-import {clamp, dim2, rect, vec2, vec2zero} from "../core/math"
+import {clamp, dim2, rect, vec2} from "../core/math"
 import {Clock} from "../core/clock"
 import {Mutable, Buffer} from "../core/react"
 import {Control, ControlConfig, Element, ElementContext, PointerInteraction} from "./element"
@@ -17,7 +17,7 @@ const tmpsize = vec2.create(), tmpv = vec2.create(), tmpv2 = vec2.create()
 abstract class TransformedContainer extends Control {
   protected readonly _offset = new Buffer(vec2.create(), vec2.copy)
 
-  get offset () { return this._offset ? this._offset.current : vec2zero }
+  get offset () { return this._offset.current }
   get scale () :number { return 1 }
 
   applyToContaining (canvas :CanvasRenderingContext2D, pos :vec2, op :(element :Element) => void) {
@@ -30,6 +30,8 @@ abstract class TransformedContainer extends Control {
   }
 
   dirty (region :rect = this.expandBounds(this._bounds), fromChild :boolean = false) {
+    // we might be called from our super constructor, at which time _offset is not yet initialized
+    if (this._offset === undefined) return
     if (!fromChild) {
       super.dirty(region, false)
       return
