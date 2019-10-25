@@ -505,18 +505,24 @@ export class Root extends Element {
   }
 
   /** Sizes this root to `size` and immediately revalidates and rerenders it. */
-  setSize (size :dim2) {
+  setSize (size :dim2, rerender = true) {
     if (size[0] !== this.width || size[1] !== this.height) {
       this.setBounds(rect.set(tmpr, 0, 0, size[0], size[1]))
-      this._validateAndRender()
+      if (rerender) this._validateAndRender()
     }
   }
 
-  /** Sizes this root to its preferred width and height (which is computed using the supplied
-    * `maxWidth` and `maxHeight` hints). */
-  sizeToFit (maxWidth :number = 64000, maxHeight :number = 32000) {
-    this.computePreferredSize(maxWidth, maxHeight, tmpd)
-    this.setSize(tmpd)
+  /** Sizes this root to its preferred width and height. If either of `maxWidth` or `maxHeight` are
+    * supplied, they will override the `hintSize` configuration of the root. The root's `minSize`
+    * configuration will also be applied. */
+  sizeToFit (maxWidth? :number, maxHeight? :number, rerender = true) {
+    const hint = this._hintSize.current, min = this._minSize.current
+    const hintX = maxWidth || hint[0], hintY = maxHeight || hint[1]
+    this.computePreferredSize(hintX, hintY, tmpd)
+    // clamp the root bounds to be no smaller than min, and no bigger than hint
+    const width = Math.min(hintX, min[0] > 0 ? Math.max(tmpd[0], min[0]) : tmpd[0])
+    const height = Math.min(hintY, min[1] > 0 ? Math.max(tmpd[1], min[1]) : tmpd[1])
+    this.setSize(dim2.set(tmpd, width, height), rerender)
   }
 
   /** Sizes this root to `width` pixels and its preferred height (which is computed using the
@@ -537,14 +543,7 @@ export class Root extends Element {
 
   update (clock :Clock) :boolean {
     this._clock.emit(clock)
-    if (!this.valid.current && this.config.autoSize) {
-      const hint = this._hintSize.current, min = this._minSize.current
-      this.computePreferredSize(hint[0], hint[1], tmpd)
-      // clamp the root bounds to be no smaller than min, and no bigger than hint
-      const width = Math.min(hint[0], min[0] > 0 ? Math.max(tmpd[0], min[0]) : tmpd[0])
-      const height = Math.min(hint[1], min[1] > 0 ? Math.max(tmpd[1], min[1]) : tmpd[1])
-      this.setBounds(rect.set(tmpr, 0, 0, width, height))
-    }
+    if (!this.valid.current && this.config.autoSize) this.sizeToFit(undefined, undefined, false)
     return this._validateAndRender()
   }
 
