@@ -257,7 +257,15 @@ export class TypeScriptGameObject implements GameObject {
     gameEngine._gameObjects.set(this.id, this)
     this.nameValue = Mutable.local(name)
     this.transform = this.addComponent("transform", {}, false)
-    this.addComponents(config, false)
+    for (const key in config) {
+      const value = config[key]
+      if (key === "transform") {
+        applyConfig(this.transform, value)
+        continue
+      }
+      if (typeof value === "object") this.addComponent(key, value, false)
+      else this[key] = value
+    }
     this.sendMessage("awake")
   }
 
@@ -287,7 +295,10 @@ export class TypeScriptGameObject implements GameObject {
   }
 
   getComponent<T extends Component> (type :string|ComponentConstructor<T>) :T|undefined {
-    if (typeof type === "string") return this[type] as T
+    if (typeof type === "string") {
+      const value = this[type]
+      return value instanceof TypeScriptComponent ? value as unknown as T : undefined
+    }
     for (const key in this) {
       if (this[key] instanceof type) return this[key] as unknown as T
     }
@@ -510,6 +521,7 @@ class TypeScriptTransform extends TypeScriptComponent implements Transform {
   readonly worldToLocalMatrix :mat4
 
   private _parent? :TypeScriptTransform
+  private _addedToRoot = false
   private readonly _children :TypeScriptTransform[] = []
   private readonly _childIds = Mutable.local<string[]>([])
   private readonly _localPosition :vec3
@@ -599,12 +611,22 @@ class TypeScriptTransform extends TypeScriptComponent implements Transform {
   get parent () :Transform|undefined { return this._parent }
   set parent (newParent :Transform|undefined) { this.setParent(newParent) }
 
+  get parentId () :string|undefined { return this._parent && this._parent.gameObject.id }
+  set parentId (id :string|undefined) {
+    this.parent = (id === undefined)
+      ? undefined
+      : this.gameObject.gameEngine.gameObjects.require(id).transform
+  }
+
   setParent (parent :Transform|undefined, worldPositionStays = true) :void {
     if (this._parent === parent) return
     this._maybeRemoveFromParent()
     this._parent = parent as TypeScriptTransform|undefined
     if (this._parent) this._parent._childReordered(this)
-    else this.gameObject.gameEngine._rootReordered(this)
+    else {
+      this.gameObject.gameEngine._rootReordered(this)
+      this._addedToRoot = true
+    }
     this._invalidate(worldPositionStays ? LOCAL_INVALID : WORLD_INVALID)
   }
 
@@ -708,7 +730,10 @@ class TypeScriptTransform extends TypeScriptComponent implements Transform {
   awake () {
     this._disposer.add(this.gameObject.orderValue.onValue(() => {
       if (this._parent) this._parent._childReordered(this)
-      else this.gameObject.gameEngine._rootReordered(this)
+      else {
+        this.gameObject.gameEngine._rootReordered(this)
+        this._addedToRoot = true
+      }
     }))
   }
 
@@ -720,7 +745,10 @@ class TypeScriptTransform extends TypeScriptComponent implements Transform {
 
   private _maybeRemoveFromParent () {
     if (this._parent) this._parent._childRemoved(this)
-    else this.gameObject.gameEngine._rootRemoved(this)
+    else if (this._addedToRoot) {
+      this.gameObject.gameEngine._rootRemoved(this)
+      this._addedToRoot = false
+    }
   }
 
   _childRemoved (child :TypeScriptTransform) {

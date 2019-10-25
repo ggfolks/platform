@@ -260,6 +260,9 @@ export interface Transform extends Component {
   /** The transform's parent, if any. Setting the parent does not change the world position. */
   parent? :Transform
 
+  /** The parent id, if any (used for configuration). */
+  parentId? :string
+
   /** Sets the transform's parent.
     * @param parent the new parent, if any.
     * @param [worldPositionStays=true] whether or not to retain the world position. */
