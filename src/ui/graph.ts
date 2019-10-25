@@ -6,10 +6,10 @@ import {PMap, Remover, getValue} from "../core/util"
 import {GraphConfig, getImplicitNodeId} from "../graph/graph"
 import {InputEdge} from "../graph/node"
 import {Box} from "./box"
+import {createDropdownItemConfig} from "./dropdown"
 import {Element, ElementConfig, ElementContext, PointerInteraction, Observer} from "./element"
 import {AbsConstraints, AbsGroup, AxisConfig, VGroup, OffAxisPolicy} from "./group"
 import {VList} from "./list"
-import {createMenuItemConfig} from "./menu"
 import {Action, Model, ModelProvider, Spec, dataProvider} from "./model"
 import {InputValue, NodeCopier, NodeCreator, NodeEdit} from "./node"
 import {Panner} from "./scroll"
@@ -72,7 +72,7 @@ export class GraphViewer extends VGroup {
                   contents: {type: "label", text: "name"},
                 },
                 // max category depth of two for the moment
-                element: createMenuItemConfig(2),
+                element: createDropdownItemConfig(2, "menuItem"),
                 keys: "keys",
                 data: "data",
                 shortcutKeys: "shortcutKeys",

@@ -14,8 +14,12 @@ export interface DropdownStyle {
   minWidth? :number
 }
 
+/** The available drop directions. */
+export type DropDirection = "down" | "right" | "left"
+
 /** Base configuration for dropdowns, menus, menu items. */
 export interface AbstractDropdownConfig extends ControlConfig {
+  dropLeft? :boolean
   element? :ElementConfig
   keys? :Spec<Source<ModelKey[]>>
   data? :Spec<ModelProvider>
@@ -118,20 +122,19 @@ export abstract class AbstractDropdown extends AbstractButton {
       const style = this.getStyle(this.config.style, "normal")
       const minWidth = getValue(style.minWidth, 100)
       dim2.copy(preferredSize, this._list.preferredSize(minWidth, -1))
+      const width = Math.max(preferredSize[0], minWidth)
       let x = this.x, y = this.y
-      if (this._dropRight) x += this.width + 1
-      else y += this.height + 1
-      this._list.setBounds(rect.set(
-        listBounds,
-        x,
-        y,
-        Math.max(preferredSize[0], minWidth),
-        preferredSize[1],
-      ))
+      if (this._dropDirection === "right") x += this.width + 1
+      else if (this._dropDirection === "left") x -= width + 1
+      else {
+        if (this.config.dropLeft) x += this.width - width
+        y += this.height + 1
+      }
+      this._list.setBounds(rect.set(listBounds, x, y, width, preferredSize[1]))
     }
   }
 
-  protected get _dropRight () { return false }
+  protected get _dropDirection () :DropDirection { return "down" }
 
   protected revalidate () {
     super.revalidate()
@@ -215,7 +218,9 @@ export class AbstractDropdownItem extends AbstractDropdown {
     return this._separator && this._separator.current ? "separator" : super.computeState
   }
 
-  protected get _dropRight () { return true }
+  protected get _dropDirection () :DropDirection {
+    return this.config.dropLeft ? "left" : "right"
+  }
 
   protected computePreferredSize (hintX :number, hintY :number, into :dim2) {
     if (this._separator.current) dim2.set(into, hintX, 1)
@@ -245,4 +250,60 @@ export class DropdownItem extends AbstractDropdownItem {
   }
 
   get styleScope () { return DropdownItemStyleScope }
+}
+
+/** Creates and returns a generic dropdown item config with support for submenus and separators.
+  * @param maxDepth the maximum submenu depth.
+  * @param [type="dropdownItem"] the item type ("dropdownItem" or "menuItem").
+  * @param [dropLeft=false] if true, drop left rather than right. */
+export function createDropdownItemConfig (
+  maxDepth :number,
+  type = "dropdownItem",
+  dropLeft = false,
+) :AbstractDropdownItemConfig {
+  let element :AbstractDropdownItemConfig = {
+    type,
+    dropLeft,
+    contents: {
+      type: "box",
+      contents: {type: "label", text: "name"},
+      style: {halign: "left"},
+    },
+    action: "action",
+    style: {},
+  }
+  for (; maxDepth > 0; maxDepth--) {
+    element = {
+      type,
+      dropLeft,
+      enabled: "enabled",
+      shortcut: "shortcut",
+      contents: {
+        type: "box",
+        contents: {
+          type: "row",
+          offPolicy: "stretch",
+          contents: dropLeft ? [
+            {type: "shortcut", command: "shortcut"},
+            {type: "label", text: Value.constant("◂"), visible: "submenu"},
+            {type: "spacer", width: 15, constraints: {stretch: true}},
+            {type: "label", text: "name"},
+          ] : [
+            {type: "label", text: "name"},
+            {type: "spacer", width: 15, constraints: {stretch: true}},
+            {type: "label", text: Value.constant("▸"), visible: "submenu"},
+            {type: "shortcut", command: "shortcut"},
+          ],
+        },
+        style: {halign: "stretch"},
+      },
+      element,
+      keys: "keys",
+      data: "data",
+      action: "action",
+      separator: "separator",
+      style: {},
+    }
+  }
+  return element
 }
