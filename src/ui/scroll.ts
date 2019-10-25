@@ -210,7 +210,7 @@ class TweenAnim extends Anim {
   }
 }
 
-const InertialFriction = 1000
+const InertialFriction = 2000
 const MinInertialVel = 50
 
 class InertialAnim extends Anim {
