@@ -49,7 +49,7 @@ test("entity id reuse", () => {
 test("flat value component", () => {
   const DefaultName = "default"
   const name = new DenseValueComponent<string>("name", DefaultName)
-  const age = new DenseValueComponent<number|undefined>("age", 0)
+  const age = new SparseValueComponent<number|undefined>("age", undefined)
   const domain = new Domain({}, {name, age})
 
   const id0 = domain.add({components: {name: {}}})
@@ -65,7 +65,7 @@ test("flat value component", () => {
   const id2 = domain.add({components: {age: {initial: 1}}})
   expect(age.read(id2)).toEqual(1)
 
-  const id3 = domain.add({components: {age: {initial: undefined}}})
+  const id3 = domain.add({components: {age: {}}})
   expect(age.read(id3)).toBe(undefined)
 })
 
