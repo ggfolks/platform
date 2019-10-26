@@ -1,5 +1,4 @@
 import {Disposable, Remover} from "../core/util"
-import {refEquals} from "../core/data"
 import {dim2, vec2} from "../core/math"
 import {Scale} from "../core/ui"
 import {Value, Subject} from "../core/react"
