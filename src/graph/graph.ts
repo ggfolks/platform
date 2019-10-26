@@ -18,9 +18,14 @@ export function getImplicitNodeId (value :any) {
     : getConstantNodeId(value)
 }
 
+const valueIds = new WeakMap<Value<any>, string>()
+let nextValueId = 1
+
 /** Returns the node id used for a reactive value. */
-function getValueNodeId (value :Value<any>) {
-  return `$${value.id}`
+function getValueNodeId (value :Value<any>) :string {
+  let id = valueIds.get(value)
+  if (id === undefined) valueIds.set(value, id = `$${nextValueId++}`)
+  return id
 }
 
 let lastConfigId = 0
