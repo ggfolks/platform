@@ -417,7 +417,7 @@ test("subscribe-post", done => {
     }
 
     joined (id :UUID|undefined) {
-      if (DebugLog) log.debug("Client joined room", "cid", this.client.auth.id, "rid", id)
+      if (DebugLog) log.debug("Client joined room", "cid", this.client.auth.current.id, "rid", id)
       if (this.room) this.room[1]()
       if (id) {
         this.room = this.store.resolve(["rooms", id], RoomObject)
