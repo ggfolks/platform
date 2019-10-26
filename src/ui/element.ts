@@ -481,11 +481,13 @@ export class Root extends Element {
     else this.cursor.update("auto")
   }
 
-  /** Informs the root of the position at which it is displayed on the screen. This value is used to
-    * interpret mouse and touch events. */
+  /** Updates the position at which the root is rendered on the screen.
+    * This value is used to interpret mouse and touch events. */
   setOrigin (pos :vec2) {
-    vec2.copy(this._origin, pos)
-    this.events.emit("moved")
+    if (!vec2.equals(this._origin, pos)) {
+      vec2.copy(this._origin, pos)
+      this.events.emit("moved")
+    }
   }
 
   /** Binds the origin of this root by matching a point of this root (specified by `rootH` &
@@ -500,9 +502,7 @@ export class Root extends Element {
     const remover = Value.join2(screen, rsize).onValue(([ss, rs]) => {
       const sh = pos(screenH, 0, ss[0]), sv = pos(screenV, 0, ss[1])
       const rh = pos(rootH, 0, rs[0]), rv = pos(rootV, 0, rs[1])
-      this._origin[0] = Math.round(sh-rh)
-      this._origin[1] = Math.round(sv-rv)
-      this.events.emit("moved")
+      this.setOrigin(vec2.set(tmpv, Math.round(sh-rh), Math.round(sv-rv)))
     })
     this.disposer.add(remover)
     return remover
