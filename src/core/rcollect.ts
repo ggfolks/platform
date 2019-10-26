@@ -38,6 +38,9 @@ export abstract class RList<E> extends Source<ReadonlyList<E>> implements Readon
   forEach (fn :(e:E) => void) { this.elems.forEach(fn) }
   [Symbol.iterator] () :IterableIterator<E> { return this.elems.values() }
 
+  /** Returns the index of `elem` in this list or -1 if it is not in the list. */
+  indexOf (elem :E) :number { return this.elems.indexOf(elem) }
+
   /** Returns a copy of a slice of this list as a plain array.
     * @param start the start index of the slice, defaults to `0`.
     * @param end the end index of the slice (exclusive), defaults to all elements after `start`. */
