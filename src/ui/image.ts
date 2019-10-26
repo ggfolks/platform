@@ -19,8 +19,8 @@ export class Image extends Element {
 
   constructor (ctx :ElementContext, parent :Element, readonly config :ImageConfig) {
     super(ctx, parent, config)
-    const text = ctx.model.resolve(config.image)
-    this.image.observe(text.toSubject().switchMap(path => ctx.style.image.resolve(path)))
+    const url = ctx.model.resolve(config.image)
+    this.image.observe(url.toSubject().switchMap(path => ctx.style.image.resolve(path)))
   }
 
   dispose () {
