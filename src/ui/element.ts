@@ -880,13 +880,13 @@ export class Host implements Disposable {
   private readonly _roots = MutableList.local<Root>()
 
   constructor (readonly elem :HTMLElement) {
-    this.disposer.add(mouseEvents(elem, "mousedown", "mousemove", "mouseup", "dblclick").
+    this.disposer.add(mouseEvents("mousedown", "mousemove", "mouseup", "dblclick").
                       onEmit(ev => this.handleMouseEvent(ev)))
-    this.disposer.add(wheelEvents(elem).onEmit(ev => this.handleWheelEvent(ev)))
-    this.disposer.add(touchEvents(elem, "touchstart", "touchmove", "touchcancel", "touchend").
+    this.disposer.add(wheelEvents.onEmit(ev => this.handleWheelEvent(ev)))
+    this.disposer.add(touchEvents("touchstart", "touchmove", "touchcancel", "touchend").
                       onEmit(ev => this.handleTouchEvent(ev)))
     this.disposer.add(keyEvents("keydown", "keyup").onEmit(ev => this.handleKeyEvent(ev)))
-    this.disposer.add(pointerEvents(elem, "pointerdown", "pointerup").onEmit(ev => {
+    this.disposer.add(pointerEvents("pointerdown", "pointerup").onEmit(ev => {
       if (ev.type === "pointerdown") elem.setPointerCapture(ev.pointerId)
       else elem.releasePointerCapture(ev.pointerId)
     }))

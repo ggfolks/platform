@@ -9,56 +9,42 @@ type TouchEventTypes = AllowedNames<GlobalEventHandlersEventMap, TouchEvent>
 type PointerEventTypes = AllowedNames<GlobalEventHandlersEventMap, PointerEvent>
 type KeyboardEventTypes = AllowedNames<GlobalEventHandlersEventMap, KeyboardEvent>
 
-/** Returns the specified mouse events on `elem` as a reactive stream. While the stream has
-  * listeners, event listeners will be connected to the underlying HTML `elem`. */
-export function mouseEvents (elem :HTMLElement, ...types :MouseEventTypes[]) :Stream<MouseEvent> {
+/** Returns the specified mouse events on `document` as a reactive stream. While the stream has
+  * listeners, event listeners will be connected to the DOM. */
+export function mouseEvents (...types :MouseEventTypes[]) :Stream<MouseEvent> {
   return Stream.deriveStream(dispatch => {
-    // listen for mouseup on document so that we hear it even if the mouse goes up outside the
-    // bounds of the target element
-    for (const type of types) {
-      if (type === "mouseup") document.addEventListener(type, dispatch)
-      else elem.addEventListener(type, dispatch)
-    }
+    for (const type of types) document.addEventListener(type, dispatch)
     return () => {
-      for (const type of types) {
-        if (type === "mouseup") document.removeEventListener(type, dispatch)
-        else elem.removeEventListener(type, dispatch)
-      }
+      for (const type of types) document.removeEventListener(type, dispatch)
     }
   })
 }
 
-/** Returns the `wheel` events on `elem` as a reactive stream. While the stream has listeners, event
-  * listeners will be connected to the underlying HTML `elem`. */
-export function wheelEvents (elem :HTMLElement) :Stream<WheelEvent> {
+/** Returns the `wheel` events on `document` as a reactive stream. While the stream has listeners,
+  * event listeners will be connected to the DOM. */
+export const wheelEvents :Stream<WheelEvent> = Stream.deriveStream(dispatch => {
+  document.addEventListener("wheel", dispatch)
+  return () => document.removeEventListener("wheel", dispatch)
+})
+
+/** Returns the specified touch events on `document` as a reactive stream. While the stream has
+  * listeners, event listeners will be connected to the DOM. */
+export function touchEvents (...types :TouchEventTypes[]) :Stream<TouchEvent> {
   return Stream.deriveStream(dispatch => {
-    elem.addEventListener("wheel", dispatch)
+    for (const type of types) document.addEventListener(type, dispatch)
     return () => {
-      elem.removeEventListener("wheel", dispatch)
+      for (const type of types) document.removeEventListener(type, dispatch)
     }
   })
 }
 
-/** Returns the specified touch events on `elem` as a reactive stream. While the stream has
-  * listeners, event listeners will be connected to the underlying HTML `elem`. */
-export function touchEvents (elem :HTMLElement, ...types :TouchEventTypes[]) :Stream<TouchEvent> {
+/** Returns the specified pointer events on `document` as a reactive stream. While the stream has
+  * listeners, event listeners will be connected to the DOM. */
+export function pointerEvents (...types :PointerEventTypes[]) :Stream<PointerEvent> {
   return Stream.deriveStream(dispatch => {
-    for (const type of types) elem.addEventListener(type, dispatch)
+    for (const type of types) document.addEventListener(type, dispatch)
     return () => {
-      for (const type of types) elem.removeEventListener(type, dispatch)
-    }
-  })
-}
-
-/** Returns the specified pointer events on `elem` as a reactive stream. While the stream has
-  * listeners, event listeners will be connected to the underlying HTML `elem`. */
-export function pointerEvents (
-  elem :HTMLElement, ...types :PointerEventTypes[]
-) :Stream<PointerEvent> {
-  return Stream.deriveStream(dispatch => {
-    for (const type of types) elem.addEventListener(type, dispatch)
-    return () => {
-      for (const type of types) elem.removeEventListener(type, dispatch)
+      for (const type of types) document.removeEventListener(type, dispatch)
     }
   })
 }
