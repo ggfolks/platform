@@ -3,6 +3,7 @@ import {Clock} from "../core/clock"
 import {dim2, rect, vec2} from "../core/math"
 import {Record} from "../core/data"
 import {Emitter, Mutable, Source, Stream, Value} from "../core/react"
+import {MutableList, RList} from "../core/rcollect"
 import {Scale} from "../core/ui"
 import {keyEvents, mouseEvents, pointerEvents, touchEvents, wheelEvents} from "../input/react"
 import {Model} from "./model"
@@ -424,13 +425,12 @@ export function getCurrentEditNumber () {
   return currentEditNumber
 }
 
-type RootChange = "size" | "origin"
+type RootChange = "resized" | "moved" | "rendered" | "removed" | "disposed"
 
 /** The top-level of the UI hierarchy. Manages the canvas into which the UI is rendered. */
 export class Root extends Element {
   private readonly interacts :Array<PointerInteraction|undefined> = []
   private readonly _clock = new Emitter<Clock>()
-  private readonly _change = new Emitter<RootChange>()
   private readonly _unclaimedKeyEvent = new Emitter<KeyboardEvent>()
   private readonly _scale :Scale
   private readonly _hintSize :Value<dim2>
@@ -442,6 +442,9 @@ export class Root extends Element {
   readonly contents :Element
   readonly focus = Mutable.local<Control|undefined>(undefined)
   readonly cursor = Mutable.local("auto")
+
+  /** Emits events pertaining to this root's size, origin, lifecycle, etc. */
+  readonly events = new Emitter<RootChange>()
 
   constructor (readonly ctx :ElementContext, readonly config :RootConfig) {
     super(ctx, undefined, config)
@@ -461,9 +464,6 @@ export class Root extends Element {
   get root () :Root { return this }
   get state () :Value<string> { return RootState }
   get origin () :vec2 { return this._origin }
-
-  /** Emits events when this root's size or origin change. */
-  get change () :Stream<RootChange> { return this._change }
 
   /** A stream that emits key events not consumed by focus. */
   get unclaimedKeyEvent () :Stream<KeyboardEvent> { return this._unclaimedKeyEvent }
@@ -485,7 +485,7 @@ export class Root extends Element {
     * interpret mouse and touch events. */
   setOrigin (pos :vec2) {
     vec2.copy(this._origin, pos)
-    this._change.emit("origin")
+    this.events.emit("moved")
   }
 
   /** Binds the origin of this root by matching a point of this root (specified by `rootH` &
@@ -495,14 +495,14 @@ export class Root extends Element {
     * when the root is disposed. */
   bindOrigin (screen :Value<dim2>, screenH :HAnchor, screenV :VAnchor,
               rootH :HAnchor, rootV :VAnchor) :Remover {
-    const rsize = this.change.filter(c => c === "size").
+    const rsize = this.events.filter(c => c === "resized").
       fold(this.size(dim2.create()), (sz, c) => this.size(dim2.create()), dim2.eq)
     const remover = Value.join2(screen, rsize).onValue(([ss, rs]) => {
       const sh = pos(screenH, 0, ss[0]), sv = pos(screenV, 0, ss[1])
       const rh = pos(rootH, 0, rs[0]), rv = pos(rootV, 0, rs[1])
       this._origin[0] = Math.round(sh-rh)
       this._origin[1] = Math.round(sv-rv)
-      this._change.emit("origin")
+      this.events.emit("moved")
     })
     this.disposer.add(remover)
     return remover
@@ -559,6 +559,7 @@ export class Root extends Element {
     super.dispose()
     this.focus.update(undefined)
     this.contents.dispose()
+    this.events.emit("disposed")
   }
 
   /** Dispatches a browser mouse event to this root.
@@ -658,7 +659,10 @@ export class Root extends Element {
 
   private _validateAndRender () {
     const changed = this.validate() || !rect.isEmpty(this._dirtyRegion)
-    if (changed) this.render(this.canvas, this._dirtyRegion)
+    if (changed) {
+      this.render(this.canvas, this._dirtyRegion)
+      this.events.emit("rendered")
+    }
     return changed
   }
 
@@ -716,7 +720,7 @@ export class Root extends Element {
       canvas.height = scaledHeight
       canvas.style.width = `${this.width}px`
       canvas.style.height = `${this.height}px`
-      this._change.emit("size")
+      this.events.emit("resized")
     }
     this.contents.validate()
   }
@@ -873,22 +877,22 @@ export class Control extends Element {
   * subclasses which integrate more tightly with the `scene2` and `scene3` libraries. */
 export class Host implements Disposable {
   private _canvas? :HTMLElement
-  protected readonly roots :Root[] = []
+  private readonly _roots = MutableList.local<Root>()
+
+  get roots () :RList<Root> { return this._roots }
 
   addRoot (root :Root) {
-    const ii = this.roots.length
-    this.roots.push(root)
-    this.rootAdded(root, ii)
+    this._roots.append(root)
     root.cursor.onValue(cursor => {
       if (this._canvas) this._canvas.style.cursor = cursor
     })
   }
 
   removeRoot (root :Root, dispose = true) {
-    const idx = this.roots.indexOf(root)
+    const idx = this._roots.indexOf(root)
     if (idx >= 0) {
-      this.roots.splice(idx, 1)
-      this.rootRemoved(root, idx)
+      this._roots.delete(idx)
+      root.events.emit("removed")
       if (dispose) root.dispose()
       if (this._canvas) this._canvas.style.cursor = "auto"
     }
@@ -917,9 +921,9 @@ export class Host implements Disposable {
   }
 
   dispatchEvent (event :UIEvent, op :(r:Root) => void) {
-    for (let ii = this.roots.length - 1; ii >= 0; ii--) {
+    for (let ii = this._roots.length - 1; ii >= 0; ii--) {
       if (event.cancelBubble) return
-      op(this.roots[ii])
+      op(this._roots.elemAt(ii))
     }
   }
 
@@ -938,25 +942,16 @@ export class Host implements Disposable {
   }
 
   update (clock :Clock) {
-    let ii = 0
-    for (const root of this.roots) {
-      if (root.update(clock)) this.rootUpdated(root, ii)
-      ii += 1
-    }
+    for (const root of this._roots) root.update(clock)
   }
 
   dispose () {
-    for (const root of this.roots) root.dispose()
+    for (const root of this._roots) root.dispose()
   }
-
-  protected rootAdded (root :Root, index :number) {}
-  protected rootUpdated (root :Root, index :number) {}
-  protected rootRemoved (root :Root, index :number) {}
 }
 
 /** A host that simply appends canvases to an HTML element (which should be positioned). */
 export class HTMLHost extends Host {
-  private readonly _unroots = new Map<Root,Remover>()
   private readonly _textOverlay :HTMLInputElement
   private _clearText = NoopRemover
 
@@ -967,6 +962,10 @@ export class HTMLHost extends Host {
     text.style.background = "none"
     text.style.border = "none"
     text.style.outline = "none"
+
+    this.roots.onChange(ev => {
+      if (ev.type === "added") this.rootAdded(ev.elem)
+    })
   }
 
   dispose () {
@@ -979,15 +978,15 @@ export class HTMLHost extends Host {
     if (!this._textOverlay.parentNode) super.handleKeyEvent(event)
   }
 
-  protected rootAdded (root :Root, index :number) {
+  private rootAdded (root :Root) {
     this._container.appendChild(root.canvasElem)
     const style = root.canvasElem.style
     style.position = "absolute"
     style.pointerEvents = "none"
     style.left = `${root.origin[0]}px`
     style.top = `${root.origin[1]}px`
-    const unpos = root.change.onEmit(c => {
-      if (c === "origin") {
+    const unpos = root.events.onEmit(c => {
+      if (c === "moved") {
         style.left = `${root.origin[0]}px`
         style.top = `${root.origin[1]}px`
       }
@@ -1014,13 +1013,10 @@ export class HTMLHost extends Host {
         setTimeout(() => text.focus(), 1) // for desktop (fails if done immediately, yay!)
       } else clearText()
     });
-    this._unroots.set(root, () => { unviz(); unfocus(); unpos(); clearText() })
-  }
 
-  protected rootRemoved (root :Root, index :number) {
-    this._container.removeChild(root.canvasElem)
-    const unroot = this._unroots.get(root)
-    unroot && unroot()
-    this._unroots.delete(root)
+    root.events.whenOnce(e => e === "removed", _ => {
+      this._container.removeChild(root.canvasElem)
+      unviz(); unfocus(); unpos(); clearText()
+    })
   }
 }

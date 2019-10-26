@@ -13,7 +13,6 @@ import {
   WebGLRenderer,
 } from "three"
 
-import {Remover} from "../core/util"
 import {Host, Root} from "./element"
 
 const DefaultPlaneBufferGeometry = new PlaneBufferGeometry()
@@ -21,13 +20,17 @@ const DefaultPlaneBufferGeometry = new PlaneBufferGeometry()
 export class Host3 extends Host {
   readonly group = new Group()
 
-  private _unroot = new Map<Root,Remover>()
-  private _meshes :Mesh[] = []
+  constructor () {
+    super()
+    this.roots.onChange(ev => {
+      if (ev.type === "added") this.rootAdded(ev.elem, ev.index)
+    })
+  }
 
-  protected rootAdded (root :Root, index :number) {
+  private rootAdded (root :Root, index :number) {
     const texture = new CanvasTexture(root.canvasElem)
     texture.minFilter = LinearFilter
-    const mesh = this._meshes[index] = new Mesh(DefaultPlaneBufferGeometry, new MeshBasicMaterial({
+    const mesh = new Mesh(DefaultPlaneBufferGeometry, new MeshBasicMaterial({
       map: texture,
       depthTest: false,
       transparent: true,
@@ -44,42 +47,32 @@ export class Host3 extends Host {
           // nothing to see; put it behind the camera
           mesh.matrixWorld.makeScale(1, 1, 1).setPosition(0, 0, 1)
         } else {
-          mesh.matrixWorld
-            .makeScale(
-              root.width * width / rendererSize.x,
-              root.height * height / rendererSize.y,
-              1,
-            )
-            .setPosition(
-              (root.origin[0] + root.width / 2) * width / rendererSize.x - width / 2,
-              height / 2 - (root.origin[1] + root.height / 2) * height / rendererSize.y,
-              -distance,
-            )
+          const sx = root.width * width / rendererSize.x
+          const sy = root.height * height / rendererSize.y
+          mesh.matrixWorld.makeScale(sx, sy, 1).setPosition(
+            (root.origin[0] + root.width / 2) * width / rendererSize.x - width / 2,
+            height / 2 - (root.origin[1] + root.height / 2) * height / rendererSize.y,
+            -distance,
+          )
         }
         mesh.matrixWorld.premultiply(camera.matrixWorld)
       }
     }
     this.group.add(mesh)
-  }
 
-  protected rootUpdated (root :Root, index :number) {
-    const mesh = this._meshes[index]
-    const material = mesh.material as MeshBasicMaterial
-    (material.map as CanvasTexture).needsUpdate = true
-    this._unroot.set(root, root.visible.onValue(viz => mesh.visible = viz))
-  }
-
-  protected rootRemoved (root :Root, index :number) {
-    const mesh = this._meshes[index]
-    this._meshes.splice(index, 1)
-    this.group.remove(mesh)
-    const material = mesh.material as MeshBasicMaterial
-    material.dispose();
-    (material.map as CanvasTexture).dispose()
-    const unroot = this._unroot.get(root)
-    if (unroot) {
-      this._unroot.delete(root)
-      unroot()
-    }
+    const unviz = root.visible.onValue(viz => mesh.visible = viz)
+    const unroot = root.events.onEmit(e => {
+      if (e === "rendered") {
+        const material = mesh.material as MeshBasicMaterial
+        (material.map as CanvasTexture).needsUpdate = true
+      } else if (e === "removed") {
+        this.group.remove(mesh)
+        const material = mesh.material as MeshBasicMaterial
+        (material.map as CanvasTexture).dispose()
+        material.dispose()
+        unviz()
+        unroot()
+      }
+    })
   }
 }
