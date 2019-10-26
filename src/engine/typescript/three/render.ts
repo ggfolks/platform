@@ -81,7 +81,6 @@ export class ThreeRenderEngine implements RenderEngine {
       )
     }))
 
-    this._disposer.add(gameEngine.ctx.host.bind(this.renderer.domElement))
     this._disposer.add(gameEngine.ctx.hand = this._hand = new Hand(this.renderer.domElement))
 
     this.scene.autoUpdate = false

@@ -563,14 +563,14 @@ export class Root extends Element {
   }
 
   /** Dispatches a browser mouse event to this root.
-    * @param event the browser event to dispatch.
-    * @param origin the origin of the root in screen coordinates. */
-  dispatchMouseEvent (event :MouseEvent) {
+    * @param host the host that is liaising between this root and the browser events.
+    * @param event the browser event to dispatch. */
+  dispatchMouseEvent (host :Host, event :MouseEvent) {
     // TODO: we're assuming the root/renderer scale is the same as the browser display unit to pixel
     // ratio (mouse events come in display units), so everything "just lines up"; if we want to
     // support other weird ratios between browser display units and backing buffers, we have to be
     // more explicit about all this...
-    const pos = vec2.set(tmpv, event.offsetX-this.origin[0], event.offsetY-this.origin[1])
+    const pos = host.mouseToRoot(this, event, tmpv)
     const button = event.button
     const iact = this.interacts[button]
     switch (event.type) {
@@ -604,15 +604,15 @@ export class Root extends Element {
   }
 
   /** Dispatches a browser touch event to this root.
-    * @param event the browser event to dispatch.
-    * @param origin the origin of the root in screen coordinates. */
-  dispatchTouchEvent (event :TouchEvent) {
+    * @param host the host that is liaising between this root and the browser events.
+    * @param event the browser event to dispatch. */
+  dispatchTouchEvent (host :Host, event :TouchEvent) {
     const iact = this.interacts[0]
     switch (event.type) {
     case "touchstart":
       if (event.touches.length === 1) {
         const touch = event.changedTouches[0]
-        const pos = vec2.set(tmpv, touch.clientX-this.origin[0], touch.clientY-this.origin[1])
+        const pos = host.touchToRoot(this, touch, tmpv)
         if (rect.contains(this.bounds, pos)) {
           // note that we are assuming responsibility for the event
           event.cancelBubble = true
@@ -696,8 +696,8 @@ export class Root extends Element {
     if (event.type === "keyup") currentEditNumber++
   }
 
-  dispatchWheelEvent (event :WheelEvent) {
-    const pos = vec2.set(tmpv, event.offsetX-this.origin[0], event.offsetY-this.origin[1])
+  dispatchWheelEvent (host :Host, event :WheelEvent) {
+    const pos = host.mouseToRoot(this, event, tmpv)
     if (rect.contains(this.bounds, pos)) event.cancelBubble = true
     this.contents.maybeHandleWheel(event, pos)
   }
@@ -876,16 +876,28 @@ export class Control extends Element {
   * Clients will generally not use this class directly but rather use the `Host2` or `Host3`
   * subclasses which integrate more tightly with the `scene2` and `scene3` libraries. */
 export class Host implements Disposable {
-  private _canvas? :HTMLElement
+  private readonly disposer = new Disposer()
   private readonly _roots = MutableList.local<Root>()
+
+  constructor (readonly elem :HTMLElement) {
+    this.disposer.add(mouseEvents(elem, "mousedown", "mousemove", "mouseup", "dblclick").
+                      onEmit(ev => this.handleMouseEvent(ev)))
+    this.disposer.add(wheelEvents(elem).onEmit(ev => this.handleWheelEvent(ev)))
+    this.disposer.add(touchEvents(elem, "touchstart", "touchmove", "touchcancel", "touchend").
+                      onEmit(ev => this.handleTouchEvent(ev)))
+    this.disposer.add(keyEvents("keydown", "keyup").onEmit(ev => this.handleKeyEvent(ev)))
+    this.disposer.add(pointerEvents(elem, "pointerdown", "pointerup").onEmit(ev => {
+      if (ev.type === "pointerdown") elem.setPointerCapture(ev.pointerId)
+      else elem.releasePointerCapture(ev.pointerId)
+    }))
+  }
 
   get roots () :RList<Root> { return this._roots }
 
   addRoot (root :Root) {
     this._roots.append(root)
-    root.cursor.onValue(cursor => {
-      if (this._canvas) this._canvas.style.cursor = cursor
-    })
+    // TODO: we should only do this when the mouse is over the root
+    root.cursor.onValue(cursor => this.elem.style.cursor = cursor)
   }
 
   removeRoot (root :Root, dispose = true) {
@@ -894,29 +906,7 @@ export class Host implements Disposable {
       this._roots.delete(idx)
       root.events.emit("removed")
       if (dispose) root.dispose()
-      if (this._canvas) this._canvas.style.cursor = "auto"
-    }
-  }
-
-  bind (canvas :HTMLElement) :Remover {
-    this._canvas = canvas
-    const unmouse = mouseEvents(canvas, "mousedown", "mousemove", "mouseup", "dblclick").
-      onEmit(ev => this.handleMouseEvent(ev))
-    const unwheel = wheelEvents(canvas).onEmit(ev => this.handleWheelEvent(ev))
-    const untouch = touchEvents(canvas, "touchstart", "touchmove", "touchcancel", "touchend").
-      onEmit(ev => this.handleTouchEvent(ev))
-    const unkey = keyEvents("keydown", "keyup").onEmit(ev => this.handleKeyEvent(ev))
-    const unpointer = pointerEvents(canvas, "pointerdown", "pointerup").onEmit(ev => {
-      if (ev.type === "pointerdown") canvas.setPointerCapture(ev.pointerId)
-      else canvas.releasePointerCapture(ev.pointerId)
-    })
-    return () => {
-      unmouse()
-      untouch()
-      unkey()
-      unpointer()
-      unwheel()
-      this._canvas = undefined
+      this.elem.style.cursor = "auto"
     }
   }
 
@@ -927,18 +917,33 @@ export class Host implements Disposable {
     }
   }
 
+  mouseToRoot (root :Root, event :MouseEvent, into :vec2) :vec2 {
+    return this.adjustPos(
+      vec2.set(into, event.clientX-root.origin[0], event.clientY-root.origin[1]))
+  }
+  touchToRoot (root :Root, touch :Touch, into :vec2) :vec2 {
+    return this.adjustPos(
+      vec2.set(into, touch.clientX-root.origin[0], touch.clientY-root.origin[1]))
+  }
+  protected adjustPos (pos :vec2) :vec2 {
+    const rect = this.elem.getBoundingClientRect()
+    pos[0] -= rect.left
+    pos[1] -= rect.top
+    return pos
+  }
+
   handleMouseEvent (event :MouseEvent) {
-    this.dispatchEvent(event, r => r.dispatchMouseEvent(event))
+    this.dispatchEvent(event, r => r.dispatchMouseEvent(this, event))
   }
   handleKeyEvent (event :KeyboardEvent) {
     // TODO: maintain a notion of which root currently has focus (if any)
     this.dispatchEvent(event, r => r.dispatchKeyEvent(event))
   }
   handleWheelEvent (event :WheelEvent) {
-    this.dispatchEvent(event, r => r.dispatchWheelEvent(event))
+    this.dispatchEvent(event, r => r.dispatchWheelEvent(this, event))
   }
   handleTouchEvent (event :TouchEvent) {
-    this.dispatchEvent(event, r => r.dispatchTouchEvent(event))
+    this.dispatchEvent(event, r => r.dispatchTouchEvent(this, event))
   }
 
   update (clock :Clock) {
@@ -947,6 +952,7 @@ export class Host implements Disposable {
 
   dispose () {
     for (const root of this._roots) root.dispose()
+    this.disposer.dispose()
   }
 }
 
@@ -955,8 +961,8 @@ export class HTMLHost extends Host {
   private readonly _textOverlay :HTMLInputElement
   private _clearText = NoopRemover
 
-  constructor (private readonly _container :HTMLElement) {
-    super()
+  constructor (elem :HTMLElement) {
+    super(elem)
     const text = this._textOverlay = document.createElement("input")
     text.style.position = "absolute"
     text.style.background = "none"
@@ -969,8 +975,8 @@ export class HTMLHost extends Host {
   }
 
   dispose () {
+    for (const root of this.roots) this.elem.removeChild(root.canvasElem)
     super.dispose()
-    for (const root of this.roots) this._container.removeChild(root.canvasElem)
   }
 
   handleKeyEvent (event :KeyboardEvent) {
@@ -979,7 +985,7 @@ export class HTMLHost extends Host {
   }
 
   private rootAdded (root :Root) {
-    this._container.appendChild(root.canvasElem)
+    this.elem.appendChild(root.canvasElem)
     const style = root.canvasElem.style
     style.position = "absolute"
     style.pointerEvents = "none"
@@ -998,7 +1004,7 @@ export class HTMLHost extends Host {
     const clearText = () => {
       const text = this._textOverlay
       if (text.parentNode) {
-        this._container.removeChild(text)
+        this.elem.removeChild(text)
         this._clearText()
         this._clearText = NoopRemover
       }
@@ -1008,14 +1014,14 @@ export class HTMLHost extends Host {
       if (focus && focus.config.type === "text") {
         this._clearText()
         this._clearText = (focus as any).configInput(text) // avoid importing Text here
-        this._container.appendChild(text)
+        this.elem.appendChild(text)
         text.focus() // for mobile (has to happen while handling touch event)
         setTimeout(() => text.focus(), 1) // for desktop (fails if done immediately, yay!)
       } else clearText()
     });
 
     root.events.whenOnce(e => e === "removed", _ => {
-      this._container.removeChild(root.canvasElem)
+      this.elem.removeChild(root.canvasElem)
       unviz(); unfocus(); unpos(); clearText()
     })
   }

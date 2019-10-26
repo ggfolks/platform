@@ -6,7 +6,7 @@ export class Host2 extends Host {
   textures :Texture[] = []
 
   constructor (readonly renderer :Renderer) {
-    super()
+    super(renderer.canvas)
     this.roots.onChange(ev => {
       if (ev.type === "added") this.rootAdded(ev.elem, ev.index)
     })

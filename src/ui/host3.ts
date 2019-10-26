@@ -20,8 +20,8 @@ const DefaultPlaneBufferGeometry = new PlaneBufferGeometry()
 export class Host3 extends Host {
   readonly group = new Group()
 
-  constructor () {
-    super()
+  constructor (renderer :WebGLRenderer) {
+    super(renderer.domElement)
     this.roots.onChange(ev => {
       if (ev.type === "added") this.rootAdded(ev.elem, ev.index)
     })
