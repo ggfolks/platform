@@ -347,7 +347,7 @@ export class TextureRenderTarget implements RenderTarget, Disposable {
 export function windowSize (window :Window) :Value<dim2> {
   let size = dim2.fromValues(window.innerWidth, window.innerHeight)
   return Value.deriveValue(
-    refEquals,
+    dim2.eq,
     dispatch => {
       const listener = () => {
         const oldSize = size
