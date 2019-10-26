@@ -424,11 +424,13 @@ export function getCurrentEditNumber () {
   return currentEditNumber
 }
 
+type RootChange = "size" | "origin"
+
 /** The top-level of the UI hierarchy. Manages the canvas into which the UI is rendered. */
 export class Root extends Element {
   private readonly interacts :Array<PointerInteraction|undefined> = []
   private readonly _clock = new Emitter<Clock>()
-  private readonly _sizeChange = new Emitter<Root>()
+  private readonly _change = new Emitter<RootChange>()
   private readonly _unclaimedKeyEvent = new Emitter<KeyboardEvent>()
   private readonly _scale :Scale
   private readonly _hintSize :Value<dim2>
@@ -458,10 +460,10 @@ export class Root extends Element {
   get styleScope () :StyleScope { return {id: "default", states: RootStates} }
   get root () :Root { return this }
   get state () :Value<string> { return RootState }
-  get origin ()  :vec2 { return this._origin }
+  get origin () :vec2 { return this._origin }
 
-  /** A stream that emits `this` when this root's size changes. */
-  get sizeChange () :Stream<Root> { return this._sizeChange }
+  /** Emits events when this root's size or origin change. */
+  get change () :Stream<RootChange> { return this._change }
 
   /** A stream that emits key events not consumed by focus. */
   get unclaimedKeyEvent () :Stream<KeyboardEvent> { return this._unclaimedKeyEvent }
@@ -483,6 +485,7 @@ export class Root extends Element {
     * interpret mouse and touch events. */
   setOrigin (pos :vec2) {
     vec2.copy(this._origin, pos)
+    this._change.emit("origin")
   }
 
   /** Binds the origin of this root by matching a point of this root (specified by `rootH` &
@@ -492,13 +495,14 @@ export class Root extends Element {
     * when the root is disposed. */
   bindOrigin (screen :Value<dim2>, screenH :HAnchor, screenV :VAnchor,
               rootH :HAnchor, rootV :VAnchor) :Remover {
-    const rsize = this.sizeChange.fold(dim2.fromValues(this.width, this.height),
-                                       (sz, r) => dim2.fromValues(r.width, r.height), dim2.eq)
+    const rsize = this.change.filter(c => c === "size").
+      fold(this.size(dim2.create()), (sz, c) => this.size(dim2.create()), dim2.eq)
     const remover = Value.join2(screen, rsize).onValue(([ss, rs]) => {
       const sh = pos(screenH, 0, ss[0]), sv = pos(screenV, 0, ss[1])
       const rh = pos(rootH, 0, rs[0]), rv = pos(rootV, 0, rs[1])
       this._origin[0] = Math.round(sh-rh)
       this._origin[1] = Math.round(sv-rv)
+      this._change.emit("origin")
     })
     this.disposer.add(remover)
     return remover
@@ -712,7 +716,7 @@ export class Root extends Element {
       canvas.height = scaledHeight
       canvas.style.width = `${this.width}px`
       canvas.style.height = `${this.height}px`
-      this._sizeChange.emit(this)
+      this._change.emit("size")
     }
     this.contents.validate()
   }
@@ -952,7 +956,6 @@ export class Host implements Disposable {
 
 /** A host that simply appends canvases to an HTML element (which should be positioned). */
 export class HTMLHost extends Host {
-  private readonly _lastOrigins :vec2[] = []
   private readonly _unroots = new Map<Root,Remover>()
   private readonly _textOverlay :HTMLInputElement
   private _clearText = NoopRemover
@@ -964,19 +967,6 @@ export class HTMLHost extends Host {
     text.style.background = "none"
     text.style.border = "none"
     text.style.outline = "none"
-  }
-
-  update (clock :Clock) {
-    let ii = 0
-    for (const root of this.roots) {
-      if (root.update(clock)) this.rootUpdated(root, ii)
-      const lastOrigin = this._lastOrigins[ii]
-      if (!vec2.exactEquals(lastOrigin, root.origin)) {
-        this._updatePosition(root)
-        vec2.copy(lastOrigin, root.origin)
-      }
-      ii += 1
-    }
   }
 
   dispose () {
@@ -994,8 +984,14 @@ export class HTMLHost extends Host {
     const style = root.canvasElem.style
     style.position = "absolute"
     style.pointerEvents = "none"
-    this._updatePosition(root)
-    this._lastOrigins[index] = vec2.clone(root.origin)
+    style.left = `${root.origin[0]}px`
+    style.top = `${root.origin[1]}px`
+    const unpos = root.change.onEmit(c => {
+      if (c === "origin") {
+        style.left = `${root.origin[0]}px`
+        style.top = `${root.origin[1]}px`
+      }
+    })
     const unviz = root.visible.onValue(
       viz => root.canvasElem.style.visibility = viz ? "visible" : "hidden")
     // TODO: this text overlay stuff needs to handle multiple roots, which will need the host to
@@ -1018,18 +1014,11 @@ export class HTMLHost extends Host {
         setTimeout(() => text.focus(), 1) // for desktop (fails if done immediately, yay!)
       } else clearText()
     });
-    this._unroots.set(root, () => { unviz(); unfocus(); clearText() })
-  }
-
-  protected _updatePosition (root :Root) {
-    const style = root.canvasElem.style
-    style.left = `${root.origin[0]}px`
-    style.top = `${root.origin[1]}px`
+    this._unroots.set(root, () => { unviz(); unfocus(); unpos(); clearText() })
   }
 
   protected rootRemoved (root :Root, index :number) {
     this._container.removeChild(root.canvasElem)
-    this._lastOrigins.splice(index, 1)
     const unroot = this._unroots.get(root)
     unroot && unroot()
     this._unroots.delete(root)
