@@ -93,7 +93,7 @@ abstract class TransformedContainer extends Control {
   protected _updateOffset (offset :vec2) {
     offset[0] = clamp(offset[0], 0, Math.max(this.maxX, 0))
     offset[1] = clamp(offset[1], 0, Math.max(this.maxY, 0))
-    this._offset.update(offset)
+    this._offset.updateIf(offset, vec2.equals)
   }
 
   /** Transforms the supplied position into the space of the contents. */

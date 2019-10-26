@@ -816,6 +816,12 @@ export class Buffer<T> extends ReadableSource<T> implements Prop<T> {
     dispatchValue(this._listeners, updated)
   }
 
+  /** Updates this buffer to `newValue` and notifies listeners, iff it differs from the current
+    * value based on `eq`. `eq` defaults to reference equality. */
+  updateIf (newValue :T, eq :Eq<T> = refEquals) {
+    if (!eq(newValue, this.current)) this.update(newValue)
+  }
+
   /** Updates this buffer's current value with `fn` (which presumably mutates it in place) and then
     * notifies listeners of the change. */
   updateVia (fn :(v:T) => void) {
