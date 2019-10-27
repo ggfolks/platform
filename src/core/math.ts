@@ -99,6 +99,10 @@ export class rect extends Float32Array {
     return rect.set(rect.create(), x, y, width, height)
   }
 
+  static fromPosSize (pos :vec2, size :dim2) :rect {
+    return rect.set(rect.create(), pos[0], pos[1], size[0], size[1])
+  }
+
   static set (out :rect, x :number, y :number, width :number, height :number) :rect {
     out[0] = x
     out[1] = y
