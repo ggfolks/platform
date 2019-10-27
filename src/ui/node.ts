@@ -1,5 +1,5 @@
 import {dataEquals, refEquals} from "../core/data"
-import {dim2, vec2} from "../core/math"
+import {dim2, rect, vec2, vec2zero} from "../core/math"
 import {Scale, getValueStyle} from "../core/ui"
 import {ChangeFn, Mutable, Value} from "../core/react"
 import {MutableSet} from "../core/rcollect"
@@ -262,7 +262,7 @@ class UINode extends Node {
       else root.sizeToFit()
       if (this.config.origin) root.setOrigin(this.config.origin)
       else disposer.add(root.bindOrigin(
-        ctx.screen,
+        ctx.screen.map(size => rect.fromPosSize(vec2zero, size)),
         this.config.screenH || "center",
         this.config.screenV || "center",
         this.config.rootH || "center",

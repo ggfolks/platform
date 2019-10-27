@@ -492,17 +492,17 @@ export class Root extends Element {
 
   /** Binds the origin of this root by matching a point of this root (specified by `rootH` &
     * `rootV`) to a point on the screen (specified by `screenH` & `screenV`), given a reactive view
-    * of the screen `size`.
+    * of the `screen` bounds.
     * @return a remover that can be used to cancel the binding. The binding will also be cleared
     * when the root is disposed. */
-  bindOrigin (screen :Value<dim2>, screenH :HAnchor, screenV :VAnchor,
+  bindOrigin (screen :Value<rect>, screenH :HAnchor, screenV :VAnchor,
               rootH :HAnchor, rootV :VAnchor) :Remover {
     const rsize = this.events.filter(c => c === "resized").
       fold(this.size(dim2.create()), (sz, c) => this.size(dim2.create()), dim2.eq)
     const remover = Value.join2(screen, rsize).onValue(([ss, rs]) => {
-      const sh = pos(screenH, 0, ss[0]), sv = pos(screenV, 0, ss[1])
+      const sh = pos(screenH, 0, ss[2]), sv = pos(screenV, 0, ss[3])
       const rh = pos(rootH, 0, rs[0]), rv = pos(rootV, 0, rs[1])
-      this.setOrigin(vec2.set(tmpv, Math.round(sh-rh), Math.round(sv-rv)))
+      this.setOrigin(vec2.set(tmpv, Math.round(sh-rh)+ss[0], Math.round(sv-rv)+ss[1]))
     })
     this.disposer.add(remover)
     return remover
