@@ -11,13 +11,17 @@ pipeline {
     stages {
         stage('Build') {
             steps {
-                sh 'yarn install'
-                sh 'yarn build'
+                dir("src") {
+                    sh 'yarn install'
+                    sh 'yarn build'
+                }
             }
         }
         stage('Test') {
             steps {
-                sh 'yarn test'
+                dir("src") {
+                    sh 'yarn test'
+                }
             }
         }
     }
