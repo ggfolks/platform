@@ -66,3 +66,8 @@ export class TestClient extends ChannelClient {
     }
   }
 }
+
+// we have to have a test in here otherwise jest freaks out
+test("noop", () => {
+  expect("noop").toBe("noop")
+})
