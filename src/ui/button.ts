@@ -101,12 +101,14 @@ export class Toggle extends Control {
   }
 
   applyToContaining (canvas :CanvasRenderingContext2D, pos :vec2, op :(element :Element) => void) {
-    super.applyToContaining(canvas, pos, op)
-    this.checkedContents && this.checkedContents.applyToContaining(canvas, pos, op)
+    const applied = super.applyToContaining(canvas, pos, op)
+    if (applied && this.checkedContents) this.checkedContents.applyToContaining(canvas, pos, op)
+    return applied
   }
   applyToIntersecting (region :rect, op :(element :Element) => void) {
-    super.applyToIntersecting(region, op)
-    this.checkedContents && this.checkedContents.applyToIntersecting(region, op)
+    const applied = super.applyToIntersecting(region, op)
+    if (applied && this.checkedContents) this.checkedContents.applyToIntersecting(region, op)
+    return applied
   }
 
   dispose () {

@@ -485,8 +485,9 @@ export class GraphView extends AbsGroup {
   }
 
   applyToContaining (canvas :CanvasRenderingContext2D, pos :vec2, op :(element :Element) => void) {
-    super.applyToContaining(canvas, pos, op)
+    const applied = super.applyToContaining(canvas, pos, op)
     vec2.set(this._lastContaining, pos[0] - this.x, pos[1] - this.y)
+    return applied
   }
 
   repositionNodes (ids :Map<string, string>) {
@@ -1037,7 +1038,8 @@ export class EdgeView extends Element {
   }
 
   applyToContaining (canvas :CanvasRenderingContext2D, pos :vec2, op :(element :Element) => void) {
-    if (!(rect.contains(this.bounds, pos) && this.visible.current && this._edges.length)) return
+    if (!(rect.contains(this.bounds, pos) && this.visible.current &&
+          this._edges.length)) return false
     const view = this.requireParent as GraphView
     canvas.translate(view.x, view.y)
     const lineWidth = this._lineWidth.current * PICK_EXPANSION
@@ -1077,6 +1079,7 @@ export class EdgeView extends Element {
     canvas.lineWidth = 1
     canvas.globalAlpha = 1
     canvas.translate(-view.x, -view.y)
+    return true
   }
 
   handleMouseLeave (event :MouseEvent, pos :vec2) { this._hoverKeys.update(undefined) }
@@ -1471,13 +1474,6 @@ export class Terminal extends Element {
       if (ancestor instanceof NodeView) return [ancestor.id, this._name.current]
     }
     throw new Error("Missing NodeView ancestor")
-  }
-
-  applyToContaining (canvas :CanvasRenderingContext2D, pos :vec2, op :(element :Element) => void) {
-    if (rect.contains(this.expandBounds(this.bounds), pos) && this.visible.current) op(this)
-  }
-  applyToIntersecting (region :rect, op :(element :Element) => void) {
-    if (rect.intersects(this.expandBounds(this.bounds), region) && this.visible.current) op(this)
   }
 
   expandBounds (bounds :rect) :rect {

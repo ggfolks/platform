@@ -62,14 +62,14 @@ abstract class Group extends Element {
   }
 
   applyToContaining (canvas :CanvasRenderingContext2D, pos :vec2, op :(element :Element) => void) {
-    super.applyToContaining(canvas, pos, op)
-    if (!rect.contains(this.expandBounds(this.bounds), pos)) return
-    for (const cc of this.contents) cc.applyToContaining(canvas, pos, op)
+    const applied = super.applyToContaining(canvas, pos, op)
+    if (applied) for (const cc of this.contents) cc.applyToContaining(canvas, pos, op)
+    return applied
   }
   applyToIntersecting (region :rect, op :(element :Element) => void) {
-    super.applyToIntersecting(region, op)
-    if (!rect.intersects(this.expandBounds(this.bounds), region)) return
-    for (const cc of this.contents) cc.applyToIntersecting(region, op)
+    const applied = super.applyToIntersecting(region, op)
+    if (applied) for (const cc of this.contents) cc.applyToIntersecting(region, op)
+    return applied
   }
 
   dispose () {

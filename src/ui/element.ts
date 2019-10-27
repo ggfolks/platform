@@ -237,18 +237,26 @@ export abstract class Element implements Disposable {
    * @param canvas the canvas context.
    * @param pos the position relative to the root origin.
    * @param op the operation to apply.
+   * @return whether the operation was applied to this element (and potentially its children).
    */
-  applyToContaining (canvas :CanvasRenderingContext2D, pos :vec2, op :(element :Element) => void) {
-    if (rect.contains(this.bounds, pos) && this.visible.current) op(this)
+  applyToContaining (canvas :CanvasRenderingContext2D, pos :vec2,
+                     op :(element :Element) => void) :boolean {
+    if (!this.visible.current || !rect.contains(this.expandBounds(this.bounds), pos)) return false
+    op(this)
+    return true
   }
 
   /**
    * Applies the provided operation to all elements intersecting the specified region.
    * @param region the region relative to the root origin.
    * @param op the operation to apply.
+   * @return whether the operation was applied to this element (and potentially its children).
    */
-  applyToIntersecting (region :rect, op :(element :Element) => void) {
-    if (rect.intersects(this.bounds, region) && this.visible.current) op(this)
+  applyToIntersecting (region :rect, op :(element :Element) => void) :boolean {
+    if (!this.visible.current ||
+        !rect.intersects(this.expandBounds(this.bounds), region)) return false
+    op(this)
+    return true
   }
 
   /** Requests that this element handle the supplied mouse enter event.
@@ -413,10 +421,6 @@ function pos (align :HAnchor|VAnchor, min :number, max :number) {
   else return min+(max-min)/2
 }
 
-let elementsOver :Set<Element> = new Set()
-let lastElementsOver :Set<Element> = new Set()
-const addToElementsOver = (element :Element) => elementsOver.add(element)
-
 let currentEditNumber = 0
 
 /** Returns the current value of the edit number, which is simply a number that we increment after
@@ -436,7 +440,10 @@ export class Root extends Element {
   private readonly _hintSize :Value<dim2>
   private readonly _minSize :Value<dim2>
   private readonly _origin = vec2.create()
-  private _cursorOwners = new Map<Element, string>()
+  private readonly _cursorOwners = new Map<Element, string>()
+  private _elementsOver = new Set<Element>()
+  private _lastElementsOver = new Set<Element>()
+
   readonly canvasElem :HTMLCanvasElement = document.createElement("canvas")
   readonly canvas :CanvasRenderingContext2D
   readonly contents :Element
@@ -670,16 +677,18 @@ export class Root extends Element {
     const sf = this._scale.factor
     this.canvas.save()
     this.canvas.scale(sf, sf)
-    this.contents.applyToContaining(this.canvas, pos, addToElementsOver)
+    const {_elementsOver, _lastElementsOver} = this
+    this.contents.applyToContaining(this.canvas, pos, elem => _elementsOver.add(elem))
     this.canvas.restore()
-    for (const element of lastElementsOver) {
-      if (!elementsOver.has(element)) element.handleMouseLeave(event, pos)
+    for (const element of _lastElementsOver) {
+      if (!_elementsOver.has(element)) element.handleMouseLeave(event, pos)
     }
-    for (const element of elementsOver) {
-      if (!lastElementsOver.has(element)) element.handleMouseEnter(event, pos)
+    for (const element of _elementsOver) {
+      if (!_lastElementsOver.has(element)) element.handleMouseEnter(event, pos)
     }
-    [elementsOver, lastElementsOver] = [lastElementsOver, elementsOver]
-    elementsOver.clear()
+    _lastElementsOver.clear()
+    this._elementsOver = _lastElementsOver
+    this._lastElementsOver = _elementsOver
   }
 
   /** Dispatches a browser keyboard event to this root. */
@@ -823,12 +832,14 @@ export class Control extends Element {
   }
 
   applyToContaining (canvas :CanvasRenderingContext2D, pos :vec2, op :(element :Element) => void) {
-    super.applyToContaining(canvas, pos, op)
-    this.contents.applyToContaining(canvas, pos, op)
+    const applied = super.applyToContaining(canvas, pos, op)
+    if (applied) this.contents.applyToContaining(canvas, pos, op)
+    return applied
   }
   applyToIntersecting (region :rect, op :(element :Element) => void) {
-    super.applyToIntersecting(region, op)
-    this.contents.applyToIntersecting(region, op)
+    const applied = super.applyToIntersecting(region, op)
+    if (applied) this.contents.applyToIntersecting(region, op)
+    return applied
   }
 
   dispose () {

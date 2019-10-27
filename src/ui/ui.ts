@@ -145,7 +145,7 @@ export class UI {
       default: throw new Error(`Unknown element type '${config.type}'.`)
       }
     } catch (error) {
-      log.warn(`Failed to create '${config.type}' element: ${error}`)
+      log.warn("Failed to create element", "type", config.type, error)
       log.warn(`- path to element: ${parent.configPath.concat(config.type)}`)
       log.warn(`- element config: ${JSON.stringify(config)}`)
       if (error instanceof MissingModelElem) {

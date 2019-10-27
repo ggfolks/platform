@@ -52,12 +52,14 @@ export abstract class AbstractDropdown extends AbstractButton {
   }
 
   applyToContaining (canvas :CanvasRenderingContext2D, pos :vec2, op :(element :Element) => void) {
-    super.applyToContaining(canvas, pos, op)
-    this._list && this._list.applyToContaining(canvas, pos, op)
+    const applied = super.applyToContaining(canvas, pos, op)
+    if (applied && this._list) this._list.applyToContaining(canvas, pos, op)
+    return applied
   }
   applyToIntersecting (region :rect, op :(element :Element) => void) {
-    super.applyToIntersecting(region, op)
-    this._list && this._list.applyToIntersecting(region, op)
+    const applied = super.applyToIntersecting(region, op)
+    if (applied && this._list) this._list.applyToIntersecting(region, op)
+    return applied
   }
 
   maybeHandlePointerDown (event :MouseEvent|TouchEvent, pos :vec2) {

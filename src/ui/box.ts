@@ -89,12 +89,14 @@ export class Box extends Element {
   }
 
   applyToContaining (canvas :CanvasRenderingContext2D, pos :vec2, op :(element :Element) => void) {
-    super.applyToContaining(canvas, pos, op)
-    this.contents.applyToContaining(canvas, pos, op)
+    const applied = super.applyToContaining(canvas, pos, op)
+    if (applied) this.contents.applyToContaining(canvas, pos, op)
+    return applied
   }
   applyToIntersecting (region :rect, op :(element :Element) => void) {
-    super.applyToIntersecting(region, op)
-    this.contents.applyToIntersecting(region, op)
+    const applied = super.applyToIntersecting(region, op)
+    if (applied) this.contents.applyToIntersecting(region, op)
+    return applied
   }
 
   handleMouseEnter (event :MouseEvent, pos :vec2) { this._hovered.update(true) }
