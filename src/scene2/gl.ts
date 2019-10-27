@@ -342,26 +342,9 @@ export class TextureRenderTarget implements RenderTarget, Disposable {
   }
 }
 
-/** Returns a value with the current size of `window`, which updates when the size changes. */
-export function windowSize (window :Window) :Value<dim2> {
-  let size = dim2.fromValues(window.innerWidth, window.innerHeight)
-  return Value.deriveValue(
-    dim2.eq,
-    dispatch => {
-      const listener = () => {
-        const oldSize = size
-        dispatch(size = dim2.fromValues(window.innerWidth, window.innerHeight), oldSize)
-      }
-      window.addEventListener("resize", listener)
-      return () => window.removeEventListener("resize", listener)
-    },
-    () => size,
-  )
-}
-
 /** Configuration for the [[Renderer]]. */
 export type RendererConfig = {
-  /** The size of the canvas into which we will render. For full screen windows, use [[windowSize]]. */
+  /** The size of the canvas into which we will render. */
   size :Value<dim2>,
   /** The scale factor defining the ratio between display units and pixels. Usually
     * [[Window.devicePixelRatio]]. */

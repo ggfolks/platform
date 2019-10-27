@@ -1,4 +1,5 @@
 import {dim2, vec2} from "./math"
+import {Value} from "./react"
 
 /** Represents the scale factor for a HiDPI display. Provides methods useful for doing the
   * calculations needed to create scale-independent interfaces. */
@@ -66,4 +67,21 @@ export function getValueStyleComponent (value :number) :string {
   const base = 255 * (Math.atan(value) / Math.PI + 0.5)
   // quantize to six bits to avoid excess redraw
   return String(base & 0xFC)
+}
+
+/** Returns a value with the current size of `window`, which updates when the size changes. */
+export function windowSize (window :Window) :Value<dim2> {
+  let size = dim2.fromValues(window.innerWidth, window.innerHeight)
+  return Value.deriveValue(
+    dim2.eq,
+    dispatch => {
+      const listener = () => {
+        const oldSize = size
+        dispatch(size = dim2.fromValues(window.innerWidth, window.innerHeight), oldSize)
+      }
+      window.addEventListener("resize", listener)
+      return () => window.removeEventListener("resize", listener)
+    },
+    () => size,
+  )
 }

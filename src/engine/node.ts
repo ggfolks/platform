@@ -2,6 +2,7 @@ import {dim2, vec3, vec3zero} from "../core/math"
 import {Value} from "../core/react"
 import {MutableMap, RMap} from "../core/rcollect"
 import {getValue} from "../core/util"
+import {windowSize} from "../core/ui"
 import {Graph} from "../graph/graph"
 import {
   InputEdgeMeta, OutputEdgeMeta, PropertyMeta, activateNodeConfigs, property, inputEdge, outputEdge,
@@ -9,7 +10,6 @@ import {
 import {Node, NodeConfig, NodeTypeRegistry} from "../graph/node"
 import {SubgraphRegistry} from "../graph/util"
 import {PointerConfig} from "../input/node"
-import {windowSize} from "../scene2/gl"
 import {Component, CoordinateFrame, Graph as GraphComponent, Hover, Hoverable} from "./game"
 import {getComponentMeta} from "./meta"
 import {RaycastHit} from "./render"
