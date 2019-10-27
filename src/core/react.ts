@@ -495,12 +495,9 @@ export class Subject<T> extends Source<T> {
 //
 // Reactive values
 
-let lastValueId = 0
-
 /** A reactive primitive that contains a value, which may subsequently change. The current value may
   * be observed by listening via [[Value.onValue]], or by calling [[Value.current]]. */
 export class Value<T> extends ReadableSource<T> {
-  private _id? :number
 
   /** Creates a constant value which always contains `value`. */
   static constant<T> (value :T) :Value<T> {
@@ -619,12 +616,6 @@ export class Value<T> extends ReadableSource<T> {
 
   /** The current value contained by this value. */
   get current () :T { return this._current() }
-
-  /** A lazily-created unique id for this value. */
-  get id () :number {
-    if (!this._id) this._id = ++lastValueId
-    return this._id
-  }
 
   /** Registers `fn` to be called with the new value whenever this subject changes.
     * @return a remover thunk (invoke with no args to unregister `fn`). */
@@ -780,23 +771,14 @@ export class Mutable<T> extends Value<T> implements Prop<T> {
   }
 }
 
-let lastBufferId = 0
-
 /** A reactive primitive that contains a changing value. It is similar to [[Value]] except that it
   * is designed for values which are mutated in place. For reactive values which must change every
   * frame, for example, it may be desirable to use a buffer instead of a value to avoid generating a
   * lot of garbage. */
 export class Buffer<T> extends ReadableSource<T> implements Prop<T> {
-  private _id? :number
   private _listeners :ValueFn<T>[] = []
 
   constructor (public current :T, private readonly updater? :(o :T, n :T) => T) { super() }
-
-  /** A lazily-created unique id for this buffer. */
-  get id () :number {
-    if (!this._id) this._id = ++lastBufferId
-    return this._id
-  }
 
   /** Registers `fn` to be called with the updated value whenever this buffer changes.
     * @return a remover thunk (invoke with no args to unregister `fn`). */
