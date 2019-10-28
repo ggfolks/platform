@@ -13,7 +13,9 @@
   },
   "sideEffects": false,
   "files": [
-    "lib"
+    "*/*.js",
+    "*/*.d.ts",
+    "*/*.d.ts.map"
   ],
   "scripts": {
     "build": "tsc -b",
