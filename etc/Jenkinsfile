@@ -27,7 +27,7 @@ pipeline {
     stage('Publish') {
       steps {
         withNPM(npmrcConfig: 'build1-npmrc') {
-          sh './bin/publish_snapshot.js'
+          sh './bin/publish_snapshot.js ${BUILD_NUMBER}'
         }
       }
     }

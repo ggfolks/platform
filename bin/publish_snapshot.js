@@ -14,15 +14,44 @@ if (!name || !version || !registry) {
   process.exit(255)
 }
 
-if (!version.endsWith("-snapshot")) {
-  console.warn(`${name} version (${version}) does not end with '-snapshot'. Aborting.`)
+const buildNum = process.argv[2]
+if (!buildNum) {
+  console.warn("Usage: publish_snapshot.js build_number")
   process.exit(255)
 }
 
-const unpub = spawn("npm", ["unpublish", "--registry", registry, `${name}@${version}`],
-                    {stdio: "inherit"})
-unpub.on("exit", code => {
-  if (code !== 0) console.warn(`Unpublish failed (code: ${code}), trying publish anyway...`)
-  const pub = spawn("npm", ["publish", "lib"], {stdio: "inherit"})
-  pub.on("exit", code => process.exit(code))
-})
+const snapVersion = `${version}-snapshot.${buildNum}`
+
+function exec (cmd, args, options = {}) {
+  return new Promise((resolve, reject) => {
+    const child = spawn(cmd, args, {...options, stdio: "inherit"})
+    child.on("error", err => reject(err))
+    child.on("exit", code => {
+      if (code === 0) resolve()
+      else reject(new Error(`${cmd} returned exit code ${code}`))
+    })
+  })
+}
+
+async function run () {
+  // this doesn't work because Verdaccio just can't even when run with a URL path prefix, sigh
+
+  // const oldVersion = `${version}-snapshot.${buildNum-1}`
+  // console.log(`Unpublishing old snapshot version: ${oldVersion}`)
+
+  // try {
+  //   await exec("npm", ["unpublish", "--registry", registry, `${name}@${oldVersion}`])
+  // } catch (err) {
+  //   console.warn(`Unpublish failed (${err.message}), trying publish anyway...`)
+  // }
+
+  try {
+    console.log(`Publishing new snapshot version: ${snapVersion}`)
+    await exec("npm", ["version", snapVersion], {cwd: "lib"})
+    await exec("npm", ["publish", "--tag", "snapshot"], {cwd: "lib"})
+    await exec("npm", ["version", version], {cwd: "lib"})
+  } catch (err) {
+    console.warn(`Publis failed: ${err.message}`)
+  }
+}
+run()
