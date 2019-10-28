@@ -54,6 +54,9 @@ async function run () {
   //   console.warn(`Unpublish failed (${err.message}), trying publish anyway...`)
   // }
 
+  await exec("cat", ["/.npmrc"])
+  await exec("npm", ["whoami"])
+
   try {
     console.log(`Publishing new snapshot version: ${snapVersion}`)
     await exec("npm", ["version", snapVersion], {cwd: "lib"})
