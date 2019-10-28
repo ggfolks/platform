@@ -1,35 +1,35 @@
 pipeline {
-    agent {
-        docker {
-            image 'node:12.13.0-alpine'
-            args '-p 3000:3000 --tmpfs /.npm'
-        }
+  agent {
+    docker {
+      image 'node:12.13.0-alpine'
+      args '-p 3000:3000 --tmpfs /.npm'
     }
-    environment {
-        CI = 'true'
+  }
+  environment {
+    CI = 'true'
+  }
+  stages {
+    stage('Build') {
+      steps {
+        dir("src") {
+          sh 'yarn install'
+          sh 'yarn build'
+        }
+      }
     }
-    stages {
-        stage('Build') {
-            steps {
-                dir("src") {
-                    sh 'yarn install'
-                    sh 'yarn build'
-                }
-            }
+    stage('Test') {
+      steps {
+        dir("src") {
+          sh 'yarn test'
         }
-        stage('Test') {
-            steps {
-                dir("src") {
-                    sh 'yarn test'
-                }
-            }
-        }
-        stage('Publish') {
-            steps {
-                withNPM(npmrcConfig: 'build1-npmrc') {
-                    sh './bin/publish_snapshot.js'
-                }
-            }
-        }
+      }
     }
+    stage('Publish') {
+      steps {
+        withNPM(npmrcConfig: 'build1-npmrc') {
+          sh './bin/publish_snapshot.js'
+        }
+      }
+    }
+  }
 }
