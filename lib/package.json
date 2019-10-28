@@ -13,9 +13,9 @@
   },
   "sideEffects": false,
   "files": [
-    "*/*.js",
-    "*/*.d.ts",
-    "*/*.d.ts.map"
+    "**/*.js",
+    "**/*.d.ts",
+    "**/*.d.ts.map"
   ],
   "scripts": {
     "build": "tsc -b",
