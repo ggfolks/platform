@@ -24,5 +24,10 @@ pipeline {
                 }
             }
         }
+        stage('Publish') {
+            dir("src") {
+                sh './bin/publish_snapshot.sh'
+            }
+        }
     }
 }
