@@ -20,6 +20,12 @@ if (!buildNum) {
   process.exit(255)
 }
 
+if (version.includes("-snapshot")) {
+  console.warn("Package version already has snapshot? ${version}")
+  console.warn("Did a previous publish fail?")
+  process.exit(255)
+}
+
 const snapVersion = `${version}-snapshot.${buildNum}`
 
 function exec (cmd, args, options = {}) {
@@ -32,6 +38,9 @@ function exec (cmd, args, options = {}) {
     })
   })
 }
+
+// temporary debugging
+console.log(process.env)
 
 async function run () {
   // this doesn't work because Verdaccio just can't even when run with a URL path prefix, sigh
@@ -49,9 +58,13 @@ async function run () {
     console.log(`Publishing new snapshot version: ${snapVersion}`)
     await exec("npm", ["version", snapVersion], {cwd: "lib"})
     await exec("npm", ["publish", "--tag", "snapshot"], {cwd: "lib"})
-    await exec("npm", ["version", version], {cwd: "lib"})
   } catch (err) {
     console.warn(`Publish failed: ${err.message}`)
+  }
+  try {
+    await exec("npm", ["version", version], {cwd: "lib"})
+  } catch (err) {
+    console.warn(`Version restoration failed: ${err.message}`)
   }
 }
 run()
