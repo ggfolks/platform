@@ -26,7 +26,7 @@ pipeline {
         }
         stage('Publish') {
             steps {
-                sh './bin/publish_snapshot.sh'
+                sh './bin/publish_snapshot.js'
             }
         }
     }
