@@ -51,7 +51,7 @@ async function run () {
     await exec("npm", ["publish", "--tag", "snapshot"], {cwd: "lib"})
     await exec("npm", ["version", version], {cwd: "lib"})
   } catch (err) {
-    console.warn(`Publis failed: ${err.message}`)
+    console.warn(`Publish failed: ${err.message}`)
   }
 }
 run()
