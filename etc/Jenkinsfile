@@ -2,7 +2,7 @@ pipeline {
     agent {
         docker {
             image 'node:12.13.0-alpine'
-            args '-p 3000:3000'
+            args '-p 3000:3000 --tmpfs /.npm'
         }
     }
     environment {
@@ -26,7 +26,9 @@ pipeline {
         }
         stage('Publish') {
             steps {
-                sh './bin/publish_snapshot.js'
+                withNPM(npmrcConfig: 'build1-npmrc') {
+                    sh './bin/publish_snapshot.js'
+                }
             }
         }
     }
