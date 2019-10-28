@@ -1,4 +1,4 @@
-import {rect} from "../core/math"
+import {rect, vec2} from "../core/math"
 import {Value} from "../core/react"
 import {MutableSet} from "../core/rcollect"
 import {Element, ElementContext} from "./element"
@@ -30,21 +30,27 @@ export class TreeView extends VGroup implements AbstractList {
     const updateParentOrder = ctx.model.resolveOpt(config.updateParentOrder)
     this.disposer.add(syncListContents(ctx, this, {
       type: "row",
+      offPolicy: "stretch",
       contents: [
         {
-          type: "toggle",
-          checked: "expanded",
-          onClick: "toggleExpanded",
+          type: "box",
           contents: {
-            type: "box",
-            scopeId: "treeViewToggle",
-            contents: {type: "label", text: Value.constant("▸")},
+            type: "toggle",
+            visible: "hasChildren",
+            checked: "expanded",
+            onClick: "toggleExpanded",
+            contents: {
+              type: "box",
+              scopeId: "treeViewToggle",
+              contents: {type: "label", text: Value.constant("▸")},
+            },
+            checkedContents: {
+              type: "box",
+              scopeId: "treeViewToggle",
+              contents: {type: "label", text: Value.constant("▾")},
+            },
           },
-          checkedContents: {
-            type: "box",
-            scopeId: "treeViewToggle",
-            contents: {type: "label", text: Value.constant("▾")},
-          },
+          style: {valign: "top"},
         },
         {
           type: "column",
@@ -63,6 +69,7 @@ export class TreeView extends VGroup implements AbstractList {
               element: config.element,
               keys: "childKeys",
               data: "childData",
+              key: config.key,
               selectedKeys,
               updateParentOrder,
             },
@@ -72,12 +79,29 @@ export class TreeView extends VGroup implements AbstractList {
     }))
   }
 
-  visitNodeKeys (op :(key :ModelKey) => void) {
-    for (const element of this.contents) {
+  visitNodes (
+    op :(node :TreeViewNode, parentKey :ModelKey|undefined, index :number) => void,
+    parentKey? :ModelKey,
+  ) {
+    for (let ii = 0; ii < this.contents.length; ii++) {
+      const element = this.contents[ii]
       const node = element.findChild("treeViewNode") as TreeViewNode
-      op(node.key)
+      op(node, parentKey, ii)
       const treeView = element.findChild("treeView") as TreeView
-      treeView.visitNodeKeys(op)
+      treeView.visitNodes(op, node.key)
+    }
+  }
+
+  visitVisibleNodes (
+    op :(node :TreeViewNode, parentKey :ModelKey|undefined, index :number) => void,
+    parentKey? :ModelKey,
+  ) {
+    for (let ii = 0; ii < this.contents.length; ii++) {
+      const element = this.contents[ii]
+      const node = element.findChild("treeViewNode") as TreeViewNode
+      op(node, parentKey, ii)
+      const treeView = element.findChild("treeView") as TreeView
+      if (treeView.visible.current) treeView.visitVisibleNodes(op, node.key)
     }
   }
 
@@ -108,6 +132,8 @@ export class TreeViewNode extends DragElement {
   private readonly _selectedKeys :MutableSet<ModelKey>
   private readonly _parentOrderUpdater? :ParentOrderUpdater
 
+  private _dropNode? :TreeViewNode
+
   get key () :ModelKey { return this._key.current }
 
   constructor (ctx :ElementContext, parent :Element, readonly config :TreeViewNodeConfig) {
@@ -118,6 +144,13 @@ export class TreeViewNode extends DragElement {
     if (config.updateParentOrder) {
       this._parentOrderUpdater = ctx.model.resolve(config.updateParentOrder)
     }
+  }
+
+  isDescendedFrom (node :TreeViewNode) {
+    for (let ancestor = this.parent; ancestor; ancestor = ancestor.parent) {
+      if (ancestor === node) return true
+    }
+    return false
   }
 
   get styleScope () { return TreeViewNodeStyleScope }
@@ -136,7 +169,8 @@ export class TreeViewNode extends DragElement {
 
     } else if (event.shiftKey) {
       let select = this._selectedKeys.size === 0
-      this._root.visitNodeKeys(key => {
+      this._root.visitNodes(node => {
+        const key = node.key
         if (select) {
           if (this._selectedKeys.has(key)) select = false
           else {
@@ -157,15 +191,6 @@ export class TreeViewNode extends DragElement {
     }
   }
 
-  private get _root () :TreeView {
-    let lastTreeView :TreeView|undefined
-    for (let ancestor = this.parent; ancestor; ancestor = ancestor.parent) {
-      if (ancestor instanceof TreeView) lastTreeView = ancestor
-    }
-    if (!lastTreeView) throw new Error("TreeViewNode used outside TreeView")
-    return lastTreeView
-  }
-
   get canReorder () :boolean {
     return !!this._parentOrderUpdater
   }
@@ -176,5 +201,67 @@ export class TreeViewNode extends DragElement {
   }
 
   protected _updateDropPosition () {
+    this._dropStart = undefined
+    this._dropEnd = undefined
+    this._dropData = undefined
+
+    let dropPosX = 0, dropPosY = 0, dropWidth = 0
+    let dropDistance = Infinity
+    const center = this._dragPos![1] + this.height / 2
+    this._root.visitVisibleNodes((node, parentKey, index) => {
+      const startPos = node.y
+      const startDistance = Math.abs(startPos - center)
+      if (startDistance < dropDistance) {
+        dropDistance = startDistance
+        dropPosX = node.x
+        dropPosY = startPos
+        dropWidth = node.width
+        this._setDropNode(undefined)
+        this._dropData = [parentKey, index]
+      }
+      const midPos = startPos + node.height / 2
+      const midDistance = Math.abs(midPos - center)
+      if (midDistance < dropDistance && node !== this && !node.isDescendedFrom(this)) {
+        dropDistance = midDistance
+        dropWidth = 0
+        this._setDropNode(node)
+        const tree = node.requireParent.findChild("treeView") as TreeView
+        this._dropData = [node.key, tree.contents.length]
+      }
+      const endPos = startPos + node.height
+      const endDistance = Math.abs(endPos - center)
+      if (endDistance < dropDistance) {
+        dropDistance = endDistance
+        dropPosX = node.x
+        dropPosY = endPos
+        dropWidth = node.width
+        this._setDropNode(undefined)
+        this._dropData = [parentKey, index + 1]
+      }
+    })
+    if (dropWidth === 0) return
+    this._dropStart = vec2.fromValues(dropPosX, dropPosY)
+    this._dropEnd = vec2.fromValues(dropPosX + dropWidth, dropPosY)
+  }
+
+  protected _clearDropPosition () {
+    super._clearDropPosition()
+    this._setDropNode(undefined)
+  }
+
+  private _setDropNode (node :TreeViewNode|undefined) {
+    if (this._dropNode === node) return
+    if (this._dropNode) this._dropNode._hovered.update(false)
+    this._dropNode = node
+    if (node) node._hovered.update(true)
+  }
+
+  private get _root () :TreeView {
+    let lastTreeView :TreeView|undefined
+    for (let ancestor = this.parent; ancestor; ancestor = ancestor.parent) {
+      if (ancestor instanceof TreeView) lastTreeView = ancestor
+    }
+    if (!lastTreeView) throw new Error("TreeViewNode used outside TreeView")
+    return lastTreeView
   }
 }

@@ -158,6 +158,7 @@ export abstract class DragElement extends Control {
       this.clearCursor(this)
       this.dirty()
       this._dragPos = undefined
+      this._clearDropPosition()
     }
     return {
       move: (moveEvent :MouseEvent|TouchEvent, pos :vec2) => {
@@ -212,6 +213,11 @@ export abstract class DragElement extends Control {
     this._dropEnd = vec2.fromValues(this.x + this.width - 1, this.y + this.height - 1)
     this._dropStart[posIdx] = dropPos
     this._dropEnd[posIdx] = dropPos
+  }
+
+  protected _clearDropPosition () {
+    this._dropStart = undefined
+    this._dropEnd = undefined
   }
 
   handleDoubleClick (event :MouseEvent, pos :vec2) :boolean {
