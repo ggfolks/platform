@@ -175,8 +175,6 @@ class LocalMutableList<E> extends MutableList<E> {
   }
 }
 
-// TODO: these are just interface definitions for now, to sketch out the API
-
 //
 // Reactive sets
 
