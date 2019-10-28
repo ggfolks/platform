@@ -1,12 +1,15 @@
 {
   "name": "tfw",
-  "version": "1.0.0",
+  "version": "0.1.0",
   "description": "The tfw multiplayer game platform",
   "author": "tfw, inc. (https://tfw.dev)",
   "license": "MIT",
   "repository": {
     "type": "git",
     "url": "https://github.com/tfwdev/platform.git"
+  },
+  "publishConfig": {
+    "registry": "https://build1.tfw.dev/registry/"
   },
   "sideEffects": false,
   "files": [
