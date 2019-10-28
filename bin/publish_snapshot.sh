@@ -1,4 +1,4 @@
-#!/bin/sh
+#!/bin/bash
 #
 # Publishes "snapshot" versions of the platform to our local NPM registry. NPM does not support
 # snapshot versions, so the way this is accomplished is to unpublish the package and republish it
