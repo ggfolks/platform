@@ -8,6 +8,7 @@ import {UINodeContext} from "../ui/node"
 import {GraphConfig} from "../graph/graph"
 import {CategoryNode} from "../graph/node"
 import {setEnumMeta} from "../graph/meta"
+import {PropertyMeta} from "./meta"
 import {PhysicsEngine} from "./physics"
 import {RenderEngine} from "./render"
 
@@ -175,6 +176,12 @@ export interface Component extends Disposable {
 
   /** The component's type aliases, under which it is also registered. */
   readonly aliases :string[]
+
+  /** Whether or not the component is removable (transforms, for instance, are not). */
+  readonly removable :boolean
+
+  /** The metadata for the component's viewable/editable properties. */
+  readonly propertiesMeta :RMap<string, PropertyMeta>
 
   /** The sort order of the component. */
   order :number

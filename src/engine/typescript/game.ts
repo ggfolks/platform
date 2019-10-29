@@ -22,7 +22,7 @@ import {
   Cylinder, GameContext, GameEngine, GameObject, GameObjectConfig, Graph, Mesh, MeshFilter, Page,
   PrimitiveType, Quad, SpaceConfig, Sphere, Time, Transform,
 } from "../game"
-import {getComponentMeta, property} from "../meta"
+import {PropertyMeta, getComponentMeta, property} from "../meta"
 import {PhysicsEngine} from "../physics"
 import {RenderEngine} from "../render"
 import {registerEngineNodes, registerEngineSubgraphs} from "../node"
@@ -415,6 +415,12 @@ export class TypeScriptComponent implements Component {
   protected readonly _disposer = new Disposer()
   private readonly _coroutines :Coroutine[] = []
 
+  get removable () :boolean { return true }
+
+  get propertiesMeta () :RMap<string, PropertyMeta> {
+    return getComponentMeta(Object.getPrototypeOf(this)).properties
+  }
+
   get order () :number { return this.orderValue.current }
   set order (order :number) { this.orderValue.update(order) }
 
@@ -625,6 +631,8 @@ class TypeScriptTransform extends TypeScriptComponent implements Transform {
       WORLD_TO_LOCAL_MATRIX_INVALID,
     )
   }
+
+  get removable () :boolean { return false }
 
   get parent () :Transform|undefined { return this._parent }
   set parent (newParent :Transform|undefined) { this.setParent(newParent) }
