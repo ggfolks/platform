@@ -144,8 +144,8 @@ export abstract class AbsGroup extends Group {
       const constraints = absConstraints(element)
       const position = absPosition(constraints)
       const size = constraints.size || element.preferredSize(hintX, hintY)
-      into[0] = Math.max(into[0], constraints.stretchX ? hintX : position[0] + size[0])
-      into[1] = Math.max(into[1], constraints.stretchY ? hintY : position[1] + size[1])
+      into[0] = Math.max(into[0], position[0] + size[0])
+      into[1] = Math.max(into[1], position[1] + size[1])
     }
   }
 

@@ -257,17 +257,20 @@ export class DropdownItem extends AbstractDropdownItem {
 /** Creates and returns a generic dropdown item config with support for submenus and separators.
   * @param maxDepth the maximum submenu depth.
   * @param [type="dropdownItem"] the item type ("dropdownItem" or "menuItem").
-  * @param [dropLeft=false] if true, drop left rather than right. */
+  * @param [dropLeft=false] if true, drop left rather than right.
+  * @param [scopeId] a replacement scope id to use. */
 export function createDropdownItemConfig (
   maxDepth :number,
   type = "dropdownItem",
   dropLeft = false,
+  scopeId? :string,
 ) :AbstractDropdownItemConfig {
   let element :AbstractDropdownItemConfig = {
     type,
     dropLeft,
     contents: {
       type: "box",
+      scopeId,
       contents: {type: "label", text: "name"},
       style: {halign: "left"},
     },
@@ -282,6 +285,7 @@ export function createDropdownItemConfig (
       shortcut: "shortcut",
       contents: {
         type: "box",
+        scopeId,
         contents: {
           type: "row",
           offPolicy: "stretch",
