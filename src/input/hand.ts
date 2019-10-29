@@ -28,12 +28,14 @@ export class Hand implements Disposable {
     this._disposer.add(this.mouse = new Mouse())
     this._disposer.add(this.touchpad = new Touchpad())
 
-    this._disposer.add(pointerEvents("pointerdown").onEmit(
-      event => _canvas.setPointerCapture(event.pointerId),
-    ))
-    this._disposer.add(pointerEvents("pointerup").onEmit(
-      event => _canvas.releasePointerCapture(event.pointerId),
-    ))
+    this._disposer.add(pointerEvents("pointerdown").onEmit(event => {
+      const target = event.target as HTMLElement
+      target.setPointerCapture(event.pointerId)
+    }))
+    this._disposer.add(pointerEvents("pointerup").onEmit(event => {
+      const target = event.target as HTMLElement
+      target.releasePointerCapture(event.pointerId)
+    }))
   }
 
   /** Updates the mouse and touchpad state.  Should be called once per frame. */
