@@ -220,6 +220,10 @@ export abstract class DragElement extends Control {
     this._dropEnd = undefined
   }
 
+  handleWheel (event :WheelEvent, pos :vec2) :boolean {
+    return this.contents.handleWheel(event, pos)
+  }
+  
   handleDoubleClick (event :MouseEvent, pos :vec2) :boolean {
     return this.contents.handleDoubleClick(event, pos)
   }

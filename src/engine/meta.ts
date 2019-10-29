@@ -9,8 +9,13 @@ export interface PropertyMeta {
 
 /** Base interface for property constraints. */
 export interface PropertyConstraints {
+  /** If true, this property is read-only. */
   readonly? :boolean
+  /** If true, this property should not be persisted. */
   transient? :boolean
+  /** If false, this property should not be shown in the editor interface. */
+  editable? :boolean
+  /** Extra bits may apply to specific property types. */
   [extra :string] :any
 }
 

@@ -1,4 +1,4 @@
-import {vec2, vec3} from "gl-matrix"
+import {glMatrix, quat, vec2, vec3} from "gl-matrix"
 
 export * from "gl-matrix"
 
@@ -31,6 +31,14 @@ export const vec2ToString = (v :vec2, digits? :number) => posToString(v[0], v[1]
 
 /** Returns `val` clamped to the range `[min, max]`. */
 export const clamp = (val :number, min :number, max :number) => Math.min(Math.max(min, val), max)
+
+/** Converts a value in degrees to radians. */
+export const toRadian = glMatrix.toRadian
+
+const radiansToDegrees = 180 / Math.PI
+
+/** Converts a value in radians to degrees. */
+export const toDegree = (radians :number) => radians * radiansToDegrees
 
 export class dim2 extends Float32Array {
 
@@ -230,5 +238,45 @@ export class Plane extends Float32Array {
   /** Computes the dot product of the plane normal with a point. */
   private static _dot (plane :Plane, point :vec3) {
     return plane[0] * point[0] + plane[1] * point[1] + plane[2] * point[2]
+  }
+}
+
+/** A set of Euler angles in degrees and XYZ order. */
+export class Euler extends Float32Array {
+
+  private constructor () {
+    super(3)
+  }
+
+  /** Creates a new set of Euler angles set to zero. */
+  static create () :Euler { return new Euler() }
+
+  /** Creates a new set of Euler angles from components. */
+  static fromValues (x :number, y :number, z :number) :Euler {
+    return Euler.set(Euler.create(), x, y, z)
+  }
+
+  /** Sets the components of a set of Euler angles. */
+  static set (out :Euler, x :number, y :number, z :number) :Euler {
+    out[0] = x
+    out[1] = y
+    out[2] = z
+    return out
+  }
+
+  /** Sets a set of Euler angles from a quaternion. */
+  static fromQuat (out :Euler, q :quat) :Euler {
+    // https://en.wikipedia.org/wiki/Conversion_between_quaternions_and_Euler_angles#Quaternion_to_Euler_Angles_Conversion
+    // (note that on that page, [x, y, z, w] = [q1, q2, q3, q0])
+    const q0 = q[3]
+    const q1 = q[0]
+    const q2 = q[1]
+    const q3 = q[2]
+    return Euler.set(
+      out,
+      toDegree(Math.atan2(2 * (q0*q1 + q2*q3), 1 - 2 * (q1*q1 + q2*q2))),
+      toDegree(Math.asin(2 * (q0*q2 - q3*q1))),
+      toDegree(Math.atan2(2 * (q0*q3 + q1*q2), 1 - 2 * (q2*q2 + q3*q3))),
+    )
   }
 }

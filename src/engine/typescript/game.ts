@@ -540,7 +540,7 @@ const WORLD_INVALID =
   LOCAL_TO_WORLD_MATRIX_INVALID | WORLD_TO_LOCAL_MATRIX_INVALID
 
 class TypeScriptTransform extends TypeScriptComponent implements Transform {
-  @property("vec3", {transient: true}) readonly lossyScale :vec3
+  @property("vec3", {readonly: true, transient: true}) readonly lossyScale :vec3
   readonly localToWorldMatrix :mat4
   readonly worldToLocalMatrix :mat4
 

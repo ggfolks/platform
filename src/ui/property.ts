@@ -1,6 +1,6 @@
-import {Color, Euler, Math as M, Vector3} from "three"
+import {Color as ThreeColor, Euler as ThreeEuler, Math as M, Vector3} from "three"
 
-import {vec3} from "../core/math"
+import {Euler, quat, vec3} from "../core/math"
 import {Mutable, Value} from "../core/react"
 import {PMap, toLimitedString} from "../core/util"
 import {NumberConstraints, SelectConstraints, getEnumMeta} from "../graph/meta"
@@ -128,6 +128,45 @@ const propertyConfigCreators :PMap<PropertyConfigCreator> = {
       ],
     })
   },
+  quat: (model, editable) => {
+    const value = model.resolve<Mutable<quat>>("value").bimap(
+      q => Euler.fromQuat(Euler.create(), q),
+      (q, e) => quat.fromEuler(quat.create(), e[0], e[1], e[2]),
+    )
+    return createPropertyRowConfig(model, {
+      type: "row",
+      constraints: {stretch: true},
+      contents: [
+        {
+          type: "numberText",
+          constraints: {stretch: true},
+          number: value.bimap(e => e[0], (e, x) => Euler.fromValues(x, e[1], e[2])),
+          contents: NumberBox,
+          min: -180,
+          max: 180,
+          maxDecimals: 0,
+        },
+        {
+          type: "numberText",
+          constraints: {stretch: true},
+          number: value.bimap(e => e[1], (e, y) => Euler.fromValues(e[0], y, e[2])),
+          contents: NumberBox,
+          min: -180,
+          max: 180,
+          maxDecimals: 0,
+        },
+        {
+          type: "numberText",
+          constraints: {stretch: true},
+          number: value.bimap(e => e[2], (e, z) => Euler.fromValues(e[0], e[1], z)),
+          contents: NumberBox,
+          min: -180,
+          max: 180,
+          maxDecimals: 0,
+        },
+      ],
+    })
+  },
   Vector3: (model, editable) => {
     const value = model.resolve<Mutable<Vector3>>("value")
     return createPropertyRowConfig(model, {
@@ -156,14 +195,17 @@ const propertyConfigCreators :PMap<PropertyConfigCreator> = {
     })
   },
   Euler: (model, editable) => {
-    const value = model.resolve<Mutable<Euler>>("value")
+    const value = model.resolve<Mutable<ThreeEuler>>("value")
     return createPropertyRowConfig(model, {
       type: "row",
       contents: [
         {
           type: "numberText",
           constraints: {stretch: true},
-          number: value.bimap(e => M.radToDeg(e.x), (e, x) => new Euler(M.degToRad(x), e.y, e.z)),
+          number: value.bimap(
+            e => M.radToDeg(e.x),
+            (e, x) => new ThreeEuler(M.degToRad(x), e.y, e.z),
+          ),
           contents: NumberBox,
           min: -180,
           max: 180,
@@ -172,7 +214,10 @@ const propertyConfigCreators :PMap<PropertyConfigCreator> = {
         {
           type: "numberText",
           constraints: {stretch: true},
-          number: value.bimap(e => M.radToDeg(e.y), (e, y) => new Euler(e.x, M.degToRad(y), e.z)),
+          number: value.bimap(
+            e => M.radToDeg(e.y),
+            (e, y) => new ThreeEuler(e.x, M.degToRad(y), e.z),
+          ),
           contents: NumberBox,
           min: -180,
           max: 180,
@@ -181,7 +226,10 @@ const propertyConfigCreators :PMap<PropertyConfigCreator> = {
         {
           type: "numberText",
           constraints: {stretch: true},
-          number: value.bimap(e => M.radToDeg(e.z), (e, z) => new Euler(e.x, e.y, M.degToRad(z))),
+          number: value.bimap(
+            e => M.radToDeg(e.z),
+            (e, z) => new ThreeEuler(e.x, e.y, M.degToRad(z)),
+          ),
           contents: NumberBox,
           min: -180,
           max: 180,
@@ -191,11 +239,11 @@ const propertyConfigCreators :PMap<PropertyConfigCreator> = {
     })
   },
   Color: (model, editable) => {
-    const value = model.resolve<Mutable<Color>>("value")
+    const value = model.resolve<Mutable<ThreeColor>>("value")
     return createPropertyRowConfig(model, {
       type: "colorText",
       constraints: {stretch: true},
-      color: value.bimap(c => c.getHexString(), (c, s) => new Color("#" + s)),
+      color: value.bimap(c => c.getHexString(), (c, s) => new ThreeColor("#" + s)),
       enabled: editable,
       contents: {
         type: "box",
