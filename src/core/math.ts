@@ -13,7 +13,7 @@ const toFixedString = (n :number, digits? :number) =>
 /** Converts a number to a string of the form `Sw.f` where `S` is `+` or `-`, optionally rounding
   * to the specified number of decimal digits. */
 export const numToString = (n :number, digits? :number) =>
-  `${n >= 0 ? "+" : ""}${toFixedString(n, digits)}) : n}`
+  `${n >= 0 ? "+" : ""}${toFixedString(n, digits)}`
 
 /** Converts a 2D position to a string of the form `Sx.xSy.y`, optionally rounding to the specified
   * number of decimal digits. */
@@ -23,7 +23,7 @@ export const posToString = (x :number, y :number, digits? :number) =>
 /** Converts a 2D size to a string of the form `WxH`, optionally rounding to the specified number
   * of decimal digits. */
 export const sizeToString = (w :number, h :number, digits? :number) =>
-  `${toFixedString(w, digits)}x$toFixedt(h, digits)}`
+  `${toFixedString(w, digits)}x${toFixedString(h, digits)}`
 
 /** Converts a 2D vector to a string of the form `Sx.xSy.y`, optionally rounding to the specified
   * number of decimal digits. */
