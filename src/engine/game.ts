@@ -82,6 +82,9 @@ export interface GameEngine extends Disposable {
     * @param [config] the configuration of the object's components. */
   createGameObject (name? :string, config? :GameObjectConfig) :GameObject
 
+  /** Returns the configuration of the entire space as a new object. */
+  getConfig () :SpaceConfig
+
   /** Updates the game state. */
   update (clock :Clock) :void
 }

@@ -27,6 +27,9 @@ export class Color extends Float32Array {
     return Color.setAHSV(Color.create(), a, h, s, v)
   }
 
+  /** Creates a color from another color. */
+  static clone (c :Color) :Color { return Color.copy(Color.create(), c) }
+
   /** Copies color `c` into `into`.
     * @return the supplied color `into`. */
   static copy (into :Color, c :Color) :Color {

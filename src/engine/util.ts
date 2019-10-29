@@ -163,3 +163,111 @@ export function* waitForAll (...generators :Generator<void>[]) {
     yield
   }
 }
+
+const IDENTIFIER_PATTERN = /^[a-zA-Z_]\w*$/
+const QUOTE_PATTERN = /\"/g
+
+const constructorStringifiers = new Map<Function, (value :any, indent :number) => string>([
+  [Float32Array, value => `Float32Array.of(${value.join(", ")})`],
+  [Color, value => `Color.fromARGB(${value.join(", ")})`],
+  [Object, (value, indent) => {
+    let string = (indent === 0) ? "({" : "{"
+    const nextIndent = indent + 2
+    const nextIndentString = " ".repeat(nextIndent)
+    let first = true
+    for (const key in value) {
+      if (first) {
+        string += "\n"
+        first = false
+      } else string += ",\n"
+      string += nextIndentString
+      if (IDENTIFIER_PATTERN.test(key)) string += key
+      else string += `"${key.replace(QUOTE_PATTERN, "\"")}"`
+      string += ": " + JavaScript.stringify(value[key], nextIndent)
+    }
+    if (!first) string += "\n" + " ".repeat(indent)
+    return string + (indent === 0 ? "})" : "}")
+  }],
+])
+
+const constructorCloners = new Map<Function, (value :any) => any>([
+  [Float32Array, value => cloneTypedArray(Float32Array, value)],
+  [Color, value => Color.clone(value)],
+  [Object, value => {
+    const obj :PMap<any> = {}
+    for (const key in value) obj[key] = JavaScript.clone(value[key])
+    return obj
+  }],
+])
+
+interface TypedArrayConstructor<T> {
+  new (size :number): T
+}
+
+function cloneTypedArray (constructor :TypedArrayConstructor<any>, value :any) {
+  // we copy "manually" rather than using one of the various typed array functions (slice,
+  // TypedArray.from, etc.) because this way works with the proxies we use for transform elements
+  const array = new constructor(value.length)
+  for (let ii = 0; ii < array.length; ii++) array[ii] = value[ii]
+  return array
+}
+
+/** Utility class to assist with converting JS objects to strings and vice-versa; equivalent to
+  * the `JSON` class. */
+export abstract class JavaScript {
+
+  /** Converts a JavaScript value to a parseable string.
+    * @param value the value to stringify.
+    * @param [indent=0] the current indentation level.
+    * @return the resulting string. */
+  static stringify (value :any, indent = 0) :string {
+    switch (typeof value) {
+      case "undefined":
+      case "boolean":
+      case "number":
+        return String(value)
+
+      case "string":
+        return `"${value}"`
+
+      case "object":
+        if (value === null) return "null"
+        const stringifier = constructorStringifiers.get(value.constructor)
+        if (stringifier) return stringifier(value, indent)
+        throw new Error(`Don't know how to stringify "${value}" ("${value.constructor}")`)
+
+      default:
+        throw new Error(`Don't know how to stringify "${value}" ("${typeof value}")`)
+    }
+  }
+
+  /** Parses a JavaScript value and returns the result.  Currently this just evaluates the string,
+    * but in the future we may want to use a safer method.
+    * @param js the JavaScript string to parse.
+    * @return the parsed value. */
+  static parse (js :string) :any {
+    return eval(js)
+  }
+
+  /** Clones a value of the types supported for parsing and stringification.
+    * @param value the value to clone.
+    * @return the cloned value. */
+  static clone (value :any) :any {
+    switch (typeof value) {
+      case "undefined":
+      case "boolean":
+      case "number":
+      case "string":
+        return value
+
+      case "object":
+        if (value === null) return null
+        const cloner = constructorCloners.get(value.constructor)
+        if (cloner) return cloner(value)
+        throw new Error(`Don't know how to clone "${value}" ("${value.constructor}")`)
+
+      default:
+        throw new Error(`Don't know how to clone "${value}" ("${typeof value}")`)
+    }
+  }
+}

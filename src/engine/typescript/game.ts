@@ -22,10 +22,11 @@ import {
   Cylinder, GameContext, GameEngine, GameObject, GameObjectConfig, Graph, Mesh, MeshFilter, Page,
   PrimitiveType, Quad, SpaceConfig, Sphere, Time, Transform,
 } from "../game"
-import {property} from "../meta"
+import {getComponentMeta, property} from "../meta"
 import {PhysicsEngine} from "../physics"
 import {RenderEngine} from "../render"
 import {registerEngineNodes, registerEngineSubgraphs} from "../node"
+import {JavaScript} from "../util"
 
 interface Updatable { update (clock :Clock) :void }
 interface Wakeable { awake () :void }
@@ -119,6 +120,12 @@ export class TypeScriptGameEngine implements GameEngine {
 
   createGameObject (name? :string, config? :GameObjectConfig) :GameObject {
     return new TypeScriptGameObject(this, getValue(name, "object"), config || {})
+  }
+
+  getConfig () :SpaceConfig {
+    const config :SpaceConfig = {}
+    for (const [id, gameObject] of this.gameObjects) config[id] = gameObject.getConfig()
+    return config
   }
 
   update (clock :Clock) :void {
@@ -349,7 +356,12 @@ export class TypeScriptGameObject implements GameObject {
   }
 
   getConfig () :GameObjectConfig {
-    const config :GameObjectConfig = {name: this.name, order: this.order}
+    const config :GameObjectConfig = {}
+    if (this.name !== this.id) config.name = this.name
+    if (this.order !== 0) config.order = this.order
+    for (const type of this._componentTypes.current) {
+      config[type] = this._components.require(type).getConfig()
+    }
     return config
   }
 
@@ -453,7 +465,13 @@ export class TypeScriptComponent implements Component {
   }
 
   getConfig () :ComponentConfig {
-    const config = {type: this.type}
+    const config :ComponentConfig = {}
+    if (this.order !== 0) config.order = this.order
+    const meta = getComponentMeta(Object.getPrototypeOf(this))
+    for (const [key, property] of meta.properties) {
+      if (property.constraints.readonly || property.constraints.transient) continue
+      config[key] = JavaScript.clone(this[key])
+    }
     return config
   }
 
@@ -516,7 +534,7 @@ const WORLD_INVALID =
   LOCAL_TO_WORLD_MATRIX_INVALID | WORLD_TO_LOCAL_MATRIX_INVALID
 
 class TypeScriptTransform extends TypeScriptComponent implements Transform {
-  readonly lossyScale :vec3
+  @property("vec3", {transient: true}) readonly lossyScale :vec3
   readonly localToWorldMatrix :mat4
   readonly worldToLocalMatrix :mat4
 
@@ -638,19 +656,19 @@ class TypeScriptTransform extends TypeScriptComponent implements Transform {
     return this._children[index]
   }
 
-  get localPosition () :vec3 { return this._localPosition }
+  @property("vec3") get localPosition () :vec3 { return this._localPosition }
   set localPosition (pos :vec3) { vec3.copy(this._localPosition, pos) }
 
-  get localRotation () :quat { return this._localRotation }
+  @property("quat") get localRotation () :quat { return this._localRotation }
   set localRotation (rot :quat) { quat.copy(this._localRotation, rot) }
 
-  get localScale () :vec3 { return this._localScale }
+  @property("vec3") get localScale () :vec3 { return this._localScale }
   set localScale (scale :vec3) { vec3.copy(this._localScale, scale) }
 
-  @property("vec3") get position () :vec3 { return this._position }
+  @property("vec3", {transient: true}) get position () :vec3 { return this._position }
   set position (pos :vec3) { vec3.copy(this._position, pos) }
 
-  @property("quat") get rotation () :quat { return this._rotation }
+  @property("quat", {transient: true}) get rotation () :quat { return this._rotation }
   set rotation (rot :quat) { quat.copy(this._rotation, rot) }
 
   rotate (euler :vec3, frame? :CoordinateFrame) :void {

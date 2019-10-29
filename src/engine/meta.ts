@@ -4,12 +4,13 @@ import {Component} from "./game"
 /** The metadata associated with a viewable/editable property. */
 export interface PropertyMeta {
   type :string
-  constraints? :PropertyConstraints
+  constraints :PropertyConstraints
 }
 
 /** Base interface for property constraints. */
 export interface PropertyConstraints {
   readonly? :boolean
+  transient? :boolean
   [extra :string] :any
 }
 
@@ -19,7 +20,7 @@ export interface ComponentMeta {
 }
 
 /** Marks the decorated field as a viewable/editable property. */
-export function property (type :string, constraints? :PropertyConstraints) {
+export function property (type :string, constraints :PropertyConstraints = {}) {
   return (prototype :Component, name :string) => {
     getComponentMeta(prototype).properties.set(name, {type, constraints})
   }
