@@ -1,10 +1,12 @@
 import {vec2} from "gl-matrix"
-import {Disposable} from "../core/util"
+import {Disposable, Disposer} from "../core/util"
 import {Emitter, Mutable, Stream, Value} from "../core/react"
+import {mouseEvents} from "./react"
 
 /** Provides reactive values for mouse state. */
 export class Mouse implements Disposable {
 
+  private _disposer = new Disposer()
   private _buttonStates :Map<number, Mutable<boolean>> = new Map()
   private _movement = Mutable.local(vec2.create())
   private _doubleClicked :Emitter<void> = new Emitter()
@@ -33,13 +35,33 @@ export class Mouse implements Disposable {
     return this._entered
   }
 
-  constructor (private _canvas :HTMLElement) {
-    _canvas.addEventListener("mousedown", this._onMouseDown)
-    document.addEventListener("mouseup", this._onMouseUp)
-    _canvas.addEventListener("dblclick", this._onDoubleClick)
-    _canvas.addEventListener("mousemove", this._onMouseMove)
-    _canvas.addEventListener("mouseenter", this._onMouseEnter)
-    _canvas.addEventListener("mouseleave", this._onMouseLeave)
+  constructor () {
+    this._disposer.add(mouseEvents("mousedown").onEmit(event => {
+      if (!event.cancelBubble) this._getButtonState(event.button).update(true)
+    }))
+    this._disposer.add(mouseEvents("mouseup").onEmit(event => {
+      this._getButtonState(event.button).update(false)
+    }))
+    this._disposer.add(mouseEvents("dblclick").onEmit(event => {
+      if (!event.cancelBubble) this._doubleClicked.emit()
+    }))
+    this._disposer.add(mouseEvents("mousemove").onEmit(event => {
+      if (!(this._lastScreen && this._lastOffset)) {
+        this._lastScreen = vec2.fromValues(event.screenX, event.screenY)
+        this._lastOffset = vec2.fromValues(event.offsetX, event.offsetY)
+        return
+      }
+      this._accumulatedMovement[0] += event.screenX - this._lastScreen[0]
+      this._accumulatedMovement[1] += event.screenY - this._lastScreen[1]
+      vec2.set(this._lastScreen, event.screenX, event.screenY)
+      vec2.set(this._lastOffset, event.offsetX, event.offsetY)
+    }))
+    this._disposer.add(mouseEvents("mouseenter").onEmit(event => {
+      this._entered = true
+    }))
+    this._disposer.add(mouseEvents("mouseleave").onEmit(event => {
+      this._entered = false
+    }))
   }
 
   /** Returns the state value corresponding to the given mouse button. */
@@ -57,44 +79,7 @@ export class Mouse implements Disposable {
   }
 
   dispose () {
-    this._canvas.removeEventListener("mousedown", this._onMouseDown)
-    document.removeEventListener("mouseup", this._onMouseUp)
-    this._canvas.removeEventListener("dblclick", this._onDoubleClick)
-    this._canvas.removeEventListener("mousemove", this._onMouseMove)
-    this._canvas.removeEventListener("mouseenter", this._onMouseEnter)
-    this._canvas.removeEventListener("mouseleave", this._onMouseLeave)
-  }
-
-  private _onMouseDown = (event :MouseEvent) => {
-    if (!event.cancelBubble) this._getButtonState(event.button).update(true)
-  }
-
-  private _onMouseUp = (event :MouseEvent) => {
-    this._getButtonState(event.button).update(false)
-  }
-
-  private _onDoubleClick = (event :MouseEvent) => {
-    if (!event.cancelBubble) this._doubleClicked.emit()
-  }
-
-  private _onMouseMove = (event :MouseEvent) => {
-    if (!(this._lastScreen && this._lastOffset)) {
-      this._lastScreen = vec2.fromValues(event.screenX, event.screenY)
-      this._lastOffset = vec2.fromValues(event.offsetX, event.offsetY)
-      return
-    }
-    this._accumulatedMovement[0] += event.screenX - this._lastScreen[0]
-    this._accumulatedMovement[1] += event.screenY - this._lastScreen[1]
-    vec2.set(this._lastScreen, event.screenX, event.screenY)
-    vec2.set(this._lastOffset, event.offsetX, event.offsetY)
-  }
-
-  private _onMouseEnter = (event :MouseEvent) => {
-    this._entered = true
-  }
-
-  private _onMouseLeave = (event :MouseEvent) => {
-    this._entered = false
+    this._disposer.dispose()
   }
 
   private _getButtonState (button :number) {

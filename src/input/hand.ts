@@ -1,7 +1,8 @@
 import {vec2, vec2ToString} from "../core/math"
 import {MutableMap, RMap} from "../core/rcollect"
-import {Disposable} from "../core/util"
+import {Disposable, Disposer} from "../core/util"
 import {Mouse} from "./mouse"
+import {pointerEvents} from "./react"
 import {Touchpad} from "./touchpad"
 
 /** The ID we use for the mouse pointer, which should never be a touch identifier. */
@@ -15,6 +16,7 @@ export class Hand implements Disposable {
   readonly mouse :Mouse
   readonly touchpad :Touchpad
 
+  private _disposer = new Disposer()
   private _pointers :MutableMap<number, Pointer> = MutableMap.local()
 
   /** Returns a reactive view of the map from ids to active pointers. */
@@ -22,11 +24,16 @@ export class Hand implements Disposable {
     return this._pointers
   }
 
-  constructor (private _canvas :HTMLElement) {
-    this.mouse = new Mouse(_canvas)
-    this.touchpad = new Touchpad(_canvas)
-    _canvas.addEventListener("pointerdown", this._onPointerDown)
-    _canvas.addEventListener("pointerup", this._onPointerUp)
+  constructor (private readonly _canvas :HTMLElement) {
+    this._disposer.add(this.mouse = new Mouse())
+    this._disposer.add(this.touchpad = new Touchpad())
+
+    this._disposer.add(pointerEvents("pointerdown").onEmit(
+      event => _canvas.setPointerCapture(event.pointerId),
+    ))
+    this._disposer.add(pointerEvents("pointerup").onEmit(
+      event => _canvas.releasePointerCapture(event.pointerId),
+    ))
   }
 
   /** Updates the mouse and touchpad state.  Should be called once per frame. */
@@ -74,18 +81,7 @@ export class Hand implements Disposable {
   }
 
   dispose () {
-    this._canvas.removeEventListener("pointerdown", this._onPointerDown)
-    this._canvas.removeEventListener("pointerup", this._onPointerUp)
-    this.mouse.dispose()
-    this.touchpad.dispose()
-  }
-
-  private _onPointerDown = (event :PointerEvent) => {
-    this._canvas.setPointerCapture(event.pointerId)
-  }
-
-  private _onPointerUp = (event :PointerEvent) => {
-    this._canvas.releasePointerCapture(event.pointerId)
+    this._disposer.dispose()
   }
 }
 
