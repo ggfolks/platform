@@ -21,14 +21,14 @@ abstract class TransformedContainer extends Control {
   get scale () :number { return 1 }
 
   applyToContaining (canvas :CanvasRenderingContext2D, pos :vec2, op :(element :Element) => void) {
-    const applied = super.applyToContaining(canvas, pos, op)
-    if (applied) this.contents.applyToContaining(canvas, this._transformPos(pos), op)
-    return applied
+    const contains = this.containsPos(pos)
+    if (contains) this.contents.applyToContaining(canvas, this._transformPos(pos), op)
+    return contains
   }
   applyToIntersecting (region :rect, op :(element :Element) => void) {
-    const applied = super.applyToIntersecting(region, op)
-    if (applied) this.contents.applyToIntersecting(this._transformRegion(region), op)
-    return applied
+    const intersects = this.intersectsRect(region)
+    if (intersects) this.contents.applyToIntersecting(this._transformRegion(region), op)
+    return intersects
   }
 
   dirty (region :rect = this.expandBounds(this._bounds), fromChild :boolean = false) {

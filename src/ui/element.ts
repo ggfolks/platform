@@ -222,9 +222,7 @@ export abstract class Element implements Disposable {
   }
 
   render (canvas :CanvasRenderingContext2D, region :rect) {
-    if (rect.intersects(this.expandBounds(this._bounds), region) && this.visible.current) {
-      this.rerender(canvas, region)
-    }
+    if (this.intersectsRect(region)) this.rerender(canvas, region)
     rect.zero(this._dirtyRegion)
   }
 
@@ -241,7 +239,7 @@ export abstract class Element implements Disposable {
    */
   applyToContaining (canvas :CanvasRenderingContext2D, pos :vec2,
                      op :(element :Element) => void) :boolean {
-    if (!this.visible.current || !rect.contains(this.expandBounds(this.bounds), pos)) return false
+    if (!this.containsPos(pos)) return false
     op(this)
     return true
   }
@@ -253,8 +251,7 @@ export abstract class Element implements Disposable {
    * @return whether the operation was applied to this element (and potentially its children).
    */
   applyToIntersecting (region :rect, op :(element :Element) => void) :boolean {
-    if (!this.visible.current ||
-        !rect.intersects(this.expandBounds(this.bounds), region)) return false
+    if (!this.intersectsRect(region)) return false
     op(this)
     return true
   }
@@ -344,6 +341,15 @@ export abstract class Element implements Disposable {
     if (style) return style
     log.warn(`Missing styles for state '${state}'`, "elem", this)
     return {} as S
+  }
+
+  /** Returns true if this element is visible and its bounds contain `pos`. */
+  protected containsPos (pos :vec2) {
+    return this.visible.current && rect.contains(this.expandBounds(this.bounds), pos)
+  }
+  /** Returns true if this element is visible and its bounds intersect `region`. */
+  protected intersectsRect (region :rect) {
+    return this.visible.current && rect.intersects(this.expandBounds(this.bounds), region)
   }
 
   protected invalidateOnChange (value :Source<any>) {
