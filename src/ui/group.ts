@@ -214,7 +214,7 @@ function axisWeight (c :AxisConstraints) :number { return c.weight || 1 }
 
 function computeSize (c :AxisConstraints, size :number, totalWeight :number,
                       availSize :number) :number {
-  return c.stretch ? (availSize * axisWeight(c) / totalWeight) : size
+  return c.stretch ? Math.round(availSize * axisWeight(c) / totalWeight) : size
 }
 
 function computeMetrics (group :Group, hintX :number, hintY :number,
