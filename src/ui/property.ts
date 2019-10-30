@@ -254,10 +254,15 @@ const propertyConfigCreators :PMap<PropertyConfigCreator> = {
   },
   select: (model, editable) => {
     const constraints = model.resolve<Value<SelectConstraints>>("constraints")
+    let options :Value<Map<any, string>> = constraints.map(cs => {
+      return Array.isArray(cs.options)
+        ? new Map<string, string>(cs.options.map(opt => [opt, opt]))
+        : cs.options
+    })
     return createEnumPropertyConfig(
       model,
       editable,
-      constraints.map(constraints => constraints.options),
+      options,
     )
   },
 }
@@ -267,7 +272,8 @@ function createPropertyElementConfig (model :Model, editable :Value<boolean>) {
   const creator = propertyConfigCreators[type.current]
   if (creator) return creator(model, editable)
   const enumMeta = getEnumMeta(type.current)
-  if (enumMeta) return createEnumPropertyConfig(model, editable, Value.constant(enumMeta.values))
+  if (enumMeta) return createEnumPropertyConfig(model, editable,
+      Value.constant(new Map<string, string>(enumMeta.values.map(opt => [opt, opt]))))
   return createPropertyRowConfig(model, {
     type: "label",
     constraints: {stretch: true},
@@ -275,7 +281,8 @@ function createPropertyElementConfig (model :Model, editable :Value<boolean>) {
   })
 }
 
-function createEnumPropertyConfig (model :Model, editable :Value<boolean>, keys :Value<string[]>) {
+function createEnumPropertyConfig (
+    model :Model, editable :Value<boolean>, options :Value<Map<any, string>>) {
   const value = model.resolve<Mutable<string>>("value")
   return createPropertyRowConfig(model, {
     type: "dropdown",
@@ -293,11 +300,11 @@ function createEnumPropertyConfig (model :Model, editable :Value<boolean>, keys 
       },
       action: "action",
     },
-    keys,
+    keys: options.map(map => Array.from(map.keys())),
     data: {
       resolve: (key :ModelKey) => new Model({
         name: Value.constant(key as string),
-        action: () => value.update(key as string),
+        action: () => value.update(options.current.get(key as string)!),
       }),
     },
   })
