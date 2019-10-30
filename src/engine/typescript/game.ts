@@ -457,17 +457,16 @@ export class TypeScriptComponent implements Component {
   }
 
   getProperty<T> (name :string, overrideDefault? :any) :Value<T|undefined>|Mutable<T|undefined> {
-    switch (name) {
-      case "order": return this.orderValue as unknown as Mutable<T|undefined>
-      default:
-        // default implementation doesn't know about changes
-        return Mutable.deriveMutable(
-          dispatch => NoopRemover,
-          () => this[name] as T|undefined,
-          newValue => this[name] = newValue,
-          refEquals,
-        )
-    }
+    const propertyName = name + "Value"
+    const property = this[propertyName]
+    if (property instanceof Value) return property as unknown as Value<T|undefined>
+    // default implementation doesn't know about changes
+    return Mutable.deriveMutable(
+      dispatch => NoopRemover,
+      () => this[name] as T|undefined,
+      newValue => this[name] = newValue,
+      refEquals,
+    )
   }
 
   getConfig () :ComponentConfig {

@@ -546,28 +546,28 @@ class ThreeLight extends ThreeObjectComponent implements Light {
 registerComponentType(["render"], "light", ThreeLight)
 
 class ThreeModel extends ThreeObjectComponent implements Model {
-  private _url? :string
+  readonly urlValue = Mutable.local("")
+
   private _urlRemover :Remover = NoopRemover
 
-  @property("url") get url () :string|undefined { return this._url }
-  set url (url :string|undefined) {
-    if (this._url === url) return
-    this._url = url
-    this._updateUrl()
+  @property("url") get url () :string { return this.urlValue.current }
+  set url (url :string) { this.urlValue.update(url) }
+
+  constructor (gameObject :TypeScriptGameObject, type :string) {
+    super(gameObject, type)
+    this._disposer.add(this.urlValue.onChange(url => {
+      this._urlRemover()
+      this.objectValue.update(undefined)
+      if (!url) return
+      this._urlRemover = loadGLTF(url).onValue(gltf => {
+        this.objectValue.update(SkeletonUtils.clone(gltf.scene) as Object3D)
+      })
+    }))
   }
 
   dispose () {
     super.dispose()
     this._urlRemover()
-  }
-
-  private _updateUrl () {
-    this._urlRemover()
-    this.objectValue.update(undefined)
-    if (!this._url) return
-    this._urlRemover = loadGLTF(this._url).onValue(gltf => {
-      this.objectValue.update(SkeletonUtils.clone(gltf.scene) as Object3D)
-    })
   }
 
   protected _updateTransform () {

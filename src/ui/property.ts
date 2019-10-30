@@ -72,6 +72,47 @@ const propertyConfigCreators :PMap<PropertyConfigCreator> = {
       style: {halign: "left"},
     },
   }),
+  url: (model, editable) => {
+    const value = model.resolve<Mutable<string>>("value")
+    return createPropertyRowConfig(model, {
+      type: "row",
+      constraints: {stretch: true},
+      offPolicy: "stretch",
+      contents: [
+        {
+          type: "text",
+          constraints: {stretch: true},
+          text: "value",
+          enabled: editable,
+          contents: {
+            type: "box",
+            contents: {type: "label", text: "value"},
+            style: {halign: "left"},
+          },
+        },
+        {
+          type: "button",
+          visible: editable,
+          contents: {
+            type: "box",
+            scopeId: "propertyButton",
+            contents: {type: "label", text: Value.constant("⋮")},
+          },
+          onClick: () => {
+            const input = document.createElement("input")
+            input.setAttribute("type", "file")
+            input.addEventListener("change", event => {
+              if (!input.files || input.files.length === 0) return
+              const url = URL.createObjectURL(input.files[0])
+              value.update(url.toString())
+              // TODO: call revokeObjectURL when finished
+            })
+            input.click()
+          },
+        },
+      ],
+    })
+  },
   number: (model, editable) => {
     const constraints = model.resolve<Value<NumberConstraints>>("constraints").current
     return createPropertyRowConfig(model, {

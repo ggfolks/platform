@@ -10,6 +10,7 @@ const nodeBodyCorner = [0, 0, 5, 5]
 const menuCorner = [5, 5, 0, 0]
 const dropdownCorner = 5
 const nodeButtonCorner = 5
+const propertyButtonCorner = [0, 5, 5, 0]
 
 /** The font family. */
 export const family = "Helvetica, sans-serif"
@@ -91,6 +92,15 @@ export const DefaultStyles :StyleDefs = {
     nodeButton: {fill: {type: "color", color: "#404040"}, cornerRadius: nodeButtonCorner},
     nodeButtonHovered: {fill: {type: "color", color: "#383838"}, cornerRadius: nodeButtonCorner},
     nodeButtonPressed: {fill: {type: "color", color: "#303030"}, cornerRadius: nodeButtonCorner},
+    propertyButton: {fill: {type: "color", color: "#404040"}, cornerRadius: propertyButtonCorner},
+    propertyButtonHovered: {
+      fill: {type: "color", color: "#383838"},
+      cornerRadius: propertyButtonCorner,
+    },
+    propertyButtonPressed: {
+      fill: {type: "color", color: "#303030"},
+      cornerRadius: propertyButtonCorner,
+    },
   },
 }
 
@@ -309,6 +319,15 @@ export const DefaultTheme :Theme = {
   },
   nodeProperties: {
     label: {font: "$nodeProperty", fill: "$lightGray"},
+  },
+  propertyButton: {
+    box: {
+      background: "$propertyButton",
+      hovered: {background: "$propertyButtonHovered"},
+      hoverFocused: {background: "$propertyButtonHovered"},
+      pressed: {background: "$propertyButtonPressed"},
+    },
+    label: {font: "$nodeProperty", fill: "$white"},
   },
   nodeEdges: {
     box: {padding: 0, background: undefined},
