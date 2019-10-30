@@ -24,8 +24,8 @@ export interface NumberConstraints {
 
 /** Constraints on select properties. */
 export interface SelectConstraints {
-  /** Options can be either some labels mapped to values, or just labels. */
-  options: Map<string,any>|string[]
+  options :any[]
+  labeler? :(option :any) => string
 }
 
 /** The metadata associated with a graph edge. */
