@@ -1,7 +1,7 @@
 import {rect, vec2} from "../core/math"
 import {Value} from "../core/react"
 import {MutableSet} from "../core/rcollect"
-import {Element, ElementContext} from "./element"
+import {Element, ElementContext, PointerInteraction, RootStates} from "./element"
 import {OffAxisPolicy, VGroup} from "./group"
 import {
   AbstractList, AbstractListConfig, DragElement, DragElementConfig,
@@ -19,14 +19,18 @@ export interface TreeViewConfig extends AbstractListConfig {
   updateParentOrder? :Spec<ParentOrderUpdater>
 }
 
+const TreeViewStyleScope = {id: "treeView", states: RootStates}
+
 /** Contains an expandable tree view. */
 export class TreeView extends VGroup implements AbstractList {
   readonly elements = new Map<ModelKey, Element>()
   readonly contents :Element[] = []
 
+  private readonly _selectedKeys :MutableSet<ModelKey>
+
   constructor (ctx :ElementContext, parent :Element, readonly config :TreeViewConfig) {
     super(ctx, parent, config)
-    const selectedKeys = ctx.model.resolve(config.selectedKeys)
+    this._selectedKeys = ctx.model.resolve(config.selectedKeys)
     const updateParentOrder = ctx.model.resolveOpt(config.updateParentOrder)
     this.disposer.add(syncListContents(ctx, this, {
       type: "row",
@@ -34,6 +38,7 @@ export class TreeView extends VGroup implements AbstractList {
       contents: [
         {
           type: "box",
+          scopeId: "treeViewToggleContainer",
           contents: {
             type: "toggle",
             visible: "hasChildren",
@@ -54,13 +59,14 @@ export class TreeView extends VGroup implements AbstractList {
         },
         {
           type: "column",
+          constraints: {stretch: true},
           offPolicy: "stretch",
           contents: [
             {
               type: "treeViewNode",
               contents: config.element,
               key: config.key,
-              selectedKeys,
+              selectedKeys: this._selectedKeys,
               updateParentOrder,
             },
             {
@@ -70,13 +76,22 @@ export class TreeView extends VGroup implements AbstractList {
               keys: "childKeys",
               data: "childData",
               key: config.key,
-              selectedKeys,
+              selectedKeys: this._selectedKeys,
               updateParentOrder,
             },
           ],
         },
       ],
     }))
+  }
+
+  get styleScope () { return TreeViewStyleScope }
+
+  handlePointerDown (event :MouseEvent|TouchEvent, pos :vec2) :PointerInteraction|undefined {
+    const interaction = super.handlePointerDown(event, pos)
+    if (interaction) return interaction
+    this._selectedKeys.clear()
+    return undefined
   }
 
   visitNodes (
