@@ -1,4 +1,4 @@
-import {vec2, vec3} from "../core/math"
+import {rect, vec2, vec3} from "../core/math"
 import {Color} from "../core/color"
 import {Disposable} from "../core/util"
 import {Component, Hoverable, Transform} from "./game"
@@ -8,6 +8,9 @@ export interface RenderEngine extends Disposable {
 
   /** The HTML canvas. */
   readonly domElement :HTMLElement
+
+  /** Sets the onscreen bounds of the renderer. */
+  setBounds (bounds :rect) :void
 
   /** Creates a new material.
     * @return the newly created material instance. */

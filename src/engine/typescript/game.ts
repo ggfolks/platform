@@ -19,8 +19,8 @@ import {registerUINodes} from "../../ui/node"
 import {DefaultStyles, DefaultTheme} from "../../ui/theme"
 import {
   DEFAULT_PAGE, Component, ComponentConfig, ComponentConstructor, CoordinateFrame, Coroutine, Cube,
-  Cylinder, GameContext, GameEngine, GameObject, GameObjectConfig, Graph, Mesh, MeshFilter, Page,
-  PrimitiveType, Quad, SpaceConfig, Sphere, Time, Transform,
+  Cylinder, GameContext, GameEngine, GameObject, GameObjectConfig, Graph, Mesh, MeshConfig,
+  MeshFilter, Page, PrimitiveType, Quad, SpaceConfig, Sphere, Time, Transform,
 } from "../game"
 import {PropertyMeta, getComponentMeta, property} from "../meta"
 import {PhysicsEngine} from "../physics"
@@ -98,16 +98,8 @@ export class TypeScriptGameEngine implements GameEngine {
   }
 
   createPrimitive (type :PrimitiveType, config? :GameObjectConfig) :GameObject {
-    let mesh :TypeScriptMesh
-    switch (type) {
-      case "sphere": mesh = new TypeScriptSphere() ; break
-      case "cylinder": mesh = new TypeScriptCylinder() ; break
-      case "cube": mesh = new TypeScriptCube() ; break
-      case "quad": mesh = new TypeScriptQuad() ; break
-      default: throw new Error(`Unknown primitive type "${type}"`)
-    }
     const mergedConfig = {
-      meshFilter: {mesh},
+      meshFilter: {meshConfig: {type}},
       meshRenderer: {},
     }
     if (config) applyConfig(mergedConfig, config)
@@ -120,6 +112,16 @@ export class TypeScriptGameEngine implements GameEngine {
 
   createGameObject (name? :string, config? :GameObjectConfig) :GameObject {
     return new TypeScriptGameObject(this, getValue(name, "object"), config || {})
+  }
+
+  createMesh (config :MeshConfig) :Mesh {
+    switch (config.type) {
+      case "sphere": return new TypeScriptSphere(config)
+      case "cylinder": return new TypeScriptCylinder(config)
+      case "cube": return new TypeScriptCube(config)
+      case "quad": return new TypeScriptQuad(config)
+      default: throw new Error(`Unknown mesh type "${config.type}"`)
+    }
   }
 
   getConfig () :SpaceConfig {
@@ -286,6 +288,7 @@ export class TypeScriptGameObject implements GameObject {
       const Constructor = componentConstructors.get(type)
       if (!Constructor) throw new Error(`Unknown component type "${type}"`)
       component = new Constructor(this, type) as T
+      component.init()
     }
     applyConfig(component, config)
     if (wake) {
@@ -432,9 +435,12 @@ export class TypeScriptComponent implements Component {
     ...aliases :string[]
   ) {
     this.aliases = aliases
-    this._disposer.add(this.orderValue.onValue(() => gameObject._componentReordered(this)))
     const updatable = this as unknown as Updatable
     if (updatable.update) gameObject.gameEngine.updatables.add(updatable)
+  }
+
+  init () {
+    this._disposer.add(this.orderValue.onValue(() => this.gameObject._componentReordered(this)))
   }
 
   requireComponent<T extends Component> (type :string|ComponentConstructor<T>) :T {
@@ -871,11 +877,23 @@ export class TypeScriptMeshFilter extends TypeScriptComponent implements MeshFil
   meshValue = Mutable.local<TypeScriptMesh|undefined>(undefined)
 
   get mesh () :Mesh|undefined { return this.meshValue.current }
-  set mesh (mesh :Mesh|undefined) { this.meshValue.update(mesh as TypeScriptMesh) }
+  set mesh (mesh :Mesh|undefined) { this.meshValue.update(mesh as TypeScriptMesh|undefined) }
+
+  get meshConfig () :MeshConfig|undefined { return this.mesh && this.mesh.getConfig() }
+  set meshConfig (config :MeshConfig|undefined) {
+    this.mesh = config && this.gameObject.gameEngine.createMesh(config)
+  }
 }
 registerComponentType(["engine"], "meshFilter", TypeScriptMeshFilter)
 
-export class TypeScriptMesh implements Mesh {
+export abstract class TypeScriptMesh implements Mesh {
+
+  constructor (readonly config :MeshConfig) {}
+
+  getConfig () :MeshConfig {
+    return Object.assign({}, this.config)
+  }
+
   dispose () {}
 }
 
@@ -895,8 +913,8 @@ class NonApplicableConfig<T> {
 export class TypeScriptGraph extends TypeScriptComponent implements Graph {
   private readonly _graph :GraphObject
 
-  get config () :GraphConfig { return this._graph.config }
-  set config (config :GraphConfig) {
+  get graphConfig () :GraphConfig { return this._graph.config }
+  set graphConfig (config :GraphConfig) {
     // remove any nodes no longer in the config
     for (const id of this._graph.nodes.keys()) {
       if (config[id] === undefined) this._graph.removeNode(id)

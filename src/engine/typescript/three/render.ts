@@ -7,7 +7,7 @@ import {
 import {SkeletonUtils} from "three/examples/jsm/utils/SkeletonUtils"
 import {Clock} from "../../../core/clock"
 import {Color} from "../../../core/color"
-import {Plane, vec2, vec3} from "../../../core/math"
+import {Plane, rect, vec2, vec3} from "../../../core/math"
 import {Mutable, Subject, Value} from "../../../core/react"
 import {MutableMap} from "../../../core/rcollect"
 import {Disposer, NoopRemover, Remover} from "../../../core/util"
@@ -50,6 +50,7 @@ export class ThreeRenderEngine implements RenderEngine {
   private readonly _disposer = new Disposer()
   private readonly _hand :Hand
   private readonly _pressedObjects = new Map<number, ThreeObjectComponent>()
+  private readonly _bounds = rect.create()
 
   readonly renderer = new WebGLRenderer()
   readonly domElement = this.renderer.domElement
@@ -73,17 +74,31 @@ export class ThreeRenderEngine implements RenderEngine {
 
     gameEngine.root.appendChild(this.renderer.domElement)
     this._disposer.add(() => gameEngine.root.removeChild(this.renderer.domElement))
-    this._disposer.add(gameEngine.ctx.screen.onValue(() => {
-      this.renderer.setSize(
-        this.renderer.domElement.clientWidth,
-        this.renderer.domElement.clientHeight,
-        false,
-      )
-    }))
+    this._disposer.add(gameEngine.ctx.screen.onValue(() => this._updateRendererSize()))
 
     this._disposer.add(gameEngine.ctx.hand = this._hand = new Hand(this.renderer.domElement))
 
     this.scene.autoUpdate = false
+  }
+
+  setBounds (bounds :rect) :void {
+    if (rect.eq(bounds, this._bounds)) return
+    rect.copy(this._bounds, bounds)
+    const style = this.renderer.domElement.style
+    style.position = "absolute"
+    style.left = `${bounds[0]}px`
+    style.top = `${bounds[1]}px`
+    style.width = `${bounds[2]}px`
+    style.height = `${bounds[3]}px`
+    this._updateRendererSize()
+  }
+
+  private _updateRendererSize () {
+    this.renderer.setSize(
+      this.renderer.domElement.clientWidth,
+      this.renderer.domElement.clientHeight,
+      false,
+    )
   }
 
   createMaterial () :Material {
@@ -377,10 +392,10 @@ class ThreeMeshRenderer extends ThreeObjectComponent implements MeshRenderer {
   private _mesh = new Mesh()
   private _materials :ThreeMaterial[]
 
-  @property("Material") get material () :Material { return this.materials[0] }
+  get material () :Material { return this.materials[0] }
   set material (mat :Material) { this.materials[0] = mat as ThreeMaterial }
 
-  @property("Material[]") get materials () :Material[] { return this._materials }
+  get materials () :Material[] { return this._materials }
   set materials (mats :Material[]) {
     this._materials.length = mats.length
     for (let ii = 0; ii < mats.length; ii++) this._materials[ii] = mats[ii] as ThreeMaterial

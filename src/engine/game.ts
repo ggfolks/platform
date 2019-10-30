@@ -83,6 +83,10 @@ export interface GameEngine extends Disposable {
     * @param [config] the configuration of the object's components. */
   createGameObject (name? :string, config? :GameObjectConfig) :GameObject
 
+  /** Creates and returns a mesh object from its configuration.
+    * @param config the configuration of the mesh. */
+  createMesh (config :MeshConfig) :Mesh
+
   /** Returns the configuration of the entire space as a new object. */
   getConfig () :SpaceConfig
 
@@ -185,6 +189,9 @@ export interface Component extends Disposable {
 
   /** The sort order of the component. */
   order :number
+
+  /** Initializes the component.  Called immediately after creation. */
+  init () :void
 
   /** Gets a typed reference to a component, throwing an exception if not present.
     * @param type the type of component desired.
@@ -356,10 +363,24 @@ export interface MeshFilter extends Component {
 
   /** The mesh to render. */
   mesh? :Mesh
+
+  /** The configuration of the mesh. */
+  meshConfig? :MeshConfig
+}
+
+/** The type used to configure game objects. */
+export interface MeshConfig {
+  type :string
+  // extra bits depend on type
+  [extra :string] :any
 }
 
 /** A piece of geometry. */
-export interface Mesh extends Disposable {}
+export interface Mesh extends Disposable {
+
+  /** Returns the configuration of the mesh as a new object. */
+  getConfig () :MeshConfig
+}
 
 /** A spherical mesh. */
 export interface Sphere extends Mesh {}
@@ -377,5 +398,5 @@ export interface Quad extends Mesh {}
 export interface Graph extends Component {
 
   /** The graph configuration. */
-  config :GraphConfig
+  graphConfig :GraphConfig
 }

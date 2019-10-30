@@ -567,7 +567,10 @@ export class Root extends Element {
   findChild (type :string) :Element|undefined {
     return super.findChild(type) || this.contents.findChild(type)
   }
-
+  findTaggedChild (tag :string) :Element|undefined {
+    return super.findTaggedChild(tag) || this.contents.findTaggedChild(tag)
+  }
+  
   dispose () {
     super.dispose()
     this.focus.update(undefined)
