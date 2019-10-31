@@ -14,17 +14,18 @@ import {Disposer, NoopRemover, Remover} from "../../../core/util"
 import {windowSize} from "../../../core/ui"
 import {loadGLTF, loadGLTFAnimationClip} from "../../../scene3/entity"
 import {Hand, Pointer} from "../../../input/hand"
-import {Hover, Transform} from "../../game"
+import {ConfigurableConfig, Hover, Transform} from "../../game"
 import {Animation} from "../../animation"
 import {property} from "../../meta"
 import {
   Camera, Light, LightType, Material, MaterialType,
   MeshRenderer, Model, RaycastHit, RenderEngine,
 } from "../../render"
+import {JavaScript} from "../../util"
 import {
   TypeScriptComponent, TypeScriptCube, TypeScriptCylinder, TypeScriptGameEngine,
   TypeScriptGameObject, TypeScriptMesh, TypeScriptMeshFilter, TypeScriptQuad, TypeScriptSphere,
-  registerComponentType,
+  applyConfig, registerConfigurableType,
 } from "../game"
 
 const defaultCamera = new PerspectiveCamera()
@@ -169,8 +170,11 @@ export class ThreeRenderEngine implements RenderEngine {
         this.raycastAll(rayOrigin, rayDirection, 0, Infinity, raycastHits)
         let noted = false
         for (const hit of raycastHits) {
-          const objectComponent = hit.transform.requireComponent<ThreeObjectComponent>("hoverable")
-          if (this._maybeNoteHovered(identifier, pointer, camera, objectComponent, hit.point)) {
+          const objectComponent = hit.transform.getComponent<ThreeObjectComponent>("hoverable")
+          if (
+            objectComponent &&
+            this._maybeNoteHovered(identifier, pointer, camera, objectComponent, hit.point)
+          ) {
             noted = true
             break
           }
@@ -328,8 +332,13 @@ abstract class ThreeObjectComponent extends TypeScriptComponent {
     return this.gameObject.gameEngine.renderEngine as ThreeRenderEngine
   }
 
-  constructor (gameObject :TypeScriptGameObject, type :string) {
-    super(gameObject, type, "hoverable")
+  constructor (
+    gameEngine :TypeScriptGameEngine,
+    supertype :string,
+    type :string,
+    gameObject :TypeScriptGameObject,
+  ) {
+    super(gameEngine, supertype, type, gameObject, "hoverable")
     this._disposer.add(this.objectValue.onValue((
       object,
       oldObject? :Object3D,
@@ -395,14 +404,42 @@ class ThreeMeshRenderer extends ThreeObjectComponent implements MeshRenderer {
   get material () :Material { return this.materials[0] }
   set material (mat :Material) { this.materials[0] = mat as ThreeMaterial }
 
+  get materialConfig () :ConfigurableConfig { return this.materialConfigs[0] }
+  set materialConfig (config :ConfigurableConfig) { applyConfig(this.materials[0], config) }
+
   get materials () :Material[] { return this._materials }
   set materials (mats :Material[]) {
     this._materials.length = mats.length
     for (let ii = 0; ii < mats.length; ii++) this._materials[ii] = mats[ii] as ThreeMaterial
   }
 
-  constructor (gameObject :TypeScriptGameObject, type :string) {
-    super(gameObject, type)
+  get materialConfigs () :ConfigurableConfig[] {
+    const configs :ConfigurableConfig[] = []
+    for (const material of this._materials) {
+      configs.push({type: material.type, color: JavaScript.clone(material.color)})
+    }
+    return configs
+  }
+  set materialConfigs (configs :ConfigurableConfig[]) {
+    let ii = 0
+    for (; ii < configs.length; ii++) {
+      let material = this._materials[ii]
+      if (!material) this._materials[ii] = material = new ThreeMaterial(this)
+      applyConfig(material, configs[ii])
+    }
+    for (; ii < this._materials.length; ii++) {
+      this._materials[ii].dispose()
+    }
+    this._materials.length = configs.length
+  }
+
+  constructor (
+    gameEngine :TypeScriptGameEngine,
+    supertype :string,
+    type :string,
+    gameObject :TypeScriptGameObject,
+  ) {
+    super(gameEngine, supertype, type, gameObject)
 
     this.objectValue.update(this._mesh)
     this._materials = new Proxy([new ThreeMaterial(this)], {
@@ -427,7 +464,7 @@ class ThreeMeshRenderer extends ThreeObjectComponent implements MeshRenderer {
         .switchMap(
           meshFilter => meshFilter
             ? meshFilter.meshValue
-            : Value.constant<TypeScriptMesh|undefined>(undefined),
+            : Value.constant<TypeScriptMesh|null>(null),
           )
         .onValue((mesh :any) => {
           this._mesh.geometry = (mesh && mesh._bufferGeometry) || emptyGeometry
@@ -441,7 +478,7 @@ class ThreeMeshRenderer extends ThreeObjectComponent implements MeshRenderer {
       : this._materials.map(mat => mat.object)
   }
 }
-registerComponentType(["render"], "meshRenderer", ThreeMeshRenderer)
+registerConfigurableType("component", ["render"], "meshRenderer", ThreeMeshRenderer)
 
 const tmpVector2 = new Vector2()
 const tmpc = vec2.create()
@@ -465,8 +502,13 @@ class ThreeCamera extends ThreeObjectComponent implements Camera {
     this._perspectiveCamera.updateProjectionMatrix()
   }
 
-  constructor (gameObject :TypeScriptGameObject, type :string) {
-    super(gameObject, type)
+  constructor (
+    gameEngine :TypeScriptGameEngine,
+    supertype :string,
+    type :string,
+    gameObject :TypeScriptGameObject,
+  ) {
+    super(gameEngine, supertype, type, gameObject)
     this.objectValue.update(this._perspectiveCamera)
     this.renderEngine.cameras.push(this)
 
@@ -511,7 +553,7 @@ class ThreeCamera extends ThreeObjectComponent implements Camera {
     this.renderEngine.cameras.splice(this.renderEngine.cameras.indexOf(this), 1)
   }
 }
-registerComponentType(["render"], "camera", ThreeCamera)
+registerConfigurableType("component", ["render"], "camera", ThreeCamera)
 
 class ThreeLight extends ThreeObjectComponent implements Light {
   private _lightType :LightType = "ambient"
@@ -528,8 +570,13 @@ class ThreeLight extends ThreeObjectComponent implements Light {
   get color () :Color { return this._color }
   set color (color :Color) { Color.copy(this._color, color) }
 
-  constructor (gameObject :TypeScriptGameObject, type :string) {
-    super(gameObject, type)
+  constructor (
+    gameEngine :TypeScriptGameEngine,
+    supertype :string,
+    type :string,
+    gameObject :TypeScriptGameObject,
+  ) {
+    super(gameEngine, supertype, type, gameObject)
 
     this._color = new Proxy(Color.fromRGB(1, 1, 1), {
       set: (obj, prop, value) => {
@@ -558,7 +605,7 @@ class ThreeLight extends ThreeObjectComponent implements Light {
     this._lightObject!.color.fromArray(this._color, 1)
   }
 }
-registerComponentType(["render"], "light", ThreeLight)
+registerConfigurableType("component", ["render"], "light", ThreeLight)
 
 class ThreeModel extends ThreeObjectComponent implements Model {
   readonly urlValue = Mutable.local("")
@@ -568,8 +615,13 @@ class ThreeModel extends ThreeObjectComponent implements Model {
   @property("url") get url () :string { return this.urlValue.current }
   set url (url :string) { this.urlValue.update(url) }
 
-  constructor (gameObject :TypeScriptGameObject, type :string) {
-    super(gameObject, type)
+  constructor (
+    gameEngine :TypeScriptGameEngine,
+    supertype :string,
+    type :string,
+    gameObject :TypeScriptGameObject,
+  ) {
+    super(gameEngine, supertype, type, gameObject)
     this._disposer.add(this.urlValue.onChange(url => {
       this._urlRemover()
       this.objectValue.update(undefined)
@@ -591,16 +643,16 @@ class ThreeModel extends ThreeObjectComponent implements Model {
     if (object) updateChildren(object)
   }
 }
-registerComponentType(["render"], "model", ThreeModel)
+registerConfigurableType("component", ["render"], "model", ThreeModel)
 
 class ThreeAnimation extends TypeScriptComponent implements Animation {
   playAutomatically = true
 
-  private _urls :string[]
-  private _mixerSubject :Subject<AnimationMixer>
+  private readonly _urls :string[]
+  private readonly _mixerSubject :Subject<AnimationMixer>
   private _mixer? :AnimationMixer
-  private _clipsByUrl = new Map<string, Subject<AnimationClip>>()
-  private _clipsByName = new Map<string, Subject<AnimationClip>>()
+  private readonly _clipsByUrl = new Map<string, Subject<AnimationClip>>()
+  private readonly _clipsByName = new Map<string, Subject<AnimationClip>>()
 
   get url () :string|undefined { return this.urls[0] }
   set url (url :string|undefined) {
@@ -614,8 +666,13 @@ class ThreeAnimation extends TypeScriptComponent implements Animation {
     for (let ii = 0; ii < urls.length; ii++) this._urls[ii] = urls[ii]
   }
 
-  constructor (gameObject :TypeScriptGameObject, type :string) {
-    super(gameObject, type)
+  constructor (
+    gameEngine :TypeScriptGameEngine,
+    supertype :string,
+    type :string,
+    gameObject :TypeScriptGameObject,
+  ) {
+    super(gameEngine, supertype, type, gameObject)
 
     this._urls = new Proxy([], {
       set: (obj, prop, value) => {
@@ -681,7 +738,7 @@ class ThreeAnimation extends TypeScriptComponent implements Animation {
     }
   }
 }
-registerComponentType(["render"], "animation", ThreeAnimation)
+registerConfigurableType("component", ["render"], "animation", ThreeAnimation)
 
 function updateChildren (object :Object3D) {
   for (const child of object.children) child.updateMatrixWorld(true)

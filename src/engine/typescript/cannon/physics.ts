@@ -10,7 +10,7 @@ import {PhysicsEngine, RigidBody} from "../../physics"
 import {
   TypeScriptComponent, TypeScriptGameEngine, TypeScriptGameObject, TypeScriptCube,
   TypeScriptCylinder, TypeScriptMesh, TypeScriptMeshFilter, TypeScriptQuad, TypeScriptSphere,
-  registerComponentType,
+  registerConfigurableType,
 } from "../game"
 
 /** A physics engine that uses Cannon.js. */
@@ -115,8 +115,13 @@ class CannonRigidBody extends TypeScriptComponent implements RigidBody {
     return this.gameObject.gameEngine.physicsEngine as CannonPhysicsEngine
   }
 
-  constructor (gameObject :TypeScriptGameObject, type :string) {
-    super(gameObject, type)
+  constructor (
+    gameEngine :TypeScriptGameEngine,
+    supertype :string,
+    type :string,
+    gameObject :TypeScriptGameObject,
+  ) {
+    super(gameEngine, supertype, type, gameObject)
 
     const component =
       this.gameObject.components.getValue("meshFilter") as Value<TypeScriptMeshFilter|undefined>
@@ -126,7 +131,7 @@ class CannonRigidBody extends TypeScriptComponent implements RigidBody {
           component.switchMap(
             meshFilter => meshFilter
               ? meshFilter.meshValue
-              : Value.constant<TypeScriptMesh|undefined>(undefined),
+              : Value.constant<TypeScriptMesh|null>(null),
           ),
           this._scale,
         )
@@ -175,4 +180,4 @@ class CannonRigidBody extends TypeScriptComponent implements RigidBody {
     this._body.updateMassProperties()
   }
 }
-registerComponentType(["physics"], "rigidBody", CannonRigidBody)
+registerConfigurableType("component", ["physics"], "rigidBody", CannonRigidBody)

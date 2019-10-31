@@ -1,6 +1,6 @@
 import {Mutable, Value} from "../../core/react"
 import {AnimationController, AnimationControllerConfig} from "../animation"
-import {TypeScriptComponent, registerComponentType} from "./game"
+import {TypeScriptComponent, registerConfigurableType} from "./game"
 
 class TypeScriptAnimationController extends TypeScriptComponent implements AnimationController {
   private _config :AnimationControllerConfig = {states: {default: {}}}
@@ -11,4 +11,9 @@ class TypeScriptAnimationController extends TypeScriptComponent implements Anima
 
   get state () :Value<string> { return this._state }
 }
-registerComponentType(["animation"], "animationController", TypeScriptAnimationController)
+registerConfigurableType(
+  "component",
+  ["animation"],
+  "animationController",
+  TypeScriptAnimationController,
+)

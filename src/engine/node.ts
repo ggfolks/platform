@@ -11,7 +11,7 @@ import {Node, NodeConfig, NodeTypeRegistry} from "../graph/node"
 import {SubgraphRegistry} from "../graph/util"
 import {PointerConfig} from "../input/node"
 import {Component, CoordinateFrame, Graph as GraphComponent, Hover, Hoverable} from "./game"
-import {getComponentMeta} from "./meta"
+import {getConfigurableMeta} from "./meta"
 import {RaycastHit} from "./render"
 
 abstract class AbstractComponentNode<T extends Component> extends Node {
@@ -99,7 +99,7 @@ function getComponentInputsMeta (component :Component|undefined) :RMap<string, I
   if (!meta) {
     const map = MutableMap.local<string, InputEdgeMeta>()
     for (; prototype; prototype = Object.getPrototypeOf(prototype)) {
-      for (const [name, property] of getComponentMeta(prototype).properties) {
+      for (const [name, property] of getConfigurableMeta(prototype).properties) {
         if (!(property.constraints && property.constraints.readonly)) {
           map.set(name, {type: property.type})
         }
@@ -118,7 +118,7 @@ function getComponentOutputsMeta (component :Component|undefined) :RMap<string, 
   if (!meta) {
     const map = MutableMap.local<string, OutputEdgeMeta>()
     for (; prototype; prototype = Object.getPrototypeOf(prototype)) {
-      for (const [name, property] of getComponentMeta(prototype).properties) {
+      for (const [name, property] of getConfigurableMeta(prototype).properties) {
         map.set(name, {type: property.type})
       }
     }

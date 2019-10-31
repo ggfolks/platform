@@ -1,7 +1,7 @@
 import {rect, vec2, vec3} from "../core/math"
 import {Color} from "../core/color"
 import {Disposable} from "../core/util"
-import {Component, Hoverable, Transform} from "./game"
+import {Component, ConfigurableConfig, Hoverable, Transform} from "./game"
 
 /** Top-level interface to render engine. */
 export interface RenderEngine extends Disposable {
@@ -65,6 +65,12 @@ export interface MeshRenderer extends Component, Hoverable {
 
   /** The array of materials assigned to the renderer. */
   materials :Material[]
+
+  /** The configuration of the first material. */
+  materialConfig :ConfigurableConfig
+
+  /** The configurations of all the materials. */
+  materialConfigs :ConfigurableConfig[]
 }
 
 /** The available material types. */

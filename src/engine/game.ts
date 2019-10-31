@@ -12,11 +12,43 @@ import {PropertyMeta} from "./meta"
 import {PhysicsEngine} from "./physics"
 import {RenderEngine} from "./render"
 
+/** Base type of the configurations of all configurable objects. */
+export type ConfigurableConfig = PMap<any>
+
+/** Base interface for objects that are configurable--that is, whose state can be captured in a
+  * JavaScript object and that can be reconfigured with instances of same. */
+export interface Configurable extends Disposable {
+  /** Flags this object as configurable. */
+  readonly isConfigurable :true
+  /** The owning game engine. */
+  readonly gameEngine :GameEngine
+  /** The supertype of the configurable object. */
+  readonly supertype :string
+  /** The type of the configurable object. */
+  readonly type :string
+  /** The metadata for the object's viewable/editable properties. */
+  readonly propertiesMeta :RMap<string, PropertyMeta>
+  /** Initializes the object.  Called immediately after creation. */
+  init () :void
+  /** Returns a reactive view of the specified property.
+    * @param name the name of the desired property.
+    * @param [overrideDefault] if specified, a value that will override the default default.
+    * @return the reactive value, which may or may not be writable. */
+  getProperty<T> (name :string, overrideDefault? :any) :Value<T|undefined>|Mutable<T|undefined>
+  /** Returns the config of this object as a a new object.
+    * @param [omitType=false] if true, leave the type out of the config.
+    * @return the newly created config. */
+  createConfig (omitType? :boolean) :ConfigurableConfig
+  /** Reconfigures this object.
+    * @param type the type of the new object, or undefined for none.
+    * @param config the configuration to apply, or null to "reconfigure" into null.
+    * @return either this object, if the config is of the same type, or a new object with the
+    * supplied config, or null.  If the object couldn't be reused, it will be disposed. */
+  reconfigure (type :string|undefined, config :ConfigurableConfig|null) :Configurable|null
+}
+
 /** The available primitive types. */
 export type PrimitiveType = "sphere" | "cylinder" | "cube" | "quad"
-
-/** The type used to configure components. */
-export type ComponentConfig = PMap<any>
 
 /** The type used to configure game objects. */
 export interface GameObjectConfig {
@@ -50,9 +82,6 @@ export interface GameEngine extends Disposable {
   /** The active physics engine. */
   readonly physicsEngine :PhysicsEngine
 
-  /** The root of the component type tree. */
-  readonly componentTypeRoot :CategoryNode
-
   /** The keys of the pages in sorted order. */
   readonly pages :Value<string[]>
 
@@ -64,6 +93,36 @@ export interface GameEngine extends Disposable {
 
   /** All game objects, mapped by id. */
   readonly gameObjects :RMap<string, GameObject>
+
+  /** Creates the configuration of a reconfigurable reference as a new object.
+    * @param configurable the configurable object, or null for none.
+    * @param [omitType=false] if true, leave the type out of the config.
+    * @return the configuration of the object, or null for none. */
+  createConfigurableConfig (
+    configurable :Configurable|null,
+    omitType? :boolean,
+  ) :ConfigurableConfig|null
+
+  /** Reconfigures a configurable reference.
+    * @param supertype the configurable supertype (e.g., "component").
+    * @param configurable the configurable object, or null for none.
+    * @param type the type of the new object, or undefined for none.
+    * @param config the new configuration, or null for none.
+    * @param constructorArgs additional arguments to pass to the constructor.
+    * @return either the reference passed in (if reconfigured) or a new object (if recreated) or
+    * null.  If the object couldn't be reused, it will be disposed. */
+  reconfigureConfigurable (
+    supertype :string,
+    configurable :Configurable|null,
+    type :string|undefined,
+    config :ConfigurableConfig|null,
+    ...constructorArgs :any[]
+  ) :Configurable|null
+
+  /** Returns the type root for the identified supertype.
+    * @param supertype the configurable supertype (e.g., "component").
+    * @return the root of the type tree. */
+  getConfigurableTypeRoot (supertype :string) :CategoryNode
 
   /** Creates a page object.
     * @param [name] the name of the page. */
@@ -83,12 +142,8 @@ export interface GameEngine extends Disposable {
     * @param [config] the configuration of the object's components. */
   createGameObject (name? :string, config? :GameObjectConfig) :GameObject
 
-  /** Creates and returns a mesh object from its configuration.
-    * @param config the configuration of the mesh. */
-  createMesh (config :MeshConfig) :Mesh
-
   /** Returns the configuration of the entire space as a new object. */
-  getConfig () :SpaceConfig
+  createConfig () :SpaceConfig
 
   /** Updates the game state. */
   update (clock :Clock) :void
@@ -129,14 +184,14 @@ export interface GameObject extends Disposable {
 
   /** Adds a set of components to the game object.
     * @param config the object mapping component types to configurations. */
-  addComponents (config :PMap<ComponentConfig>) :void
+  addComponents (config :PMap<ConfigurableConfig>) :void
 
   /** Adds a component to the game object.  Once the component is added, it will be accessible as
     * `gameObject.componentType`.
     * @param type the type of component to add.
     * @param [config] optional configuration for the component.
     * @return the newly created component. */
-  addComponent<T extends Component> (type :string, config? :ComponentConfig) :T
+  addComponent<T extends Component> (type :string, config? :ConfigurableConfig) :T
 
   /** Gets a typed reference to a component, throwing an exception if not present.
     * @param type the type of component desired.
@@ -160,14 +215,14 @@ export interface GameObject extends Disposable {
   getProperty<T> (name :string, overrideDefault? :any) :Value<T|undefined>|Mutable<T|undefined>
 
   /** Returns the configuration of this game object as a new object. */
-  getConfig () :GameObjectConfig
+  createConfig () :GameObjectConfig
 
   /** Anything else is an untyped component. */
   readonly [type :string] :any
 }
 
 /** Base class for object components. */
-export interface Component extends Disposable {
+export interface Component extends Configurable {
 
   /** The game object to which this component is attached. */
   readonly gameObject :GameObject
@@ -175,23 +230,14 @@ export interface Component extends Disposable {
   /** The game object transform. */
   readonly transform :Transform
 
-  /** The component type. */
-  readonly type :string
-
   /** The component's type aliases, under which it is also registered. */
   readonly aliases :string[]
 
   /** Whether or not the component is removable (transforms, for instance, are not). */
   readonly removable :boolean
 
-  /** The metadata for the component's viewable/editable properties. */
-  readonly propertiesMeta :RMap<string, PropertyMeta>
-
   /** The sort order of the component. */
   order :number
-
-  /** Initializes the component.  Called immediately after creation. */
-  init () :void
 
   /** Gets a typed reference to a component, throwing an exception if not present.
     * @param type the type of component desired.
@@ -212,15 +258,6 @@ export interface Component extends Disposable {
     * @param fnOrGenerator the coroutine to start.
     * @return the coroutine object. */
   startCoroutine (fnOrGenerator :(() => Generator<void>)|Generator<void>) :Coroutine
-
-  /** Returns a reactive view of the specified property.
-    * @param name the name of the desired property.
-    * @param [overrideDefault] if specified, a value that will override the default default.
-    * @return the reactive value, which may or may not be writable. */
-  getProperty<T> (name :string, overrideDefault? :any) :Value<T|undefined>|Mutable<T|undefined>
-
-  /** Returns the configuration of this component as a new object. */
-  getConfig () :ComponentConfig
 
   /** Optional wake function. */
   readonly awake? :() => void
@@ -362,25 +399,14 @@ export interface Page extends Component {
 export interface MeshFilter extends Component {
 
   /** The mesh to render. */
-  mesh? :Mesh
+  mesh :Mesh|null
 
   /** The configuration of the mesh. */
-  meshConfig? :MeshConfig
-}
-
-/** The type used to configure game objects. */
-export interface MeshConfig {
-  type :string
-  // extra bits depend on type
-  [extra :string] :any
+  meshConfig :ConfigurableConfig|null
 }
 
 /** A piece of geometry. */
-export interface Mesh extends Disposable {
-
-  /** Returns the configuration of the mesh as a new object. */
-  getConfig () :MeshConfig
-}
+export interface Mesh extends Configurable {}
 
 /** A spherical mesh. */
 export interface Sphere extends Mesh {}

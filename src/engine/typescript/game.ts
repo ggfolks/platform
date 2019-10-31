@@ -18,20 +18,126 @@ import {HTMLHost} from "../../ui/element"
 import {registerUINodes} from "../../ui/node"
 import {DefaultStyles, DefaultTheme} from "../../ui/theme"
 import {
-  DEFAULT_PAGE, Component, ComponentConfig, ComponentConstructor, CoordinateFrame, Coroutine, Cube,
-  Cylinder, GameContext, GameEngine, GameObject, GameObjectConfig, Graph, Mesh, MeshConfig,
+  DEFAULT_PAGE, Component, ComponentConstructor, Configurable, ConfigurableConfig, CoordinateFrame,
+  Coroutine, Cube, Cylinder, GameContext, GameEngine, GameObject, GameObjectConfig, Graph, Mesh,
   MeshFilter, Page, PrimitiveType, Quad, SpaceConfig, Sphere, Time, Transform,
 } from "../game"
-import {PropertyMeta, getComponentMeta, property} from "../meta"
+import {PropertyMeta, getConfigurableMeta, property} from "../meta"
 import {PhysicsEngine} from "../physics"
 import {RenderEngine} from "../render"
 import {registerEngineNodes, registerEngineSubgraphs} from "../node"
 import {JavaScript} from "../util"
 
+/** Constructor interface for configurable TypeScript objects. */
+export interface TypeScriptConfigurableConstructor {
+  new (
+    gameEngine :TypeScriptGameEngine,
+    supertype :string,
+    type :string,
+    ...otherArgs :any[]
+  ): TypeScriptConfigurable
+}
+
+class ConfigurableSupertype {
+  readonly constructors = new Map<string, TypeScriptConfigurableConstructor>()
+  readonly typeRoot = new CategoryNode("")
+}
+
+const configurableSupertypes = new Map<string, ConfigurableSupertype>()
+
+/** Registers a configurable type's constructor with the TypeScript engine.
+  * @param supertype the configurable supertype (e.g., "component")
+  * @param categories the category path under which to list the type, if any.
+  * @param type the configurable type name.
+  * @param constructor the configurable constructor. */
+export function registerConfigurableType (
+  supertype :string,
+  categories: string[]|undefined,
+  type :string,
+  constructor :TypeScriptConfigurableConstructor,
+) {
+  let configurableSupertype = configurableSupertypes.get(supertype)
+  if (!configurableSupertype) {
+    configurableSupertypes.set(supertype, configurableSupertype = new ConfigurableSupertype())
+  }
+  configurableSupertype.constructors.set(type, constructor)
+  if (categories) configurableSupertype.typeRoot.getCategoryNode(categories).addLeafNode(type)
+}
+
+export class TypeScriptConfigurable implements Configurable {
+  protected readonly _disposer = new Disposer()
+  protected readonly _constructorArgs :any[]
+
+  get isConfigurable () :true { return true }
+
+  get propertiesMeta () :RMap<string, PropertyMeta> {
+    return getConfigurableMeta(Object.getPrototypeOf(this)).properties
+  }
+
+  constructor (
+    readonly gameEngine :TypeScriptGameEngine,
+    readonly supertype :string,
+    readonly type :string,
+    ...otherArgs :any[]
+  ) {
+    this._constructorArgs = otherArgs
+  }
+
+  init () :void {}
+
+  getProperty<T> (name :string, overrideDefault? :any) :Value<T|undefined>|Mutable<T|undefined> {
+    const propertyName = name + "Value"
+    const property = this[propertyName]
+    if (property instanceof Value) return property as unknown as Value<T|undefined>
+    // default implementation doesn't know about changes
+    return Mutable.deriveMutable(
+      dispatch => NoopRemover,
+      () => this[name] as T|undefined,
+      newValue => this[name] = newValue,
+      refEquals,
+    )
+  }
+
+  createConfig (omitType? :boolean) :ConfigurableConfig {
+    const config :ConfigurableConfig = {}
+    if (!omitType) config.type = this.type
+    for (const [key, meta] of this.propertiesMeta) {
+      if (!(meta.constraints.readonly || meta.constraints.transient)) {
+        config[key] = JavaScript.clone(this[key])
+      }
+    }
+    return config
+  }
+
+  reconfigure (type :string|undefined, config :ConfigurableConfig|null) :Configurable|null {
+    if (config === null) {
+      this.dispose()
+      return null
+    }
+    if (type === undefined) type = config.type
+    if (type && type !== this.type) {
+      this.dispose()
+      return this.gameEngine.reconfigureConfigurable(
+        this.supertype,
+        null,
+        type,
+        config,
+        ...this._constructorArgs,
+      )
+    }
+    for (const key in config) {
+      if (key !== "type") this[key] = config[key]
+    }
+    return this
+  }
+
+  dispose () {
+    this._disposer.dispose()
+  }
+}
+
 interface Updatable { update (clock :Clock) :void }
 interface Wakeable { awake () :void }
-
-const componentTypeRoot = new CategoryNode("")
 
 /** An implementation of the GameEngine interface in TypeScript. */
 export class TypeScriptGameEngine implements GameEngine {
@@ -60,8 +166,6 @@ export class TypeScriptGameEngine implements GameEngine {
     if (!this._physicsEngine) throw new Error("Missing physics engine")
     return this._physicsEngine
   }
-
-  get componentTypeRoot () :CategoryNode { return componentTypeRoot }
 
   get pages () :Value<string[]> { return this._pages }
 
@@ -93,6 +197,42 @@ export class TypeScriptGameEngine implements GameEngine {
     )
   }
 
+  createConfigurableConfig (
+    configurable :Configurable|null,
+    omitType? :boolean,
+  ) :ConfigurableConfig|null {
+    return configurable && configurable.createConfig(omitType)
+  }
+
+  reconfigureConfigurable (
+    supertype :string,
+    configurable :Configurable|null,
+    type :string|undefined,
+    config :ConfigurableConfig|null,
+    ...constructorArgs :any[]
+  ) :Configurable|null {
+    if (configurable !== null) return configurable.reconfigure(type, config)
+    if (config === null) return null
+    const configurableSupertype = this._requireConfigurableSupertype(supertype)
+    if (type === undefined) type = config.type
+    if (type === undefined) throw new Error(`No type given to create "${supertype}"`)
+    const constructor = configurableSupertype.constructors.get(type)
+    if (!constructor) throw new Error(`Unknown configurable type "${type}"`)
+    const newConfigurable = new constructor(this, supertype, type, ...constructorArgs)
+    newConfigurable.init()
+    return newConfigurable.reconfigure(undefined, config)
+  }
+
+  getConfigurableTypeRoot (supertype :string) :CategoryNode {
+    return this._requireConfigurableSupertype(supertype).typeRoot
+  }
+
+  private _requireConfigurableSupertype (supertype :string) :ConfigurableSupertype {
+    const configurableSupertype = configurableSupertypes.get(supertype)
+    if (!configurableSupertype) throw new Error(`Unknown configurable supertype "${supertype}"`)
+    return configurableSupertype
+  }
+
   createPage (name? :string) :GameObject {
     return this.createGameObject(name || "page", {page: {}})
   }
@@ -114,19 +254,9 @@ export class TypeScriptGameEngine implements GameEngine {
     return new TypeScriptGameObject(this, getValue(name, "object"), config || {})
   }
 
-  createMesh (config :MeshConfig) :Mesh {
-    switch (config.type) {
-      case "sphere": return new TypeScriptSphere(config)
-      case "cylinder": return new TypeScriptCylinder(config)
-      case "cube": return new TypeScriptCube(config)
-      case "quad": return new TypeScriptQuad(config)
-      default: throw new Error(`Unknown mesh type "${config.type}"`)
-    }
-  }
-
-  getConfig () :SpaceConfig {
+  createConfig () :SpaceConfig {
     const config :SpaceConfig = {}
-    for (const [id, gameObject] of this.gameObjects) config[id] = gameObject.getConfig()
+    for (const [id, gameObject] of this.gameObjects) config[id] = gameObject.createConfig()
     return config
   }
 
@@ -210,26 +340,6 @@ function reorderId (ids :Mutable<string[]>, id :string, getOrder: (id :string) =
   return idx
 }
 
-/** Constructor interface for TypeScript components. */
-export interface TypeScriptComponentConstructor {
-  new (gameObject :TypeScriptGameObject, type :string): Component
-}
-
-const componentConstructors = new Map<string, TypeScriptComponentConstructor>()
-
-/** Registers a component type's constructor with the TypeScript engine.
-  * @param categories the category path under which to list the component, if any.
-  * @param type the component type name.
-  * @param constructor the component constructor. */
-export function registerComponentType (
-  categories: string[]|undefined,
-  type :string,
-  constructor :TypeScriptComponentConstructor,
-) {
-  componentConstructors.set(type, constructor)
-  if (categories) componentTypeRoot.getCategoryNode(categories).addLeafNode(type)
-}
-
 type MessageHandler = (...args :any[]) => void
 
 export class TypeScriptGameObject implements GameObject {
@@ -278,22 +388,30 @@ export class TypeScriptGameObject implements GameObject {
     this.sendMessage("awake")
   }
 
-  addComponents (config :PMap<ComponentConfig>, wake = true) {
+  addComponents (config :PMap<ConfigurableConfig>, wake = true) {
     for (const type in config) this.addComponent(type, config[type], wake)
   }
 
-  addComponent<T extends Component> (type :string, config :ComponentConfig = {}, wake = true) :T {
+  addComponent<T extends Component> (
+    type :string,
+    config :ConfigurableConfig = {},
+    wake = true,
+  ) :T {
     let component = this[type] as T|undefined
-    if (!component) {
-      const Constructor = componentConstructors.get(type)
-      if (!Constructor) throw new Error(`Unknown component type "${type}"`)
-      component = new Constructor(this, type) as T
-      component.init()
-    }
-    applyConfig(component, config)
-    if (wake) {
-      const wakeable = component as unknown as Wakeable
-      if (wakeable.awake) wakeable.awake()
+    if (component) {
+      component.reconfigure(undefined, config)
+    } else {
+      component = this.gameEngine.reconfigureConfigurable(
+        "component",
+        null,
+        type,
+        config,
+        this,
+      ) as T
+      if (wake) {
+        const wakeable = component as unknown as Wakeable
+        if (wakeable.awake) wakeable.awake()
+      }
     }
     return component
   }
@@ -358,12 +476,12 @@ export class TypeScriptGameObject implements GameObject {
     }
   }
 
-  getConfig () :GameObjectConfig {
+  createConfig () :GameObjectConfig {
     const config :GameObjectConfig = {}
     if (this.name !== this.id) config.name = this.name
     if (this.order !== 0) config.order = this.order
     for (const type of this._componentTypes.current) {
-      config[type] = this._components.require(type).getConfig()
+      config[type] = this._components.require(type).createConfig()
     }
     return config
   }
@@ -396,7 +514,7 @@ export class TypeScriptGameObject implements GameObject {
   }
 }
 
-function applyConfig (target :PMap<any>, config :PMap<any>) {
+export function applyConfig (target :PMap<any>, config :PMap<any>) {
   for (const key in config) {
     const value = config[key]
     const targetValue = target[key]
@@ -411,7 +529,7 @@ function applyConfig (target :PMap<any>, config :PMap<any>) {
   }
 }
 
-export class TypeScriptComponent implements Component {
+export class TypeScriptComponent extends TypeScriptConfigurable implements Component {
   readonly aliases :string[]
   readonly orderValue = Mutable.local(0)
 
@@ -420,20 +538,19 @@ export class TypeScriptComponent implements Component {
 
   get removable () :boolean { return true }
 
-  get propertiesMeta () :RMap<string, PropertyMeta> {
-    return getComponentMeta(Object.getPrototypeOf(this)).properties
-  }
-
   get order () :number { return this.orderValue.current }
   set order (order :number) { this.orderValue.update(order) }
 
   get transform () :Transform { return this.gameObject.transform }
 
   constructor (
+    gameEngine :TypeScriptGameEngine,
+    supertype :string,
+    type :string,
     readonly gameObject :TypeScriptGameObject,
-    readonly type :string,
     ...aliases :string[]
   ) {
+    super(gameEngine, supertype, type, gameObject, ...aliases)
     this.aliases = aliases
     const updatable = this as unknown as Updatable
     if (updatable.update) gameObject.gameEngine.updatables.add(updatable)
@@ -462,23 +579,10 @@ export class TypeScriptComponent implements Component {
     )
   }
 
-  getProperty<T> (name :string, overrideDefault? :any) :Value<T|undefined>|Mutable<T|undefined> {
-    const propertyName = name + "Value"
-    const property = this[propertyName]
-    if (property instanceof Value) return property as unknown as Value<T|undefined>
-    // default implementation doesn't know about changes
-    return Mutable.deriveMutable(
-      dispatch => NoopRemover,
-      () => this[name] as T|undefined,
-      newValue => this[name] = newValue,
-      refEquals,
-    )
-  }
-
-  getConfig () :ComponentConfig {
-    const config :ComponentConfig = {}
+  createConfig () :ConfigurableConfig {
+    const config :ConfigurableConfig = {}
     if (this.order !== 0) config.order = this.order
-    const meta = getComponentMeta(Object.getPrototypeOf(this))
+    const meta = getConfigurableMeta(Object.getPrototypeOf(this))
     for (const [key, property] of meta.properties) {
       if (property.constraints.readonly || property.constraints.transient) continue
       config[key] = JavaScript.clone(this[key])
@@ -567,8 +671,13 @@ class TypeScriptTransform extends TypeScriptComponent implements Transform {
   private readonly _worldToLocalMatrixTarget :mat4
   private _invalidFlags = 0
 
-  constructor (gameObject :TypeScriptGameObject, type :string) {
-    super(gameObject, type)
+  constructor (
+    gameEngine :TypeScriptGameEngine,
+    supertype :string,
+    type :string,
+    gameObject :TypeScriptGameObject,
+  ) {
+    super(gameEngine, supertype, type, gameObject)
 
     const makeReadWriteProxy = (
       target :any,
@@ -861,7 +970,7 @@ class TypeScriptTransform extends TypeScriptComponent implements Transform {
     }
   }
 }
-registerComponentType(undefined, "transform", TypeScriptTransform)
+registerConfigurableType("component", undefined, "transform", TypeScriptTransform)
 
 class TypeScriptPage extends TypeScriptComponent implements Page {
 
@@ -871,39 +980,36 @@ class TypeScriptPage extends TypeScriptComponent implements Page {
     else if (this.active) this.gameObject.gameEngine.activePage.update(DEFAULT_PAGE)
   }
 }
-registerComponentType(undefined, "page", TypeScriptPage)
+registerConfigurableType("component", undefined, "page", TypeScriptPage)
 
 export class TypeScriptMeshFilter extends TypeScriptComponent implements MeshFilter {
-  meshValue = Mutable.local<TypeScriptMesh|undefined>(undefined)
+  meshValue = Mutable.local<TypeScriptMesh|null>(null)
 
-  get mesh () :Mesh|undefined { return this.meshValue.current }
-  set mesh (mesh :Mesh|undefined) { this.meshValue.update(mesh as TypeScriptMesh|undefined) }
+  get mesh () :Mesh|null { return this.meshValue.current }
+  set mesh (mesh :Mesh|null) { this.meshValue.update(mesh as TypeScriptMesh|null) }
 
-  get meshConfig () :MeshConfig|undefined { return this.mesh && this.mesh.getConfig() }
-  set meshConfig (config :MeshConfig|undefined) {
-    this.mesh = config && this.gameObject.gameEngine.createMesh(config)
+  get meshConfig () :ConfigurableConfig|null {
+    return this.gameEngine.createConfigurableConfig(this.mesh)
+  }
+  set meshConfig (config :ConfigurableConfig|null) {
+    this.mesh = this.gameEngine.reconfigureConfigurable("mesh", this.mesh, undefined, config)
   }
 }
-registerComponentType(["engine"], "meshFilter", TypeScriptMeshFilter)
+registerConfigurableType("component", ["engine"], "meshFilter", TypeScriptMeshFilter)
 
-export abstract class TypeScriptMesh implements Mesh {
-
-  constructor (readonly config :MeshConfig) {}
-
-  getConfig () :MeshConfig {
-    return Object.assign({}, this.config)
-  }
-
-  dispose () {}
-}
+export abstract class TypeScriptMesh extends TypeScriptConfigurable implements Mesh {}
 
 export class TypeScriptSphere extends TypeScriptMesh implements Sphere {}
+registerConfigurableType("mesh", [], "sphere", TypeScriptSphere)
 
 export class TypeScriptCylinder extends TypeScriptMesh implements Cylinder {}
+registerConfigurableType("mesh", [], "cylinder", TypeScriptCylinder)
 
 export class TypeScriptCube extends TypeScriptMesh implements Cube {}
+registerConfigurableType("mesh", [], "cube", TypeScriptCube)
 
 export class TypeScriptQuad extends TypeScriptMesh implements Quad {}
+registerConfigurableType("mesh", [], "quad", TypeScriptQuad)
 
 // marker class to flag configurations as being not recursively applicable
 class NonApplicableConfig<T> {
@@ -930,8 +1036,13 @@ export class TypeScriptGraph extends TypeScriptComponent implements Graph {
     }
   }
 
-  constructor (gameObject :TypeScriptGameObject, type :string) {
-    super(gameObject, type)
+  constructor (
+    gameEngine :TypeScriptGameEngine,
+    supertype :string,
+    type :string,
+    gameObject :TypeScriptGameObject,
+  ) {
+    super(gameEngine, supertype, type, gameObject)
     const subctx = Object.create(gameObject.gameEngine.ctx)
     subctx.graphComponent = this
     this._graph = new GraphObject(subctx, new NonApplicableConfig<NodeConfig>())
@@ -941,4 +1052,4 @@ export class TypeScriptGraph extends TypeScriptComponent implements Graph {
     this._graph.update(clock)
   }
 }
-registerComponentType(["engine"], "graph", TypeScriptGraph)
+registerConfigurableType("component", ["engine"], "graph", TypeScriptGraph)
