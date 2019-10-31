@@ -202,6 +202,7 @@ export class Transform {
   private vprop (field :number) :VProp<vec2> {
     const data = this.data
     return {
+      get current () :vec2 { return vec2.fromValues(data[field], data[field+1]) },
       read (into :vec2) {
         into[0] = data[field]
         into[1] = data[field+1]

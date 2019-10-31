@@ -62,14 +62,12 @@ export interface Prop<T> extends RProp<T> {
 
 /** An interface for readable "vector" properties. These properties are usually views into an array
   * of bulk data, and are thus read into a temporary array provided by the caller. */
-export interface RVProp<T> {
+export interface RVProp<T> extends RProp<T> {
   read (into :T) :T
 }
 
 /** An interface for readable and updatable "vector" properties. */
-export interface VProp<T> extends RVProp<T> {
-  update (v :T) :void
-}
+export interface VProp<T> extends Prop<T>, RVProp<T> {}
 
 /** Maintains a set of positive integers using bits in a backing (typed array) vector. */
 export class BitSet {
