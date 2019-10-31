@@ -204,8 +204,8 @@ export abstract class Element implements Disposable {
       this._valid.update(false)
       this._psize[0] = -1 // force psize recompute
       this.parent && this.parent.invalidate(false)
+      if (dirty) this.dirty()
     }
-    if (dirty) this.dirty()
   }
 
   dirty (region :rect = this.expandBounds(this._bounds), fromChild :boolean = false) {
