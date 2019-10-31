@@ -79,7 +79,7 @@ export type ModelKey = number|string
 /** Defines the model for a dynamic UI component (like `List`). The component will display some
   * dynamic list of elements which are identified by the `keys` array, and the data models for each
   * individual element are fetched via `resolve`. */
-export interface ElementsModel<K extends ModelKey> {
+export interface ElementsModel<K> {
 
   /** The keys identifying the elements in this model. */
   keys :Source<Iterable<K>>
