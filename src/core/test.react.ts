@@ -231,7 +231,7 @@ test("basic value", () => {
   testValue(rm, v => rm.update(v))
 
   const em = new Emitter<string>()
-  testValue(Value.fromStream(em, ""), v => em.emit(v))
+  testValue(Value.from(em, ""), v => em.emit(v))
 })
 
 test("basic buffer", () => {

@@ -312,18 +312,13 @@ export class Stream<T> extends Source<T> {
   /** Returns a reactive [[Subject]] that is initialized with the next value emitted by this stream
     * and then changed by each subsequent value emitted by this stream. See note in [[fold]]
     * regarding liveness. */
-  toSubject () :Subject<T> {
-    const onEmit = this._onEmit
-    return Subject.deriveSubject(disp => onEmit(disp))
-  }
+  toSubject () :Subject<T> { return Subject.deriveSubject(this._onEmit) }
 
   /** Returns a reactive [[Value]] which starts with value `start` and is updated by values emitted
     * by this stream whenever they arrive. See note in [[fold]] regarding liveness.
     * @param eq used to check whether successive values from this stream have actually changed.
     * [[Value]]s emit notifications only when values change. */
-  toValue (start :T, eq :Eq<T> = refEquals) :Value<T> {
-    return this.fold(start, (ov, nv) => nv, eq)
-  }
+  toValue (start :T, eq :Eq<T> = refEquals) :Value<T> { return Value.from(this, start, eq) }
 }
 
 /* A stream which can have values emitted on it by external callers. */
@@ -511,18 +506,11 @@ export class Value<T> extends ReadableSource<T> {
     return this.constant(value)
   }
 
-  /** Creates a value from `stream` which starts with the value `start` and is updated by values
-    * emitted by `stream` whenever they arrive. The values emitted by `stream` are `Data` and are
-    * compared for equality structurally (via [dataEquals]). */
-  static fromStream<T extends Data> (stream :Stream<T>, start :T) :Value<T> {
-    return stream.toValue(start, dataEquals)
-  }
-
-  /** Creates a value from `stream` which starts with the value `start` and is updated by values
-    * emitted by `stream` whenever they arrive. The values emitted by `stream` may be of any type,
-    * but are compared for equality by reference. */
-  static fromStreamRef<T> (stream :Stream<T>, start :T) :Value<T> {
-    return stream.toValue(start, refEquals)
+  /** Creates a value from `source` which starts with the value `start` and is updated by values
+    * emitted by `source` whenever they arrive. The values emitted by `source` are compared for
+    * equality via `eq` (which defaults to `refEquals`) */
+  static from<T> (source :Source<T>, start :T, eq :Eq<T> = refEquals) :Value<T> {
+    return source.fold(start, (o, n) => n, eq)
   }
 
   /** Creates a value derived from an external source. The `current` function should return the
