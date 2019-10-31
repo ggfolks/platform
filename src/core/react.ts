@@ -202,6 +202,21 @@ export abstract class ReadableSource<T> extends Source<T> implements RProp<T> {
     * emits a `value`, the returned source will emit `fn(value)`. */
   abstract map<U> (fn :(v:T) => U) :ReadableSource<U>
 
+  /** Transforms the value of this source via `fn` and exposes it as a value, which emits when the
+    * transformed value differs per the supplied `eq` tester. */
+  mapValue<U> (fn :(v:T) => U, eq :Eq<U> = refEquals) :Value<U> {
+    return Value.deriveValue(eq, disp => {
+      let prev = fn(this.current)
+      return this.onEmit(value => {
+        const next = fn(value)
+        if (!eq(next, prev)) {
+          disp(next, prev)
+          prev = next
+        }
+      })
+    }, () => fn(this.current))
+  }
+
   /** Returns a `Subject` that contains this source's current value and changes whenever this
     * source's value changes. */
   toSubject () :Subject<T> {
@@ -218,10 +233,7 @@ export abstract class ReadableSource<T> extends Source<T> implements RProp<T> {
     * value. */
   toPromise (pred :Pred<T>) :Promise<T> {
     let current = this.current
-    if (pred(current)) {
-      return Promise.resolve(current)
-    }
-    return new Promise((resolve, reject) => {
+    return pred(current) ? Promise.resolve(current) : new Promise((resolve, reject) => {
       let remover = this.onEmit(value => {
         if (pred(value)) {
           remover()
