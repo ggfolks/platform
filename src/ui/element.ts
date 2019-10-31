@@ -570,7 +570,7 @@ export class Root extends Element {
   findTaggedChild (tag :string) :Element|undefined {
     return super.findTaggedChild(tag) || this.contents.findTaggedChild(tag)
   }
-  
+
   dispose () {
     super.dispose()
     this.focus.update(undefined)
@@ -971,7 +971,10 @@ export class Host implements Disposable {
   }
 
   dispose () {
-    for (const root of this._roots) root.dispose()
+    for (const root of this._roots) {
+      root.events.emit("removed")
+      root.dispose()
+    }
     this.disposer.dispose()
   }
 }
@@ -992,11 +995,6 @@ export class HTMLHost extends Host {
     this.roots.onChange(ev => {
       if (ev.type === "added") this.rootAdded(ev.elem)
     })
-  }
-
-  dispose () {
-    for (const root of this.roots) this.elem.removeChild(root.canvasElem)
-    super.dispose()
   }
 
   handleKeyEvent (event :KeyboardEvent) {
