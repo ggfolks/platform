@@ -12,7 +12,7 @@ import {
   NodeContext, NodeInput, NodeTypeRegistry,
 } from "../graph/node"
 import {HAnchor, Host, Root, RootConfig, VAnchor, getCurrentEditNumber} from "./element"
-import {Action, Model, ModelData, ModelKey, ModelProvider, mapProvider} from "./model"
+import {Action, Model, ModelData, ModelKey, ElementsModel, mapModel} from "./model"
 import {Theme, UI} from "./ui"
 import {ImageResolver, StyleDefs} from "./style"
 
@@ -173,19 +173,15 @@ class UINode extends Node {
         canRedo.update(false)
       }
       setPath([])
-      function getCategoryKeys (category :CategoryNode) :Value<string[]> {
-        return category.children.keysValue.map<string[]>(Array.from)
-      }
-      function getCategoryData (
+      function getCategoryModel (
         category :CategoryNode,
-        createConfig :(name :string) => NodeConfig,
-      ) :ModelProvider {
-        return mapProvider(category.children, (value, key) => {
+        createConfig :(name :string) => NodeConfig
+      ) :ElementsModel<string> {
+        return mapModel(category.children.keysValue, category.children, (value, key) => {
           if (value.current instanceof CategoryNode) return {
             name: Value.constant(key),
             submenu: Value.constant(true),
-            keys: getCategoryKeys(value.current),
-            data: getCategoryData(value.current, createConfig),
+            model: getCategoryModel(value.current, createConfig),
           }
           return {
             name: Value.constant(key),
@@ -200,10 +196,8 @@ class UINode extends Node {
           root.dispose()
           disposer.dispose()
         },
-        typeCategoryKeys: getCategoryKeys(ctx.types.root),
-        typeCategoryData: getCategoryData(ctx.types.root, name => ({type: name})),
-        subgraphCategoryKeys: getCategoryKeys(ctx.subgraphs.root),
-        subgraphCategoryData: getCategoryData(
+        typeCategoryModel: getCategoryModel(ctx.types.root, name => ({type: name})),
+        subgraphCategoryModel: getCategoryModel(
           ctx.subgraphs.root,
           name => ctx.subgraphs.createNodeConfig(name),
         ),
@@ -312,15 +306,15 @@ function createGraphModelData (
     changeFn(currentPageKeys, oldPageKeys)
   }
   updatePageKeys()
-  const pageKeys = Value.deriveValue(
-    dataEquals,
-    dispatch => {
-      changeFn = dispatch
-      return graph.nodes.keysValue.onValue(updatePageKeys)
-    },
-    () => currentPageKeys,
-  )
-  const pageData = {
+  const pagesModel = {
+    keys: Value.deriveValue(
+      dataEquals,
+      dispatch => {
+        changeFn = dispatch
+        return graph.nodes.keysValue.onValue(updatePageKeys)
+      },
+      () => currentPageKeys,
+    ),
     resolve: (key :ModelKey) => {
       let model = pageModels.get(key)
       if (!model) {
@@ -359,8 +353,7 @@ function createGraphModelData (
   }
   const pageEditor = createNodeEditor(graph, pageModels)
   return {
-    pageKeys,
-    pageData,
+    pagesModel,
     createPage: () => {
       // find a unique id for the page
       let pageId = ""
@@ -420,7 +413,7 @@ function createGraphModelData (
     editPages: (edit :NodeEdit) => {
       if (edit.page) {
         // forward to appropriate page model
-        const model = pageData.resolve(edit.page)
+        const model = pagesModel.resolve(edit.page)
         return model.resolve<NodeEditor>("editNodes")(edit)
       }
       const result = pageEditor(edit)
@@ -490,11 +483,11 @@ function createPageModelData (
       for (const id of ids) config[id] = graph.nodes.get(id)!.toJSON()
       return config
     },
-    nodeKeys: graph.nodes.keysValue.map(keys => filteredIterable(
-      keys,
-      key => graph.nodes.require(key).config.type !== "page",
-    )),
-    nodeData: {
+    nodesModel: {
+      keys: graph.nodes.keysValue.map(keys => filteredIterable(
+        keys,
+        key => graph.nodes.require(key).config.type !== "page",
+      )),
       resolve: (key :ModelKey) => {
         let model = nodeModels.get(key)
         if (!model) {
@@ -518,17 +511,15 @@ function createPageModelData (
             name: node.name,
             position: createPropertyValue("_position"),
             ...subgraphElement,
-            propertyKeys: node.propertiesMeta.keysValue.map(Array.from),
-            inputKeys: node.inputsMeta.keysValue.map(Array.from),
-            outputKeys: node.outputsMeta.keysValue.map(Array.from),
             defaultOutputKey: Value.constant(node.defaultOutputKey),
-            propertyData: mapProvider(node.propertiesMeta, (value, key) => ({
+            propertiesModel: mapModel(node.propertiesMeta.keysValue,
+                                      node.propertiesMeta, (value, key) => ({
               name: Value.constant(key),
               type: value.map(value => value.type),
               constraints: value.map(value => value.constraints),
               value: createPropertyValue(key, value.map(value => value.defaultValue)),
             })),
-            inputData: mapProvider(node.inputsMeta, (value, key) => {
+            inputsModel: mapModel(node.inputsMeta.keysValue, node.inputsMeta, (value, key) => {
               const multiple = value.map(value => value.multiple)
               const input = createPropertyValue(key)
               return {
@@ -543,7 +534,7 @@ function createPageModelData (
                 }),
               }
             }),
-            outputData: mapProvider(node.outputsMeta, (value, key) => ({
+            outputsModel: mapModel(node.outputsMeta.keysValue, node.outputsMeta, (value, key) => ({
               name: Value.constant(key),
               style: node.getOutput(key as string, undefined).map(getValueStyle),
             })),

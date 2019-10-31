@@ -1,7 +1,7 @@
 import {rect, vec2} from "../core/math"
-import {Source, Value} from "../core/react"
+import {Value} from "../core/react"
 import {Noop, NoopRemover, PMap, Remover} from "../core/util"
-import {ModelKey, ModelProvider} from "./model"
+import {ModelKey, ElementsModel} from "./model"
 import {
   Control, ControlConfig, ControlStates, Element, ElementConfig, ElementContext, PointerInteraction,
 } from "./element"
@@ -12,8 +12,7 @@ import {strokeLinePath} from "./util"
 /** Base interface for list-like elements. */
 export interface AbstractListConfig extends AxisConfig {
   element :ElementConfig
-  data :Spec<ModelProvider>
-  keys :Spec<Source<ModelKey[]>>
+  model :Spec<ElementsModel<ModelKey>>
 }
 
 /** Defines configuration for [[HList]] elements. */
@@ -322,10 +321,9 @@ export function syncListContents (
   elementConfig = list.config.element,
 ) :Remover {
   const config = list.config as AbstractListConfig
-  const keys = ctx.model.resolveOpt(config.keys)
-  const data = ctx.model.resolveOpt(config.data)
-  if (!(keys && data)) return NoopRemover
-  return keys.onValue(keys => {
+  const model = ctx.model.resolveOpt(config.model)
+  if (!model) return NoopRemover
+  return model.keys.onValue(keys => {
     const {contents, elements} = list
     // first dispose no longer used elements
     const kset = new Set(keys)
@@ -340,7 +338,7 @@ export function syncListContents (
     for (const key of keys) {
       let elem = elements.get(key)
       if (!elem) {
-        elem = ctx.elem.create(ctx.remodel(data.resolve(key)), list, elementConfig)
+        elem = ctx.elem.create(ctx.remodel(model.resolve(key)), list, elementConfig)
         list.elements.set(key, elem)
       }
       contents.push(elem)

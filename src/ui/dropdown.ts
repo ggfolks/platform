@@ -1,5 +1,5 @@
 import {dim2, rect, vec2} from "../core/math"
-import {Source, Value} from "../core/react"
+import {Value} from "../core/react"
 import {Noop, PMap, getValue} from "../core/util"
 import {AbstractButton, ButtonStates} from "./button"
 import {
@@ -7,7 +7,7 @@ import {
   PointerInteraction, falseValue, trueValue,
 } from "./element"
 import {VList} from "./list"
-import {Action, ModelKey, ModelProvider, Spec} from "./model"
+import {Action, ModelKey, ElementsModel, Spec} from "./model"
 
 /** Defines the styles that apply to [[Dropdown]]. */
 export interface DropdownStyle {
@@ -21,8 +21,7 @@ export type DropDirection = "down" | "right" | "left"
 export interface AbstractDropdownConfig extends ControlConfig {
   dropLeft? :boolean
   element? :ElementConfig
-  keys? :Spec<Source<ModelKey[]>>
-  data? :Spec<ModelProvider>
+  model? :Spec<ElementsModel<ModelKey>>
   style :PMap<DropdownStyle>
 }
 
@@ -96,8 +95,7 @@ export abstract class AbstractDropdown extends AbstractButton {
       type: "vlist",
       offPolicy: "stretch",
       element: this.config.element,
-      data: this.config.data,
-      keys: this.config.keys,
+      model: this.config.model,
     }) as VList
     this.invalidate()
   }
@@ -194,7 +192,7 @@ export class AbstractDropdownItem extends AbstractDropdown {
         ).map(([enabled, separator]) => enabled && !separator),
       },
     )
-    const keys = ctx.model.resolveOpt(config.keys)
+    const model = ctx.model.resolveOpt(config.model)
     this.disposer.add(this._hovered.onValue(hovered => {
       if (!hovered) return
       for (let ancestor = this.parent; ancestor; ancestor = ancestor.parent) {
@@ -206,7 +204,7 @@ export class AbstractDropdownItem extends AbstractDropdown {
               dropdown.toggle()
             }
           }
-          if (keys && !this.list) this.toggle()
+          if (model && !this.list) this.toggle()
           return
         }
       }
@@ -304,8 +302,7 @@ export function createDropdownItemConfig (
         style: {halign: "stretch"},
       },
       element,
-      keys: "keys",
-      data: "data",
+      model: "model",
       action: "action",
       separator: "separator",
       style: {},

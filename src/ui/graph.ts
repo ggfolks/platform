@@ -1,6 +1,6 @@
 import {dataCopy, dataEquals} from "../core/data"
 import {dim2, rect, vec2} from "../core/math"
-import {Mutable, Source, Subject, Value} from "../core/react"
+import {Mutable, Value} from "../core/react"
 import {MutableSet} from "../core/rcollect"
 import {PMap, Remover, getValue} from "../core/util"
 import {GraphConfig, getImplicitNodeId} from "../graph/graph"
@@ -10,7 +10,7 @@ import {createDropdownItemConfig} from "./dropdown"
 import {Element, ElementConfig, ElementContext, PointerInteraction, Observer} from "./element"
 import {AbsConstraints, AbsGroup, AxisConfig, VGroup, OffAxisPolicy} from "./group"
 import {VList} from "./list"
-import {Action, Model, ModelProvider, Spec, dataProvider} from "./model"
+import {Action, Model, ReadableElementsModel, ElementsModel, Spec, dataModel} from "./model"
 import {InputValue, NodeCopier, NodeCreator, NodeEdit} from "./node"
 import {Panner} from "./scroll"
 import {BackgroundConfig, BorderConfig, NoopDecor, addDecorationBounds} from "./style"
@@ -38,10 +38,8 @@ export class GraphViewer extends VGroup {
   constructor (readonly ctx :ElementContext, parent :Element, readonly config :GraphViewerConfig) {
     super(ctx, parent, config)
     if (this.config.editable) this._editable = ctx.model.resolve(this.config.editable)
-    const typeCategoryKeys = ctx.model.resolve<Source<string[]>>("typeCategoryKeys")
-    const typeCategoryData = ctx.model.resolve<ModelProvider>("typeCategoryData")
-    const subgraphCategoryKeys = ctx.model.resolve<Source<string[]>>("subgraphCategoryKeys")
-    const subgraphCategoryData = ctx.model.resolve<ModelProvider>("subgraphCategoryData")
+    const typeCategoryModel = ctx.model.resolve<ElementsModel<string>>("typeCategoryModel")
+    const subgraphCategoryModel = ctx.model.resolve<ElementsModel<string>>("subgraphCategoryModel")
     this._graphModel = ctx.model.resolve<Value<Model>>("graphModel")
     this._nodeCreator = ctx.model.resolve<Mutable<NodeCreator>>("nodeCreator")
     const remove = ctx.model.resolve<Action>("remove")
@@ -73,17 +71,13 @@ export class GraphViewer extends VGroup {
                 },
                 // max category depth of two for the moment
                 element: createDropdownItemConfig(2, "menuItem"),
-                keys: "keys",
-                data: "data",
-                shortcutKeys: "shortcutKeys",
-                shortcutData: "shortcutData",
+                model: "model",
+                shortcutsModel: "shortcutsModel",
               },
-              keys: Value.constant(["graph", "edit", "view", "node", "subgraph"]),
-              data: dataProvider({
+              model: dataModel({
                 graph: {
                   name: Value.constant("Graph"),
-                  keys: Value.constant(["clearAll", "sep1", "import", "export", "sep2", "close"]),
-                  data: dataProvider({
+                  model: dataModel({
                     clearAll: {
                       name: Value.constant("Clear All"),
                       enabled: this._editable,
@@ -107,17 +101,13 @@ export class GraphViewer extends VGroup {
                       shortcut: Value.constant("closeTab"),
                     },
                   }),
-                  shortcutKeys: Value.constant(["closeTab"]),
-                  shortcutData: dataProvider({
+                  shortcutsModel: dataModel({
                     closeTab: {action: remove},
                   }),
                 },
                 edit: {
                   name: Value.constant("Edit"),
-                  keys: Value.constant(
-                    ["undo", "redo", "sep1", "cut", "copy", "paste", "delete", "sep2", "selectAll"],
-                  ),
-                  data: dataProvider({
+                  model: dataModel({
                     undo: {
                       name: Value.constant("Undo"),
                       shortcut: Value.constant("undo"),
@@ -147,15 +137,14 @@ export class GraphViewer extends VGroup {
                     selectAll: {
                       name: Value.constant("Select All"),
                       action: this._createPageModelAction(model => {
-                        const nodeKeys = model.resolve<Source<Iterable<string>>>("nodeKeys")
-                        nodeKeys.once(keys => {
+                        const nodesModel = model.resolve<ElementsModel<string>>("nodesModel")
+                        nodesModel.keys.once(keys => {
                           for (const key of keys) this.selection.add(key)
                         })
                       }),
                     },
                   }),
-                  shortcutKeys: Value.constant(["undo", "redo", "cut", "copy", "paste", "delete"]),
-                  shortcutData: dataProvider({
+                  shortcutsModel: dataModel({
                     undo: {
                       enabled: ctx.model.resolve<Value<boolean>>("canUndo"),
                       action: ctx.model.resolve<Action>("undo"),
@@ -201,8 +190,7 @@ export class GraphViewer extends VGroup {
                 },
                 view: {
                   name: Value.constant("View"),
-                  keys: Value.constant(["zoomIn", "zoomOut", "zoomReset", "zoomToFit"]),
-                  data: dataProvider({
+                  model: dataModel({
                     zoomIn: {
                       name: Value.constant("Zoom In"),
                       shortcut: Value.constant("zoomIn"),
@@ -220,8 +208,7 @@ export class GraphViewer extends VGroup {
                       shortcut: Value.constant("zoomToFit"),
                     },
                   }),
-                  shortcutKeys: Value.constant(["zoomIn", "zoomOut", "zoomReset", "zoomToFit"]),
-                  shortcutData: dataProvider({
+                  shortcutsModel: dataModel({
                     zoomIn: {
                       action: this._createPannerAction(panner => panner.zoom(1)),
                     },
@@ -238,13 +225,11 @@ export class GraphViewer extends VGroup {
                 },
                 node: {
                   name: Value.constant("Node"),
-                  keys: typeCategoryKeys,
-                  data: typeCategoryData,
+                  model: typeCategoryModel,
                 },
                 subgraph: {
                   name: Value.constant("Subgraph"),
-                  keys: subgraphCategoryKeys,
-                  data: subgraphCategoryData,
+                  model: subgraphCategoryModel,
                 },
               }),
             },
@@ -291,9 +276,9 @@ export class GraphViewer extends VGroup {
       this._nodeFunctionRemover()
       this.disposer.remove(this._nodeFunctionRemover)
     }
-    const pageData = graphModel.resolve<ModelProvider>("pageData")
+    const pagesModel = graphModel.resolve<ElementsModel<string>>("pagesModel")
     this.disposer.add(this._nodeFunctionRemover = this.activePage.onValue(activePage => {
-      const pageModel = pageData.resolve(activePage)
+      const pageModel = pagesModel.resolve(activePage)
       const createNodes = pageModel.resolve<NodeCreator>("createNodes")
       this._nodeCreator.update((config :GraphConfig) => {
         const ids = createNodes(config)
@@ -315,8 +300,8 @@ export class GraphViewer extends VGroup {
   private _createPageModelAction (op :(model :Model) => void) :Action {
     return () => {
       const graphModel = this._graphModel.current
-      const pageData = graphModel.resolve<ModelProvider>("pageData")
-      op(pageData.resolve(this.activePage.current))
+      const pagesModel = graphModel.resolve<ElementsModel<string>>("pagesModel")
+      op(pagesModel.resolve(this.activePage.current))
     }
   }
 
@@ -380,8 +365,7 @@ export class GraphViewer extends VGroup {
         },
         onClick: "createPage",
       },
-      data: "pageData",
-      keys: "pageKeys",
+      model: "pagesModel",
       key: "id",
       activeKey: this.activePage,
       updateOrder: "updateOrder",
@@ -424,11 +408,10 @@ export class GraphView extends AbsGroup {
 
   constructor (ctx :ElementContext, parent :Element, readonly config :GraphViewConfig) {
     super(ctx, parent, config)
-    const data = ctx.model.resolve<ModelProvider>("nodeData")
+    const nodesModel = ctx.model.resolve<ElementsModel<string>>("nodesModel")
     let models :Model[] | null = []
     const editable = ctx.model.resolve(this.config.editable)
-    const nodeKeys = ctx.model.resolve<Source<IterableIterator<string>>>("nodeKeys")
-    this.disposer.add(nodeKeys.onValue(keys => {
+    this.disposer.add(nodesModel.keys.onValue(keys => {
       const {contents, elements} = this
       // first dispose no longer used elements
       const kset = new Set(keys)
@@ -446,7 +429,7 @@ export class GraphView extends AbsGroup {
       for (const key of kset) {
         let elem = this.elements.get(key)
         if (!elem) {
-          const model = data.resolve(key)
+          const model = nodesModel.resolve(key)
           const position = model.resolve<Value<[number, number]>>("position").current
           // if we encounter any valid positions, don't layout automatically
           if (position[0] > 0 || position[1] > 0) models = null
@@ -664,8 +647,7 @@ export class GraphView extends AbsGroup {
     for (let ii = 0; ii < keys.length; ii++) {
       const key = keys[ii]
       const model = models[ii]
-      const inputKeys = model.resolve<Value<string[]>>("inputKeys").current
-      const inputData = model.resolve<ModelProvider>("inputData")
+      const inputsModel = model.resolve<ReadableElementsModel<string>>("inputsModel")
       const inputs :string[] = []
       const pushInput = (edge :InputEdge<any>) => {
         let nodeId = Array.isArray(edge) ? edge[0] : edge
@@ -674,9 +656,9 @@ export class GraphView extends AbsGroup {
         inputs.push(nodeId)
         roots.delete(nodeId)
       }
-      for (const inputKey of inputKeys) {
+      for (const inputKey of inputsModel.keys.current) {
         // remove anything from roots that's used as an input
-        const data = inputData.resolve(inputKey)
+        const data = inputsModel.resolve(inputKey)
         const value = data.resolve<Value<InputValue>>("value")
         const multiple = data.resolve<Value<boolean>>("multiple")
         if (multiple.current) {
@@ -707,6 +689,11 @@ export interface NodeViewConfig extends AxisConfig {
 }
 
 export const NodeViewStyleScope = {id: "nodeView", states: ["normal", "hovered", "selected"]}
+
+function isEmpty (iable :Iterable<any>) :boolean {
+  for (const _ of iable) return false
+  return true
+}
 
 export class NodeView extends VGroup {
   readonly id :string
@@ -743,25 +730,20 @@ export class NodeView extends VGroup {
         },
       })
     }
-    const propertyKeys = ctx.model.resolve<Subject<string[]>>("propertyKeys")
-    const propertiesVisible = Mutable.local(false)
-    this.disposer.add(propertyKeys.onValue(value => propertiesVisible.update(value.length > 0)))
+    const propertiesModel = ctx.model.resolve<ElementsModel<string>>("propertiesModel")
     bodyContents.push({
       type: "propertyView",
-      visible: propertiesVisible,
+      visible: Value.from(propertiesModel.keys.map(keys => !isEmpty(keys)), false),
       gap: 2,
       scopeId: "nodeProperties",
       offPolicy: "stretch",
       editable: this._editable,
-      keys: "propertyKeys",
-      data: "propertyData",
+      model: "propertiesModel",
     })
-    const inputKeys = ctx.model.resolve<Subject<string[]>>("inputKeys")
-    const inputsVisible = Mutable.local(false)
-    this.disposer.add(inputKeys.onValue(value => inputsVisible.update(value.length > 0)))
-    const outputKeys = ctx.model.resolve<Subject<string[]>>("outputKeys")
-    const outputsVisible = Mutable.local(false)
-    this.disposer.add(outputKeys.onValue(value => outputsVisible.update(value.length > 0)))
+    const inputsModel = ctx.model.resolve<ElementsModel<string>>("inputsModel")
+    const inputsVisible = Value.from(inputsModel.keys.map(keys => !isEmpty(keys)), false)
+    const outputModel = ctx.model.resolve<ElementsModel<string>>("outputsModel")
+    const outputsVisible = Value.from(outputModel.keys.map(keys => !isEmpty(keys)), false)
     const terminalsVisible = Value.join(inputsVisible, outputsVisible).map(
       ([inputs, outputs]) => inputs || outputs,
     )
@@ -800,8 +782,7 @@ export class NodeView extends VGroup {
                 },
               ],
             },
-            data: "inputData",
-            keys: "inputKeys",
+            model: "inputsModel",
           },
         },
         {
@@ -834,8 +815,7 @@ export class NodeView extends VGroup {
                 },
               ],
             },
-            data: "outputData",
-            keys: "outputKeys",
+            model: "outputsModel",
           },
         }
       ],
@@ -982,11 +962,10 @@ const DEFAULT_CONTROL_POINT_OFFSET = 30
 export class EdgeView extends Element {
   private _nodeId :Value<string>
   private _editable :Value<boolean>
-  private _inputKeys :Value<string[]>
   private _defaultOutputKey :Value<string>
-  private _inputData :ModelProvider
+  private _inputsModel :ReadableElementsModel<string>
   private _inputs :Value<InputValue[]>
-  private _outputData :ModelProvider
+  private _outputsModel :ElementsModel<string>
   private _edges :{from :vec2, to :OutputTo[]}[] = []
   private readonly _state = Mutable.local("normal")
   private readonly _lineWidth = this.observe(1)
@@ -1001,14 +980,13 @@ export class EdgeView extends Element {
     super(ctx, parent, config)
     this._nodeId = ctx.model.resolve<Value<string>>("id")
     this._editable = ctx.model.resolve(this.config.editable)
-    this._inputKeys = ctx.model.resolve<Value<string[]>>("inputKeys")
     this._defaultOutputKey = ctx.model.resolve<Value<string>>("defaultOutputKey")
-    this._inputData = ctx.model.resolve<ModelProvider>("inputData")
-    this._outputData = ctx.model.resolve<ModelProvider>("outputData")
-    this.invalidateOnChange(this._inputs = this._inputKeys.switchMap(inputKeys => {
-      return Value.join(...inputKeys.map(inputKey => {
-        return this._inputData.resolve(inputKey).resolve<Value<InputValue>>("value")
-      }))
+    this._inputsModel = ctx.model.resolve<ReadableElementsModel<string>>("inputsModel")
+    this._outputsModel = ctx.model.resolve<ElementsModel<string>>("outputsModel")
+    this.invalidateOnChange(this._inputs = this._inputsModel.keys.switchMap(inputKeys => {
+      return Value.join(...Array.from(inputKeys).map(
+        inputKey => this._inputsModel.resolve(inputKey).resolve<Value<InputValue>>("value")
+      ))
     }))
     this.disposer.add(this.state.onValue(state => {
       const style = this.style
@@ -1034,7 +1012,7 @@ export class EdgeView extends Element {
   }
 
   getOutputStyle (key :string) {
-    return this._outputData.resolve(key).resolve<Value<string>>("style")
+    return this._outputsModel.resolve(key).resolve<Value<string>>("style")
   }
 
   applyToContaining (canvas :CanvasRenderingContext2D, pos :vec2, op :(element :Element) => void) {
@@ -1089,7 +1067,7 @@ export class EdgeView extends Element {
     if (keys === undefined || !this._editable.current) return undefined
     const [inputKey, targetId, outputKey] = keys
     // sever the connection
-    const input = this._inputData.resolve(inputKey)
+    const input = this._inputsModel.resolve(inputKey)
     const multiple = input.resolve<Value<boolean>>("multiple")
     const value = input.resolve<Mutable<InputValue>>("value")
     if (multiple.current) {
@@ -1137,7 +1115,7 @@ export class EdgeView extends Element {
     nodesUsed.clear()
     nodesUsed.add(node)
     stylesUsed.clear()
-    const inputKeys = this._inputKeys.current
+    const inputKeys = Array.from(this._inputsModel.keys.current)
     const inputs = this._inputs.current
     for (let ii = 0; ii < inputKeys.length; ii++) {
       const input = inputs[ii]
@@ -1194,9 +1172,9 @@ export class EdgeView extends Element {
         }
         return true
       }
-      const inputModel = this._inputData.resolve(inputKey)
-      const multiple = inputModel.resolve<Value<boolean>>("multiple")
-      const value = inputModel.resolve<Mutable<InputValue>>("value")
+      const inputsModel = this._inputsModel.resolve(inputKey)
+      const multiple = inputsModel.resolve<Value<boolean>>("multiple")
+      const value = inputsModel.resolve<Mutable<InputValue>>("value")
       if (multiple.current) {
         if (Array.isArray(input)) {
           let newInput = input

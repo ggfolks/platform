@@ -8,7 +8,7 @@ export type Action = (...args :any) => void
 export const NoopAction :Action = () => {}
 
 /** Defines the allowed values in a model. */
-export type ModelValue = Source<unknown> | Action | ModelProvider
+export type ModelValue = Source<unknown> | Action | ElementsModel<any>
 
 type ModelElem = ModelValue | ModelData
 
@@ -29,7 +29,8 @@ function find<V extends ModelValue> (
   const value = findOpt(data, path, pos)
   if (!value) {
     if (defaultValue) return defaultValue
-    else throw new MissingModelElem(path, pos)
+    console.log(`Missing model elem ${path} @ ${pos}`)
+    throw new MissingModelElem(path, pos)
   }
   else return value as V
 }
@@ -72,63 +73,81 @@ export class Model {
   }
 }
 
-/** The allowed key types for models obtained via a [[ModelProvider]]. */
+/** The allowed key types for models obtained via an [[ElementsModel]]. */
 export type ModelKey = number|string
 
-/** Provides sub-models based on a key. Used for dynamic interface elements (like `List`) which
-  * create sub-elements on the fly. The dynamic element's data model will contain a model provider
-  * along with a normal reactive model element that contains the keys to be resolved to create that
-  * element's children. */
-export interface ModelProvider {
+/** Defines the model for a dynamic UI component (like `List`). The component will display some
+  * dynamic list of elements which are identified by the `keys` array, and the data models for each
+  * individual element are fetched via `resolve`. */
+export interface ElementsModel<K extends ModelKey> {
+
+  /** The keys identifying the elements in this model. */
+  keys :Source<Iterable<K>>
 
   /** Resolves the model for `key`. */
-  resolve (key :ModelKey) :Model
+  resolve (key :K) :Model
 
-  // TODO: should model providers provide a way to remove no longer used models?
+  // TODO: do we want a way to tell the model that an element model is no longer in use?
+  // in theory it knows this because the key was removed from the keys array so maybe not...
 }
 
-/** Creates a model provider that computes the model via a `fn` of its `key`. */
-export function makeProvider<K extends ModelKey> (fn :(key :K) => ModelData) :ModelProvider {
-  const models = new Map<ModelKey, Model>()
-  return {
-    resolve: (key :K) => {
-      let model = models.get(key)
-      if (!model) models.set(key, model = new Model(fn(key)))
-      return model
-    }
+/** A refinment of `ElementsModel` that allows the current value of the keys to be read. */
+export interface ReadableElementsModel<K extends ModelKey> extends ElementsModel<K> {
+  keys :Value<Iterable<K>>
+}
+
+function resolver<K extends ModelKey> (fn :(key :K) => ModelData) {
+  const models = new Map<K, Model>()
+  return (key :K) => {
+    let model = models.get(key)
+    if (!model) models.set(key, model = new Model(fn(key)))
+    return model
   }
 }
 
-/** Provides models from model data. */
-export function dataProvider (data :ModelData) :ModelProvider {
-  return makeProvider(key => data[key] as ModelData)
+/** Creates an elements model that computes each element model via a `fn` of its `key`. */
+export function makeModel<K extends ModelKey> (
+  keys :Source<Iterable<K>>, fn :(key :K) => ModelData
+) :ElementsModel<K> {
+  return {keys, resolve: resolver(fn)}
 }
 
-/** Creates a model provider from the supplied `map` and model data `maker` function. The `maker`
+/** Provides element models from a model data object.
+  * The keys of the model are the keys of the data object in iteration order. */
+export function dataModel (data :ModelData) :ReadableElementsModel<string> {
+  return {
+    keys: Value.constant(Object.keys(data) as Iterable<string>),
+    resolve: resolver(key => data[key] as ModelData)
+  }
+}
+
+/** Creates an elements model from the supplied `map` and model data `maker` function. The `maker`
   * function should project the needed values from the map value using `Value.map`. For example:
   *
   * ```ts
   * const map :RMap<string, {name :string, age :number}> = ...
-  * const provider = mapProvider(map, v => ({name: v.map(r => r.name), age: v.map(r => r.age)}))
+  * const keys = map.keysValue // could opt to sort or filter or whatnot
+  * const model = mapModel(keys, map, v => ({name: v.map(r => r.name), age: v.map(r => r.age)}))
   * ```
   *
   * Note: the maker function is passed a value that assumes the correct mapping always exists.
   * This is necessary to avoid a lot of painful checking for undefined values. But if you build a
   * component where the list of keys is not in sync with its associated map, things will blow up.
   * Be careful. */
-export function mapProvider<K extends ModelKey, V> (
-  map :RMap<K,V>, maker :(v :Value<V>, k :K) => ModelData
-) :ModelProvider {
-  return makeProvider(key => maker(map.getValue(key as K) as Value<V>, key as K))
+export function mapModel<K extends ModelKey, V> (
+  keys :Source<Iterable<K>>, map :RMap<K,V>, maker :(v :Value<V>, k :K) => ModelData
+) :ElementsModel<K> {
+  return {keys, resolve: resolver(key => maker(map.getValue(key as K) as Value<V>, key as K))}
 }
 
-/** Creates a model provider from the supplied `map` and model data `maker` function. The `maker`
+/** Creates an elements model from the supplied `map` and model data `maker` function. The `maker`
   * function should project the needed values from the map value using `Value.map` and needed
   * mutable values using `Mutable.bimap`. For example:
   *
   * ```ts
   * const map :MutableMap<string, {name :string, age :number}> = ...
-  * const provider = mapProvider(map, m => ({
+  * const keys = map.keysValue // could opt to sort or filter or whatnot
+  * const model = mapModel(keys, map, m => ({
   *   name: m.bimap(r => r.name, (r, name) => ({...r, name})), // editable
   *   age: m.map(r => r.age) // not editable
   * }))
@@ -138,8 +157,8 @@ export function mapProvider<K extends ModelKey, V> (
   * This is necessary to avoid a lot of painful checking for undefined values. But if you build a
   * component where the list of keys is not in sync with its associated map, things will blow up.
   * Be careful. */
-export function mutableMapProvider<K extends ModelKey, V> (
-  map :MutableMap<K,V>, maker :(m:Mutable<V>) => ModelData
-) :ModelProvider {
-  return makeProvider(key => maker(map.getMutable(key as K) as Mutable<V>))
+export function mutableMapModel<K extends ModelKey, V> (
+  keys :Source<Iterable<K>>, map :MutableMap<K,V>, maker :(m:Mutable<V>) => ModelData
+) :ElementsModel<K> {
+  return {keys, resolve: resolver(key => maker(map.getMutable(key as K) as Mutable<V>))}
 }

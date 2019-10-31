@@ -8,7 +8,7 @@ import {
 import {Element, ElementContext, trueValue, blankValue} from "./element"
 import {HGroup} from "./group"
 import {AbstractList, AbstractListConfig, syncListContents} from "./list"
-import {Action, ModelProvider, Spec} from "./model"
+import {Action, ElementsModel, Spec} from "./model"
 import {
   AbstractLabel, AbstractLabelConfig, AltMask, CtrlMask,
   MetaMask, ShiftMask, getCommandKeys, modMask,
@@ -33,15 +33,14 @@ export class MenuBar extends HGroup implements AbstractList {
 /** Defines configuration for [[Menu]] elements. */
 export interface MenuConfig extends AbstractDropdownConfig {
   type :"menu"
-  shortcutKeys? :Spec<Value<string[]>>
-  shortcutData? :Spec<ModelProvider>
+  shortcutsModel? :Spec<ElementsModel<string>>
 }
 
 const MenuStyleScope = {id: "menu", states: ButtonStates}
 
 /** A menu within a menu bar. */
 export class Menu extends AbstractDropdown {
-  private readonly _shortcutData? :ModelProvider
+  private readonly _shortcutsModel? :ElementsModel<string>
   private readonly _shortcutRemovers = new Map<string, Remover>()
 
   constructor (ctx :ElementContext, parent :Element, readonly config :MenuConfig) {
@@ -73,12 +72,13 @@ export class Menu extends AbstractDropdown {
         }
       }
     }))
-    const shortcutKeys = ctx.model.resolveOpt(config.shortcutKeys)
-    this._shortcutData = ctx.model.resolveOpt(config.shortcutData)
-    if (!(shortcutKeys && this._shortcutData)) return
-    this.disposer.add(shortcutKeys.onValue(keys => {
+    this._shortcutsModel = ctx.model.resolveOpt(config.shortcutsModel)
+    if (!this._shortcutsModel) return
+    let latestKeys :Iterable<string> = []
+    this.disposer.add(this._shortcutsModel.keys.onValue(keys => {
       // subscribe to enabled states so that they're up-to-date when we want to sample them
       const kset = new Set(keys)
+      latestKeys = keys
       for (const [key, remover] of this._shortcutRemovers) {
         if (!kset.has(key)) {
           remover()
@@ -96,7 +96,7 @@ export class Menu extends AbstractDropdown {
     }))
     this.disposer.add(this.root.unclaimedKeyEvent.onEmit(event => {
       if (event.type !== "keydown") return
-      for (const key of shortcutKeys.current) {
+      for (const key of latestKeys) {
         for (const [flags, code] of getCommandKeys(key)) {
           if (flags === modMask(event) && code === event.code && this.activateShortcut(key)) {
             event.preventDefault()
@@ -109,13 +109,13 @@ export class Menu extends AbstractDropdown {
 
   /** Returns the enabled state for the shortcut with the supplied key. */
   getShortcutEnabled (key :string) :Value<boolean> {
-    const data = this._requireShortcutData.resolve(key)
+    const data = this._requireShortcutsModel.resolve(key)
     return data.resolve<Value<boolean>>("enabled", trueValue)
   }
 
   /** Activates the shortcut identified by the supplied key. */
   activateShortcut (key :string) :boolean {
-    const data = this._requireShortcutData.resolve(key)
+    const data = this._requireShortcutsModel.resolve(key)
     const enabled = data.resolve<Value<boolean>>("enabled", trueValue)
     if (!enabled.current) return false
     data.resolve<Action>("action")()
@@ -124,9 +124,9 @@ export class Menu extends AbstractDropdown {
 
   get styleScope () { return MenuStyleScope }
 
-  private get _requireShortcutData () {
-    if (!this._shortcutData) throw new Error("Missing shortcut data")
-    return this._shortcutData
+  private get _requireShortcutsModel () {
+    if (!this._shortcutsModel) throw new Error("Missing shortcut model")
+    return this._shortcutsModel
   }
 }
 

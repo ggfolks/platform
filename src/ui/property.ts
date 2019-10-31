@@ -7,14 +7,13 @@ import {PMap, toLimitedString} from "../core/util"
 import {NumberConstraints, SelectConstraints, getEnumMeta} from "../graph/meta"
 import {Element, ElementConfig, ElementContext} from "./element"
 import {AxisConfig, VGroup} from "./group"
-import {Model, ModelKey, ModelProvider, Spec} from "./model"
+import {Model, ElementsModel, Spec} from "./model"
 
 /** Configuration for [[PropertyView]]. */
 export interface PropertyViewConfig extends AxisConfig {
   type :"propertyView"
   editable :Spec<Value<boolean>>
-  keys :Spec<Value<string[]>>
-  data :Spec<ModelProvider>
+  model :Spec<ElementsModel<string>>
 }
 
 /** Depicts a node's editable/viewable properties. */
@@ -24,9 +23,9 @@ export class PropertyView extends VGroup {
 
   constructor (ctx :ElementContext, parent :Element, readonly config :PropertyViewConfig) {
     super(ctx, parent, config)
-    const propertyData = ctx.model.resolve(config.data)
     const editable = ctx.model.resolve(config.editable)
-    this.disposer.add(ctx.model.resolve(config.keys).onValue(keys => {
+    const model = ctx.model.resolve(config.model)
+    this.disposer.add(model.keys.onValue(keys => {
       const {contents, elements} = this
       // first dispose no longer used elements
       const kset = new Set(keys)
@@ -41,11 +40,11 @@ export class PropertyView extends VGroup {
       for (const key of kset) {
         let elem = this.elements.get(key)
         if (!elem) {
-          const model = propertyData.resolve(key)
+          const elemModel = model.resolve(key)
           elem = ctx.elem.create(
-            ctx.remodel(model),
+            ctx.remodel(elemModel),
             this,
-            createPropertyElementConfig(model, editable),
+            createPropertyElementConfig(elemModel, editable),
           )
           this.elements.set(key, elem)
         }
@@ -306,13 +305,8 @@ const propertyConfigCreators :PMap<PropertyConfigCreator> = {
     })
   },
   select: (model, editable) => {
-    const constraints = model.resolve<Value<SelectConstraints>>("constraints")
-    return createEnumPropertyConfig(
-      model,
-      editable,
-      constraints.map(constraints => constraints.options),
-      constraints.map(constraints => constraints.labeler)
-    )
+    const constraints = model.resolve<Value<SelectConstraints<any>>>("constraints")
+    return createSelectPropertyConfig(model, editable, constraints)
   },
 }
 
@@ -321,7 +315,8 @@ function createPropertyElementConfig (model :Model, editable :Value<boolean>) {
   const creator = propertyConfigCreators[type.current]
   if (creator) return creator(model, editable)
   const enumMeta = getEnumMeta(type.current)
-  if (enumMeta) return createEnumPropertyConfig(model, editable, Value.constant(enumMeta.values))
+  if (enumMeta) return createSelectPropertyConfig(
+    model, editable, Value.constant({options: enumMeta.values}))
   return createPropertyRowConfig(model, {
     type: "label",
     constraints: {stretch: true},
@@ -329,13 +324,12 @@ function createPropertyElementConfig (model :Model, editable :Value<boolean>) {
   })
 }
 
-function createEnumPropertyConfig (
-    model :Model, editable :Value<boolean>, keys :Value<any[]>,
-    labeler? :Value<((opt :any) => string)|undefined>) {
+function createSelectPropertyConfig<K> (
+  model :Model, editable :Value<boolean>, constraints :Value<SelectConstraints<K>>
+) {
+  const labeler = constraints.map(c => c.labeler ? c.labeler : (v :K) => String(v))
   const value = model.resolve<Mutable<any>>("value")
-  const label = (labeler)
-    ? Value.join2(value, labeler).map(([val, labeler]) => labeler ? labeler(val) : String(val))
-    : value.map(v => String(v))
+  const label = labeler.switchMap(fn => value.map(fn))
   return createPropertyRowConfig(model, {
     type: "dropdown",
     enabled: editable,
@@ -352,10 +346,10 @@ function createEnumPropertyConfig (
       },
       action: "action",
     },
-    keys,
-    data: {
-      resolve: (key :ModelKey) => new Model({
-        name: Value.constant(labeler && labeler.current ? labeler.current(key) : String(key)),
+    model: {
+      keys: constraints.map(c => c.options),
+      resolve: (key :K) => new Model({
+        name: labeler.map(fn => fn(key)),
         action: () => value.update(key)
       }),
     },

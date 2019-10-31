@@ -1,9 +1,9 @@
 import {rect} from "../core/math"
-import {Mutable, Source, Value} from "../core/react"
+import {Mutable, Value} from "../core/react"
 import {Element, ElementConfig, ElementContext} from "./element"
 import {AxisConfig, OffAxisPolicy, VGroup} from "./group"
 import {DragElementConfig, DragElement, DragElementStates, HList, OrderUpdater} from "./list"
-import {ModelKey, ModelProvider, Spec} from "./model"
+import {ModelKey, ElementsModel, Spec} from "./model"
 
 /** Defines configuration for [[TabbedPane]] elements. */
 export interface TabbedPaneConfig extends AxisConfig {
@@ -11,8 +11,7 @@ export interface TabbedPaneConfig extends AxisConfig {
   tabElement :ElementConfig
   addTabElement? :ElementConfig
   contentElement :ElementConfig
-  data :Spec<ModelProvider>
-  keys :Spec<Source<ModelKey[]>>
+  model :Spec<ElementsModel<ModelKey>>
   key :Spec<Value<ModelKey>>
   activeKey :Spec<Mutable<ModelKey>>
   updateOrder? :Spec<OrderUpdater>
@@ -37,8 +36,7 @@ export class TabbedPane extends VGroup {
         activeKey,
         updateOrder,
       },
-      data: config.data,
-      keys: config.keys,
+      model: config.model,
     }
     this.contents.push(
       ctx.elem.create(ctx, this, {
@@ -52,11 +50,11 @@ export class TabbedPane extends VGroup {
       })
     )
     this._hlist = this.findChild("hlist") as HList
-    const data = ctx.model.resolve(config.data)
+    const tabsModel = ctx.model.resolve(config.model)
     this.disposer.add(activeKey.onValue(activeKey => {
       const oldElement = this.contents[1]
       if (oldElement) oldElement.dispose()
-      const model = data.resolve(activeKey)
+      const model = tabsModel.resolve(activeKey)
       this.contents[1] = ctx.elem.create(ctx.remodel(model), this, config.contentElement)
       this.invalidate()
     }))
