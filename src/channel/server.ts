@@ -24,10 +24,14 @@ export interface ServerConfig {
 
 export type ServerState = "initializing" | "listening" | "terminating" | "terminated"
 
+const PING_INTERVAL = 15*1000
+const NEED_PING = 30*1000
+
 export class ChannelServer {
   private readonly wss :WebSocket.Server
   private readonly _sessions = MutableSet.local<Session>()
   private readonly _state = Mutable.local("initializing" as ServerState)
+  private readonly pinger :NodeJS.Timeout
 
   /** Emits errors reported by the underlying web socket server. */
   readonly errors :Stream<Error> = new Emitter()
@@ -47,6 +51,11 @@ export class ChannelServer {
       sess.state.when(ss => ss === "closed", () => this._sessions.delete(sess))
     })
     wss.on("error", error => (this.errors as Emitter<Error>).emit(error))
+
+    this.pinger = setInterval(() => {
+      const now = Date.now()
+      for (const sess of this._sessions) sess.ping(now)
+    }, PING_INTERVAL)
   }
 
   get state () :Value<ServerState> { return this._state }
@@ -55,10 +64,12 @@ export class ChannelServer {
     this._state.update("terminating")
     for (const sess of this._sessions) sess.close()
     this.wss.close(() => this._state.update("terminated"))
+    clearInterval(this.pinger)
   }
 }
 
 class Session implements Connection {
+  private lastRecvStamp = 0
   readonly state = Mutable.local("connecting" as CState)
   readonly msgs = new Emitter<Uint8Array>()
   readonly cmgr :ChannelManager
@@ -77,6 +88,10 @@ class Session implements Connection {
         "Dropping message that arrived on closed socket", "sess", this);
       else if (msg instanceof ArrayBuffer) this.msgs.emit(new Uint8Array(msg))
       else log.warn("Got non-binary message", "sess", this, "msg", msg)
+      this.lastRecvStamp = Date.now()
+    })
+    ws.on("pong", () => {
+      this.lastRecvStamp = Date.now()
     })
     ws.on("close", (code, reason) => {
       log.info("Session closed", "sess", this, "code", code, "reason", reason)
@@ -97,6 +112,18 @@ class Session implements Connection {
       if (err) log.warn("Message send failed", "sess", this, err) // TODO: terminate?
     })
     return true
+  }
+
+  ping (now :number) {
+    if (now - this.lastRecvStamp > NEED_PING) {
+      this.lastRecvStamp = now
+      this.ws.ping(undefined, undefined, err => {
+        if (err) {
+          log.warn("Ping failed", "sess", this, err)
+          this.close()
+        }
+      })
+    }
   }
 
   close () {
