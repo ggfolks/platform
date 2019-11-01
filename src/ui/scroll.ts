@@ -200,6 +200,7 @@ class TweenAnim extends Anim {
     const init = this.init = scroller.axisOffset
     const range = this.range = targetOffset - init
     this.time = Math.min(range / 1000, 1)
+    this.done = (this.time <= 0)
   }
 
   update (clock :Clock, offset :number) {
@@ -294,7 +295,7 @@ export class Scroller extends TransformedContainer {
   protected setAnim (anim :Anim|undefined) {
     const offset = this._offset, idx = this.horiz ? 0 : 1
     this.unanim()
-    if (anim) {
+    if (anim && !anim.done) {
       const unanim = this.unanim = this.root.clock.onEmit(clock => {
         this._updateAxisOffset(anim.update(clock, offset.current[idx]))
         if (anim.done) unanim()
@@ -302,7 +303,7 @@ export class Scroller extends TransformedContainer {
     }
   }
 
-  protected get horiz () :boolean { return this.config.orient == "horiz" }
+  protected get horiz () :boolean { return this.config.orient === "horiz" }
 
   protected startScroll (event :MouseEvent|TouchEvent, pos :vec2) :PointerInteraction|undefined {
     const clearCursor = () => this.clearCursor(this)
