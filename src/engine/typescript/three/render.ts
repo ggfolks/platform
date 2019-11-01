@@ -301,6 +301,11 @@ function getTransform (object :Object3D) :Transform {
 class ThreePage extends TypeScriptPage {
   readonly scene = new Scene()
   readonly cameras :ThreeCamera[] = []
+
+  init () {
+    super.init()
+    this.scene.autoUpdate = false
+  }
 }
 registerConfigurableType("component", undefined, "page", ThreePage)
 
