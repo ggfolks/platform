@@ -413,6 +413,7 @@ export interface RootConfig extends ElementConfig {
   autoSize? :boolean
   hintSize? :Spec<Value<dim2>>
   minSize? :Spec<Value<dim2>>
+  zIndex? :number
   contents :ElementConfig
 }
 
@@ -477,6 +478,11 @@ export class Root extends Element {
   get root () :Root { return this }
   get state () :Value<string> { return RootState }
   get origin () :vec2 { return this._origin }
+
+  /** Returns the desired index of this root relative to other roots. Events will be dispatched to
+    * higher zIndexed roots first, under the assumption that they are rendered on top of lower
+    * zIndexed roots in cases where they overlap. */
+  get zIndex () :number { return this.config.zIndex || 0}
 
   /** A stream that emits key events not consumed by focus. */
   get unclaimedKeyEvent () :Stream<KeyboardEvent> { return this._unclaimedKeyEvent }
@@ -914,8 +920,15 @@ export class Host implements Disposable {
 
   get roots () :RList<Root> { return this._roots }
 
+  /** Adds `root` to this host. The root will be inserted into the root list after all roots with a
+    * lower or equal z-index, and before any roots with a higher z-index. */
   addRoot (root :Root) {
-    this._roots.append(root)
+    const roots = this._roots
+    let index = 0
+    for (let ll = roots.length; index < ll; index += 1) {
+      if (roots.elemAt(index).zIndex > root.zIndex) break
+    }
+    this._roots.insert(root, index)
     // TODO: we should only do this when the mouse is over the root
     root.cursor.onValue(cursor => this.elem.style.cursor = cursor)
   }
@@ -1009,6 +1022,7 @@ export class HTMLHost extends Host {
     style.pointerEvents = "none"
     style.left = `${root.origin[0]}px`
     style.top = `${root.origin[1]}px`
+    style.zIndex = `${root.zIndex}`
     const unpos = root.events.onEmit(c => {
       if (c === "moved") {
         style.left = `${root.origin[0]}px`
@@ -1032,6 +1046,7 @@ export class HTMLHost extends Host {
       if (focus && focus.config.type === "text") {
         this._clearText()
         this._clearText = (focus as any).configInput(text) // avoid importing Text here
+        text.style.zIndex = `${root.zIndex+1}`
         this.elem.appendChild(text)
         text.focus() // for mobile (has to happen while handling touch event)
         setTimeout(() => text.focus(), 1) // for desktop (fails if done immediately, yay!)
