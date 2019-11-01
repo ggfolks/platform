@@ -165,6 +165,11 @@ export class Timestamp {
   /** Creates a timestamp with the current time. */
   static now () { return new Timestamp(Date.now()) }
 
+  /** Returns `-1` if `a < b`, `1` if `a > b` and `0` if they are equal. */
+  static compare (a :Timestamp, b :Timestamp) :number {
+    return a.millis < b.millis ? -1 : a.millis > b.millis ? 1 : 0
+  }
+
   // TODO: should we use seconds + nanos like Firebase?
   constructor (readonly millis :number) {}
 
@@ -260,4 +265,27 @@ export function toLimitedString (value :any, maxLength = 30) {
   if (typeof value === "number") return String(Math.round(value * 1000000) / 1000000)
   const string = String(value)
   return string.length > maxLength ? string.substring(0, maxLength - 3) + "..." : string
+}
+
+/** Returns the position at which `elem` should be inserted into `elems` to preserve the least to
+  * greatest ordering of the array. Elements are compared using `cmp` which must return `<0`, `0` or
+  * `>0` per the normal JavaScript array sort contract. */
+export function insertPos<E> (elems :E[], elem :E, cmp :(a:E, b:E) => number) :number {
+  let low = 0, high = elems.length
+  while (low < high) {
+    const mid = (low + high) >>> 1, cv = cmp(elem, elems[mid])
+    if (cv < 0) high = mid
+    else low = mid+1
+  }
+  return low
+}
+
+/** Splices `elem` into `elems` at an index that preserves the least to greatest ordering of the
+  * array. Elements are compared using `cmp` which must return `<0`, `0` or `>0` per the normal
+  * JavaScript array sort contract.
+  * @return the index at which `elem` was inserted. */
+export function insertSorted<E> (elems :E[], elem :E, cmp :(a:E, b:E) => number) :number {
+  const pos = insertPos(elems, elem, cmp)
+  elems.splice(pos, 0, elem)
+  return pos
 }

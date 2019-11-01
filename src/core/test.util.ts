@@ -1,4 +1,4 @@
-import {BitSet, filteredIterable} from "./util"
+import {BitSet, filteredIterable, insertSorted} from "./util"
 
 test("bitset", () => {
   const b = new BitSet()
@@ -23,4 +23,18 @@ test("bitset", () => {
 test("filter", () => {
   const nums = [1, 2, 3, 4, 5, 6]
   expect(Array.from(filteredIterable(nums, n => n % 2 == 0))).toEqual([2, 4, 6])
+})
+
+test("insertSorted", () => {
+  const cmp = (a :number, b :number) => a-b
+  for (let ii = 0; ii < 100; ii += 1) {
+    const sort :number[] = [], sorted :number[] = []
+    for (let cc = 0; cc < 1000; cc += 1) {
+      const v = Math.round(Math.random()*10000)
+      sort.push(v)
+      insertSorted(sorted, v, cmp)
+    }
+    sort.sort(cmp)
+    expect(sorted).toEqual(sort)
+  }
 })
