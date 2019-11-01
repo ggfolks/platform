@@ -1,7 +1,7 @@
 import {rect, vec2} from "../core/math"
 import {Value} from "../core/react"
 import {Noop, NoopRemover, PMap, Remover} from "../core/util"
-import {ModelKey, ElementsModel} from "./model"
+import {Model, ModelKey, ElementsModel} from "./model"
 import {
   Control, ControlConfig, ControlStates, Element, ElementConfig, ElementContext, PointerInteraction,
 } from "./element"
@@ -9,9 +9,15 @@ import {DefaultPaint, PaintConfig, Spec} from "./style"
 import {AxisConfig, HGroup, OffAxisPolicy, VGroup} from "./group"
 import {strokeLinePath} from "./util"
 
+export type ElementConfigMaker = (model :Model) => ElementConfig
+
+function elementConfig (element :ElementConfig|ElementConfigMaker, model :Model) {
+  return typeof element === "function" ? element(model) : element
+}
+
 /** Base interface for list-like elements. */
 export interface AbstractListConfig extends AxisConfig {
-  element :ElementConfig
+  element :ElementConfig|ElementConfigMaker
   model :Spec<ElementsModel<ModelKey>>
 }
 
@@ -70,12 +76,12 @@ export class DragVList extends VGroup implements AbstractList {
   constructor (ctx :ElementContext, parent :Element, readonly config :DragVListConfig) {
     super(ctx, parent, config)
     const updateOrder = ctx.model.resolve(config.updateOrder)
-    this.disposer.add(syncListContents(ctx, this, {
+    this.disposer.add(syncListContents(ctx, this, model => ({
       type: "dragVElement",
-      contents: config.element,
+      contents: elementConfig(config.element, model),
       key: config.key,
       updateOrder,
-    }))
+    })))
   }
 
   protected rerender (canvas :CanvasRenderingContext2D, region :rect) {
@@ -323,7 +329,7 @@ export class DragVElement extends DragElement {
 export function syncListContents (
   ctx :ElementContext,
   list :Element & AbstractList,
-  elementConfig = list.config.element,
+  element :ElementConfig|ElementConfigMaker = list.config.element
 ) :Remover {
   const config = list.config as AbstractListConfig
   const model = ctx.model.resolveOpt(config.model)
@@ -343,7 +349,8 @@ export function syncListContents (
     for (const key of keys) {
       let elem = elements.get(key)
       if (!elem) {
-        elem = ctx.elem.create(ctx.remodel(model.resolve(key)), list, elementConfig)
+        const emodel = model.resolve(key)
+        elem = ctx.elem.create(ctx.remodel(emodel), list, elementConfig(element, emodel))
         list.elements.set(key, elem)
       }
       contents.push(elem)
