@@ -203,10 +203,20 @@ export interface GameObject extends Disposable {
     * @return the component reference. */
   getComponent<T extends Component> (type :string|ComponentConstructor<T>) :T|undefined
 
+  /** Gets a typed reference to a component, searching all ancestors in sequence.
+    * @param type the type of component desired.
+    * @return the component reference. */
+  getComponentInParent<T extends Component> (type :string|ComponentConstructor<T>) :T|undefined
+
   /** Sends a message to all components on the game object.
     * @param message the name of the message to send.
     * @param args the arguments to pass along with the message. */
   sendMessage (message :string, ...args :any[]) :void
+
+  /** Sends a message to this game object and all of its descendents.
+    * @param message the name of the message to send.
+    * @param args the arguments to pass along with the message. */
+  broadcastMessage (message :string, ...args: any[]) :void
 
   /** Returns a reactive view of the specified property.
     * @param name the name of the desired property.
@@ -249,10 +259,20 @@ export interface Component extends Configurable {
     * @return the component reference. */
   getComponent<T extends Component> (type :string|ComponentConstructor<T>) :T|undefined
 
+  /** Gets a typed reference to a component, searching all ancestors in sequence.
+    * @param type the type of component desired.
+    * @return the component reference. */
+  getComponentInParent<T extends Component> (type :string|ComponentConstructor<T>) :T|undefined
+
   /** Sends a message to all components on the game object.
     * @param message the name of the message to send.
     * @param args the arguments to pass along with the message. */
   sendMessage (message :string, ...args :any[]) :void
+
+  /** Sends a message to this game object and all of its descendents.
+    * @param message the name of the message to send.
+    * @param args the arguments to pass along with the message. */
+  broadcastMessage (message :string, ...args: any[]) :void
 
   /** Starts a coroutine on this component.
     * @param fnOrGenerator the coroutine to start.
@@ -267,6 +287,9 @@ export interface Component extends Configurable {
 
   /** Optional function to call if the transform changed. */
   readonly onTransformChanged? :() => void
+
+  /** Optional function to call if any ancestor of the transform changed. */
+  readonly onTransformParentChanged? :() => void
 
   /** Optional function to call each frame we hover over the object. */
   readonly onHover? :(identifier :number, hover :Hover) => void

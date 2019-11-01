@@ -433,6 +433,12 @@ export class TypeScriptGameObject implements GameObject {
     return undefined
   }
 
+  getComponentInParent<T extends Component> (type :string|ComponentConstructor<T>) :T|undefined {
+    const component = this.getComponent(type)
+    if (component) return component
+    return this.transform.parent && this.transform.parent.getComponentInParent(type)
+  }
+
   hasMessageHandler (message :string) :boolean {
     if (this._messageHandlers.has(message)) return true
     for (const key in this) {
@@ -464,6 +470,13 @@ export class TypeScriptGameObject implements GameObject {
     const handlers = this._messageHandlers.get(message)
     if (handlers) {
       for (const handler of handlers) handler(...args)
+    }
+  }
+
+  broadcastMessage (message :string, ...args: any[]) :void {
+    this.sendMessage(message, ...args)
+    for (let ii = 0; ii < this.transform.childCount; ii++) {
+      this.transform.getChild(ii).broadcastMessage(message, ...args)
     }
   }
 
@@ -568,8 +581,16 @@ export class TypeScriptComponent extends TypeScriptConfigurable implements Compo
     return this.gameObject.getComponent(type)
   }
 
+  getComponentInParent<T extends Component> (type :string|ComponentConstructor<T>) :T|undefined {
+    return this.gameObject.getComponentInParent(type)
+  }
+
   sendMessage (message :string, ...args :any[]) :void {
     this.gameObject.sendMessage(message, ...args)
+  }
+
+  broadcastMessage (message :string, ...args: any[]) :void {
+    this.gameObject.broadcastMessage(message, ...args)
   }
 
   startCoroutine (fnOrGenerator :(() => Generator<void>)|Generator<void>) :Coroutine {
@@ -760,6 +781,7 @@ class TypeScriptTransform extends TypeScriptComponent implements Transform {
 
   setParent (parent :Transform|undefined, worldPositionStays = true) :void {
     if (this._parent === parent) return
+    this._validate(POSITION_INVALID | ROTATION_INVALID)
     this._maybeRemoveFromParent()
     this._parent = parent as TypeScriptTransform|undefined
     if (this._parent) this._parent._childReordered(this)
@@ -768,6 +790,7 @@ class TypeScriptTransform extends TypeScriptComponent implements Transform {
       this._addedToRoot = true
     }
     this._invalidate(worldPositionStays ? LOCAL_INVALID : WORLD_INVALID)
+    this.broadcastMessage("onTransformParentChanged")
   }
 
   get childIds () :Value<string[]> { return this._childIds }
@@ -972,7 +995,7 @@ class TypeScriptTransform extends TypeScriptComponent implements Transform {
 }
 registerConfigurableType("component", undefined, "transform", TypeScriptTransform)
 
-class TypeScriptPage extends TypeScriptComponent implements Page {
+export class TypeScriptPage extends TypeScriptComponent implements Page {
 
   get active () { return this.gameObject.gameEngine.activePage.current === this.gameObject.id }
   set active (active :boolean) {

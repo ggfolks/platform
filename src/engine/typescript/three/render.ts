@@ -7,15 +7,14 @@ import {
 import {SkeletonUtils} from "three/examples/jsm/utils/SkeletonUtils"
 import {Clock} from "../../../core/clock"
 import {Color} from "../../../core/color"
-import {Plane, rect, vec2, vec3} from "../../../core/math"
+import {Plane, dim2, rect, vec2, vec3} from "../../../core/math"
 import {Mutable, Subject, Value} from "../../../core/react"
 import {MutableMap} from "../../../core/rcollect"
 import {Disposer, NoopRemover, Remover} from "../../../core/util"
-import {windowSize} from "../../../core/ui"
 import {setEnumMeta} from "../../../graph/meta"
 import {loadGLTF, loadGLTFAnimationClip} from "../../../scene3/entity"
 import {Hand, Pointer} from "../../../input/hand"
-import {ConfigurableConfig, Hover, Transform} from "../../game"
+import {DEFAULT_PAGE, ConfigurableConfig, Hover, Transform} from "../../game"
 import {Animation} from "../../animation"
 import {property} from "../../meta"
 import {
@@ -25,8 +24,8 @@ import {
 import {JavaScript} from "../../util"
 import {
   TypeScriptComponent, TypeScriptCube, TypeScriptCylinder, TypeScriptGameEngine,
-  TypeScriptGameObject, TypeScriptMesh, TypeScriptMeshFilter, TypeScriptQuad, TypeScriptSphere,
-  applyConfig, registerConfigurableType,
+  TypeScriptGameObject, TypeScriptMesh, TypeScriptMeshFilter, TypeScriptPage, TypeScriptQuad,
+  TypeScriptSphere, applyConfig, registerConfigurableType,
 } from "../game"
 
 setEnumMeta("LightType", ["ambient", "directional"])
@@ -55,11 +54,14 @@ export class ThreeRenderEngine implements RenderEngine {
   private readonly _hand :Hand
   private readonly _pressedObjects = new Map<number, ThreeObjectComponent>()
   private readonly _bounds = rect.create()
+  private readonly _size = Mutable.local(dim2.create())
 
   readonly renderer = new WebGLRenderer()
   readonly domElement = this.renderer.domElement
   readonly scene = new Scene()
   readonly cameras :ThreeCamera[] = []
+
+  get size () :Value<dim2> { return this._size }
 
   constructor (readonly gameEngine :TypeScriptGameEngine) {
     gameEngine._renderEngine = this
@@ -98,11 +100,12 @@ export class ThreeRenderEngine implements RenderEngine {
   }
 
   private _updateRendererSize () {
-    this.renderer.setSize(
+    const size = dim2.fromValues(
       this.renderer.domElement.clientWidth,
       this.renderer.domElement.clientHeight,
-      false,
     )
+    this.renderer.setSize(size[0], size[1], false)
+    this._size.update(size)
   }
 
   createMaterial () :Material {
@@ -121,7 +124,8 @@ export class ThreeRenderEngine implements RenderEngine {
     raycaster.ray.origin.fromArray(origin)
     raycaster.ray.direction.fromArray(direction)
     raycasterResults.length = 0
-    raycaster.intersectObject(this.scene, true, raycasterResults)
+    const activePage = this._getActivePage()
+    raycaster.intersectObject(activePage ? activePage.scene : this.scene, true, raycasterResults)
     if (target) target.length = 0
     else target = []
     for (const result of raycasterResults) {
@@ -139,7 +143,9 @@ export class ThreeRenderEngine implements RenderEngine {
   updateHovers () {
     this._hand.update()
     hovered.clear()
-    for (const camera of this.cameras) {
+    const activePage = this._getActivePage()
+    const cameras = activePage ? activePage.cameras : this.cameras
+    for (const camera of cameras) {
       for (const [identifier, pointer] of this._hand.pointers) {
         const rayOrigin = camera.transform.position
         camera.screenPointToDirection(
@@ -261,8 +267,24 @@ export class ThreeRenderEngine implements RenderEngine {
   }
 
   render () {
-    const camera = this.cameras.length > 0 ? this.cameras[0].camera : defaultCamera
-    this.renderer.render(this.scene, camera)
+    const activePage = this._getActivePage()
+    let cameras :ThreeCamera[]
+    let scene :Scene
+    if (activePage) {
+      cameras = activePage.cameras
+      scene = activePage.scene
+    } else {
+      cameras = this.cameras
+      scene = this.scene
+    }
+    this.renderer.render(scene, cameras.length > 0 ? cameras[0].camera : defaultCamera)
+  }
+
+  protected _getActivePage () :ThreePage|undefined {
+    const activePage = this.gameEngine.activePage.current
+    return (activePage === DEFAULT_PAGE)
+      ? undefined
+      : this.gameEngine.gameObjects.require(activePage).requireComponent<ThreePage>("page")
   }
 
   dispose () {
@@ -275,6 +297,12 @@ function getTransform (object :Object3D) :Transform {
   if (!object.parent) throw new Error("Can't find transform corresponding to Object3D")
   return getTransform(object.parent)
 }
+
+class ThreePage extends TypeScriptPage {
+  readonly scene = new Scene()
+  readonly cameras :ThreeCamera[] = []
+}
+registerConfigurableType("component", undefined, "page", ThreePage)
 
 type MaterialObject = MeshBasicMaterial | MeshStandardMaterial
 
@@ -331,6 +359,8 @@ abstract class ThreeObjectComponent extends TypeScriptComponent {
   readonly objectValue = Mutable.local<Object3D|undefined>(undefined)
   readonly hovers = MutableMap.local<number, Hover>()
 
+  protected _page? :ThreePage
+
   get renderEngine () :ThreeRenderEngine {
     return this.gameObject.gameEngine.renderEngine as ThreeRenderEngine
   }
@@ -346,18 +376,40 @@ abstract class ThreeObjectComponent extends TypeScriptComponent {
       object,
       oldObject? :Object3D,
     ) => {
-      if (oldObject) this.renderEngine.scene.remove(oldObject)
+      if (oldObject) this._removeFromPage(this._page)
       if (object) {
         object.matrixAutoUpdate = false
-        object.matrixWorld.fromArray(this.transform.localToWorldMatrix)
+        this._updateObjectTransform(object)
         object.userData.transform = this.transform
-        this.renderEngine.scene.add(object)
+        this._addToPage(this._page)
       }
     }))
   }
 
   onTransformChanged () {
-    this._updateTransform()
+    const object = this.objectValue.current
+    if (object) this._updateObjectTransform(object)
+  }
+
+  onTransformParentChanged () {
+    const page = this.getComponentInParent<ThreePage>("page")
+    if (this._page === page) return
+    this._removeFromPage(this._page)
+    this._addToPage(this._page = page)
+  }
+
+  protected _removeFromPage (page :ThreePage|undefined) {
+    const object = this.objectValue.current
+    if (!object) return
+    if (page) page.scene.remove(object)
+    else this.renderEngine.scene.remove(object)
+  }
+
+  protected _addToPage (page :ThreePage|undefined) {
+    const object = this.objectValue.current
+    if (!object) return
+    if (page) page.scene.add(object)
+    else this.renderEngine.scene.add(object)
   }
 
   dispose () {
@@ -380,9 +432,8 @@ abstract class ThreeObjectComponent extends TypeScriptComponent {
     }
   }
 
-  protected _updateTransform () {
-    const object = this.objectValue.current
-    if (object) object.matrixWorld.fromArray(this.transform.localToWorldMatrix)
+  protected _updateObjectTransform (object :Object3D) {
+    object.matrixWorld.fromArray(this.transform.localToWorldMatrix)
   }
 }
 
@@ -513,12 +564,11 @@ class ThreeCamera extends ThreeObjectComponent implements Camera {
   ) {
     super(gameEngine, supertype, type, gameObject)
     this.objectValue.update(this._perspectiveCamera)
-    this.renderEngine.cameras.push(this)
+    this._addToCameras(this._page)
 
-    // for now, just use the renderer element aspect
-    this._disposer.add(windowSize(window).onValue(() => {
-      const element = this.renderEngine.renderer.domElement
-      this.aspect = element.clientWidth / element.clientHeight
+    // for now, just use the renderer size aspect
+    this._disposer.add(this.renderEngine.size.onValue(size => {
+      this.aspect = size[0] / size[1]
     }))
   }
 
@@ -546,14 +596,32 @@ class ThreeCamera extends ThreeObjectComponent implements Camera {
     return raycaster.ray.direction.toArray(target) as vec3
   }
 
-  onTransformChanged () {
-    super.onTransformChanged()
-    this._perspectiveCamera.matrixWorldInverse.fromArray(this.transform.worldToLocalMatrix)
+  onTransformParentChanged () {
+    const oldPage = this._page
+    super.onTransformParentChanged()
+    if (this._page === oldPage) return
+    this._removeFromCameras(oldPage)
+    this._addToCameras(this._page)
   }
 
   dispose () {
     super.dispose()
-    this.renderEngine.cameras.splice(this.renderEngine.cameras.indexOf(this), 1)
+    this._removeFromCameras(this._page)
+  }
+
+  protected _updateObjectTransform (object :Object3D) {
+    super._updateObjectTransform(object)
+    this._perspectiveCamera.matrixWorldInverse.fromArray(this.transform.worldToLocalMatrix)
+  }
+
+  protected _addToCameras (page :ThreePage|undefined) {
+    const cameras = page ? page.cameras : this.renderEngine.cameras
+    cameras.push(this)
+  }
+
+  protected _removeFromCameras (page :ThreePage|undefined) {
+    const cameras = page ? page.cameras : this.renderEngine.cameras
+    cameras.splice(cameras.indexOf(this), 1)
   }
 }
 registerConfigurableType("component", ["render"], "camera", ThreeCamera)
@@ -601,7 +669,7 @@ class ThreeLight extends ThreeObjectComponent implements Light {
         : new DirectionalLight()
     )
     this._updateColor()
-    this._updateTransform()
+    this._updateObjectTransform(this._lightObject)
   }
 
   private _updateColor () {
@@ -640,10 +708,9 @@ class ThreeModel extends ThreeObjectComponent implements Model {
     this._urlRemover()
   }
 
-  protected _updateTransform () {
-    super._updateTransform()
-    const object = this.objectValue.current
-    if (object) updateChildren(object)
+  protected _updateObjectTransform (object :Object3D) {
+    super._updateObjectTransform(object)
+    updateChildren(object)
   }
 }
 registerConfigurableType("component", ["render"], "model", ThreeModel)
