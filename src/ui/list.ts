@@ -138,6 +138,11 @@ export abstract class DragElement extends Control {
   /** Reorders the element based on the supplied data. */
   abstract reorder (data :any) :void
 
+  maybeHandlePointerDown (event :MouseEvent|TouchEvent, pos :vec2) {
+    return rect.contains(this.expandBounds(this.bounds), pos)
+      ? this.handlePointerDown(event, pos)
+      : undefined
+  }
   handlePointerDown (event :MouseEvent|TouchEvent, pos :vec2) :PointerInteraction|undefined {
     const interaction = this.contents.handlePointerDown(event, pos)
     if (interaction) return interaction
@@ -222,14 +227,14 @@ export abstract class DragElement extends Control {
   handleWheel (event :WheelEvent, pos :vec2) :boolean {
     return this.contents.handleWheel(event, pos)
   }
-  
+
   handleDoubleClick (event :MouseEvent, pos :vec2) :boolean {
     return this.contents.handleDoubleClick(event, pos)
   }
 
   expandBounds (bounds :rect) :rect {
-    if (this._dragPos === undefined) return super.expandBounds(bounds)
     const cbounds = this.contents.expandBounds(this.contents.bounds)
+    if (this._dragPos === undefined) return cbounds
     rect.union(
       dragBounds,
       cbounds,

@@ -12,6 +12,7 @@ import {Mutable, Subject, Value} from "../../../core/react"
 import {MutableMap} from "../../../core/rcollect"
 import {Disposer, NoopRemover, Remover} from "../../../core/util"
 import {windowSize} from "../../../core/ui"
+import {setEnumMeta} from "../../../graph/meta"
 import {loadGLTF, loadGLTFAnimationClip} from "../../../scene3/entity"
 import {Hand, Pointer} from "../../../input/hand"
 import {ConfigurableConfig, Hover, Transform} from "../../game"
@@ -27,6 +28,8 @@ import {
   TypeScriptGameObject, TypeScriptMesh, TypeScriptMeshFilter, TypeScriptQuad, TypeScriptSphere,
   applyConfig, registerConfigurableType,
 } from "../game"
+
+setEnumMeta("LightType", ["ambient", "directional"])
 
 const defaultCamera = new PerspectiveCamera()
 const raycaster :Raycaster = new Raycaster()
@@ -560,7 +563,7 @@ class ThreeLight extends ThreeObjectComponent implements Light {
   private _color :Color
   private _lightObject? :LightObject
 
-  get lightType () :LightType { return this._lightType }
+  @property("LightType") get lightType () :LightType { return this._lightType }
   set lightType (type :LightType) {
     if (type === this._lightType) return
     this._lightType = type
