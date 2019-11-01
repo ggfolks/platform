@@ -146,6 +146,7 @@ class Random extends Node {
 /** Tracks the sum of its input over time, subject to optional min and max constraints. */
 abstract class AccumulateConfig implements NodeConfig {
   type = "accumulate"
+  @property() initial = 0
   @property() min = -Infinity
   @property() max = Infinity
   @inputEdge("number") input = undefined
@@ -154,10 +155,11 @@ abstract class AccumulateConfig implements NodeConfig {
 }
 
 class Accumulate extends Node {
-  private _output = Mutable.local(0)
+  private _output :Mutable<number>
 
   constructor (graph :Graph, id :string, readonly config :AccumulateConfig) {
     super(graph, id, config)
+    this._output = Mutable.local(config.initial || 0)
   }
 
   connect () {

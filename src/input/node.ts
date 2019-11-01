@@ -1,9 +1,11 @@
+import {refEquals} from "../core/data"
 import {Mutable, Value} from "../core/react"
 import {Graph} from "../graph/graph"
 import {outputEdge, property} from "../graph/meta"
 import {Node, NodeConfig, NodeContext, NodeTypeRegistry} from "../graph/node"
 import {Hand} from "./hand"
 import {Keyboard} from "./keyboard"
+import {wheelEvents} from "./react"
 
 /** Context for nodes relating to input. */
 export interface InputNodeContext extends NodeContext {
@@ -137,6 +139,33 @@ class PointerMovement extends Node {
   }
 }
 
+/** Outputs wheel values. */
+abstract class WheelConfig implements NodeConfig {
+  type = "wheel"
+  @outputEdge("number") deltaX = undefined
+  @outputEdge("number", true) deltaY = undefined
+  @outputEdge("number") deltaZ = undefined
+}
+
+class Wheel extends Node {
+
+  constructor (graph :Graph, id :string, readonly config :WheelConfig) {
+    super(graph, id, config)
+  }
+
+  protected _createOutput (name :string) {
+    return Value.deriveValue(
+      refEquals,
+      dispatch => wheelEvents.onEmit(event => {
+        const value = event[name]
+        dispatch(value, 0)
+        dispatch(0, value)
+      }),
+      () => 0,
+    )
+  }
+}
+
 /** Registers the nodes in this module with the supplied registry. */
 export function registerInputNodes (registry :NodeTypeRegistry) {
   registry.registerNodeTypes(["input"], {
@@ -145,5 +174,6 @@ export function registerInputNodes (registry :NodeTypeRegistry) {
     doubleClick: DoubleClick,
     mouseMovement: MouseMovement,
     pointerMovement: PointerMovement,
+    wheel: Wheel,
   })
 }

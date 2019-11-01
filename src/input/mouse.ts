@@ -62,6 +62,9 @@ export class Mouse implements Disposable {
     this._disposer.add(mouseEvents("mouseleave").onEmit(event => {
       this._entered = false
     }))
+    this._disposer.add(mouseEvents("contextmenu").onEmit(event => {
+      event.preventDefault()
+    }))
   }
 
   /** Returns the state value corresponding to the given mouse button. */

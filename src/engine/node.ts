@@ -452,5 +452,105 @@ export function registerEngineSubgraphs (registry :SubgraphRegistry) {
         graph: fallable,
       },
     },
+    orbit: {
+      leftMouseButton: {type: "mouseButton"},
+      pointerMovement: {type: "pointerMovement"},
+      azimuth: {
+        type: "accumulate",
+        input: {
+          type: "multiply",
+          inputs: ["leftMouseButton", ["pointerMovement", "x"], -0.5],
+        },
+      },
+      elevation: {
+        type: "accumulate",
+        initial: -45,
+        min: -90,
+        max: 90,
+        input: {
+          type: "multiply",
+          inputs: ["leftMouseButton", ["pointerMovement", "y"], -0.5],
+        },
+      },
+      rotation: {type: "quat.fromEuler", x: "elevation", y: "azimuth"},
+      middleMouseButton: {type: "mouseButton", button: 1},
+      distance: {
+        type: "accumulate",
+        initial: 10,
+        min: 0,
+        input: {
+          type: "add",
+          inputs: [
+            {
+              type: "multiply",
+              inputs: ["middleMouseButton", ["pointerMovement", "y"], 0.1],
+            },
+            {
+              type: "multiply",
+              inputs: [
+                {
+                  type: "sign",
+                  input: {type: "wheel"},
+                },
+                0.5,
+              ],
+            },
+          ],
+        },
+      },
+      rightMouseButton: {type: "mouseButton", button: 2},
+      translation: {
+        type: "vec3.split",
+        input: {
+          type: "vec3.transformQuat",
+          vector: {
+            type: "vec3.fromValues",
+            x: ["pointerMovement", "x"],
+            z: ["pointerMovement", "y"],
+          },
+          quaternion: {type: "quat.fromEuler", y: "azimuth"},
+        }
+      },
+      target: {
+        type: "vec3.fromValues",
+        x: {
+          type: "accumulate",
+          input: {
+            type: "multiply",
+            inputs: [
+              "rightMouseButton",
+              ["translation", "x"],
+              -0.01,
+            ],
+          },
+        },
+        z: {
+          type: "accumulate",
+          input: {
+            type: "multiply",
+            inputs: [
+              "rightMouseButton",
+              ["translation", "z"],
+              -0.01,
+            ],
+          },
+        },
+      },
+      updateTransform: {
+        type: "component",
+        localPosition: {
+          type: "vec3.add",
+          inputs: [
+            "target",
+            {
+              type: "vec3.transformQuat",
+              vector: {type: "vec3.fromValues", z: "distance"},
+              quaternion: "rotation",
+            },
+          ],
+        },
+        localRotation: "rotation",
+      },
+    },
   })
 }
