@@ -595,9 +595,12 @@ export class Root extends Element {
     const pos = host.mouseToRoot(this, event, tmpv)
     const button = event.button
     const iact = this.interacts[button]
+    // if this mouse event is in our bounds, stop it from propagating to (lower) roots; except in
+    // the case of mouseup because a mouse interaction might start on one root and then drag over to
+    // our root, but we want to be sure the original root also hears about the mouseup
+    if (event.type !== "mouseup" && rect.contains(this.bounds, pos)) event.cancelBubble = true
     switch (event.type) {
     case "mousedown":
-      if (rect.contains(this.bounds, pos)) event.cancelBubble = true
       if (iact) {
         log.warn("Got mouse down but have active interaction?", "button", button)
         iact.cancel()
@@ -619,7 +622,6 @@ export class Root extends Element {
       currentEditNumber++
       break
     case "dblclick":
-      if (rect.contains(this.bounds, pos)) event.cancelBubble = true
       this.contents.maybeHandleDoubleClick(event, pos)
       break
     }
