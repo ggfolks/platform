@@ -154,9 +154,12 @@ class Wheel extends Node {
   }
 
   protected _createOutput (name :string) {
+    const hand = (this.graph.ctx as InputNodeContext).hand
+    if (!hand) return Value.constant(0)
     return Value.deriveValue(
       refEquals,
       dispatch => wheelEvents.onEmit(event => {
+        if (!hand.mouse.canvasContains(event)) return
         const value = event[name]
         dispatch(value, 0)
         dispatch(0, value)

@@ -35,20 +35,17 @@ export class Mouse implements Disposable {
     return this._entered
   }
 
-  constructor (canvas :HTMLElement) {
-    const contains = (event :MouseEvent) => {
-      const rect = canvas.getBoundingClientRect()
-      return event.clientX >= rect.left && event.clientX <= rect.right &&
-        event.clientY >= rect.top && event.clientY <= rect.bottom
-    }
+  constructor (private readonly _canvas :HTMLElement) {
     this._disposer.add(mouseEvents("mousedown").onEmit(event => {
-      if (!event.cancelBubble && contains(event)) this._getButtonState(event.button).update(true)
+      if (!event.cancelBubble && this.canvasContains(event)) {
+        this._getButtonState(event.button).update(true)
+      }
     }))
     this._disposer.add(mouseEvents("mouseup").onEmit(event => {
       this._getButtonState(event.button).update(false)
     }))
     this._disposer.add(mouseEvents("dblclick").onEmit(event => {
-      if (!event.cancelBubble && contains(event)) this._doubleClicked.emit()
+      if (!event.cancelBubble && this.canvasContains(event)) this._doubleClicked.emit()
     }))
     this._disposer.add(mouseEvents("mousemove").onEmit(event => {
       if (!(this._lastScreen && this._lastOffset)) {
@@ -70,6 +67,13 @@ export class Mouse implements Disposable {
     this._disposer.add(mouseEvents("contextmenu").onEmit(event => {
       event.preventDefault()
     }))
+  }
+
+  /** Checks whether the supplied event is over the canvas. */
+  canvasContains (event :MouseEvent) :boolean {
+    const rect = this._canvas.getBoundingClientRect()
+    return event.clientX >= rect.left && event.clientX <= rect.right &&
+      event.clientY >= rect.top && event.clientY <= rect.bottom
   }
 
   /** Returns the state value corresponding to the given mouse button. */
