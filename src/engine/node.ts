@@ -452,7 +452,7 @@ export function registerEngineSubgraphs (registry :SubgraphRegistry) {
         type: "accumulate",
         input: {
           type: "multiply",
-          inputs: ["leftMouseButton", ["pointerMovement", "x"], -0.5],
+          inputs: ["leftMouseButton", ["pointerMovement", "x"], -0.2],
         },
       },
       elevation: {
@@ -462,7 +462,7 @@ export function registerEngineSubgraphs (registry :SubgraphRegistry) {
         max: 90,
         input: {
           type: "multiply",
-          inputs: ["leftMouseButton", ["pointerMovement", "y"], -0.5],
+          inputs: ["leftMouseButton", ["pointerMovement", "y"], -0.2],
         },
       },
       rotation: {type: "quat.fromEuler", x: "elevation", y: "azimuth"},
@@ -476,7 +476,7 @@ export function registerEngineSubgraphs (registry :SubgraphRegistry) {
           inputs: [
             {
               type: "multiply",
-              inputs: ["middleMouseButton", ["pointerMovement", "y"], 0.1],
+              inputs: ["middleMouseButton", ["pointerMovement", "y"], 0.025],
             },
             {
               type: "multiply",
@@ -510,22 +510,14 @@ export function registerEngineSubgraphs (registry :SubgraphRegistry) {
           type: "accumulate",
           input: {
             type: "multiply",
-            inputs: [
-              "rightMouseButton",
-              ["translation", "x"],
-              -0.01,
-            ],
+            inputs: ["rightMouseButton", ["translation", "x"], -0.0005, "distance"],
           },
         },
         z: {
           type: "accumulate",
           input: {
             type: "multiply",
-            inputs: [
-              "rightMouseButton",
-              ["translation", "z"],
-              -0.01,
-            ],
+            inputs: ["rightMouseButton", ["translation", "z"], -0.0005, "distance"],
           },
         },
       },
