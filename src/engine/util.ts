@@ -198,6 +198,11 @@ const constructorCloners = new Map<Function, (value :any) => any>([
     for (const key in value) obj[key] = JavaScript.clone(value[key])
     return obj
   }],
+  [Array, values => {
+    const array :any[] = []
+    for (const value of values) array.push(JavaScript.clone(value))
+    return array
+  }]
 ])
 
 interface TypedArrayConstructor<T> {
