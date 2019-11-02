@@ -51,14 +51,16 @@ export abstract class AbstractDropdown extends AbstractButton {
   }
 
   applyToContaining (canvas :CanvasRenderingContext2D, pos :vec2, op :(element :Element) => void) {
-    const applied = super.applyToContaining(canvas, pos, op)
-    if (applied && this._list) this._list.applyToContaining(canvas, pos, op)
-    return applied
+    if (!super.applyToContaining(canvas, pos, op)) return false
+    if (!this._list) return true
+    this._list.applyToContaining(canvas, pos, op)
+    // return false so as to continue the traversal
+    return false
   }
   applyToIntersecting (region :rect, op :(element :Element) => void) {
-    const applied = super.applyToIntersecting(region, op)
-    if (applied && this._list) this._list.applyToIntersecting(region, op)
-    return applied
+    if (!super.applyToIntersecting(region, op)) return false
+    if (this._list) this._list.applyToIntersecting(region, op)
+    return true
   }
 
   maybeHandlePointerDown (event :MouseEvent|TouchEvent, pos :vec2) {
