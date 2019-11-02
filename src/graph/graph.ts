@@ -63,6 +63,24 @@ export class Graph implements Disposable {
     }
   }
 
+  /** Reconfigures this graph with the supplied config.
+    * @param config the new config to apply. */
+  reconfigure (config :GraphConfig) {
+    // remove any nodes no longer in the config
+    for (const id of this.nodes.keys()) {
+      if (config[id] === undefined) this.removeNode(id)
+    }
+    // add/re-add any nodes present
+    for (const id in config) {
+      if (this.nodes.has(id)) this.removeNode(id)
+      this.createNode(id, config[id])
+    }
+    // connect after everything's in place
+    for (const id in config) {
+      this.nodes.require(id).connect()
+    }
+  }
+
   /** Creates a node with the supplied id and configuration, but does not connect it. */
   createNode (id :string, config :NodeConfig) {
     this._nodes.set(id, this.ctx.types.createNode(this, id, this.config[id] = config))
@@ -91,6 +109,34 @@ export class Graph implements Disposable {
     for (const node of this._nodes.values()) {
       node.connect()
     }
+  }
+
+  /** Creates a string representing a vertex shader for this graph. */
+  createVertexShader () :string {
+    return `
+      varying vec4 worldPosition;
+      void main(void) {
+        worldPosition = modelMatrix * vec4(position, 1.0);
+        gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+      }
+    `
+  }
+
+  /** Creates a string representing a fragment shader for this graph. */
+  createFragmentShader () :string {
+    return `
+      varying vec4 worldPosition;
+      void main(void) {
+        vec2 modPosition = mod(worldPosition.xz, 1.0);
+        vec2 lowerSteps = step(0.02, modPosition);
+        vec2 upperSteps = vec2(1.0, 1.0) - step(0.98, modPosition);
+        gl_FragColor = mix(
+          vec4(0.1, 0.1, 0.1, 1.0),
+          vec4(0.0, 0.0, 0.0, 1.0),
+          lowerSteps.x * lowerSteps.y * upperSteps.x * upperSteps.y
+        );
+      }
+    `
   }
 
   /** Retrieves a reactive value representing the identified input edges. */

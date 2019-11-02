@@ -1,7 +1,7 @@
 import {rect, vec2, vec3} from "../core/math"
 import {Color} from "../core/color"
 import {Disposable} from "../core/util"
-import {Component, ConfigurableConfig, Hoverable, Transform} from "./game"
+import {Component, Configurable, ConfigurableConfig, Hoverable, Transform} from "./game"
 
 /** Top-level interface to render engine. */
 export interface RenderEngine extends Disposable {
@@ -11,10 +11,6 @@ export interface RenderEngine extends Disposable {
 
   /** Sets the onscreen bounds of the renderer. */
   setBounds (bounds :rect) :void
-
-  /** Creates a new material.
-    * @return the newly created material instance. */
-  createMaterial () :Material
 
   /** Casts a ray into the scene, finding all intersections.
     * @param origin the origin of the ray in world space.
@@ -73,18 +69,8 @@ export interface MeshRenderer extends Component, Hoverable {
   materialConfigs :ConfigurableConfig[]
 }
 
-/** The available material types. */
-export type MaterialType = "basic" | "standard"
-
 /** Represents a single material. */
-export interface Material extends Disposable {
-
-  /** The material type. */
-  type :MaterialType
-
-  /** The material color. */
-  color :Color
-}
+export interface Material extends Configurable {}
 
 /** Represents a camera attached to a game object. */
 export interface Camera extends Component, Hoverable {

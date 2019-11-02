@@ -1,8 +1,9 @@
 import {
   AnimationClip, AnimationMixer, AmbientLight, BoxBufferGeometry, BufferGeometry,
-  CylinderBufferGeometry, DirectionalLight, Intersection, Light as LightObject, Mesh,
-  MeshBasicMaterial, MeshStandardMaterial, Object3D, PerspectiveCamera, PlaneBufferGeometry,
-  Raycaster, Scene, SphereBufferGeometry, Vector2, WebGLRenderer,
+  CylinderBufferGeometry, DirectionalLight, Intersection, Light as LightObject,
+  Material as MaterialObject, Mesh, MeshBasicMaterial, MeshStandardMaterial, Object3D,
+  PerspectiveCamera, PlaneBufferGeometry, Raycaster, Scene, ShaderMaterial, SphereBufferGeometry,
+  Vector2, WebGLRenderer,
 } from "three"
 import {SkeletonUtils} from "three/examples/jsm/utils/SkeletonUtils"
 import {Clock} from "../../../core/clock"
@@ -11,6 +12,7 @@ import {Plane, dim2, rect, vec2, vec3} from "../../../core/math"
 import {Mutable, Subject, Value} from "../../../core/react"
 import {MutableMap} from "../../../core/rcollect"
 import {Disposer, NoopRemover, Remover} from "../../../core/util"
+import {Graph, GraphConfig} from "../../../graph/graph"
 import {setEnumMeta} from "../../../graph/meta"
 import {loadGLTF, loadGLTFAnimationClip} from "../../../scene3/entity"
 import {Hand, Pointer} from "../../../input/hand"
@@ -18,14 +20,12 @@ import {DEFAULT_PAGE, ConfigurableConfig, Hover, Transform} from "../../game"
 import {Animation} from "../../animation"
 import {property} from "../../meta"
 import {
-  Camera, Light, LightType, Material, MaterialType,
-  MeshRenderer, Model, RaycastHit, RenderEngine,
+  Camera, Light, LightType, Material, MeshRenderer, Model, RaycastHit, RenderEngine,
 } from "../../render"
-import {JavaScript} from "../../util"
 import {
-  TypeScriptComponent, TypeScriptCube, TypeScriptCylinder, TypeScriptGameEngine,
-  TypeScriptGameObject, TypeScriptMesh, TypeScriptMeshFilter, TypeScriptPage, TypeScriptQuad,
-  TypeScriptSphere, applyConfig, registerConfigurableType,
+  TypeScriptComponent, TypeScriptConfigurable, TypeScriptCube, TypeScriptCylinder,
+  TypeScriptGameEngine, TypeScriptGameObject, TypeScriptMesh, TypeScriptMeshFilter, TypeScriptPage,
+  TypeScriptQuad, TypeScriptSphere, registerConfigurableType,
 } from "../game"
 
 setEnumMeta("LightType", ["ambient", "directional"])
@@ -106,10 +106,6 @@ export class ThreeRenderEngine implements RenderEngine {
     )
     this.renderer.setSize(size[0], size[1], false)
     this._size.update(size)
-  }
-
-  createMaterial () :Material {
-    return new ThreeMaterial()
   }
 
   raycastAll (
@@ -309,26 +305,34 @@ class ThreePage extends TypeScriptPage {
 }
 registerConfigurableType("component", undefined, "page", ThreePage)
 
-type MaterialObject = MeshBasicMaterial | MeshStandardMaterial
+abstract class ThreeMaterial extends TypeScriptConfigurable implements Material {
 
-class ThreeMaterial implements Material {
-  private _type :MaterialType = "basic"
-  private _color :Color
-  private _materialObject :MaterialObject = new MeshBasicMaterial()
-
-  get type () :MaterialType { return this._type }
-  set type (type :MaterialType) {
-    if (type === this._type) return
-    this._type = type
-    this._updateType()
+  constructor (
+    readonly gameEngine :TypeScriptGameEngine,
+    readonly supertype :string,
+    readonly type :string,
+    readonly object :MaterialObject,
+  ) {
+    super(gameEngine, supertype, type)
+    this._disposer.add(object)
   }
+}
+
+type BasicStandardMaterial = MeshBasicMaterial | MeshStandardMaterial
+
+class ThreeBasicMaterial extends ThreeMaterial {
+  private readonly _color :Color
 
   get color () :Color { return this._color }
   set color (color :Color) { Color.copy(this._color, color) }
 
-  get object () { return this._materialObject }
-
-  constructor (public _meshRenderer? :ThreeMeshRenderer) {
+  constructor (
+    readonly gameEngine :TypeScriptGameEngine,
+    readonly supertype :string,
+    readonly type :string,
+    readonly object :BasicStandardMaterial = new MeshBasicMaterial(),
+  ) {
+    super(gameEngine, supertype, type, object)
     this._color = new Proxy(Color.fromRGB(1, 1, 1), {
       set: (obj, prop, value) => {
         obj[prop] = value
@@ -341,24 +345,53 @@ class ThreeMaterial implements Material {
     })
   }
 
-  dispose () {
-    this._materialObject.dispose()
-  }
-
-  private _updateType () {
-    this._materialObject.dispose()
-    this._materialObject = this._type === "basic"
-      ? new MeshBasicMaterial()
-      : new MeshStandardMaterial()
-    this._updateColor()
-    if (this._meshRenderer) this._meshRenderer._updateMaterials()
-  }
-
   private _updateColor () {
-    this._materialObject.color.fromArray(this._color, 1)
-    this._materialObject.opacity = this._color[0]
+    this.object.color.fromArray(this._color, 1)
+    this.object.opacity = this._color[0]
   }
 }
+registerConfigurableType("material", [], "basic", ThreeBasicMaterial)
+
+class ThreeStandardMaterial extends ThreeBasicMaterial {
+
+  constructor (
+    readonly gameEngine :TypeScriptGameEngine,
+    readonly supertype :string,
+    readonly type :string,
+  ) {
+    super(gameEngine, supertype, type, new MeshStandardMaterial())
+  }
+}
+registerConfigurableType("material", [], "standard", ThreeStandardMaterial)
+
+class ThreeShaderMaterial extends ThreeMaterial {
+  private readonly _vertexShaderGraph :Graph
+  private readonly _fragmentShaderGraph :Graph
+
+  get vertexShaderGraphConfig () :GraphConfig { return this._vertexShaderGraph.config }
+  set vertexShaderGraphConfig (config :GraphConfig) {
+    this._vertexShaderGraph.reconfigure(config)
+    this.object.vertexShader = this._vertexShaderGraph.createVertexShader()
+  }
+
+  get fragmentShaderGraphConfig () :GraphConfig { return this._fragmentShaderGraph.config }
+  set fragmentShaderGraphConfig (config :GraphConfig) {
+    this._fragmentShaderGraph.reconfigure(config)
+    this.object.fragmentShader = this._fragmentShaderGraph.createFragmentShader()
+  }
+
+  constructor (
+    readonly gameEngine :TypeScriptGameEngine,
+    readonly supertype :string,
+    readonly type :string,
+    readonly object = new ShaderMaterial(),
+  ) {
+    super(gameEngine, supertype, type, object)
+    this._vertexShaderGraph = new Graph(gameEngine.ctx, {})
+    this._fragmentShaderGraph = new Graph(gameEngine.ctx, {})
+  }
+}
+registerConfigurableType("material", [], "shader", ThreeShaderMaterial)
 
 abstract class ThreeObjectComponent extends TypeScriptComponent {
   readonly objectValue = Mutable.local<Object3D|undefined>(undefined)
@@ -381,12 +414,12 @@ abstract class ThreeObjectComponent extends TypeScriptComponent {
       object,
       oldObject? :Object3D,
     ) => {
-      if (oldObject) this._removeFromPage(this._page)
+      if (oldObject) this._removeFromPage(this._page, oldObject)
       if (object) {
         object.matrixAutoUpdate = false
         this._updateObjectTransform(object)
         object.userData.transform = this.transform
-        this._addToPage(this._page)
+        this._addToPage(this._page, object)
       }
     }))
   }
@@ -399,19 +432,17 @@ abstract class ThreeObjectComponent extends TypeScriptComponent {
   onTransformParentChanged () {
     const page = this.getComponentInParent<ThreePage>("page")
     if (this._page === page) return
-    this._removeFromPage(this._page)
-    this._addToPage(this._page = page)
+    this._removeFromPage(this._page, this.objectValue.current)
+    this._addToPage(this._page = page, this.objectValue.current)
   }
 
-  protected _removeFromPage (page :ThreePage|undefined) {
-    const object = this.objectValue.current
+  protected _removeFromPage (page :ThreePage|undefined, object :Object3D|undefined) {
     if (!object) return
     if (page) page.scene.remove(object)
     else this.renderEngine.scene.remove(object)
   }
 
-  protected _addToPage (page :ThreePage|undefined) {
-    const object = this.objectValue.current
+  protected _addToPage (page :ThreePage|undefined, object :Object3D|undefined) {
     if (!object) return
     if (page) page.scene.add(object)
     else this.renderEngine.scene.add(object)
@@ -461,30 +492,39 @@ class ThreeMeshRenderer extends ThreeObjectComponent implements MeshRenderer {
   private _materials :ThreeMaterial[]
 
   get material () :Material { return this.materials[0] }
-  set material (mat :Material) { this.materials[0] = mat as ThreeMaterial }
-
-  get materialConfig () :ConfigurableConfig { return this.materialConfigs[0] }
-  set materialConfig (config :ConfigurableConfig) { applyConfig(this.materials[0], config) }
+  set material (mat :Material) { this.materials = [mat] }
 
   get materials () :Material[] { return this._materials }
   set materials (mats :Material[]) {
+    let ii = 0
+    for (; ii < mats.length; ii++) {
+      const oldMaterial = this._materials[ii]
+      const newMaterial = mats[ii]
+      if (oldMaterial === newMaterial) continue
+      oldMaterial.dispose()
+      this._materials[ii] = newMaterial as ThreeMaterial
+    }
+    for (; ii < this._materials.length; ii++) this._materials[ii].dispose()
     this._materials.length = mats.length
-    for (let ii = 0; ii < mats.length; ii++) this._materials[ii] = mats[ii] as ThreeMaterial
+  }
+
+  get materialConfig () :ConfigurableConfig { return this.material.createConfig() }
+  set materialConfig (config :ConfigurableConfig) {
+    this.material = this.material.reconfigure(undefined, config) as Material
   }
 
   get materialConfigs () :ConfigurableConfig[] {
-    const configs :ConfigurableConfig[] = []
-    for (const material of this._materials) {
-      configs.push({type: material.type, color: JavaScript.clone(material.color)})
-    }
-    return configs
+    return this._materials.map(material => material.createConfig())
   }
   set materialConfigs (configs :ConfigurableConfig[]) {
     let ii = 0
     for (; ii < configs.length; ii++) {
-      let material = this._materials[ii]
-      if (!material) this._materials[ii] = material = new ThreeMaterial(this)
-      applyConfig(material, configs[ii])
+      this._materials[ii] = this.gameEngine.reconfigureConfigurable(
+        "material",
+        this._materials[ii] || null,
+        undefined,
+        configs[ii],
+      ) as ThreeMaterial
     }
     for (; ii < this._materials.length; ii++) {
       this._materials[ii].dispose()
@@ -501,17 +541,24 @@ class ThreeMeshRenderer extends ThreeObjectComponent implements MeshRenderer {
     super(gameEngine, supertype, type, gameObject)
 
     this.objectValue.update(this._mesh)
-    this._materials = new Proxy([new ThreeMaterial(this)], {
-      set: (obj, prop, value) => {
-        if (value instanceof ThreeMaterial) value._meshRenderer = this
-        obj[prop] = value
-        this._updateMaterials()
-        return true
+    this._materials = new Proxy(
+      [gameEngine.reconfigureConfigurable(
+        "material",
+        null,
+        undefined,
+        {type: "basic"},
+      ) as ThreeMaterial],
+      {
+        set: (obj, prop, value) => {
+          obj[prop] = value
+          this._updateMaterials()
+          return true
+        },
+        get: (obj, prop) => {
+          return obj[prop]
+        },
       },
-      get: (obj, prop) => {
-        return obj[prop]
-      },
-    })
+    )
     this._updateMaterials()
     this._disposer.add(() => {
       for (const material of this._materials) material.dispose()

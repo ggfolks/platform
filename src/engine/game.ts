@@ -49,6 +49,7 @@ export interface Configurable extends Disposable {
 
 /** The available primitive types. */
 export type PrimitiveType = "sphere" | "cylinder" | "cube" | "quad"
+export const PrimitiveTypes = ["sphere", "cylinder", "cube", "quad"]
 
 /** The type used to configure game objects. */
 export interface GameObjectConfig {

@@ -1043,21 +1043,7 @@ export class TypeScriptGraph extends TypeScriptComponent implements Graph {
   private readonly _graph :GraphObject
 
   get graphConfig () :GraphConfig { return this._graph.config }
-  set graphConfig (config :GraphConfig) {
-    // remove any nodes no longer in the config
-    for (const id of this._graph.nodes.keys()) {
-      if (config[id] === undefined) this._graph.removeNode(id)
-    }
-    // add/re-add any nodes present
-    for (const id in config) {
-      if (this._graph.nodes.has(id)) this._graph.removeNode(id)
-      this._graph.createNode(id, config[id])
-    }
-    // connect after everything's in place
-    for (const id in config) {
-      this._graph.nodes.require(id).connect()
-    }
-  }
+  set graphConfig (config :GraphConfig) { this._graph.reconfigure(config) }
 
   constructor (
     gameEngine :TypeScriptGameEngine,
