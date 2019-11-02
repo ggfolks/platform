@@ -25,7 +25,7 @@ export class Hand implements Disposable {
   }
 
   constructor (private readonly _canvas :HTMLElement) {
-    this._disposer.add(this.mouse = new Mouse())
+    this._disposer.add(this.mouse = new Mouse(_canvas))
     this._disposer.add(this.touchpad = new Touchpad())
 
     this._disposer.add(pointerEvents("pointerdown").onEmit(event => {

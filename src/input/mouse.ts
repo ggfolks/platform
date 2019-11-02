@@ -35,15 +35,20 @@ export class Mouse implements Disposable {
     return this._entered
   }
 
-  constructor () {
+  constructor (canvas :HTMLElement) {
+    const contains = (event :MouseEvent) => {
+      const rect = canvas.getBoundingClientRect()
+      return event.clientX >= rect.left && event.clientX <= rect.right &&
+        event.clientY >= rect.top && event.clientY <= rect.bottom
+    }
     this._disposer.add(mouseEvents("mousedown").onEmit(event => {
-      if (!event.cancelBubble) this._getButtonState(event.button).update(true)
+      if (!event.cancelBubble && contains(event)) this._getButtonState(event.button).update(true)
     }))
     this._disposer.add(mouseEvents("mouseup").onEmit(event => {
       this._getButtonState(event.button).update(false)
     }))
     this._disposer.add(mouseEvents("dblclick").onEmit(event => {
-      if (!event.cancelBubble) this._doubleClicked.emit()
+      if (!event.cancelBubble && contains(event)) this._doubleClicked.emit()
     }))
     this._disposer.add(mouseEvents("mousemove").onEmit(event => {
       if (!(this._lastScreen && this._lastOffset)) {
