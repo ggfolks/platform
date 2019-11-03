@@ -139,7 +139,7 @@ export class Box extends Element {
     )
   }
 
-  computeInnerBounds (into :rect) :rect {
+  private computeInnerBounds (into :rect) :rect {
     const {padding, margin} = this.style
     rect.copy(into, this._bounds)
     if (padding) insetRect(padding, into, into)
@@ -163,12 +163,12 @@ export class Box extends Element {
     const halign = this.style.halign || "center"
     const valign = this.style.valign || "center"
     const inbounds = this.computeInnerBounds(tmpr)
-    const bwidth = inbounds[2], bheight = inbounds[3]
+    const bx = inbounds[0], by = inbounds[1], bwidth = inbounds[2], bheight = inbounds[3]
     const psize = this.contents.preferredSize(bwidth, bheight)
     const cwidth = halign == "stretch" ? bwidth : Math.min(bwidth, psize[0])
     const cheight = valign == "stretch" ? bheight : Math.min(bheight, psize[1])
-    const cx = inbounds[0] + alignOffset(halign, cwidth, bwidth)
-    const cy = inbounds[1] + alignOffset(valign, cheight, bheight)
+    const cx = bx + alignOffset(halign, cwidth, bwidth)
+    const cy = by + alignOffset(valign, cheight, bheight)
     this.contents.setBounds(rect.set(tmpr, cx, cy, cwidth, cheight))
   }
 
@@ -182,9 +182,10 @@ export class Box extends Element {
     const inbounds = margin ? insetRect(margin, this._bounds, tmpr) : this._bounds
     // TODO: should we just do all element rendering translated to the element's origin
     canvas.translate(inbounds[0], inbounds[1])
-    this.background.current.render(canvas, dim2.set(tmpd, inbounds[2], inbounds[3]))
+    const bsize = dim2.set(tmpd, inbounds[2], inbounds[3])
+    this.background.current.render(canvas, bsize)
     // TODO: should the border render over the contents?
-    this.border.current.render(canvas, dim2.set(tmpd, inbounds[2], inbounds[3]))
+    this.border.current.render(canvas, bsize)
     canvas.translate(-inbounds[0], -inbounds[1])
     this.contents.render(canvas, region)
   }
