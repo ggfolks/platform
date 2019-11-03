@@ -361,7 +361,7 @@ export class GraphViewer extends VGroup {
         contents: {
           type: "box",
           scopeId: "addTabButton",
-          contents: {type: "label", text: Value.constant("🞣")},
+          contents: {type: "label", text: Value.constant("✚")},
         },
         onClick: "createPage",
       },
