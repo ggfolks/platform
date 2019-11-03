@@ -1,8 +1,7 @@
-import {dim2, vec3, vec3zero} from "../core/math"
+import {vec3, vec3zero} from "../core/math"
 import {Value} from "../core/react"
 import {MutableMap, RMap} from "../core/rcollect"
 import {getValue} from "../core/util"
-import {windowSize} from "../core/ui"
 import {Graph} from "../graph/graph"
 import {
   InputEdgeMeta, OutputEdgeMeta, PropertyMeta, activateNodeConfigs, property, inputEdge, outputEdge,
@@ -329,9 +328,6 @@ export function registerEngineSubgraphs (registry :SubgraphRegistry) {
     translate: {type: "translate", input: "translation"},
     aboveGroundOutput: {type: "output", name: "aboveGround", input: "aboveGround"},
   }
-  const rootSize = windowSize(window).map(
-    size => dim2.fromValues(Math.round(size[0] * 0.9), Math.round(size[1] * 0.9)),
-  )
   registry.registerSubgraphs(["engine", "object"], {
     doubleClickToInspect: {
       doubleClick: {type: "doubleClick"},
@@ -342,9 +338,6 @@ export function registerEngineSubgraphs (registry :SubgraphRegistry) {
         input: "inspect",
         root: {
           type: "root",
-          autoSize: true,
-          hintSize: rootSize,
-          minSize: rootSize,
           contents: {
             type: "box",
             contents: {type: "graphViewer", editable: Value.constant(true)},

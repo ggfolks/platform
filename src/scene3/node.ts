@@ -3,11 +3,9 @@ import {
   Material, Mesh, Object3D, Raycaster, Vector3,
 } from "three"
 
-import {dim2} from "../core/math"
 import {Subject, Value} from "../core/react"
 import {MutableMap} from "../core/rcollect"
 import {Noop, NoopRemover, getValue} from "../core/util"
-import {windowSize} from "../core/ui"
 import {Graph} from "../graph/graph"
 import {InputEdgeMeta, activateNodeConfigs, inputEdge, outputEdge, property} from "../graph/meta"
 import {NodeTypeRegistry, WrappedValue} from "../graph/node"
@@ -417,9 +415,6 @@ export function registerScene3Subgraphs (registry :SubgraphRegistry) {
     translate: {type: "translate", input: "translation"},
     aboveGroundOutput: {type: "output", name: "aboveGround", input: "aboveGround"},
   }
-  const rootSize = windowSize(window).map(
-    size => dim2.fromValues(Math.round(size[0] * 0.9), Math.round(size[1] * 0.9)),
-  )
   registry.registerSubgraphs(["scene3", "object"], {
     doubleClickToInspect: {
       doubleClick: {type: "doubleClick"},
@@ -430,9 +425,6 @@ export function registerScene3Subgraphs (registry :SubgraphRegistry) {
         input: "inspect",
         root: {
           type: "root",
-          autoSize: true,
-          hintSize: rootSize,
-          minSize: rootSize,
           contents: {
             type: "box",
             contents: {type: "graphViewer", editable: Value.constant(true)},

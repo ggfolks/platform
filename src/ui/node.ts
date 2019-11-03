@@ -1,5 +1,5 @@
 import {dataEquals, refEquals} from "../core/data"
-import {dim2, rect, vec2, vec2zero} from "../core/math"
+import {dim2, rect} from "../core/math"
 import {Scale, getValueStyle} from "../core/ui"
 import {ChangeFn, Mutable, Value} from "../core/react"
 import {MutableSet} from "../core/rcollect"
@@ -24,7 +24,7 @@ export interface UINodeContext extends NodeContext {
   theme :Theme
   styles :StyleDefs
   image :ImageResolver
-  screen :Value<dim2>
+  screen :Value<rect>
 }
 
 /** Creates a UI element when the input becomes true. */
@@ -32,8 +32,7 @@ abstract class UINodeConfig implements NodeConfig {
   type = "ui"
   model? :ModelData
   root :RootConfig = {type: "root", scale: Scale.ONE, contents: {type: ""}}
-  origin? :vec2
-  size? :vec2
+  rootBounds? :rect
   screenH? :HAnchor
   screenV? :VAnchor
   rootH? :HAnchor
@@ -252,16 +251,21 @@ class UINode extends Node {
         },
       })
       root = ui.createRoot(this.config.root, model)
-      if (this.config.size) root.setSize(this.config.size)
-      else root.sizeToFit()
-      if (this.config.origin) root.setOrigin(this.config.origin)
-      else disposer.add(root.bindOrigin(
-        ctx.screen.map(size => rect.fromPosSize(vec2zero, size)),
-        this.config.screenH || "center",
-        this.config.screenV || "center",
-        this.config.rootH || "center",
-        this.config.rootV || "center",
-      ))
+      if (this.config.rootBounds) {
+        root.setSize(rect.size(this.config.rootBounds))
+        root.setOrigin(rect.pos(this.config.rootBounds))
+      }
+      else {
+        root.setSize(dim2.fromValues(Math.round(ctx.screen.current[2]*0.9),
+                                     Math.round(ctx.screen.current[3]*0.9)))
+        disposer.add(root.bindOrigin(
+          ctx.screen,
+          this.config.screenH || "center",
+          this.config.screenV || "center",
+          this.config.rootH || "center",
+          this.config.rootV || "center",
+        ))
+      }
       ctx.host.addRoot(root)
     }))
   }
