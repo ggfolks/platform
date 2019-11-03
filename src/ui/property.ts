@@ -143,7 +143,25 @@ const propertyConfigCreators :PMap<PropertyConfigCreator> = {
     })
   },
   vec3: (model, editable) => {
-    const value = model.resolve<Mutable<vec3>>("value")
+    const rawValue = model.resolve<Mutable<vec3>>("value")
+    const maxDecimals = 3
+    let currentValue = truncateVec3(rawValue.current, maxDecimals)
+    const truncatedValue = Mutable.deriveMutable(
+      dispatch => rawValue.onChange((value :vec3, oldValue :vec3) => {
+        const truncated = truncateVec3(value, maxDecimals)
+        if (!vec3.equals(currentValue, truncated)) {
+          const oldValue = currentValue
+          dispatch(currentValue = truncated, oldValue)
+        }
+      }),
+      () => currentValue,
+      (newValue :vec3) => {
+        if (!vec3.equals(currentValue, newValue)) {
+          rawValue.update(newValue)
+        }
+      },
+      refEquals,
+    )
     return createPropertyRowConfig(model, {
       type: "row",
       constraints: {stretch: true},
@@ -151,19 +169,25 @@ const propertyConfigCreators :PMap<PropertyConfigCreator> = {
         {
           type: "numberText",
           constraints: {stretch: true},
-          number: value.bimap(v => v[0], (v, x) => vec3.fromValues(x, v[1], v[2])),
+          maxDecimals,
+          wheelStep: 0.1,
+          number: truncatedValue.bimap(v => v[0], (v, x) => vec3.fromValues(x, v[1], v[2])),
           contents: NumberBox,
         },
         {
           type: "numberText",
           constraints: {stretch: true},
-          number: value.bimap(v => v[1], (v, y) => vec3.fromValues(v[0], y, v[2])),
+          maxDecimals,
+          wheelStep: 0.1,
+          number: truncatedValue.bimap(v => v[1], (v, y) => vec3.fromValues(v[0], y, v[2])),
           contents: NumberBox,
         },
         {
           type: "numberText",
           constraints: {stretch: true},
-          number: value.bimap(v => v[2], (v, z) => vec3.fromValues(v[0], v[1], z)),
+          maxDecimals,
+          wheelStep: 0.1,
+          number: truncatedValue.bimap(v => v[2], (v, z) => vec3.fromValues(v[0], v[1], z)),
           contents: NumberBox,
         },
       ],
@@ -194,27 +218,24 @@ const propertyConfigCreators :PMap<PropertyConfigCreator> = {
           constraints: {stretch: true},
           number: eulerValue.bimap(e => e[0], (e, x) => Euler.fromValues(x, e[1], e[2])),
           contents: NumberBox,
-          min: -180,
-          max: 180,
           maxDecimals: 0,
+          wheelStep: 10,
         },
         {
           type: "numberText",
           constraints: {stretch: true},
           number: eulerValue.bimap(e => e[1], (e, y) => Euler.fromValues(e[0], y, e[2])),
           contents: NumberBox,
-          min: -180,
-          max: 180,
           maxDecimals: 0,
+          wheelStep: 10,
         },
         {
           type: "numberText",
           constraints: {stretch: true},
           number: eulerValue.bimap(e => e[2], (e, z) => Euler.fromValues(e[0], e[1], z)),
           contents: NumberBox,
-          min: -180,
-          max: 180,
           maxDecimals: 0,
+          wheelStep: 10,
         },
       ],
     })
@@ -308,6 +329,12 @@ const propertyConfigCreators :PMap<PropertyConfigCreator> = {
     const constraints = model.resolve<Value<SelectConstraints<any>>>("constraints")
     return createSelectPropertyConfig(model, editable, constraints)
   },
+}
+
+function truncateVec3 (vector :vec3, maxDecimals :number) :vec3 {
+  const result = vec3.create()
+  const scale = 10 ** maxDecimals
+  return vec3.scale(result, vec3.round(result, vec3.scale(result, vector, scale)), 1.0 / scale)
 }
 
 function createPropertyElementConfig (model :Model, editable :Value<boolean>) {
