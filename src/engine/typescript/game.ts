@@ -1,11 +1,10 @@
 import {loadImage} from "../../core/assets"
 import {Clock} from "../../core/clock"
 import {refEquals} from "../../core/data"
-import {mat4, quat, vec3, vec4} from "../../core/math"
+import {mat4, quat, vec3, vec4, rect} from "../../core/math"
 import {Mutable, Value} from "../../core/react"
 import {MutableMap, RMap} from "../../core/rcollect"
 import {Disposer, NoopRemover, PMap, getValue} from "../../core/util"
-import {windowSize} from "../../core/ui"
 import {Graph as GraphObject, GraphConfig} from "../../graph/graph"
 import {CategoryNode, NodeConfig, NodeTypeRegistry} from "../../graph/node"
 import {registerLogicNodes} from "../../graph/logic"
@@ -171,7 +170,7 @@ export class TypeScriptGameEngine implements GameEngine {
 
   get gameObjects () :RMap<string, GameObject> { return this._gameObjects }
 
-  constructor (readonly root :HTMLElement) {
+  constructor (readonly root :HTMLElement, screen :Value<rect>) {
     this.ctx = {
       types: new NodeTypeRegistry(
         registerLogicNodes,
@@ -188,7 +187,7 @@ export class TypeScriptGameEngine implements GameEngine {
       theme: DefaultTheme,
       styles: DefaultStyles,
       image: {resolve: loadImage},
-      screen: windowSize(window),
+      screen,
     }
     this.rootIds = this.activePage.switchMap(
       page => page === DEFAULT_PAGE

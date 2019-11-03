@@ -80,7 +80,7 @@ export class ThreeRenderEngine implements RenderEngine {
 
     gameEngine.root.appendChild(this.renderer.domElement)
     this._disposer.add(() => gameEngine.root.removeChild(this.renderer.domElement))
-    this._disposer.add(gameEngine.ctx.screen.onValue(() => this._updateRendererSize()))
+    this._disposer.add(gameEngine.ctx.screen.onValue(b => this.setBounds(b)))
 
     this._disposer.add(gameEngine.ctx.hand = this._hand = new Hand(this.renderer.domElement))
 
