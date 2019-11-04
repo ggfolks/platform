@@ -1,3 +1,4 @@
+import {ChangeFn, Value} from "./react"
 import {ListChange, MutableList, MapChange, MutableMap, MutableSet, SetChange} from "./rcollect"
 
 test("reactive lists", () => {
@@ -26,30 +27,46 @@ test("reactive lists", () => {
   expect(hist).toEqual(xhist)
 })
 
+function expectChange<A> (v :Value<A>, check :ChangeFn<A>) {
+  const remove = v.onChange((v, ov) => { check(v, ov) ; remove() })
+}
+
 test("reactive sets", () => {
   const set = MutableSet.local<string>()
   const hist :SetChange<string>[] = []
   const xhist :SetChange<string>[] = []
   set.onChange(change => hist.push(change))
 
+  const sizeV = set.sizeValue
+
+  expectChange(sizeV, (s, os) => expect(os).toBe(s-1))
   set.add("a")
   xhist.push({type: "added", elem: "a"})
+  expect(sizeV.current).toBe(1)
   set.add("b")
   xhist.push({type: "added", elem: "b"})
+  expect(sizeV.current).toBe(2)
   set.add("c")
   xhist.push({type: "added", elem: "c"})
+  expect(sizeV.current).toBe(3)
   expect(Array.from(set.values())).toEqual(["a", "b", "c"])
   expect(hist).toEqual(xhist)
 
+  const shist :number[] = []
+  sizeV.onChange(size => shist.push(size))
+
+  expectChange(sizeV, (s, os) => expect(os).toBe(s+1))
   set.delete("b")
   xhist.push({type: "deleted", elem: "b"})
   expect(Array.from(set.values())).toEqual(["a", "c"])
   expect(hist).toEqual(xhist)
+  expect(shist).toEqual([2])
 
   set.add("bee")
   xhist.push({type: "added", elem: "bee"})
   expect(Array.from(set.values())).toEqual(["a", "c", "bee"])
   expect(hist).toEqual(xhist)
+  expect(shist).toEqual([2, 3])
 
   const aval = set.hasValue("a")
   const ahist :Array<boolean> = []
@@ -66,6 +83,7 @@ test("reactive sets", () => {
   set.add("a")
   expect(aval.current).toEqual(true)
   expect(ahist).toEqual([true, false, true])
+  expect(shist).toEqual([2, 3])
 
   const zval = set.hasValue("z")
   const zhist :Array<boolean> = []
@@ -87,6 +105,8 @@ test("reactive maps", () => {
   const xhist :MapChange<string,string>[] = []
   map.onChange(change => hist.push(change))
 
+  const sizeV = map.sizeValue
+  expectChange(sizeV, (s, os) => expect(os).toBe(s-1))
   map.set("a", "eh")
   xhist.push({type: "set", key: "a", value: "eh", prev: undefined})
   map.set("b", "bee")
@@ -96,15 +116,20 @@ test("reactive maps", () => {
   expect(Array.from(map.entries())).toEqual([["a", "eh"], ["b", "bee"], ["c", "sea"]])
   expect(hist).toEqual(xhist)
 
+  expectChange(sizeV, (s, os) => expect(os).toBe(s+1))
   map.delete("b")
   xhist.push({type: "deleted", key: "b", prev: "bee"})
   expect(Array.from(map.entries())).toEqual([["a", "eh"], ["c", "sea"]])
   expect(hist).toEqual(xhist)
 
+  const shist :number[] = []
+  sizeV.onChange(size => shist.push(size))
+
   map.set("c", "see")
   xhist.push({type: "set", key: "c", value: "see", prev: "sea"})
   expect(Array.from(map.entries())).toEqual([["a", "eh"], ["c", "see"]])
   expect(hist).toEqual(xhist)
+  expect(shist).toEqual([3])
 
   const aval = map.getValue("a")
   const ahist :Array<string|undefined> = []
@@ -117,6 +142,7 @@ test("reactive maps", () => {
   amval.onValue(v => amhist.push(v))
   expect(amval.current).toEqual("eh")
   expect(amhist).toEqual(["eh"])
+  expect(shist).toEqual([3])
 
   const cval = map.getValue("c")
   const chist :Array<string|undefined> = []
@@ -127,14 +153,18 @@ test("reactive maps", () => {
   map.set("c", "see")
   expect(cval.current).toEqual("see")
   expect(chist).toEqual(["see"])
+  expect(shist).toEqual([3])
 
   map.set("c", "cee")
   expect(cval.current).toEqual("cee")
   expect(chist).toEqual(["see", "cee"])
+  expect(shist).toEqual([3])
 
+  expectChange(sizeV, (s, os) => expect(os).toBe(s+1))
   map.delete("c")
   expect(cval.current).toEqual(undefined)
   expect(chist).toEqual(["see", "cee", undefined])
+  expect(shist).toEqual([3, 2])
 
   map.set("c", "see!")
   expect(chist).toEqual(["see", "cee", undefined, "see!"])

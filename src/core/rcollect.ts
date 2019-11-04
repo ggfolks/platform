@@ -220,7 +220,11 @@ export abstract class RSet<E> extends Source<ReadonlySet<E>> implements Readonly
 
   /** The size of this set as a reactive value. */
   get sizeValue () :Value<number> {
-    const value = this.map(s => s.size).fold(0, (_, s) => s)
+    const value = Value.deriveValue(refEquals, disp => this.onChange(change => {
+      const size = this.size
+      if (change.type === "added") disp(size, size-1)
+      else disp(size, size+1)
+    }), () => this.size)
     Object.defineProperty(this, "sizeValue", {value})
     return value
   }
@@ -442,7 +446,11 @@ export abstract class RMap<K,V> extends Source<ReadonlyMap<K,V>> implements Read
 
   /** The size of this map as a reactive value. */
   get sizeValue () :Value<number> {
-    const value = this.map(m => m.size).fold(0, (_, s) => s)
+    const value = Value.deriveValue(refEquals, disp => this.onChange(change => {
+      const size = this.size
+      if (change.type === "deleted") disp(size, size+1)
+      else if (change.prev === undefined) disp(size, size-1)
+    }), () => this.size)
     Object.defineProperty(this, "sizeValue", {value})
     return value
   }
