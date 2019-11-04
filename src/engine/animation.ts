@@ -14,9 +14,16 @@ export interface Animation extends Component {
   /** Whether or not to play the animation automatically on startup. */
   playAutomatically :boolean
 
+  /** The name of the animation currently playing, or the empty string for none. */
+  playing :string
+
   /** Plays an animation
     * @param [name] the name of the animation to play, if not the default. */
   play (name? :string) :void
+
+  /** Stops an animation.
+    * @param [name] the name of the animation to stop, if not all animations. */
+  stop (name? :string) :void
 }
 
 /** Manages an animation state graph. */

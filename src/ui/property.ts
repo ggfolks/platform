@@ -359,10 +359,12 @@ function createSelectPropertyConfig<K> (
   const label = labeler.switchMap(fn => value.map(fn))
   return createPropertyRowConfig(model, {
     type: "dropdown",
+    constraints: {stretch: true},
     enabled: editable,
     contents: {
       type: "box",
       contents: {type: "label", text: label},
+      style: {halign: "left"},
     },
     element: {
       type: "dropdownItem",

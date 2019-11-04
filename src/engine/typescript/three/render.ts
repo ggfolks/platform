@@ -10,7 +10,7 @@ import {Clock} from "../../../core/clock"
 import {Color} from "../../../core/color"
 import {Plane, dim2, rect, vec2, vec3} from "../../../core/math"
 import {Mutable, Subject, Value} from "../../../core/react"
-import {MutableMap} from "../../../core/rcollect"
+import {MutableMap, RMap} from "../../../core/rcollect"
 import {Disposer, NoopRemover, Remover} from "../../../core/util"
 import {Graph, GraphConfig} from "../../../graph/graph"
 import {setEnumMeta} from "../../../graph/meta"
@@ -18,7 +18,7 @@ import {loadGLTF, loadGLTFAnimationClip} from "../../../scene3/entity"
 import {Hand, Pointer} from "../../../input/hand"
 import {DEFAULT_PAGE, ConfigurableConfig, Hover, Transform} from "../../game"
 import {Animation} from "../../animation"
-import {property} from "../../meta"
+import {PropertyMeta, getConfigurableMeta, property} from "../../meta"
 import {
   Camera, Light, LightType, Material, MeshRenderer, Model, RaycastHit, RenderEngine,
 } from "../../render"
@@ -768,7 +768,9 @@ class ThreeModel extends ThreeObjectComponent implements Model {
 registerConfigurableType("component", ["render"], "model", ThreeModel)
 
 class ThreeAnimation extends TypeScriptComponent implements Animation {
-  playAutomatically = true
+  readonly playAutomaticallyValue = Mutable.local(true)
+  readonly playingValue = Mutable.local("")
+  readonly urlsValue = Mutable.local<string[]>([])
 
   private readonly _urls :string[]
   private readonly _mixerSubject :Subject<AnimationMixer>
@@ -786,6 +788,29 @@ class ThreeAnimation extends TypeScriptComponent implements Animation {
   set urls (urls :string[]) {
     this._urls.length = urls.length
     for (let ii = 0; ii < urls.length; ii++) this._urls[ii] = urls[ii]
+  }
+
+  @property("boolean") get playAutomatically () :boolean {
+    return this.playAutomaticallyValue.current
+  }
+  set playAutomatically (play :boolean) { this.playAutomaticallyValue.update(play) }
+
+  @property("select", {options: [""]}) get playing () :string { return this.playingValue.current }
+  set playing (playing :string) { this.playingValue.update(playing) }
+
+  get propertiesMeta () :RMap<string, PropertyMeta> {
+    return RMap.fromValue(this.urlsValue, urls => {
+      const map = MutableMap.local<string, PropertyMeta>()
+      for (const [property, meta] of getConfigurableMeta(Object.getPrototypeOf(this)).properties) {
+        if (property === "playing") {
+          const options = urls.map(getAnchor)
+          options.unshift("")
+          map.set(property, {type: "select", constraints: {options}})
+        }
+        else map.set(property, meta)
+      }
+      return map
+    })
   }
 
   constructor (
@@ -807,8 +832,8 @@ class ThreeAnimation extends TypeScriptComponent implements Animation {
       },
     })
 
+    const component = this.gameObject.components.getValue("model") as Value<ThreeModel|undefined>
     this._mixerSubject = Subject.deriveSubject(dispatch => {
-      const component = this.gameObject.components.getValue("model") as Value<ThreeModel|undefined>
       return component
         .switchMap(
           model => model ? model.objectValue : Value.constant<Object3D|undefined>(undefined),
@@ -818,20 +843,53 @@ class ThreeAnimation extends TypeScriptComponent implements Animation {
         })
     })
     this._disposer.add(this._mixerSubject.onValue(mixer => this._mixer = mixer))
+
+    // automatically add the URLs of any model loaded
+    this._disposer.add(
+      component
+        .switchMap(model => model ? model.urlValue : Value.constant(""))
+        .onValue(url => url && loadGLTF(url).onValue(gltf => {
+          for (const clip of gltf.animations) {
+            const fullUrl = url + "#" + clip.name
+            if (this._urls.indexOf(fullUrl) === -1) this._urls.push(url + "#" + clip.name)
+          }
+          this._updateUrls()
+        })),
+    )
+
+    this._disposer.add(this.playingValue.onValue(name => {
+      if (name) this.play(name)
+      else this.stop()
+    }))
   }
 
   awake () {
-    if (this.playAutomatically) this.play()
+    if (this.playAutomatically && this._urls[0]) this.play()
   }
 
   play (name? :string) :void {
+    const clip = this._requireClip(name)
+    Subject.join2(clip, this._mixerSubject).once(([clip, mixer]) => {
+      mixer.stopAllAction().clipAction(clip).play()
+    })
+  }
+
+  stop (name? :string) :void {
+    if (!name) this._mixerSubject.once(mixer => mixer.stopAllAction())
+    else {
+      const clip = this._requireClip(name)
+      Subject.join2(clip, this._mixerSubject).once(([clip, mixer]) => {
+        mixer.clipAction(clip).stop()
+      })
+    }
+  }
+
+  private _requireClip (name? :string) :Subject<AnimationClip> {
     let clip :Subject<AnimationClip>|undefined
     if (name !== undefined) clip = this._clipsByName.get(name)
     else clip = this._clipsByUrl.get(this._urls[0])
     if (!clip) throw new Error(`Unknown animation clip "${name}"`)
-    Subject.join2(clip, this._mixerSubject).once(([clip, mixer]) => {
-      mixer.clipAction(clip).play()
-    })
+    return clip
   }
 
   update (clock :Clock) {
@@ -858,6 +916,7 @@ class ThreeAnimation extends TypeScriptComponent implements Animation {
         this._clipsByName.set(getAnchor(url), clip)
       }
     }
+    this.urlsValue.update(this._urls.slice())
   }
 }
 registerConfigurableType("component", ["render"], "animation", ThreeAnimation)
