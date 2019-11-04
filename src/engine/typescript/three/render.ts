@@ -8,6 +8,7 @@ import {
 import {SkeletonUtils} from "three/examples/jsm/utils/SkeletonUtils"
 import {Clock} from "../../../core/clock"
 import {Color} from "../../../core/color"
+import {refEquals} from "../../../core/data"
 import {Plane, dim2, rect, vec2, vec3} from "../../../core/math"
 import {Mutable, Subject, Value} from "../../../core/react"
 import {MutableMap, RMap} from "../../../core/rcollect"
@@ -55,9 +56,11 @@ export class ThreeRenderEngine implements RenderEngine {
   private readonly _pressedObjects = new Map<number, ThreeObjectComponent>()
   private readonly _bounds = rect.create()
   private readonly _size = Mutable.local(dim2.create())
+  private _frameCount = 0
 
   readonly renderer = new WebGLRenderer()
   readonly domElement = this.renderer.domElement
+  readonly stats :Value<string[]>
   readonly scene = new Scene()
   readonly cameras :ThreeCamera[] = []
 
@@ -77,6 +80,27 @@ export class ThreeRenderEngine implements RenderEngine {
     this.renderer.setPixelRatio(window.devicePixelRatio)
     this.renderer.domElement.style.width = "100%"
     this.renderer.domElement.style.height = "100%"
+
+    let currentStats :string[] = []
+    this.stats = Value.deriveValue(
+      refEquals,
+      dispatch => {
+        this._frameCount = 0
+        const interval = setInterval(() => {
+          const oldStats = currentStats
+          const info = this.renderer.info
+          dispatch(currentStats = [
+            `${this._frameCount} fps`,
+            `${info.memory.geometries} geometries, ${info.memory.textures} textures`,
+            `${info.render.calls} calls, ${info.render.triangles} triangles`,
+            `${info.programs ? info.programs.length : 0} programs`
+          ], oldStats)
+          this._frameCount = 0
+        }, 1000)
+        return () => clearInterval(interval)
+      },
+      () => currentStats,
+    )
 
     gameEngine.root.appendChild(this.renderer.domElement)
     this._disposer.add(() => gameEngine.root.removeChild(this.renderer.domElement))
@@ -263,6 +287,7 @@ export class ThreeRenderEngine implements RenderEngine {
   }
 
   render () {
+    this._frameCount++
     const activePage = this._getActivePage()
     let cameras :ThreeCamera[]
     let scene :Scene

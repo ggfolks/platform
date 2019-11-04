@@ -1,5 +1,6 @@
 import {rect, vec2, vec3} from "../core/math"
 import {Color} from "../core/color"
+import {Value} from "../core/react"
 import {Disposable} from "../core/util"
 import {Component, Configurable, ConfigurableConfig, Hoverable, Transform} from "./game"
 
@@ -8,6 +9,9 @@ export interface RenderEngine extends Disposable {
 
   /** The HTML canvas. */
   readonly domElement :HTMLElement
+
+  /** The renderer stats. */
+  readonly stats :Value<string[]>
 
   /** Sets the onscreen bounds of the renderer. */
   setBounds (bounds :rect) :void

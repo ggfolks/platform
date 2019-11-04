@@ -273,13 +273,24 @@ export const DefaultTheme :Theme = {
   },
   menuItem: {
     box: {
-      padding: [5, 5, 5, 15],
+      padding: 5,
       background: "$menuItem",
       hovered: {background: "$menuItemHovered"},
       hoverFocused: {background: "$menuItemHovered"},
       pressed: {background: "$menuItemPressed"},
       separator: {background: undefined},
     },
+    label: {font: "$menu"},
+  },
+  menuItemCheckBoxContainer: {
+    box: {},
+  },
+  menuItemCheckBox: {
+    box: {},
+    label: {font: "$menu"},
+  },
+  menuItemCheckBoxChecked: {
+    box: {},
     label: {font: "$menu"},
   },
   graphViewerHeader: {

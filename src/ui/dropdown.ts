@@ -264,6 +264,7 @@ export function createDropdownItemConfig (
   type = "dropdownItem",
   dropLeft = false,
   scopeId? :string,
+  checkable = false,
 ) :AbstractDropdownItemConfig {
   let element :AbstractDropdownItemConfig = {
     type,
@@ -277,6 +278,28 @@ export function createDropdownItemConfig (
     action: "action",
     style: {},
   }
+  const toggle = (type === "menuItem") ? [
+    {
+      type: "box",
+      scopeId: "menuItemCheckBoxContainer",
+      contents: {
+        type: "toggle",
+        visible: "checkable",
+        checked: "checked",
+        onClick: "action",
+        contents: {
+          type: "box",
+          scopeId: "menuItemCheckBox",
+          contents: {type: "label", text: Value.constant(" ")},
+        },
+        checkedContents: {
+          type: "box",
+          scopeId: "menuItemCheckBoxChecked",
+          contents: {type: "label", text: Value.constant("✔︎")},
+        },
+      },
+    },
+  ] : []
   for (; maxDepth > 0; maxDepth--) {
     element = {
       type,
@@ -294,7 +317,9 @@ export function createDropdownItemConfig (
             {type: "label", text: Value.constant("◂"), visible: "submenu"},
             {type: "spacer", width: 15, constraints: {stretch: true}},
             {type: "label", text: "name"},
+            ...toggle,
           ] : [
+            ...toggle,
             {type: "label", text: "name"},
             {type: "spacer", width: 15, constraints: {stretch: true}},
             {type: "label", text: Value.constant("▸"), visible: "submenu"},

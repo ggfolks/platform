@@ -58,7 +58,7 @@ export class AbstractButton extends Control {
 export class Button extends AbstractButton {
 
   constructor (ctx :ElementContext, parent :Element, readonly config :ButtonConfig) {
-    super(ctx, parent, config, config.onClick ? ctx.model.resolve(config.onClick) : NoopAction)
+    super(ctx, parent, config, ctx.model.resolve(config.onClick, NoopAction))
   }
 }
 
@@ -79,7 +79,10 @@ export class Toggle extends Control {
 
   constructor (ctx :ElementContext, parent :Element,
                readonly config :ToggleConfig,
-               readonly checked :Value<boolean> = ctx.model.resolve(config.checked)) {
+               readonly checked :Value<boolean> = ctx.model.resolve(
+                 config.checked,
+                 Value.constant<boolean>(false),
+               )) {
     super(ctx, parent,
           // if we have a special checked contents element, bind visibility of our "not" checked
           // (normal) contents to the opposite of our checked value
@@ -87,7 +90,7 @@ export class Toggle extends Control {
           {...config, contents: injectViz(config.contents, checked.map(c => !c))} :
           config)
     this.invalidateOnChange(this.checked)
-    this.onClick = config.onClick ? ctx.model.resolve(config.onClick) : NoopAction
+    this.onClick = ctx.model.resolve(config.onClick, NoopAction)
     if (config.checkedContents) this.checkedContents = ctx.elem.create(
       ctx, this, injectViz(config.checkedContents, checked))
   }
