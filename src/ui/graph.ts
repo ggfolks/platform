@@ -1,6 +1,6 @@
 import {dataCopy, dataEquals} from "../core/data"
 import {dim2, rect, vec2} from "../core/math"
-import {Mutable, Value} from "../core/react"
+import {Mutable, Value, falseValue} from "../core/react"
 import {MutableSet} from "../core/rcollect"
 import {PMap, Remover, getValue} from "../core/util"
 import {GraphConfig, getImplicitNodeId} from "../graph/graph"
@@ -10,7 +10,8 @@ import {createDropdownItemConfig} from "./dropdown"
 import {Element, ElementConfig, ElementContext, PointerInteraction, Observer} from "./element"
 import {AbsConstraints, AbsGroup, AxisConfig, VGroup, OffAxisPolicy} from "./group"
 import {VList} from "./list"
-import {Action, Model, ReadableElementsModel, ElementsModel, Spec, dataModel} from "./model"
+import {Action, Command, Model, ReadableElementsModel, ElementsModel, Spec, dataModel} from "./model"
+import {CtrlMask, MetaMask, ShiftMask} from "./keymap"
 import {InputValue, NodeCopier, NodeCreator, NodeEdit} from "./node"
 import {Panner} from "./scroll"
 import {BackgroundConfig, BorderConfig, NoopDecor, addDecorationBounds} from "./style"
@@ -28,29 +29,101 @@ export class GraphViewer extends VGroup {
   readonly activePage :Mutable<string>
   readonly selection :MutableSet<string>
   readonly push :(id :string) => void
-  readonly applyEdit :(edit :NodeEdit) => void
 
-  private _editable = Value.constant(false)
+  private _editable :Value<boolean>
   private _graphModel :Value<Model>
   private _nodeCreator :Mutable<NodeCreator>
   private _nodeFunctionRemover? :Remover
 
-  constructor (readonly ctx :ElementContext, parent :Element, readonly config :GraphViewerConfig) {
+  constructor (ctx :ElementContext, parent :Element, readonly config :GraphViewerConfig) {
     super(ctx, parent, config)
-    if (this.config.editable) this._editable = ctx.model.resolve(this.config.editable)
+    this._editable = ctx.model.resolve(this.config.editable, falseValue)
     const typeCategoryModel = ctx.model.resolve<ElementsModel<string>>("typeCategoryModel")
     const subgraphCategoryModel = ctx.model.resolve<ElementsModel<string>>("subgraphCategoryModel")
-    this._graphModel = ctx.model.resolve<Value<Model>>("graphModel")
+    const graphModel = this._graphModel = ctx.model.resolve<Value<Model>>("graphModel")
     this._nodeCreator = ctx.model.resolve<Mutable<NodeCreator>>("nodeCreator")
     const remove = ctx.model.resolve<Action>("remove")
-    this.activePage = ctx.model.resolve<Mutable<string>>("activePage")
-    this.selection = ctx.model.resolve<MutableSet<string>>("selection")
-    this.push = ctx.model.resolve<(id :string) => void>("push")
-    this.applyEdit = ctx.model.resolve<(edit :NodeEdit) => void>("applyEdit")
-    const haveSelection = this.selection.fold(false, (value, set) => set.size > 0)
+    const activePage = this.activePage = ctx.model.resolve<Mutable<string>>("activePage")
+    const selection = this.selection = ctx.model.resolve<MutableSet<string>>("selection")
+    this.push = ctx.model.resolveAction<(id :string) => void>("push")
+    const applyEdit = ctx.model.resolve<(edit :NodeEdit) => void>("applyEdit")
+
+    const haveSelection = this.selection.sizeValue.map(size => size > 0)
     const editableSelection = Value.join(haveSelection, this._editable).map(
       ([selection, editable]) => selection && editable,
     )
+
+    const graphModelAction = (op :(model :Model) => void) => () => op(graphModel.current)
+    const pageModelAction = (op :(model :Model) => void) => () => {
+      const pagesModel = graphModel.current.resolve<ElementsModel<string>>("pagesModel")
+      op(pagesModel.resolve(activePage.current))
+    }
+
+    const menuActions = {
+      // graph menu
+      clearAll: new Command(graphModelAction(model => model.resolve<Action>("removeAll")()),
+                            this._editable),
+      import: new Command(() => this._import(), this._editable),
+      export: () => this._export(),
+      closeTab: remove,
+
+      // edit menu
+      undo: ctx.model.resolve<Command>("undo"),
+      redo: ctx.model.resolve<Command>("redo"),
+
+      cut: new Command(pageModelAction(model => {
+        clipboard.update(dataCopy(model.resolve<NodeCopier>("copyNodes")(selection)))
+        const page = model.resolve<Value<string>>("id").current
+        applyEdit({page, selection: new Set(), remove: selection})
+      }), editableSelection),
+
+      copy: new Command(pageModelAction(model => {
+        clipboard.update(dataCopy(model.resolve<NodeCopier>("copyNodes")(selection)))
+      }), haveSelection),
+
+      paste: new Command(pageModelAction(model => {
+        this._nodeCreator.current(dataCopy(clipboard.current!))
+      }), Value.join2(clipboard, this._editable).map(
+        ([clipboard, editable]) => editable && !!clipboard)),
+
+      delete: new Command(pageModelAction(model => {
+        const page = model.resolve<Value<string>>("id").current
+        applyEdit({page, selection: new Set(), remove: selection})
+      }), editableSelection),
+
+      selectAll: pageModelAction(model => {
+        const nodesModel = model.resolve<ElementsModel<string>>("nodesModel")
+        nodesModel.keys.once(keys => {
+          for (const key of keys) selection.add(key)
+        })
+      }),
+
+      // view menu
+      zoomIn: this._createPannerAction(panner => panner.zoom(1)),
+      zoomOut: this._createPannerAction(panner => panner.zoom(-1)),
+      zoomReset: this._createPannerAction(panner => panner.resetZoom()),
+      zoomToFit: this._createPannerAction(panner => panner.zoomToFit()),
+    }
+
+    this.disposer.add(this.root.keymap.pushBindings({
+      // TODO: use something that abstracts over the fact that on Mac we use Meta for many things
+      // versus Ctrl on Linux & Windows
+      KeyX: {[CtrlMask]: "cut", [MetaMask]: "cut"},
+      KeyC: {[CtrlMask]: "copy", [MetaMask]: "copy"},
+      KeyV: {[CtrlMask]: "paste", [MetaMask]: "paste"},
+
+      Delete: {0: "delete"},
+      Escape: {0: "closeTab"},
+
+      KeyZ: {[CtrlMask]: "undo", [CtrlMask|ShiftMask]: "redo"},
+      KeyY: {[CtrlMask]: "redo"},
+
+      Equal: {[CtrlMask]: "zoomIn"},
+      Minus: {[CtrlMask]: "zoomOut"},
+      Digit0: {[CtrlMask]: "zoomReset"},
+      KeyJ: {[CtrlMask|ShiftMask]: "zoomToFit"},
+    }, new Model(menuActions)))
+
     this.contents.push(
       ctx.elem.create(ctx, this, {
         type: "box",
@@ -80,29 +153,22 @@ export class GraphViewer extends VGroup {
                   model: dataModel({
                     clearAll: {
                       name: Value.constant("Clear All"),
-                      enabled: this._editable,
-                      action: this._createGraphModelAction(model => {
-                        model.resolve<Action>("removeAll")()
-                      }),
+                      action: menuActions.clearAll,
                     },
                     sep1: {separator: Value.constant(true)},
                     import: {
                       name: Value.constant("Import..."),
-                      enabled: this._editable,
-                      action: () => this._import(),
+                      action: menuActions.import,
                     },
                     export: {
                       name: Value.constant("Export..."),
-                      action: () => this._export(),
+                      action: menuActions.export,
                     },
                     sep2: {separator: Value.constant(true)},
                     close: {
                       name: Value.constant("Close"),
-                      shortcut: Value.constant("closeTab"),
+                      action: menuActions.closeTab,
                     },
-                  }),
-                  shortcutsModel: dataModel({
-                    closeTab: {action: remove},
                   }),
                 },
                 edit: {
@@ -110,81 +176,39 @@ export class GraphViewer extends VGroup {
                   model: dataModel({
                     undo: {
                       name: Value.constant("Undo"),
+                      action: menuActions.undo,
                       shortcut: Value.constant("undo"),
                     },
                     redo: {
                       name: Value.constant("Redo"),
+                      action: menuActions.redo,
                       shortcut: Value.constant("redo"),
                     },
                     sep1: {separator: Value.constant(true)},
                     cut: {
                       name: Value.constant("Cut"),
+                      action: menuActions.cut,
                       shortcut: Value.constant("cut"),
                     },
                     copy: {
                       name: Value.constant("Copy"),
+                      action: menuActions.copy,
                       shortcut: Value.constant("copy"),
                     },
                     paste: {
                       name: Value.constant("Paste"),
+                      action: menuActions.paste,
                       shortcut: Value.constant("paste"),
                     },
                     delete: {
                       name: Value.constant("Delete"),
+                      action: menuActions.delete,
                       shortcut: Value.constant("delete"),
                     },
                     sep2: {separator: Value.constant(true)},
                     selectAll: {
                       name: Value.constant("Select All"),
-                      action: this._createPageModelAction(model => {
-                        const nodesModel = model.resolve<ElementsModel<string>>("nodesModel")
-                        nodesModel.keys.once(keys => {
-                          for (const key of keys) this.selection.add(key)
-                        })
-                      }),
-                    },
-                  }),
-                  shortcutsModel: dataModel({
-                    undo: {
-                      enabled: ctx.model.resolve<Value<boolean>>("canUndo"),
-                      action: ctx.model.resolve<Action>("undo"),
-                    },
-                    redo: {
-                      enabled: ctx.model.resolve<Value<boolean>>("canRedo"),
-                      action: ctx.model.resolve<Action>("redo"),
-                    },
-                    cut: {
-                      enabled: editableSelection,
-                      action: this._createPageModelAction(model => {
-                        clipboard.update(dataCopy(
-                          model.resolve<NodeCopier>("copyNodes")(this.selection),
-                        ))
-                        const page = model.resolve<Value<string>>("id").current
-                        this.applyEdit({page, selection: new Set(), remove: this.selection})
-                      }),
-                    },
-                    copy: {
-                      enabled: haveSelection,
-                      action: this._createPageModelAction(model => {
-                        clipboard.update(dataCopy(
-                          model.resolve<NodeCopier>("copyNodes")(this.selection),
-                        ))
-                      }),
-                    },
-                    paste: {
-                      enabled: Value.join2(clipboard, this._editable).map(
-                        ([clipboard, editable]) => clipboard && editable,
-                      ),
-                      action: this._createPageModelAction(model => {
-                        this._nodeCreator.current(dataCopy(clipboard.current!))
-                      }),
-                    },
-                    delete: {
-                      enabled: editableSelection,
-                      action: this._createPageModelAction(model => {
-                        const page = model.resolve<Value<string>>("id").current
-                        this.applyEdit({page, selection: new Set(), remove: this.selection})
-                      }),
+                      action: menuActions.selectAll,
                     },
                   }),
                 },
@@ -193,33 +217,23 @@ export class GraphViewer extends VGroup {
                   model: dataModel({
                     zoomIn: {
                       name: Value.constant("Zoom In"),
+                      action: menuActions.zoomIn,
                       shortcut: Value.constant("zoomIn"),
                     },
                     zoomOut: {
                       name: Value.constant("Zoom Out"),
+                      action: menuActions.zoomOut,
                       shortcut: Value.constant("zoomOut"),
                     },
                     zoomReset: {
                       name: Value.constant("Reset Zoom"),
+                      action: menuActions.zoomReset,
                       shortcut: Value.constant("zoomReset"),
                     },
                     zoomToFit: {
                       name: Value.constant("Zoom to Fit"),
+                      action: menuActions.zoomToFit,
                       shortcut: Value.constant("zoomToFit"),
-                    },
-                  }),
-                  shortcutsModel: dataModel({
-                    zoomIn: {
-                      action: this._createPannerAction(panner => panner.zoom(1)),
-                    },
-                    zoomOut: {
-                      action: this._createPannerAction(panner => panner.zoom(-1)),
-                    },
-                    zoomReset: {
-                      action: this._createPannerAction(panner => panner.resetZoom()),
-                    },
-                    zoomToFit: {
-                      action: this._createPannerAction(panner => panner.zoomToFit()),
                     },
                   }),
                 },
@@ -241,7 +255,7 @@ export class GraphViewer extends VGroup {
             {
               type: "button",
               onClick: "pop",
-              visible: "canPop",
+              visible: "pop.enabled",
               contents: {
                 type: "box",
                 contents: {type: "label", text: Value.constant("←")},
@@ -263,7 +277,7 @@ export class GraphViewer extends VGroup {
     this.disposer.add(this._graphModel.onValue(model => {
       const oldContents = this.contents[1]
       if (oldContents) oldContents.dispose()
-      this.contents[1] = this._createElement(model)
+      this.contents[1] = this._createElement(ctx, model)
       this._updateNodeFunctions(model)
       this.invalidate()
     }))
@@ -293,18 +307,6 @@ export class GraphViewer extends VGroup {
     return () => op(this.contents[1].findChild("panner") as Panner)
   }
 
-  private _createGraphModelAction (op :(model :Model) => void) :Action {
-    return () => op(this._graphModel.current)
-  }
-
-  private _createPageModelAction (op :(model :Model) => void) :Action {
-    return () => {
-      const graphModel = this._graphModel.current
-      const pagesModel = graphModel.resolve<ElementsModel<string>>("pagesModel")
-      op(pagesModel.resolve(this.activePage.current))
-    }
-  }
-
   private _import () {
     const input = document.createElement("input")
     input.setAttribute("type", "file")
@@ -322,8 +324,8 @@ export class GraphViewer extends VGroup {
     input.click()
   }
 
-  private _createElement (model :Model) :Element {
-    return this.ctx.elem.create(this.ctx.remodel(model), this, {
+  private _createElement (ctx :ElementContext, model :Model) :Element {
+    return ctx.elem.create(ctx.remodel(model), this, {
       type: "tabbedPane",
       tabElement: {
         type: "box",

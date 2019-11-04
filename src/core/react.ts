@@ -683,6 +683,12 @@ export class Value<T> extends ReadableSource<T> {
   toString () { return `Value(${this.current})` }
 }
 
+/** A constant value which is always `true`. */
+export const trueValue = Value.constant(true)
+
+/** A constant value which is always `false`. */
+export const falseValue = Value.constant(false)
+
 /** A `Value` which can be mutated by external callers. */
 export class Mutable<T> extends Value<T> implements Prop<T> {
 

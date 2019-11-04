@@ -12,7 +12,7 @@ import {
   NodeContext, NodeInput, NodeTypeRegistry,
 } from "../graph/node"
 import {HAnchor, Host, Root, RootConfig, VAnchor, getCurrentEditNumber} from "./element"
-import {Action, Model, ModelData, ModelKey, ElementsModel, mapModel} from "./model"
+import {Action, Command, Model, ModelData, ModelKey, ElementsModel, mapModel} from "./model"
 import {Theme, UI} from "./ui"
 import {ImageResolver, StyleDefs} from "./style"
 
@@ -206,15 +206,14 @@ class UINode extends Node {
           newPath.push(id)
           setPath(newPath)
         },
-        canPop: path.map(path => path.length > 0),
-        pop: () => setPath(path.current.slice(0, path.current.length - 1)),
+        pop: new Command(() => setPath(path.current.slice(0, path.current.length - 1)),
+                         path.map(path => path.length > 0)),
         graphModel,
         activePage,
         selection,
         nodeCreator,
         applyEdit,
-        canUndo,
-        undo: () => {
+        undo: new Command(() => {
           const oldSelection = new Set(selection)
           const edit = undoStack.pop()!
           setPath(edit.path)
@@ -227,9 +226,8 @@ class UINode extends Node {
           redoStack.push(reverseEdit)
           canRedo.update(true)
           canUndo.update(undoStack.length > 0)
-        },
-        canRedo,
-        redo: () => {
+        }, canUndo),
+        redo: new Command(() => {
           const oldSelection = new Set(selection)
           const edit = redoStack.pop()!
           setPath(edit.path)
@@ -242,7 +240,7 @@ class UINode extends Node {
           undoStack.push(reverseEdit)
           canUndo.update(true)
           canRedo.update(redoStack.length > 0)
-        },
+        }, canRedo),
         clearUndoStacks: () => {
           undoStack.length = 0
           redoStack.length = 0

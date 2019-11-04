@@ -1,11 +1,8 @@
 import {dim2, rect, vec2} from "../core/math"
-import {Value} from "../core/react"
+import {Value, falseValue, trueValue} from "../core/react"
 import {Noop, PMap, getValue} from "../core/util"
 import {AbstractButton, ButtonStates} from "./button"
-import {
-  ControlConfig, Element, ElementConfig, ElementContext,
-  PointerInteraction, falseValue, trueValue,
-} from "./element"
+import {ControlConfig, Element, ElementConfig, ElementContext, PointerInteraction} from "./element"
 import {VList} from "./list"
 import {Action, ModelKey, ElementsModel, Spec} from "./model"
 
@@ -40,7 +37,7 @@ export abstract class AbstractDropdown extends AbstractButton {
     parent :Element,
     readonly config :AbstractDropdownConfig,
   ) {
-    super(_ctx, parent, config, () => this._activate())
+    super(_ctx, parent, config)
   }
 
   findChild (type :string) :Element|undefined {
@@ -107,9 +104,7 @@ export abstract class AbstractDropdown extends AbstractButton {
     return rect.union(this._combinedBounds, bounds, this._list.bounds)
   }
 
-  protected _activate () {
-    this.toggle()
-  }
+  protected onClick () { this.toggle() }
 
   protected _closeAll () {
     if (this._list) this.toggle()
@@ -213,7 +208,11 @@ export class AbstractDropdownItem extends AbstractDropdown {
     }))
     this._separator = ctx.model.resolve(config.separator, falseValue)
     this.disposer.add(this._separator.onValue(() => this._state.update(this.computeState)))
-    this._action = ctx.model.resolveOpt(config.action)
+    this._action = ctx.model.resolveActionOpt(config.action)
+  }
+
+  protected actionSpec (config :ControlConfig) {
+    return (config as AbstractDropdownItemConfig).action
   }
 
   protected get computeState () {
@@ -229,7 +228,7 @@ export class AbstractDropdownItem extends AbstractDropdown {
     else super.computePreferredSize(hintX, hintY, into)
   }
 
-  protected _activate () {
+  protected onClick () {
     if (this._action) {
       this._closeAll()
       this._action()
@@ -304,8 +303,6 @@ export function createDropdownItemConfig (
     element = {
       type,
       dropLeft,
-      enabled: "enabled",
-      shortcut: "shortcut",
       contents: {
         type: "box",
         scopeId,

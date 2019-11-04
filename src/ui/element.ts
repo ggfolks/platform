@@ -2,16 +2,15 @@ import {Disposable, Disposer, Remover, NoopRemover, PMap, log} from "../core/uti
 import {Clock} from "../core/clock"
 import {dim2, rect, vec2} from "../core/math"
 import {Record} from "../core/data"
-import {Emitter, Mutable, Source, Stream, Value} from "../core/react"
+import {Emitter, Mutable, Source, Stream, Value, trueValue, falseValue} from "../core/react"
 import {MutableList, RList} from "../core/rcollect"
 import {Scale} from "../core/ui"
 import {keyEvents, mouseEvents, pointerEvents, touchEvents, wheelEvents} from "../input/react"
-import {Model} from "./model"
+import {Action, Command, Model} from "./model"
+import {Keymap} from "./keymap"
 import {Spec, StyleContext} from "./style"
 
 const tmpr = rect.create(), tmpv = vec2.create(), tmpd = dim2.create()
-export const trueValue = Value.constant(true)
-export const falseValue = Value.constant(false)
 export const blankValue = Value.constant("")
 const defScale = new Scale(window.devicePixelRatio)
 const defHintSize = Value.constant(dim2.fromValues(64000, 32000))
@@ -460,6 +459,9 @@ export class Root extends Element {
   /** Emits events pertaining to this root's size, origin, lifecycle, etc. */
   readonly events = new Emitter<RootChange>()
 
+  /** Handles key events for menus and other elements that operate outside the focus system. */
+  readonly keymap = new Keymap()
+
   constructor (readonly ctx :ElementContext, readonly config :RootConfig) {
     super(ctx, undefined, config)
     const canvas = this.canvasElem.getContext("2d")
@@ -712,7 +714,8 @@ export class Root extends Element {
   dispatchKeyEvent (event :KeyboardEvent) {
     // TODO: focus navigation on Tab/Shift-Tab?
     const focus = this.focus.current
-    if (focus && focus.handleKeyEvent(event)) {
+    if ((focus && focus.handleKeyEvent(event)) ||
+        (event.type === "keydown" && !!this.keymap.invokeAction(event))) {
       // let the browser know we handled this event
       event.preventDefault()
       event.cancelBubble = true
@@ -781,6 +784,13 @@ export interface ControlConfig extends ElementConfig {
   contents :ElementConfig
 }
 
+function bothEitherOrTrue (a :Value<boolean>|undefined, b :Value<boolean>|undefined) {
+  if (a && b) return Value.join2(a, b).map(ab => ab[0] && ab[1])
+  else if (a) return a
+  else if (b) return b
+  else return trueValue
+}
+
 /** Controls are [[Element]]s that can be interacted with. They can be enabled or disabled and
   * generally support some sort of mouse/touch/keyboard interactions. Controls are also generally
   * composite elements, combining one or more "visualization" elements. For example, a `Button`
@@ -795,11 +805,12 @@ export class Control extends Element {
   constructor (ctx :ElementContext, parent :Element|undefined, readonly config :ControlConfig) {
     super(ctx, parent, config)
     const updateState = () => this._state.update(this.computeState)
-    if (!config.enabled) this.enabled = trueValue
-    else {
-      this.enabled = ctx.model.resolve(config.enabled, trueValue)
-      this.disposer.add(this.enabled.onValue(updateState))
-    }
+    // our enabled state either comes from our command, is directly specified, or is both (anded)
+    const command = ctx.model.resolveOpt(this.actionSpec(config))
+    const enabled = this.enabled = bothEitherOrTrue(
+      ctx.model.resolveOpt(config.enabled),
+      (command instanceof Command) ? command.enabled : undefined)
+    if (enabled !== trueValue) this.disposer.add(enabled.onValue(updateState))
     this.disposer.add(this._hovered.onValue(updateState))
     this.contents = ctx.elem.create(ctx, this, this.config.contents)
   }
@@ -872,6 +883,11 @@ export class Control extends Element {
         )
       : "disabled"
   }
+
+  /** If this control triggers an action, it must override this method to return the spec for that
+    * action from its config. The control will use this to bind its enabled state to the action's
+    * enabled state if it is bound to a command. */
+  protected actionSpec (config :ControlConfig) :Spec<Action>|undefined { return undefined }
 
   protected lostFocus () {}
 

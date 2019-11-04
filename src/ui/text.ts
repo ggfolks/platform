@@ -1,12 +1,13 @@
 import {dim2, vec2, rect} from "../core/math"
 import {refEquals} from "../core/data"
 import {Remover, PMap, getValue} from "../core/util"
-import {Mutable, Subject, Value} from "../core/react"
+import {Mutable, Subject, Value, falseValue} from "../core/react"
 import {Control, ControlConfig, ControlStates, Element, ElementConfig, ElementContext,
-        PointerInteraction, falseValue} from "./element"
+        PointerInteraction} from "./element"
 import {Spec, FontConfig, Paint, PaintConfig, DefaultPaint, ShadowConfig, Span, EmptySpan,
         insetsToCSS} from "./style"
-import {Action, NoopAction} from "./model"
+import {Model, Action, NoopAction} from "./model"
+import {CtrlMask, MetaMask, Bindings} from "./keymap"
 import {Box} from "./box"
 
 const tmpr = rect.create()
@@ -126,7 +127,6 @@ type TextState = {
   cursor: Mutable<number>,
   selection: Mutable<[number,number]>
 }
-type TextAction = (state :TextState, typed :string) => void
 
 function replace (state :TextState, start :number, end :number, text :string, cpos :number) {
   const ctext = state.text.current
@@ -135,7 +135,9 @@ function replace (state :TextState, start :number, end :number, text :string, cp
   state.selection.update([0, 0])
 }
 
-const actions :PMap<TextAction> = {
+type TextAction = (state :TextState, typed :string) => void
+
+const textActions :PMap<TextAction> = {
   // text edits
   insert: (state, typed) => {
     const [sstart, send] = state.selection.current, ipos = state.cursor.current
@@ -168,7 +170,7 @@ const actions :PMap<TextAction> = {
   },
   paste: (state, typed) => {
     readClipText().then(text => {
-      if (text) actions.insert(state, text.replace("\n", "").replace("\r", ""))
+      if (text) textActions.insert(state, text.replace("\n", "").replace("\r", ""))
     })
   },
   // moving the cursor around
@@ -186,25 +188,8 @@ const actions :PMap<TextAction> = {
   },
 }
 
-export const ShiftMask = 1 << 0
-export const AltMask   = 1 << 1
-export const CtrlMask  = 1 << 2
-export const MetaMask  = 1 << 3
-
-export function modMask (event :KeyboardEvent) :number {
-  let mask = 0
-  if (event.shiftKey) mask |= ShiftMask
-  if (event.altKey) mask |= AltMask
-  if (event.ctrlKey) mask |= CtrlMask
-  if (event.metaKey) mask |= MetaMask
-  return mask
-}
-
-export type ModMap = {[key :number] :string}
-export type KeyMap = PMap<ModMap>
-
-export const keyMap :KeyMap = {
-  // "Standard" key bindings
+// "Standard" key bindings
+const textBindings = new Bindings({
   Backspace: {0: "backspace"},
   Delete: {0: "delete"},
   NumpadDecimal: {0: "delete"},
@@ -226,37 +211,7 @@ export const keyMap :KeyMap = {
   KeyE: {[CtrlMask]: "cursorEnd"},
   KeyD: {[CtrlMask]: "delete"},
   KeyH: {[CtrlMask]: "backspace"},
-
-  Escape: {0: "closeTab"},
-
-  KeyZ: {[CtrlMask]: "undo", [CtrlMask|ShiftMask]: "redo"},
-  KeyY: {[CtrlMask]: "redo"},
-
-  Equal: {[CtrlMask]: "zoomIn"},
-  Minus: {[CtrlMask]: "zoomOut"},
-  Digit0: {[CtrlMask]: "zoomReset"},
-  KeyJ: {[CtrlMask|ShiftMask]: "zoomToFit"},
-}
-
-type ModCode = [number, string]
-let commandKeys :Map<string, ModCode[]>|undefined
-
-/** Returns the list of mod/code pairs for the named command. */
-export function getCommandKeys(name :string) :ModCode[] {
-  if (!commandKeys) {
-    commandKeys = new Map()
-    for (const code in keyMap) {
-      const modMap = keyMap[code]
-      for (const mods in modMap) {
-        const command = modMap[mods]
-        let list = commandKeys.get(command)
-        if (!list) commandKeys.set(command, list = [])
-        list.push([Number(mods), code])
-      }
-    }
-  }
-  return commandKeys.get(name) || []
-}
+}, new Model(textActions))
 
 export interface CursorStyle {
   stroke? :Spec<PaintConfig>
@@ -369,7 +324,7 @@ const TextStyleScope = {id: "text", states: [...ControlStates, "invalid"]}
 export abstract class AbstractText extends Control {
   private readonly jiggle = Mutable.local(false)
   private readonly textState :TextState
-  private readonly onEnter :Action
+  private readonly _onEnter :Action
   readonly coffset = Mutable.local(0)
   readonly label :Label
   readonly cursor :Cursor
@@ -385,7 +340,7 @@ export abstract class AbstractText extends Control {
   ) {
     super(ctx.inject({label: {text, visible: shadowed.map(s => !s)}}), parent, config)
     this.invalidateOnChange(this.coffset)
-    this.onEnter = config.onEnter ? ctx.model.resolve(config.onEnter) : NoopAction
+    this._onEnter = ctx.model.resolveAction(config.onEnter, NoopAction)
 
     // update state when text changes; we may become invalid
     this.disposer.add(text.onValue(() => this._state.update(this.computeState)))
@@ -455,17 +410,12 @@ export abstract class AbstractText extends Control {
       (event.key.length === 1) // old and busted
     )
     const typed = isPrintable ? (supportsChar ? event.char : event.key) : ""
-    const modMap = keyMap[event.code]
-    const mask = modMask(event), binding = modMap && modMap[mask]
-    if (binding) {
-      const action = actions[binding]
-      if (action) {
-        action(this.textState, typed)
-      } else {
-        console.warn(`Invalid binding for ${event.key} (mods: ${mask}): '${action}'`)
-      }
+    const binding = textBindings.getBinding(event)
+    const action = textBindings.model.resolveAction<TextAction>(binding)
+    if (action) {
+      action(this.textState, typed)
     } else if (isPrintable) {
-      actions.insert(this.textState, typed)
+      textActions.insert(this.textState, typed)
     } else if (event.code === "Enter") {
       this.onEnter()
     } else {
@@ -526,7 +476,11 @@ export abstract class AbstractText extends Control {
     return this.inputValid ? super.computeState : "invalid"
   }
 
+  protected actionSpec (config :ControlConfig) { return (config as AbstractTextConfig).onEnter }
+
   protected get inputValid () :boolean { return true }
+
+  protected onEnter () { this._onEnter() }
 
   protected revalidate () {
     super.revalidate()
@@ -673,7 +627,7 @@ const EditableLabelStyleScope = {id: "editableLabel", states: ControlStates}
 export class EditableLabel extends AbstractText {
 
   constructor (ctx :ElementContext, parent :Element, readonly config :EditableLabelConfig) {
-    super(ctx, parent, {...config, onEnter: () => this.blur()}, ctx.model.resolve(config.text))
+    super(ctx, parent, config, ctx.model.resolve(config.text))
   }
 
   get styleScope () { return EditableLabelStyleScope }
@@ -690,6 +644,8 @@ export class EditableLabel extends AbstractText {
     if (interaction) interaction.release(event, pos)
     return true
   }
+
+  protected onEnter () { this.blur() }
 
   protected lostFocus () {
     super.lostFocus()

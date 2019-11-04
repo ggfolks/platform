@@ -1,14 +1,21 @@
-import {Source, Value, Mutable} from "../core/react"
+import {Noop} from "../core/util"
+import {Source, Value, Mutable, trueValue} from "../core/react"
 import {RMap, MutableMap} from "../core/rcollect"
 
 /** Model actions executed in response to user actions (like button clicks). */
 export type Action = (...args :any) => void
 
+/** An action that carries its enabled state with it. */
+export class Command {
+  static Noop = new Command(Noop, trueValue)
+  constructor (readonly action :Action, readonly enabled :Value<boolean>) {}
+}
+
 /** An action that does nothing. */
-export const NoopAction :Action = () => {}
+export const NoopAction :Action = () => Noop
 
 /** Defines the allowed values in a model. */
-export type ModelValue = Source<unknown> | Action | ElementsModel<any>
+export type ModelValue = Source<unknown> | Action | Command | ElementsModel<any>
 
 type ModelElem = ModelValue | ModelData
 
@@ -29,7 +36,7 @@ function find<V extends ModelValue> (
   const value = findOpt(data, path, pos)
   if (!value) {
     if (defaultValue) return defaultValue
-    console.log(`Missing model elem ${path} @ ${pos}`)
+    console.log(`Missing model elem '${path}' @ ${pos}`)
     throw new MissingModelElem(path, pos)
   }
   else return value as V
@@ -58,7 +65,7 @@ export class Model {
   /** Resolves the model component identified by `spec`. The may be an immediate value of the
     * desired type or be a path which will be resolved from this model's data.
     * @throws Will throw an error if model elements are missing and no default value is given. */
-  resolve <V extends ModelValue> (spec :Spec<V>|undefined, defaultValue? :V) :V {
+  resolve<V extends ModelValue> (spec :Spec<V>|undefined, defaultValue? :V) :V {
     if (!spec && defaultValue) return defaultValue
     return (typeof spec !== "string")
       ? spec as V
@@ -68,8 +75,30 @@ export class Model {
   /** Resolves the model component identified by `spec`. The may be an immediate value of the
     * desired type or be a path which will be resolved from this model's data. Returns undefined
     * if 'spec' is undefined or any of its path's model elements are missing. */
-  resolveOpt <V extends ModelValue> (spec :Spec<V>|undefined) :V|undefined {
+  resolveOpt<V extends ModelValue> (spec :Spec<V>|undefined) :V|undefined {
     return (typeof spec !== "string") ? spec : findOpt(this.data, spec.split("."), 0)
+  }
+
+  /** Resolves the action identified by `spec`. This follows the normal resolution process and
+    * additionally handles actions that are bound to commands (combinations of action function and
+    * enabled value). If `spec` resolves to a command, the action function is extracted and
+    * returned.
+    *
+    * Note: if the caller supports being bound to a command, it is responsible for checking whether
+    * the command is enabled before invoking it. The main UI framework takes care of this for
+    * elements that trigger actions by binding the enabled state of the element to the enabled state
+    * of the command. */
+  resolveAction<F extends Action> (spec :Spec<F>|undefined, defaultAction? :F) :F {
+    const value = this.resolve(spec, defaultAction)
+    return (value instanceof Command) ? value.action as F : value
+  }
+
+  /** Resolves the action identified by `spec`, returning `undefined` if spec is undefined or if it
+    * is not bound to any model value. This does the same unwrapping that [[resolveAction]] does and
+    * comes with the same caveats re: enabledness. */
+  resolveActionOpt<F extends Action> (spec :Spec<F>|undefined) :F|undefined {
+    const value = this.resolveOpt(spec)
+    return (value instanceof Command) ? value.action as F : value
   }
 }
 
