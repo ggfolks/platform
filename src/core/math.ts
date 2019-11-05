@@ -119,6 +119,10 @@ export class rect extends Float32Array {
     return out
   }
 
+  static clone (src :rect) :rect {
+    return rect.copy(rect.create(), src)
+  }
+
   static copy (out :rect, src :rect) :rect {
     out[0] = src[0]
     out[1] = src[1]
