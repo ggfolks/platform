@@ -36,7 +36,7 @@ pipeline {
     always {
       slackSend(
         color: "#D4DADF",
-        message: "Jenkins build started: `${env.JOB_NAME}` #${env.BUILD_NUMBER}:\n${env.BUILD_URL}")
+        message: "Jenkins build started: `${env.JOB_NAME}` #${env.BUILD_NUMBER}:\n${env.RUN_DISPLAY_URL}")
     }
     failure {
       slackSend(
