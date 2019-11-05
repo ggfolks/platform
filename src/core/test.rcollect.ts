@@ -83,7 +83,7 @@ test("reactive sets", () => {
   set.add("a")
   expect(aval.current).toEqual(true)
   expect(ahist).toEqual([true, false, true])
-  expect(shist).toEqual([2, 3])
+  expect(shist).toEqual([2, 3, 2, 3])
 
   const zval = set.hasValue("z")
   const zhist :Array<boolean> = []
@@ -129,7 +129,7 @@ test("reactive maps", () => {
   xhist.push({type: "set", key: "c", value: "see", prev: "sea"})
   expect(Array.from(map.entries())).toEqual([["a", "eh"], ["c", "see"]])
   expect(hist).toEqual(xhist)
-  expect(shist).toEqual([3])
+  expect(shist).toEqual([])
 
   const aval = map.getValue("a")
   const ahist :Array<string|undefined> = []
@@ -142,7 +142,7 @@ test("reactive maps", () => {
   amval.onValue(v => amhist.push(v))
   expect(amval.current).toEqual("eh")
   expect(amhist).toEqual(["eh"])
-  expect(shist).toEqual([3])
+  expect(shist).toEqual([])
 
   const cval = map.getValue("c")
   const chist :Array<string|undefined> = []
@@ -153,18 +153,18 @@ test("reactive maps", () => {
   map.set("c", "see")
   expect(cval.current).toEqual("see")
   expect(chist).toEqual(["see"])
-  expect(shist).toEqual([3])
+  expect(shist).toEqual([])
 
   map.set("c", "cee")
   expect(cval.current).toEqual("cee")
   expect(chist).toEqual(["see", "cee"])
-  expect(shist).toEqual([3])
+  expect(shist).toEqual([])
 
   expectChange(sizeV, (s, os) => expect(os).toBe(s+1))
   map.delete("c")
   expect(cval.current).toEqual(undefined)
   expect(chist).toEqual(["see", "cee", undefined])
-  expect(shist).toEqual([3, 2])
+  expect(shist).toEqual([1])
 
   map.set("c", "see!")
   expect(chist).toEqual(["see", "cee", undefined, "see!"])
