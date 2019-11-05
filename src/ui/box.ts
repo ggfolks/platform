@@ -33,6 +33,7 @@ export interface BoxStyle {
   background? :Spec<BackgroundConfig>
   border? :Spec<BorderConfig>
   padding? :Insets
+  alpha? :number
   halign? :HAlign
   valign? :VAlign
   minWidth? :number
@@ -178,8 +179,9 @@ export class Box extends Element {
   }
 
   protected rerender (canvas :CanvasRenderingContext2D, region :rect) {
-    const {margin} = this.style
+    const {margin, alpha} = this.style
     const inbounds = margin ? insetRect(margin, this._bounds, tmpr) : this._bounds
+    if (alpha !== undefined) canvas.globalAlpha = alpha
     // TODO: should we just do all element rendering translated to the element's origin
     canvas.translate(inbounds[0], inbounds[1])
     const bsize = dim2.set(tmpd, inbounds[2], inbounds[3])
@@ -188,5 +190,6 @@ export class Box extends Element {
     this.border.current.render(canvas, bsize)
     canvas.translate(-inbounds[0], -inbounds[1])
     this.contents.render(canvas, region)
+    if (alpha !== undefined) canvas.globalAlpha = 1
   }
 }
