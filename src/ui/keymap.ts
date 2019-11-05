@@ -73,6 +73,8 @@ export class Bindings {
 export class Keymap {
   private layers :Bindings[] = []
 
+  constructor (readonly parent :Keymap|undefined = undefined) {}
+
   /** Adds a set of bindings to this keymap. They will take precedence over all existing bindings.
     * @return a remover which can be used to remove these bindings. */
   pushBindings (bindings :PMap<ModMap>, model :Model) :Remover {
@@ -91,7 +93,7 @@ export class Keymap {
       const keys = layer.getCommandBindings(name)
       if (keys) return keys
     }
-    return []
+    return this.parent ? this.parent.getCommandBindings(name) : []
   }
 
   /** Looks up the binding for `event` and, if it exists and is bound to an enabled command or bare

@@ -1,8 +1,8 @@
-import {Value} from "../core/react"
+import {Mutable, Value} from "../core/react"
 import {ButtonStates} from "./button"
 import {
   AbstractDropdown, AbstractDropdownConfig, AbstractDropdownItem,
-  AbstractDropdownItemConfig,
+  AbstractDropdownItemConfig, DropdownHost
 } from "./dropdown"
 import {Element, ElementContext, blankValue} from "./element"
 import {HGroup} from "./group"
@@ -17,9 +17,12 @@ export interface MenuBarConfig extends AbstractListConfig {
 }
 
 /** A horizontal menu bar. */
-export class MenuBar extends HGroup implements AbstractList {
+export class MenuBar extends HGroup implements AbstractList, DropdownHost {
   readonly elements = new Map<string, Element>()
   readonly contents :Element[] = []
+
+  readonly openChild = Mutable.local<Element|undefined>(undefined)
+  get autoActivate () { return !!this.openChild.current }
 
   constructor (ctx :ElementContext, parent :Element, readonly config :MenuBarConfig) {
     super(ctx, parent, config)
@@ -39,33 +42,6 @@ export class Menu extends AbstractDropdown {
 
   constructor (ctx :ElementContext, parent :Element, readonly config :MenuConfig) {
     super(ctx, parent, config)
-    const keys = ctx.model.resolveOpt(config.keys)
-    this.disposer.add(this._hovered.onValue(hovered => {
-      if (!hovered) return
-      for (let ancestor = this.parent; ancestor; ancestor = ancestor.parent) {
-        if (ancestor instanceof MenuBar) {
-          for (const element of ancestor.contents) {
-            const menu = element as Menu
-            if (menu._list && element !== this) {
-              menu.toggle()
-              if (!this._list) this.toggle()
-              return
-            }
-          }
-          return
-        } else if (ancestor instanceof AbstractDropdown) {
-          if (!ancestor.list) return
-          for (const element of ancestor.list.contents) {
-            const menu = element as AbstractDropdown
-            if (menu.list && menu !== this) {
-              menu.toggle()
-            }
-          }
-          if (keys && !this._list) this.toggle()
-          return
-        }
-      }
-    }))
   }
 
   get styleScope () { return MenuStyleScope }
@@ -74,7 +50,6 @@ export class Menu extends AbstractDropdown {
 /** Defines configuration for [[MenuItem]] elements. */
 export interface MenuItemConfig extends AbstractDropdownItemConfig {
   type :"menuItem"
-  // shortcut? :Spec<Value<string>>
 }
 
 const MenuItemStyleScope = {id: "menuItem", states: [...ButtonStates, "separator"]}

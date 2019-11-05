@@ -1,6 +1,6 @@
 import {Disposable, Disposer, Remover, NoopRemover, PMap, log} from "../core/util"
 import {Clock} from "../core/clock"
-import {dim2, rect, vec2} from "../core/math"
+import {dim2, rect, vec2, vec2zero} from "../core/math"
 import {Record} from "../core/data"
 import {Emitter, Mutable, Source, Stream, Value, trueValue, falseValue} from "../core/react"
 import {MutableList, RList} from "../core/rcollect"
@@ -231,11 +231,10 @@ export abstract class Element implements Disposable {
   }
 
   /** Applies the provided operation to all elements containing the specified position.
-   * @param canvas the canvas context.
-   * @param pos the position relative to the root origin.
-   * @param op the operation to apply.
-   * @return whether the operation was applied to this element (and potentially its children).
-   */
+    * @param canvas the canvas context.
+    * @param pos the position relative to the root origin.
+    * @param op the operation to apply.
+    * @return whether the operation was applied to this element (and potentially its children). */
   applyToContaining (canvas :CanvasRenderingContext2D, pos :vec2,
                      op :(element :Element) => void) :boolean {
     if (!this.containsPos(pos)) return false
@@ -243,12 +242,10 @@ export abstract class Element implements Disposable {
     return true
   }
 
-  /**
-   * Applies the provided operation to all elements intersecting the specified region.
-   * @param region the region relative to the root origin.
-   * @param op the operation to apply.
-   * @return whether the operation was applied to this element (and potentially its children).
-   */
+  /** Applies the provided operation to all elements intersecting the specified region.
+    * @param region the region relative to the root origin.
+    * @param op the operation to apply.
+    * @return whether the operation was applied to this element (and potentially its children). */
   applyToIntersecting (region :rect, op :(element :Element) => void) :boolean {
     if (!this.intersectsRect(region)) return false
     op(this)
@@ -256,16 +253,12 @@ export abstract class Element implements Disposable {
   }
 
   /** Requests that this element handle the supplied mouse enter event.
-   * @param event the event forwarded from the browser.
-   * @param pos the position of the event relative to the root origin.
-   */
-  handleMouseEnter (event :MouseEvent, pos :vec2) {}
+    * @param pos the position of the event relative to the root origin. */
+  handleMouseEnter (pos :vec2) {}
 
   /** Requests that this element handle the supplied mouse leave event.
-   * @param event the event forwarded from the browser.
-   * @param pos the position of the event relative to the root origin.
-   */
-  handleMouseLeave (event :MouseEvent, pos :vec2) {}
+    * @param pos the position of the event relative to the root origin. */
+  handleMouseLeave (pos :vec2) {}
 
   /** Requests that this element handle the supplied pointer down event if it contains the position.
     * @param event the event forwarded from the browser.
@@ -460,9 +453,19 @@ export class Root extends Element {
   readonly events = new Emitter<RootChange>()
 
   /** Handles key events for menus and other elements that operate outside the focus system. */
-  readonly keymap = new Keymap()
+  readonly keymap :Keymap
 
-  constructor (readonly ctx :ElementContext, readonly config :RootConfig) {
+  /** The host which is displaying this root, if the root is currently being displayed. */
+  readonly host = Mutable.local<Host|undefined>(undefined)
+
+  /** The menu popup currently active for this root. Menus set themselves into this value and the
+    * root takes care of adding them to its current host and removing them when this value is
+    * cleared. */
+  readonly menuPopup = Mutable.local<Root|undefined>(undefined)
+  // TODO: tooltipPopup
+
+  constructor (readonly ctx :ElementContext, readonly config :RootConfig,
+               readonly parent :Root|undefined = undefined) {
     super(ctx, undefined, config)
     const canvas = this.canvasElem.getContext("2d")
     if (canvas) this.canvas = canvas
@@ -472,7 +475,24 @@ export class Root extends Element {
     this.invalidateOnChange(this._hintSize)
     this._minSize = config.minSize ? ctx.model.resolve(config.minSize) : defMinSize
     this.invalidateOnChange(this._minSize)
+    this.keymap = new Keymap(parent && parent.keymap)
     this.contents = ctx.elem.create(ctx, this, config.contents)
+
+    this.menuPopup.onChange((pop, opop) => {
+      const host = this.host.current
+      if (host && opop) host.removeRoot(opop, false)
+      if (host && pop) host.addRoot(pop)
+    })
+
+    this.host.onChange((host, ohost) => {
+      const menu = this.menuPopup.current
+      if (menu && ohost) {
+        ohost.removeRoot(menu)
+        // if we're unhosted (dismissed) clear any sub-popups
+        this.menuPopup.update(undefined)
+      }
+      if (menu && host) host.addRoot(menu)
+    })
   }
 
   get clock () :Stream<Clock> { return this._clock }
@@ -484,7 +504,7 @@ export class Root extends Element {
   /** Returns the desired index of this root relative to other roots. Events will be dispatched to
     * higher zIndexed roots first, under the assumption that they are rendered on top of lower
     * zIndexed roots in cases where they overlap. */
-  get zIndex () :number { return this.config.zIndex || 0}
+  get zIndex () :number { return this.parent ? this.parent.zIndex+1 : (this.config.zIndex || 0) }
 
   /** A stream that emits key events not consumed by focus. */
   get unclaimedKeyEvent () :Stream<KeyboardEvent> { return this._unclaimedKeyEvent }
@@ -529,47 +549,46 @@ export class Root extends Element {
     return remover
   }
 
-  /** Sizes this root to `size` and immediately revalidates and rerenders it. */
-  setSize (size :dim2, rerender = true) {
+  /** Sizes this root to `size` and immediately revalidates and rerenders it.
+    * @return the size assigned to the root. */
+  setSize (size :dim2, rerender = true) :dim2 {
     if (size[0] !== this.width || size[1] !== this.height) {
       this.setBounds(rect.set(tmpr, 0, 0, size[0], size[1]))
       if (rerender) this._validateAndRender()
     }
+    return size
   }
 
   /** Sizes this root to its preferred width and height. If either of `maxWidth` or `maxHeight` are
     * supplied, they will override the `hintSize` configuration of the root. The root's `minSize`
-    * configuration will also be applied. */
-  sizeToFit (maxWidth? :number, maxHeight? :number, rerender = true) {
+    * configuration will also be applied.
+    * @return the size assigned to the root. */
+  sizeToFit (maxWidth? :number, maxHeight? :number, rerender = true) :dim2 {
     const hint = this._hintSize.current, min = this._minSize.current
     const hintX = maxWidth || hint[0], hintY = maxHeight || hint[1]
     this.computePreferredSize(hintX, hintY, tmpd)
     // clamp the root bounds to be no smaller than min, and no bigger than hint
     const width = Math.min(hintX, min[0] > 0 ? Math.max(tmpd[0], min[0]) : tmpd[0])
     const height = Math.min(hintY, min[1] > 0 ? Math.max(tmpd[1], min[1]) : tmpd[1])
-    this.setSize(dim2.set(tmpd, width, height), rerender)
+    return this.setSize(dim2.set(tmpd, width, height), rerender)
   }
 
   /** Sizes this root to `width` pixels and its preferred height (which is computed using the
-    * supplied `maxHeight` hint). */
+    * supplied `maxHeight` hint).
+    * @return the size assigned to the root. */
   sizeToWidth (width :number, maxHeight :number = 32000) {
     this.computePreferredSize(width, maxHeight, tmpd)
     tmpd[0] = width
-    this.setSize(tmpd)
+    return this.setSize(tmpd)
   }
 
   /** Sizes this root to `height` pixels and its preferred width (which is computed using the
-    * supplied `maxWidth` hint). */
+    * supplied `maxWidth` hint).
+    * @return the size assigned to the root. */
   sizeToHeight (height :number, maxWidth :number = 64000) {
     this.computePreferredSize(maxWidth, height, tmpd)
     tmpd[1] = height
-    this.setSize(tmpd)
-  }
-
-  update (clock :Clock) :boolean {
-    this._clock.emit(clock)
-    if (!this.valid.current && this.config.autoSize) this.sizeToFit(undefined, undefined, false)
-    return this._validateAndRender()
+    return this.setSize(tmpd)
   }
 
   findChild (type :string) :Element|undefined {
@@ -579,11 +598,22 @@ export class Root extends Element {
     return super.findTaggedChild(tag) || this.contents.findTaggedChild(tag)
   }
 
-  dispose () {
-    super.dispose()
-    this.focus.update(undefined)
-    this.contents.dispose()
-    this.events.emit("disposed")
+  /** Creates a root that will be popped up over this root. This root will act as the popup root's
+    * parent, allowing necessary coordination between roots. */
+  createPopup (ctx :ElementContext, config :RootConfig) :Root {
+    return new Root(ctx, config, this)
+  }
+
+  /** Clears the menu popup and all popups in parents up to the top of the popup root chain. */
+  clearMenuPopups () {
+    this.menuPopup.update(undefined)
+    if (this.parent) this.parent.clearMenuPopups()
+  }
+
+  update (clock :Clock) :boolean {
+    this._clock.emit(clock)
+    if (!this.valid.current && this.config.autoSize) this.sizeToFit(undefined, undefined, false)
+    return this._validateAndRender()
   }
 
   /** Dispatches a browser mouse event to this root.
@@ -603,6 +633,9 @@ export class Root extends Element {
     if (event.type !== "mouseup" && rect.contains(this.bounds, pos)) event.cancelBubble = true
     switch (event.type) {
     case "mousedown":
+      // if we have an open menu popup then a mousedown on us necessarily did not get processed by
+      // that popup root, so we should clear our popup
+      this.menuPopup.update(undefined)
       if (iact) {
         log.warn("Got mouse down but have active interaction?", "button", button)
         iact.cancel()
@@ -683,33 +716,6 @@ export class Root extends Element {
     }
   }
 
-  private _validateAndRender () {
-    const changed = this.validate() || !rect.isEmpty(this._dirtyRegion)
-    if (changed) {
-      this.render(this.canvas, this._dirtyRegion)
-      this.events.emit("rendered")
-    }
-    return changed
-  }
-
-  private _updateElementsOver (event :MouseEvent, pos :vec2) {
-    const sf = this._scale.factor
-    this.canvas.save()
-    this.canvas.scale(sf, sf)
-    const {_elementsOver, _lastElementsOver} = this
-    this.contents.applyToContaining(this.canvas, pos, elem => _elementsOver.add(elem))
-    this.canvas.restore()
-    for (const element of _lastElementsOver) {
-      if (!_elementsOver.has(element)) element.handleMouseLeave(event, pos)
-    }
-    for (const element of _elementsOver) {
-      if (!_lastElementsOver.has(element)) element.handleMouseEnter(event, pos)
-    }
-    _lastElementsOver.clear()
-    this._elementsOver = _lastElementsOver
-    this._lastElementsOver = _elementsOver
-  }
-
   /** Dispatches a browser keyboard event to this root. */
   dispatchKeyEvent (event :KeyboardEvent) {
     // TODO: focus navigation on Tab/Shift-Tab?
@@ -729,6 +735,20 @@ export class Root extends Element {
     const pos = host.mouseToRoot(this, event, tmpv)
     if (rect.contains(this.bounds, pos)) event.cancelBubble = true
     this.contents.maybeHandleWheel(event, pos)
+  }
+
+  wasRemoved () {
+    this.events.emit("removed")
+    this.host.update(undefined)
+    for (const elem of this._lastElementsOver) elem.handleMouseLeave(vec2zero)
+    this._lastElementsOver.clear()
+  }
+
+  dispose () {
+    super.dispose()
+    this.focus.update(undefined)
+    this.contents.dispose()
+    this.events.emit("disposed")
   }
 
   protected computePreferredSize (hintX :number, hintY :number, into :dim2) {
@@ -769,6 +789,35 @@ export class Root extends Element {
     canvas.clip()
     this.contents.render(canvas, region)
     canvas.restore()
+  }
+
+  private _validateAndRender () {
+    const changed = this.validate() || !rect.isEmpty(this._dirtyRegion)
+    if (changed) {
+      this.render(this.canvas, this._dirtyRegion)
+      this.events.emit("rendered")
+    }
+    return changed
+  }
+
+  private _updateElementsOver (event :MouseEvent, pos :vec2) {
+    // TODO: why are we scaling the canvas here? applyToContaining is just adding containing
+    // elements to a set, surely nothing is rendering to canvas?
+    const sf = this._scale.factor
+    this.canvas.save()
+    this.canvas.scale(sf, sf)
+    const {_elementsOver, _lastElementsOver} = this
+    this.contents.applyToContaining(this.canvas, pos, elem => _elementsOver.add(elem))
+    this.canvas.restore()
+    for (const element of _lastElementsOver) {
+      if (!_elementsOver.has(element)) element.handleMouseLeave(pos)
+    }
+    for (const element of _elementsOver) {
+      if (!_lastElementsOver.has(element)) element.handleMouseEnter(pos)
+    }
+    _lastElementsOver.clear()
+    this._elementsOver = _lastElementsOver
+    this._lastElementsOver = _elementsOver
   }
 }
 
@@ -841,12 +890,11 @@ export class Control extends Element {
 
   /** Requests that this control lose input focus. */
   blur () {
-    const root = this.root
-    if (root.focus.current === this) root.focus.update(undefined)
+    this.root.focus.updateIf(c => c === this, undefined)
   }
 
-  handleMouseEnter (event :MouseEvent, pos :vec2) { this._hovered.update(true) }
-  handleMouseLeave (event :MouseEvent, pos :vec2) { this._hovered.update(false) }
+  handleMouseEnter (pos :vec2) { this._hovered.update(true) }
+  handleMouseLeave (pos :vec2) { this._hovered.update(false) }
 
   /** Requests that this control handle the supplied keyboard event.
     * This will only be called on controls that have the keyboard focus. */
@@ -947,15 +995,18 @@ export class Host implements Disposable {
       if (roots.elemAt(index).zIndex > root.zIndex) break
     }
     this._roots.insert(root, index)
+    root.host.update(this)
     // TODO: we should only do this when the mouse is over the root
     root.cursor.onValue(cursor => this.elem.style.cursor = cursor)
   }
 
   removeRoot (root :Root, dispose = true) {
+    if (root.host.current !== this) throw new Error(log.format(
+      "Removing root from non-hosting host", "host", this, "root", root, "rootHost", root.host))
     const idx = this._roots.indexOf(root)
     if (idx >= 0) {
       this._roots.delete(idx)
-      root.events.emit("removed")
+      root.wasRemoved()
       if (dispose) root.dispose()
       this.elem.style.cursor = "auto"
     }
@@ -1003,7 +1054,7 @@ export class Host implements Disposable {
 
   dispose () {
     for (const root of this._roots) {
-      root.events.emit("removed")
+      root.wasRemoved()
       root.dispose()
     }
     this.disposer.dispose()

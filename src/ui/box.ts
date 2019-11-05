@@ -101,8 +101,8 @@ export class Box extends Element {
     return applied
   }
 
-  handleMouseEnter (event :MouseEvent, pos :vec2) { this._hovered.update(true) }
-  handleMouseLeave (event :MouseEvent, pos :vec2) { this._hovered.update(false) }
+  handleMouseEnter (pos :vec2) { this._hovered.update(true) }
+  handleMouseLeave (pos :vec2) { this._hovered.update(false) }
 
   maybeHandlePointerDown (event :MouseEvent|TouchEvent, pos :vec2) {
     return rect.contains(this.expandBounds(this.bounds), pos)

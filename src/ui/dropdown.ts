@@ -1,15 +1,10 @@
 import {dim2, rect, vec2} from "../core/math"
-import {Value, falseValue, trueValue} from "../core/react"
-import {Noop, PMap, getValue} from "../core/util"
+import {Mutable, Value, falseValue, trueValue} from "../core/react"
 import {AbstractButton, ButtonStates} from "./button"
-import {ControlConfig, Element, ElementConfig, ElementContext, PointerInteraction} from "./element"
-import {VList} from "./list"
+import {VGroup} from "./group"
+import {AbstractList, AbstractListConfig, syncListContents} from "./list"
+import {ControlConfig, Element, ElementConfig, ElementContext, Root} from "./element"
 import {Action, ModelKey, ElementsModel, Spec} from "./model"
-
-/** Defines the styles that apply to [[Dropdown]]. */
-export interface DropdownStyle {
-  minWidth? :number
-}
 
 /** The available drop directions. */
 export type DropDirection = "down" | "right" | "left"
@@ -19,133 +14,105 @@ export interface AbstractDropdownConfig extends ControlConfig {
   dropLeft? :boolean
   element? :ElementConfig
   model? :Spec<ElementsModel<ModelKey>>
-  style :PMap<DropdownStyle>
 }
 
-const preferredSize = dim2.create()
-const listBounds = rect.create()
+export interface DropdownHost {
+  openChild :Mutable<Element|undefined>
+  autoActivate :boolean
+}
+
+function findDropdownHost (elem :Element) :DropdownHost|undefined {
+  const rawElem = elem as any
+  if (rawElem.openChild instanceof Mutable) return rawElem
+  else return elem.parent && findDropdownHost(elem.parent)
+}
+
+export interface DropdownListConfig extends AbstractListConfig {
+  type :"dropdownList"
+}
+
+export class DropdownList extends VGroup implements AbstractList, DropdownHost {
+  readonly elements = new Map<ModelKey, Element>()
+  readonly contents :Element[] = []
+
+  readonly openChild = Mutable.local<Element|undefined>(undefined)
+  get autoActivate () { return true}
+
+  constructor (ctx :ElementContext, parent :Element, readonly config :DropdownListConfig) {
+    super(ctx, parent, config)
+    this.disposer.add(syncListContents(ctx, this))
+  }
+}
 
 /** Base class for Dropdown, Menu, and MenuItem. */
 export abstract class AbstractDropdown extends AbstractButton {
-  protected _list? :VList
-  private readonly _combinedBounds = rect.create()
+  protected _listRoot :Root
 
-  get list () { return this._list }
-
-  constructor (
-    private _ctx :ElementContext,
-    parent :Element,
-    readonly config :AbstractDropdownConfig,
-  ) {
-    super(_ctx, parent, config)
-  }
-
-  findChild (type :string) :Element|undefined {
-    return super.findChild(type) || (this._list && this._list.findChild(type))
-  }
-  findTaggedChild (tag :string) :Element|undefined {
-    return super.findTaggedChild(tag) || (this._list && this._list.findTaggedChild(tag))
-  }
-
-  applyToContaining (canvas :CanvasRenderingContext2D, pos :vec2, op :(element :Element) => void) {
-    if (!super.applyToContaining(canvas, pos, op)) return false
-    if (!this._list) return true
-    this._list.applyToContaining(canvas, pos, op)
-    // return false so as to continue the traversal
-    return false
-  }
-  applyToIntersecting (region :rect, op :(element :Element) => void) {
-    if (!super.applyToIntersecting(region, op)) return false
-    if (this._list) this._list.applyToIntersecting(region, op)
-    return true
-  }
-
-  maybeHandlePointerDown (event :MouseEvent|TouchEvent, pos :vec2) {
-    return rect.contains(this.expandBounds(this.bounds), pos)
-      ? this.handlePointerDown(event, pos)
-      : undefined
-  }
-  handlePointerDown (event :MouseEvent|TouchEvent, pos :vec2) :PointerInteraction|undefined {
-    if (!this._list) return super.handlePointerDown(event, pos)
-    const interaction = this._list.handlePointerDown(event, pos)
-    if (interaction) return interaction
-    this._closeAll()
-    // return a dummy interaction just to prevent others from handling the event
-    return {move: Noop, release: Noop, cancel: Noop}
-  }
-
-  expandBounds (bounds :rect) :rect {
-    // when the menu is showing, capture all events
-    return this._list ? this.root.bounds : bounds
-  }
-
-  dirty (region :rect = this._combineBounds(this._bounds), fromChild :boolean = false) {
-    super.dirty(region, fromChild)
-  }
-
-  toggle () {
-    if (this._list) {
-      this.dirty(this.expandBounds(this.bounds))
-      this._list.dispose()
-      this._list = undefined
-      return
-    }
-    this._list = this._ctx.elem.create(this._ctx, this, {
-      type: "vlist",
-      offPolicy: "stretch",
-      element: this.config.element,
-      model: this.config.model,
-    }) as VList
-    this.invalidate()
-  }
-
-  private _combineBounds (bounds :rect) {
-    if (!this._list) return bounds
-    return rect.union(this._combinedBounds, bounds, this._list.bounds)
-  }
-
-  protected onClick () { this.toggle() }
-
-  protected _closeAll () {
-    if (this._list) this.toggle()
-    for (let ancestor = this.parent; ancestor; ancestor = ancestor.parent) {
-      if (ancestor instanceof AbstractDropdown) ancestor.toggle()
-    }
-  }
-
-  protected relayout () {
-    super.relayout()
-    if (this._list) {
-      const style = this.getStyle(this.config.style, "normal")
-      const minWidth = getValue(style.minWidth, 100)
-      dim2.copy(preferredSize, this._list.preferredSize(minWidth, -1))
-      const width = Math.max(preferredSize[0], minWidth)
-      let x = this.x, y = this.y
-      if (this._dropDirection === "right") x += this.width + 1
-      else if (this._dropDirection === "left") x -= width + 1
-      else {
-        if (this.config.dropLeft) x += this.width - width
-        y += this.height + 1
+  constructor (ctx :ElementContext, parent :Element, readonly config :AbstractDropdownConfig) {
+    super(ctx, parent, config)
+    this._listRoot = this.root.createPopup(ctx, {
+      type: "root",
+      autoSize: true,
+      contents: {
+        type: "dropdownList",
+        offPolicy: "stretch",
+        element: config.element,
+        model: config.model,
       }
-      this._list.setBounds(rect.set(listBounds, x, y, width, preferredSize[1]))
+    })
+
+    // if our parent maintains a list of dropdowns (it is a menu bar or a dropdown of nested
+    // dropdowns), then coordinate with our siblings via `openChild`
+    const dhost = findDropdownHost(parent)
+    if (dhost) {
+      // no need to dispose these connections because all the lifecycles are the same
+      this._listRoot.host.onValue(host => {
+        if (host) dhost.openChild.update(this)
+        else dhost.openChild.updateIf(c => c === this, undefined)
+      })
+      dhost.openChild.onValue(open => {
+        if (open !== undefined && open !== this) this.setOpen(false)
+      })
+      this._hovered.onValue(hovered => {
+        if (hovered && dhost.autoActivate) this.setOpen(true)
+      })
     }
   }
+
+  get isOpen () :boolean { return this._listRoot.host.current !== undefined }
+
+  setOpen (open :boolean) {
+    const lroot = this._listRoot
+    if (this.isOpen && !open) {
+      this.root.menuPopup.updateIf(r => r === lroot, undefined)
+    } else if (open && !this.isOpen) {
+      const lsize = lroot.sizeToFit()
+      const pos = rect.pos(this.bounds)
+      switch (this._dropDirection) {
+      case "left":
+        pos[0] -= lsize[0] + 1
+        break
+      case "right":
+        pos[0] += this.width + 1
+        break
+      case "down":
+        if (this.config.dropLeft) pos[0] += this.width - lsize[0]
+        pos[1] += this.height + 1
+        break
+      }
+      lroot.setOrigin(vec2.add(pos, pos, this.root.origin))
+      this.root.menuPopup.update(lroot)
+    }
+  }
+
+  protected onClick () { this.setOpen(true) }
 
   protected get _dropDirection () :DropDirection { return "down" }
 
-  protected revalidate () {
-    super.revalidate()
-    if (this._list) this._list.validate()
-  }
-
-  protected rerender (canvas :CanvasRenderingContext2D, region :rect) {
-    super.rerender(canvas, region)
-    if (this._list) this._list.render(canvas, region)
-  }
-
   dispose () {
+    this.setOpen(false)
+    this._listRoot.dispose()
     super.dispose()
-    if (this._list) this._list.dispose()
   }
 }
 
@@ -189,23 +156,6 @@ export class AbstractDropdownItem extends AbstractDropdown {
         ).map(([enabled, separator]) => enabled && !separator),
       },
     )
-    const model = ctx.model.resolveOpt(config.model)
-    this.disposer.add(this._hovered.onValue(hovered => {
-      if (!hovered) return
-      for (let ancestor = this.parent; ancestor; ancestor = ancestor.parent) {
-        if (ancestor instanceof AbstractDropdown) {
-          if (!ancestor.list) return
-          for (const element of ancestor.list.contents) {
-            const dropdown = element as AbstractDropdown
-            if (dropdown.list && dropdown !== this) {
-              dropdown.toggle()
-            }
-          }
-          if (model && !this.list) this.toggle()
-          return
-        }
-      }
-    }))
     this._separator = ctx.model.resolve(config.separator, falseValue)
     this.disposer.add(this._separator.onValue(() => this._state.update(this.computeState)))
     this._action = ctx.model.resolveActionOpt(config.action)
@@ -224,15 +174,15 @@ export class AbstractDropdownItem extends AbstractDropdown {
   }
 
   protected computePreferredSize (hintX :number, hintY :number, into :dim2) {
-    if (this._separator.current) dim2.set(into, hintX, 1)
+    if (this._separator.current) dim2.set(into, 1, 1)
     else super.computePreferredSize(hintX, hintY, into)
   }
 
   protected onClick () {
     if (this._action) {
-      this._closeAll()
+      this.root.clearMenuPopups()
       this._action()
-    } else this.toggle()
+    } else super.onClick()
   }
 }
 

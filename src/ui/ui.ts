@@ -129,6 +129,7 @@ export class UI {
       case      "treeView": return new TR.TreeView(ctx, parent, rconfig as TR.TreeViewConfig)
       case  "treeViewNode": return new TR.TreeViewNode(ctx, parent, rconfig as TR.TreeViewNodeConfig)
       case      "dropdown": return new D.Dropdown(ctx, parent, rconfig as D.DropdownConfig)
+      case  "dropdownList": return new D.DropdownList(ctx, parent, rconfig as D.DropdownListConfig)
       case  "dropdownItem": return new D.DropdownItem(ctx, parent, rconfig as D.DropdownItemConfig)
       case       "menuBar": return new M.MenuBar(ctx, parent, rconfig as M.MenuBarConfig)
       case          "menu": return new M.Menu(ctx, parent, rconfig as M.MenuConfig)

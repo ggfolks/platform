@@ -855,8 +855,8 @@ export class NodeView extends VGroup {
   get styleScope () { return NodeViewStyleScope }
   get state () :Value<string> { return this._state }
 
-  handleMouseEnter (event :MouseEvent, pos :vec2) { this.hovered.update(true) }
-  handleMouseLeave (event :MouseEvent, pos :vec2) { this.hovered.update(false) }
+  handleMouseEnter (pos :vec2) { this.hovered.update(true) }
+  handleMouseLeave (pos :vec2) { this.hovered.update(false) }
 
   handlePointerDown (event :MouseEvent|TouchEvent, pos :vec2) :PointerInteraction|undefined {
     // move node to end of view
@@ -1062,7 +1062,7 @@ export class EdgeView extends Element {
     return true
   }
 
-  handleMouseLeave (event :MouseEvent, pos :vec2) { this._hoverKeys.update(undefined) }
+  handleMouseLeave (pos :vec2) { this._hoverKeys.update(undefined) }
 
   handlePointerDown (event :MouseEvent|TouchEvent, pos :vec2) {
     const keys = this._hoverKeys.current
@@ -1375,8 +1375,8 @@ export class Terminal extends Element {
     return style.edge && style.edge.outlineAlpha !== undefined ? style.edge.outlineAlpha : 1
   }
 
-  handleMouseEnter (event :MouseEvent, pos :vec2) { this._hovered.update(true) }
-  handleMouseLeave (event :MouseEvent, pos :vec2) { this._hovered.update(false) }
+  handleMouseEnter (pos :vec2) { this._hovered.update(true) }
+  handleMouseLeave (pos :vec2) { this._hovered.update(false) }
 
   maybeHandlePointerDown (event :MouseEvent|TouchEvent, pos :vec2) {
     return rect.contains(this.expandBounds(this.bounds), pos)
