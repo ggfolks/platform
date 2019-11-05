@@ -32,4 +32,16 @@ pipeline {
       }
     }
   }
+  post {
+    always {
+      slackSend(
+        color: "#D4DADF",
+        message: "Jenkins build started: `${env.JOB_NAME}` #${env.BUILD_NUMBER}:\n${env.BUILD_URL}")
+    }
+    failure {
+      slackSend(
+        color: "#FF9FA1",
+        message: "Jenkins build failed: `${env.JOB_NAME}` #${env.BUILD_NUMBER}:\n${env.BUILD_URL}")
+    }
+  }
 }
