@@ -274,6 +274,15 @@ export class TypeScriptGameEngine implements GameEngine {
     this.renderEngine.render()
   }
 
+  _getNextOrder (parentId :string|undefined, page :boolean) :number {
+    const ids = (parentId === undefined)
+      ? (page ? this._pages.current : this._defaultRootIds.current)
+      : this.gameObjects.require(parentId).transform.childIds.current
+    if (ids.length === 0) return 0
+    const lastId = ids[ids.length - 1]
+    return lastId === DEFAULT_PAGE ? 0 : this.gameObjects.require(lastId).order + 1
+  }
+
   _rootRemoved (root :TypeScriptTransform) {
     const idx = removeId(this._getRootIds(root), root.gameObject.id)
     if (this.activePage.current === root.gameObject.id) {
@@ -375,6 +384,11 @@ export class TypeScriptGameObject implements GameObject {
     gameEngine._gameObjects.set(this.id, this)
     this.nameValue = Mutable.local(name)
     this.transform = this.addComponent("transform", {}, false)
+    if (config.order === undefined) {
+      this.orderValue.update(
+        gameEngine._getNextOrder(config.transform && config.transform.parentId, !!config.page),
+      )
+    }
     for (const key in config) {
       const value = config[key]
       if (key === "transform") {
@@ -569,6 +583,12 @@ export class TypeScriptComponent extends TypeScriptConfigurable implements Compo
   }
 
   init () {
+    const componentTypes = this.gameObject.componentTypes.current
+    if (componentTypes.length > 0) {
+      this.orderValue.update(
+        this.gameObject.requireComponent(componentTypes[componentTypes.length - 1]).order + 1,
+      )
+    }
     this._disposer.add(this.orderValue.onValue(() => this.gameObject._componentReordered(this)))
   }
 
