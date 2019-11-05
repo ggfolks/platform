@@ -756,6 +756,12 @@ export class Mutable<T> extends Value<T> implements Prop<T> {
     * listeners will be notified of the change. */
   update (newValue :T) { this._update(newValue) }
 
+  /** Updates this mutable value to `newValue` iff `pred` is true when applied to the current value.
+    * If `newValue` differs from the current value, listeners will be notified of the change. */
+  updateIf (pred :(v:T) => boolean, newValue :T) {
+    if (pred(this.current)) this._update(newValue)
+  }
+
   /** Creates a two way mapping between `this` mutable value and a projection of it given a
     * projection and injection function. Changes to `this` value will be projected out and used to
     * reflect the bimapped value, and changes to the bimapped value will be injected back into
