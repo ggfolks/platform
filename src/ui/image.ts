@@ -3,12 +3,12 @@ import {Value} from "../core/react"
 import {Element, ElementConfig, ElementContext} from "./element"
 import {Spec} from "./style"
 
-// TODO: we need an image spec which defines whether an image is HiDPI
+type ImageSpec = {path :string, scaleFactor :number}
 
 /** Defines configuration for [[Image]] elements. */
 export interface ImageConfig extends ElementConfig {
   type :"image"
-  image :Spec<Value<string>>
+  image :Spec<Value<ImageSpec|string>>
   width? :number
   height? :number
 }
@@ -16,11 +16,15 @@ export interface ImageConfig extends ElementConfig {
 /** Displays an image, which potentially varies based on the element state. */
 export class Image extends Element {
   private image = this.observe<HTMLImageElement | Error | undefined>(undefined)
+  private scaleFactor = 1
 
   constructor (ctx :ElementContext, parent :Element, readonly config :ImageConfig) {
     super(ctx, parent, config)
-    const url = ctx.model.resolve(config.image)
-    this.image.observe(url.toSubject().switchMap(path => ctx.style.image.resolve(path)))
+    this.disposer.add(ctx.model.resolve(config.image).onValue(spec => {
+      const path = typeof spec === "string" ? spec : spec.path
+      this.image.observe(ctx.style.image.resolve(path))
+      this.scaleFactor = typeof spec === "string" ? 1 : spec.scaleFactor
+    }))
   }
 
   dispose () {
@@ -46,14 +50,16 @@ export class Image extends Element {
   protected getWidth (img :HTMLImageElement) :number {
     const config = this.config
     if (config.width) return config.width
-    else if (config.height) return (config.height / img.height) * img.width
-    else return img.width
+    else if (config.height) return (config.height / this.scale(img.height)) * this.scale(img.width)
+    else return this.scale(img.width)
   }
 
   protected getHeight (img :HTMLImageElement) :number {
     const config = this.config
     if (config.height) return config.height
-    else if (config.width) return (config.width / img.width) * img.height
-    else return img.height
+    else if (config.width) return (config.width / this.scale(img.width)) * this.scale(img.height)
+    else return this.scale(img.height)
   }
+
+  protected scale (size :number) { return size / this.scaleFactor }
 }

@@ -4,8 +4,6 @@ import {Color} from "../core/color"
 import {Subject} from "../core/react"
 import {makeRoundRectPath, strokeLinePath, strokeRoundRectSide} from "./util"
 
-// TODO?: ImageConfig = string | {source/path/url :string, scale :number} | ?
-
 /** Handles the resolution of images needed by style components. */
 export interface ImageResolver {
 
