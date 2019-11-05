@@ -106,30 +106,33 @@ test("reactive maps", () => {
   map.onChange(change => hist.push(change))
 
   const sizeV = map.sizeValue
+  const shist :number[] = []
+  sizeV.onChange(size => shist.push(size))
+
   expectChange(sizeV, (s, os) => expect(os).toBe(s-1))
   map.set("a", "eh")
   xhist.push({type: "set", key: "a", value: "eh", prev: undefined})
+  expect(shist).toEqual([1])
   map.set("b", "bee")
   xhist.push({type: "set", key: "b", value: "bee", prev: undefined})
+  expect(shist).toEqual([1, 2])
   map.set("c", "sea")
   xhist.push({type: "set", key: "c", value: "sea", prev: undefined})
   expect(Array.from(map.entries())).toEqual([["a", "eh"], ["b", "bee"], ["c", "sea"]])
   expect(hist).toEqual(xhist)
+  expect(shist).toEqual([1, 2, 3])
 
   expectChange(sizeV, (s, os) => expect(os).toBe(s+1))
   map.delete("b")
   xhist.push({type: "deleted", key: "b", prev: "bee"})
   expect(Array.from(map.entries())).toEqual([["a", "eh"], ["c", "sea"]])
   expect(hist).toEqual(xhist)
-
-  const shist :number[] = []
-  sizeV.onChange(size => shist.push(size))
+  expect(shist).toEqual([1, 2, 3, 2])
 
   map.set("c", "see")
   xhist.push({type: "set", key: "c", value: "see", prev: "sea"})
   expect(Array.from(map.entries())).toEqual([["a", "eh"], ["c", "see"]])
   expect(hist).toEqual(xhist)
-  expect(shist).toEqual([])
 
   const aval = map.getValue("a")
   const ahist :Array<string|undefined> = []
@@ -142,7 +145,7 @@ test("reactive maps", () => {
   amval.onValue(v => amhist.push(v))
   expect(amval.current).toEqual("eh")
   expect(amhist).toEqual(["eh"])
-  expect(shist).toEqual([])
+  expect(shist).toEqual([1, 2, 3, 2])
 
   const cval = map.getValue("c")
   const chist :Array<string|undefined> = []
@@ -153,18 +156,18 @@ test("reactive maps", () => {
   map.set("c", "see")
   expect(cval.current).toEqual("see")
   expect(chist).toEqual(["see"])
-  expect(shist).toEqual([])
+  expect(shist).toEqual([1, 2, 3, 2])
 
   map.set("c", "cee")
   expect(cval.current).toEqual("cee")
   expect(chist).toEqual(["see", "cee"])
-  expect(shist).toEqual([])
+  expect(shist).toEqual([1, 2, 3, 2])
 
   expectChange(sizeV, (s, os) => expect(os).toBe(s+1))
   map.delete("c")
   expect(cval.current).toEqual(undefined)
   expect(chist).toEqual(["see", "cee", undefined])
-  expect(shist).toEqual([1])
+  expect(shist).toEqual([1, 2, 3, 2, 1])
 
   map.set("c", "see!")
   expect(chist).toEqual(["see", "cee", undefined, "see!"])
