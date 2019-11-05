@@ -7,7 +7,7 @@ import {MutableList, RList} from "../core/rcollect"
 import {Scale} from "../core/ui"
 import {keyEvents, mouseEvents, pointerEvents, touchEvents, wheelEvents} from "../input/react"
 import {Action, Command, Model} from "./model"
-import {Keymap} from "./keymap"
+import {Keymap, ModMap} from "./keymap"
 import {Spec, StyleContext} from "./style"
 
 const tmpr = rect.create(), tmpv = vec2.create(), tmpd = dim2.create()
@@ -406,6 +406,7 @@ export interface RootConfig extends ElementConfig {
   hintSize? :Spec<Value<dim2>>
   minSize? :Spec<Value<dim2>>
   zIndex? :number
+  keymap? :PMap<ModMap>
   contents :ElementConfig
 }
 
@@ -476,6 +477,7 @@ export class Root extends Element {
     this._minSize = config.minSize ? ctx.model.resolve(config.minSize) : defMinSize
     this.invalidateOnChange(this._minSize)
     this.keymap = new Keymap(parent && parent.keymap)
+    if (config.keymap) this.keymap.pushBindings(config.keymap, ctx.model)
     this.contents = ctx.elem.create(ctx, this, config.contents)
 
     this.menuPopup.onChange((pop, opop) => {
@@ -970,6 +972,8 @@ export class Control extends Element {
 export class Host implements Disposable {
   private readonly disposer = new Disposer()
   private readonly _roots = MutableList.local<Root>()
+  private readonly _pending :Array<() => void> = []
+  private _dispatching = false
 
   constructor (readonly elem :HTMLElement) {
     this.disposer.add(mouseEvents("mousedown", "mousemove", "mouseup", "dblclick").
@@ -989,33 +993,51 @@ export class Host implements Disposable {
   /** Adds `root` to this host. The root will be inserted into the root list after all roots with a
     * lower or equal z-index, and before any roots with a higher z-index. */
   addRoot (root :Root) {
-    const roots = this._roots
-    let index = 0
-    for (let ll = roots.length; index < ll; index += 1) {
-      if (roots.elemAt(index).zIndex > root.zIndex) break
+    if (this._dispatching) this._pending.push(() => this.addRoot(root))
+    else {
+      const roots = this._roots
+      let index = 0
+      for (let ll = roots.length; index < ll; index += 1) {
+        if (roots.elemAt(index).zIndex > root.zIndex) break
+      }
+      this._roots.insert(root, index)
+      root.host.update(this)
+      // TODO: we should only do this when the mouse is over the root
+      root.cursor.onValue(cursor => this.elem.style.cursor = cursor)
     }
-    this._roots.insert(root, index)
-    root.host.update(this)
-    // TODO: we should only do this when the mouse is over the root
-    root.cursor.onValue(cursor => this.elem.style.cursor = cursor)
   }
 
   removeRoot (root :Root, dispose = true) {
-    if (root.host.current !== this) throw new Error(log.format(
-      "Removing root from non-hosting host", "host", this, "root", root, "rootHost", root.host))
-    const idx = this._roots.indexOf(root)
-    if (idx >= 0) {
-      this._roots.delete(idx)
-      root.wasRemoved()
-      if (dispose) root.dispose()
-      this.elem.style.cursor = "auto"
+    if (this._dispatching) this._pending.push(() => this.removeRoot(root, dispose))
+    else {
+      if (root.host.current !== this) throw new Error(log.format(
+        "Removing root from non-hosting host", "host", this, "root", root, "rootHost", root.host))
+      const idx = this._roots.indexOf(root)
+      if (idx >= 0) {
+        this._roots.delete(idx)
+        root.wasRemoved()
+        if (dispose) root.dispose()
+        this.elem.style.cursor = "auto"
+      }
     }
   }
 
   dispatchEvent (event :UIEvent, op :(r:Root) => void) {
-    for (let ii = this._roots.length - 1; ii >= 0; ii--) {
-      if (event.cancelBubble) return
-      op(this._roots.elemAt(ii))
+    this._dispatching = true
+    try {
+      for (let ii = this._roots.length - 1; ii >= 0; ii--) {
+        if (event.cancelBubble) return
+        const root = this._roots.elemAt(ii)
+        if (root) op(root)
+        else log.warn("No root at index", "ii", ii, "event", event.type)
+      }
+    } finally {
+      this._dispatching = false
+      const pending = this._pending
+      if (pending.length > 0) {
+        for (const op of pending) op()
+        pending.length = 0
+      }
     }
   }
 

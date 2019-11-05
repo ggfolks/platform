@@ -36,7 +36,7 @@ export function formatBinding (binding :Binding) {
   )
 }
 
-type ModMap = {[key :number] :string}
+export type ModMap = {[key :number] :string}
 
 export class Bindings {
   private bindingsFor :Map<string, Binding[]>|undefined
