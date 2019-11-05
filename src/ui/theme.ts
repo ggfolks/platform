@@ -333,6 +333,7 @@ export const DefaultTheme :Theme = {
   },
   propertyButton: {
     box: {
+      minWidth: 5,
       background: "$propertyButton",
       hovered: {background: "$propertyButtonHovered"},
       hoverFocused: {background: "$propertyButtonHovered"},
