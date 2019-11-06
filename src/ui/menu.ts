@@ -21,8 +21,8 @@ export class MenuBar extends HGroup implements AbstractList, DropdownHost {
   readonly elements = new Map<string, Element>()
   readonly contents :Element[] = []
 
-  readonly activeChild = Mutable.local<Element|undefined>(undefined)
-  get autoActivate () { return !!this.activeChild.current }
+  readonly activeChild = Mutable.local<AbstractDropdown|undefined>(undefined)
+  get autoActivate () { return this.activeChild.current ? this.activeChild.current.isOpen : false }
 
   constructor (ctx :ElementContext, parent :Element, readonly config :MenuBarConfig) {
     super(ctx, parent, config)

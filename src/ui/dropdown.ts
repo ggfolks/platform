@@ -17,7 +17,7 @@ export interface AbstractDropdownConfig extends ControlConfig {
 }
 
 export interface DropdownHost {
-  activeChild :Mutable<Element|undefined>
+  activeChild :Mutable<AbstractDropdown|undefined>
   autoActivate :boolean
 }
 
@@ -35,7 +35,7 @@ export class DropdownList extends VGroup implements AbstractList, DropdownHost {
   readonly elements = new Map<ModelKey, Element>()
   readonly contents :Element[] = []
 
-  readonly activeChild = Mutable.local<Element|undefined>(undefined)
+  readonly activeChild = Mutable.local<AbstractDropdown|undefined>(undefined)
   get autoActivate () { return true}
 
   constructor (ctx :ElementContext, parent :Element, readonly config :DropdownListConfig) {
@@ -80,8 +80,8 @@ export abstract class AbstractDropdown extends AbstractButton {
         if (child !== undefined && child !== this) this.setOpen(false)
       })
       this._hovered.when(h => h === true, _ => {
-        dhost.activeChild.update(this)
         if (dhost.autoActivate) this.setOpen(true)
+        dhost.activeChild.update(this)
       })
     }
   }
@@ -120,7 +120,7 @@ export abstract class AbstractDropdown extends AbstractButton {
     super.dispose()
   }
 
-  protected onClick () { this.setOpen(true) }
+  protected onClick () { this.setOpen(!this.isOpen) }
 
   protected get _dropDirection () :DropDirection { return "down" }
 }
