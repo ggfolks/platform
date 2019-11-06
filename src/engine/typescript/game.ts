@@ -4,7 +4,7 @@ import {refEquals} from "../../core/data"
 import {mat4, quat, vec3, vec4, rect} from "../../core/math"
 import {Mutable, Value} from "../../core/react"
 import {MutableMap, RMap} from "../../core/rcollect"
-import {Disposer, PMap, getValue} from "../../core/util"
+import {Disposer, NoopRemover, PMap, getValue, log} from "../../core/util"
 import {Graph as GraphObject, GraphConfig} from "../../graph/graph"
 import {CategoryNode, NodeConfig, NodeTypeRegistry} from "../../graph/node"
 import {registerLogicNodes} from "../../graph/logic"
@@ -91,7 +91,18 @@ export class TypeScriptConfigurable implements Configurable {
   }
 
   getProperty<T> (name :string, overrideDefault? :any) :Value<T>|Mutable<T> {
-    return this[getPropertyValueName(name)] as Value<T>|Mutable<T>
+    const valueName = getPropertyValueName(name)
+    let property = this[valueName]
+    if (!property) {
+      log.warn("Falling back to non-listenable Mutable", "name", name)
+      this[valueName] = property = Mutable.deriveMutable(
+        () => NoopRemover,
+        () => this[name],
+        value => this[name] = value,
+        refEquals,
+      )
+    }
+    return property as Value<T>|Mutable<T>
   }
 
   createConfig (omitType? :boolean) :ConfigurableConfig {
@@ -811,7 +822,9 @@ class TypeScriptTransform extends TypeScriptComponent implements Transform {
   get parent () :Transform|undefined { return this._parent }
   set parent (newParent :Transform|undefined) { this.setParent(newParent) }
 
-  get parentId () :string|undefined { return this._parent && this._parent.gameObject.id }
+  @property("string|undefined", {editable: false}) get parentId () :string|undefined {
+    return this._parent && this._parent.gameObject.id
+  }
   set parentId (id :string|undefined) {
     this.parent = (id === undefined)
       ? undefined
@@ -907,6 +920,22 @@ class TypeScriptTransform extends TypeScriptComponent implements Transform {
 
   protected _createPropertyValue (name :string, meta :PropertyMeta) :Value<any> {
     switch (name) {
+      case "parentId":
+        return Mutable.deriveMutable(
+          dispatch => {
+            let value = this.parentId
+            const handler = () => {
+              const oldValue = value
+              value = this.parentId
+              dispatch(value, oldValue)
+            }
+            this.gameObject.addMessageHandler("onTransformParentChanged", handler)
+            return () => this.gameObject.removeMessageHandler("onTransformParentChanged", handler)
+          },
+          () => this.parentId,
+          value => this.parentId = value,
+          refEquals,
+        )
       case "localPosition":
       case "localScale":
       case "position":
