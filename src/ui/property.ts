@@ -76,10 +76,12 @@ const propertyConfigCreators :PMap<PropertyConfigCreator> = {
     return createEllipsisConfig(model, editable, () => {
       const input = document.createElement("input")
       input.setAttribute("type", "file")
+      document.body.appendChild(input)
       input.addEventListener("change", event => {
         if (!input.files || input.files.length === 0) return
         const url = URL.createObjectURL(input.files[0])
         value.update(url.toString())
+        document.body.removeChild(input)
         // TODO: call revokeObjectURL when finished
       })
       input.click()
