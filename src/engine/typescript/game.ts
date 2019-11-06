@@ -4,7 +4,7 @@ import {refEquals} from "../../core/data"
 import {mat4, quat, vec3, vec4, rect} from "../../core/math"
 import {Mutable, Value} from "../../core/react"
 import {MutableMap, RMap} from "../../core/rcollect"
-import {Disposer, NoopRemover, PMap, getValue} from "../../core/util"
+import {Disposer, PMap, getValue} from "../../core/util"
 import {Graph as GraphObject, GraphConfig} from "../../graph/graph"
 import {CategoryNode, NodeConfig, NodeTypeRegistry} from "../../graph/node"
 import {registerLogicNodes} from "../../graph/logic"
@@ -82,19 +82,16 @@ export class TypeScriptConfigurable implements Configurable {
     this._constructorArgs = otherArgs
   }
 
-  init () :void {}
+  init () :void {
+    // create any properties not created in constructor
+    for (const [property, meta] of this.propertiesMeta) {
+      const valueName = getPropertyValueName(property)
+      if (!this[valueName]) this[valueName] = this._createPropertyValue(property, meta)
+    }
+  }
 
-  getProperty<T> (name :string, overrideDefault? :any) :Value<T|undefined>|Mutable<T|undefined> {
-    const propertyName = name + "Value"
-    const property = this[propertyName]
-    if (property instanceof Value) return property as unknown as Value<T|undefined>
-    // default implementation doesn't know about changes
-    return Mutable.deriveMutable(
-      dispatch => NoopRemover,
-      () => this[name] as T|undefined,
-      newValue => this[name] = newValue,
-      refEquals,
-    )
+  getProperty<T> (name :string, overrideDefault? :any) :Value<T>|Mutable<T> {
+    return this[getPropertyValueName(name)] as Value<T>|Mutable<T>
   }
 
   createConfig (omitType? :boolean) :ConfigurableConfig {
@@ -133,6 +130,28 @@ export class TypeScriptConfigurable implements Configurable {
   dispose () {
     this._disposer.dispose()
   }
+
+  protected _createPropertyValue (name :string, meta :PropertyMeta) :Value<any> {
+    // the default implementation assumes that we want a simple property initialized to the
+    // current value
+    if (meta.constraints.readonly) {
+      const value = Value.constant<any>(this[name])
+      Object.defineProperty(this, name, {enumerable: true, value: this[name]})
+      return value
+    } else {
+      const value = Mutable.local<any>(this[name])
+      Object.defineProperty(this, name, {
+        enumerable: true,
+        get: () => value.current,
+        set: newValue => value.update(newValue),
+      })
+      return value
+    }
+  }
+}
+
+function getPropertyValueName (property :string) :string {
+  return property + "Value"
 }
 
 interface Updatable { update (clock :Clock) :void }
@@ -493,12 +512,12 @@ export class TypeScriptGameObject implements GameObject {
     }
   }
 
-  getProperty<T> (name :string, overrideDefault? :any) :Value<T|undefined>|Mutable<T|undefined> {
+  getProperty<T> (name :string, overrideDefault? :any) :Value<T>|Mutable<T> {
     switch (name) {
-      case "id": return Value.constant(this.id) as unknown as Value<T|undefined>
-      case "name": return this.nameValue as unknown as Value<T|undefined>
-      case "order": return this.orderValue as unknown as Value<T|undefined>
-      default: return this.components.getValue(name) as unknown as Value<T|undefined>
+      case "id": return Value.constant(this.id) as unknown as Value<T>
+      case "name": return this.nameValue as unknown as Value<T>
+      case "order": return this.orderValue as unknown as Value<T>
+      default: return this.components.getValue(name) as unknown as Value<T>
     }
   }
 
@@ -583,6 +602,7 @@ export class TypeScriptComponent extends TypeScriptConfigurable implements Compo
   }
 
   init () {
+    super.init()
     const componentTypes = this.gameObject.componentTypes.current
     if (componentTypes.length > 0) {
       this.orderValue.update(
@@ -869,46 +889,6 @@ class TypeScriptTransform extends TypeScriptComponent implements Transform {
     return vec3.normalize(target, target)
   }
 
-  getProperty<T> (name :string, overrideDefault? :any) :Value<T|undefined>|Mutable<T|undefined> {
-    switch (name) {
-      case "localPosition":
-      case "localScale":
-      case "position":
-        return this._getTransformProperty(name, createVec3Fn, vec3.copy)
-
-      case "localRotation":
-      case "rotation":
-        return this._getTransformProperty(name, createQuatFn, quat.copy)
-    }
-    return super.getProperty(name, overrideDefault)
-  }
-
-  private _getTransformProperty<T> (
-    name :string,
-    createFn :(populate :(out :T, arg? :any) => T) => ((arg? :any) => T),
-    copyFn :(out :T, source :T) => T,
-  ) :Mutable<any> {
-    const propertyName = `_${name}Property`
-    const property = this[propertyName]
-    if (property) return property
-    const current = createFn(out => copyFn(out, this[name]))
-    return this[propertyName] = Mutable.deriveMutable<any>(
-      dispatch => {
-        let value = current()
-        const handler = () => {
-          const oldValue = value
-          value = current()
-          dispatch(value, oldValue)
-        }
-        this.gameObject.addMessageHandler("onTransformChanged", handler)
-        return () => this.gameObject.removeMessageHandler("onTransformChanged", handler)
-      },
-      current,
-      value => copyFn(this[name], value),
-      refEquals,
-    )
-  }
-
   awake () {
     this._disposer.add(this.gameObject.orderValue.onValue(() => {
       if (this._parent) this._parent._childReordered(this)
@@ -923,6 +903,45 @@ class TypeScriptTransform extends TypeScriptComponent implements Transform {
     super.dispose()
     this._maybeRemoveFromParent()
     this.gameObject.gameEngine.dirtyTransforms.delete(this)
+  }
+
+  protected _createPropertyValue (name :string, meta :PropertyMeta) :Value<any> {
+    switch (name) {
+      case "localPosition":
+      case "localScale":
+      case "position":
+        return this._createTransformPropertyValue(name, createVec3Fn, vec3.copy)
+
+      case "localRotation":
+      case "rotation":
+        return this._createTransformPropertyValue(name, createQuatFn, quat.copy)
+
+      default:
+        return super._createPropertyValue(name, meta)
+    }
+  }
+
+  private _createTransformPropertyValue<T> (
+    name :string,
+    createFn :(populate :(out :T, arg? :any) => T) => ((arg? :any) => T),
+    copyFn :(out :T, source :T) => T,
+  ) :Mutable<any> {
+    const current = createFn(out => copyFn(out, this[name]))
+    return Mutable.deriveMutable<any>(
+      dispatch => {
+        let value = current()
+        const handler = () => {
+          const oldValue = value
+          value = current()
+          dispatch(value, oldValue)
+        }
+        this.gameObject.addMessageHandler("onTransformChanged", handler)
+        return () => this.gameObject.removeMessageHandler("onTransformChanged", handler)
+      },
+      current,
+      value => copyFn(this[name], value),
+      refEquals,
+    )
   }
 
   private _maybeRemoveFromParent () {

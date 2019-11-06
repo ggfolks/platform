@@ -7,7 +7,7 @@ import {PMap, toLimitedString} from "../core/util"
 import {NumberConstraints, SelectConstraints, getEnumMeta} from "../graph/meta"
 import {Element, ElementConfig, ElementContext} from "./element"
 import {AxisConfig, VGroup} from "./group"
-import {Model, ElementsModel, Spec} from "./model"
+import {Action, Model, ElementsModel, Spec} from "./model"
 
 /** Configuration for [[PropertyView]]. */
 export interface PropertyViewConfig extends AxisConfig {
@@ -73,43 +73,16 @@ const propertyConfigCreators :PMap<PropertyConfigCreator> = {
   }),
   url: (model, editable) => {
     const value = model.resolve<Mutable<string>>("value")
-    return createPropertyRowConfig(model, {
-      type: "row",
-      constraints: {stretch: true},
-      offPolicy: "stretch",
-      contents: [
-        {
-          type: "text",
-          constraints: {stretch: true},
-          text: "value",
-          enabled: editable,
-          contents: {
-            type: "box",
-            contents: {type: "label", text: "value"},
-            style: {halign: "left"},
-          },
-        },
-        {
-          type: "button",
-          visible: editable,
-          contents: {
-            type: "box",
-            scopeId: "propertyButton",
-            contents: {type: "label", text: Value.constant("⋮")},
-          },
-          onClick: () => {
-            const input = document.createElement("input")
-            input.setAttribute("type", "file")
-            input.addEventListener("change", event => {
-              if (!input.files || input.files.length === 0) return
-              const url = URL.createObjectURL(input.files[0])
-              value.update(url.toString())
-              // TODO: call revokeObjectURL when finished
-            })
-            input.click()
-          },
-        },
-      ],
+    return createEllipsisConfig(model, editable, () => {
+      const input = document.createElement("input")
+      input.setAttribute("type", "file")
+      input.addEventListener("change", event => {
+        if (!input.files || input.files.length === 0) return
+        const url = URL.createObjectURL(input.files[0])
+        value.update(url.toString())
+        // TODO: call revokeObjectURL when finished
+      })
+      input.click()
     })
   },
   number: (model, editable) => {
@@ -331,6 +304,11 @@ const propertyConfigCreators :PMap<PropertyConfigCreator> = {
   },
 }
 
+/** Sets the element config creator to use for editing properties of the specified type. */
+export function setPropertyConfigCreator (type :string, creator :PropertyConfigCreator) {
+  propertyConfigCreators[type] = creator
+}
+
 function truncateVec3 (vector :vec3, maxDecimals :number) :vec3 {
   const result = vec3.create()
   const scale = 10 ** maxDecimals
@@ -385,7 +363,43 @@ function createSelectPropertyConfig<K> (
   })
 }
 
-function createPropertyRowConfig (model :Model, valueConfig :ElementConfig) {
+/** Creates a property edit config consisting of a string value field and an ellipsis button that
+  * brings up a dialog. */
+export function createEllipsisConfig (model :Model, editable :Value<boolean>, ellipsis :Action) {
+  return createPropertyRowConfig(model, {
+    type: "row",
+    constraints: {stretch: true},
+    offPolicy: "stretch",
+    contents: [
+      {
+        type: "text",
+        constraints: {stretch: true},
+        text: "value",
+        enabled: editable,
+        contents: {
+          type: "box",
+          contents: {type: "label", text: "value"},
+          style: {halign: "left"},
+        },
+      },
+      {
+        type: "button",
+        visible: editable,
+        contents: {
+          type: "box",
+          scopeId: "propertyButton",
+          contents: {type: "label", text: Value.constant("⋮")},
+        },
+        onClick: ellipsis,
+      },
+    ],
+  })
+}
+
+/** Creates the element configuration for a property row with the supplied value editor.  This is
+  * broken out into a separate function because some property editors will want to use a different
+  * (wider) layout. */
+export function createPropertyRowConfig (model :Model, valueConfig :ElementConfig) {
   return {
     type: "row",
     gap: 2,

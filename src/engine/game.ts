@@ -34,7 +34,7 @@ export interface Configurable extends Disposable {
     * @param name the name of the desired property.
     * @param [overrideDefault] if specified, a value that will override the default default.
     * @return the reactive value, which may or may not be writable. */
-  getProperty<T> (name :string, overrideDefault? :any) :Value<T|undefined>|Mutable<T|undefined>
+  getProperty<T> (name :string, overrideDefault? :any) :Value<T>|Mutable<T>
   /** Returns the config of this object as a a new object.
     * @param [omitType=false] if true, leave the type out of the config.
     * @return the newly created config. */
@@ -223,7 +223,7 @@ export interface GameObject extends Disposable {
     * @param name the name of the desired property.
     * @param [overrideDefault] if specified, a value that will override the default default.
     * @return the reactive value, which may or may not be writable. */
-  getProperty<T> (name :string, overrideDefault? :any) :Value<T|undefined>|Mutable<T|undefined>
+  getProperty<T> (name :string, overrideDefault? :any) :Value<T>|Mutable<T>
 
   /** Returns the configuration of this game object as a new object. */
   createConfig () :GameObjectConfig

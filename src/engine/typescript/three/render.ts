@@ -704,16 +704,10 @@ class ThreeCamera extends ThreeObjectComponent implements Camera {
 registerConfigurableType("component", ["render"], "camera", ThreeCamera)
 
 class ThreeLight extends ThreeObjectComponent implements Light {
-  private _lightType :LightType = "ambient"
+  @property("LightType") lightType :LightType = "ambient"
+
   private _color :Color
   private _lightObject? :LightObject
-
-  @property("LightType") get lightType () :LightType { return this._lightType }
-  set lightType (type :LightType) {
-    if (type === this._lightType) return
-    this._lightType = type
-    this._updateLightType()
-  }
 
   get color () :Color { return this._color }
   set color (color :Color) { Color.copy(this._color, color) }
@@ -736,17 +730,19 @@ class ThreeLight extends ThreeObjectComponent implements Light {
         return obj[prop]
       },
     })
-    this._updateLightType()
   }
 
-  private _updateLightType () {
-    this.objectValue.update(
-      this._lightObject = (this._lightType === "ambient")
-        ? new AmbientLight()
-        : new DirectionalLight()
-    )
-    this._updateColor()
-    this._updateObjectTransform(this._lightObject)
+  init () {
+    super.init()
+    this._disposer.add(this.getProperty<LightType>("lightType").onValue(lightType => {
+      this.objectValue.update(
+        this._lightObject = (lightType === "ambient")
+          ? new AmbientLight()
+          : new DirectionalLight()
+      )
+      this._updateColor()
+      this._updateObjectTransform(this._lightObject)
+    }))
   }
 
   private _updateColor () {
@@ -756,21 +752,13 @@ class ThreeLight extends ThreeObjectComponent implements Light {
 registerConfigurableType("component", ["render"], "light", ThreeLight)
 
 class ThreeModel extends ThreeObjectComponent implements Model {
-  readonly urlValue = Mutable.local("")
+  @property("url") url = ""
 
   private _urlRemover :Remover = NoopRemover
 
-  @property("url") get url () :string { return this.urlValue.current }
-  set url (url :string) { this.urlValue.update(url) }
-
-  constructor (
-    gameEngine :TypeScriptGameEngine,
-    supertype :string,
-    type :string,
-    gameObject :TypeScriptGameObject,
-  ) {
-    super(gameEngine, supertype, type, gameObject)
-    this._disposer.add(this.urlValue.onChange(url => {
+  init () {
+    super.init()
+    this._disposer.add(this.getProperty<string>("url").onChange(url => {
       this._urlRemover()
       this.objectValue.update(undefined)
       if (!url) return
@@ -872,7 +860,7 @@ class ThreeAnimation extends TypeScriptComponent implements Animation {
     // automatically add the URLs of any model loaded
     this._disposer.add(
       component
-        .switchMap(model => model ? model.urlValue : Value.constant(""))
+        .switchMap(model => model ? model.getProperty<string>("url") : Value.constant(""))
         .onValue(url => url && loadGLTF(url).onValue(gltf => {
           for (const clip of gltf.animations) {
             const fullUrl = url + "#" + clip.name
