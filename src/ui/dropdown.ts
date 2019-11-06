@@ -17,13 +17,13 @@ export interface AbstractDropdownConfig extends ControlConfig {
 }
 
 export interface DropdownHost {
-  openChild :Mutable<Element|undefined>
+  activeChild :Mutable<Element|undefined>
   autoActivate :boolean
 }
 
 function findDropdownHost (elem :Element) :DropdownHost|undefined {
   const rawElem = elem as any
-  if (rawElem.openChild instanceof Mutable) return rawElem
+  if (rawElem.activeChild instanceof Mutable) return rawElem
   else return elem.parent && findDropdownHost(elem.parent)
 }
 
@@ -35,7 +35,7 @@ export class DropdownList extends VGroup implements AbstractList, DropdownHost {
   readonly elements = new Map<ModelKey, Element>()
   readonly contents :Element[] = []
 
-  readonly openChild = Mutable.local<Element|undefined>(undefined)
+  readonly activeChild = Mutable.local<Element|undefined>(undefined)
   get autoActivate () { return true}
 
   constructor (ctx :ElementContext, parent :Element, readonly config :DropdownListConfig) {
@@ -46,43 +46,53 @@ export class DropdownList extends VGroup implements AbstractList, DropdownHost {
 
 /** Base class for Dropdown, Menu, and MenuItem. */
 export abstract class AbstractDropdown extends AbstractButton {
-  protected _listRoot :Root
+  protected _listRoot :Root|undefined
 
   constructor (ctx :ElementContext, parent :Element, readonly config :AbstractDropdownConfig) {
     super(ctx, parent, config)
-    this._listRoot = this.root.createPopup(ctx, {
-      type: "root",
-      autoSize: true,
-      contents: {
-        type: "dropdownList",
-        offPolicy: "stretch",
-        element: config.element,
-        model: config.model,
-      }
-    })
 
-    // if our parent maintains a list of dropdowns (it is a menu bar or a dropdown of nested
-    // dropdowns), then coordinate with our siblings via `openChild`
+    // if our parent maintains a list of dropdowns (a menu bar or a dropdown of nested dropdowns),
+    // then coordinate with our siblings via its `activeChild`
     const dhost = findDropdownHost(parent)
+
+    if (ctx.model.resolveOpt(config.model)) {
+      this.disposer.add(this._listRoot = this.root.createPopup(ctx, {
+        type: "root",
+        autoSize: true,
+        contents: {
+          type: "dropdownList",
+          offPolicy: "stretch",
+          element: config.element,
+          model: config.model,
+        }
+      }))
+
+      if (dhost) {
+        this._listRoot.host.onEmit(host => {
+          if (!host) dhost.activeChild.updateIf(c => c === this, undefined)
+        })
+      }
+    }
+
     if (dhost) {
       // no need to dispose these connections because all the lifecycles are the same
-      this._listRoot.host.onValue(host => {
-        if (host) dhost.openChild.update(this)
-        else dhost.openChild.updateIf(c => c === this, undefined)
+      dhost.activeChild.onValue(child => {
+        if (child !== undefined && child !== this) this.setOpen(false)
       })
-      dhost.openChild.onValue(open => {
-        if (open !== undefined && open !== this) this.setOpen(false)
-      })
-      this._hovered.onValue(hovered => {
-        if (hovered && dhost.autoActivate) this.setOpen(true)
+      this._hovered.when(h => h === true, _ => {
+        dhost.activeChild.update(this)
+        if (dhost.autoActivate) this.setOpen(true)
       })
     }
   }
 
-  get isOpen () :boolean { return this._listRoot.host.current !== undefined }
+  get isOpen () :boolean {
+    return this._listRoot ? this._listRoot.host.current !== undefined : false
+  }
 
   setOpen (open :boolean) {
     const lroot = this._listRoot
+    if (!lroot) return
     if (this.isOpen && !open) {
       this.root.menuPopup.updateIf(r => r === lroot, undefined)
     } else if (open && !this.isOpen) {
@@ -105,15 +115,14 @@ export abstract class AbstractDropdown extends AbstractButton {
     }
   }
 
+  dispose () {
+    this.setOpen(false)
+    super.dispose()
+  }
+
   protected onClick () { this.setOpen(true) }
 
   protected get _dropDirection () :DropDirection { return "down" }
-
-  dispose () {
-    this.setOpen(false)
-    this._listRoot.dispose()
-    super.dispose()
-  }
 }
 
 /** Defines configuration for [[Dropdown]] elements. */

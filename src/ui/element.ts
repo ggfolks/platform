@@ -463,6 +463,10 @@ export class Root extends Element {
     * root takes care of adding them to its current host and removing them when this value is
     * cleared. */
   readonly menuPopup = Mutable.local<Root|undefined>(undefined)
+
+  /** An element that is intercepting all input events. */
+  readonly targetElem = Mutable.local<Element|undefined>(undefined)
+
   // TODO: tooltipPopup
 
   constructor (readonly ctx :ElementContext, readonly config :RootConfig,
@@ -627,6 +631,7 @@ export class Root extends Element {
     // support other weird ratios between browser display units and backing buffers, we have to be
     // more explicit about all this...
     const pos = host.mouseToRoot(this, event, tmpv)
+
     const button = event.button
     const iact = this.interacts[button]
     // if this mouse event is in our bounds, stop it from propagating to (lower) roots; except in
@@ -635,31 +640,27 @@ export class Root extends Element {
     if (event.type !== "mouseup" && rect.contains(this.bounds, pos)) event.cancelBubble = true
     switch (event.type) {
     case "mousedown":
-      // if we have an open menu popup then a mousedown on us necessarily did not get processed by
-      // that popup root, so we should clear our popup
-      this.menuPopup.update(undefined)
       if (iact) {
         log.warn("Got mouse down but have active interaction?", "button", button)
         iact.cancel()
       }
-      const niact = this.interacts[button] = this.contents.maybeHandlePointerDown(event, pos)
-      // if we click and hit no interactive control, clear the focus
-      if (niact === undefined) this.focus.update(undefined)
+      const niact = this.interacts[button] = this.eventTarget.maybeHandlePointerDown(event, pos)
+      if (niact === undefined) this.droppedClick(event, pos)
       break
     case "mousemove":
       if (iact) iact.move(event, pos)
-      else this._updateElementsOver(event, pos)
+      else this._updateElementsOver(pos)
       break
     case "mouseup":
       if (iact) {
         iact.release(event, pos)
         this.interacts[button] = undefined
-        this._updateElementsOver(event, pos)
+        this._updateElementsOver(pos)
       }
       currentEditNumber++
       break
     case "dblclick":
-      this.contents.maybeHandleDoubleClick(event, pos)
+      this.eventTarget.maybeHandleDoubleClick(event, pos)
       break
     }
   }
@@ -684,9 +685,8 @@ export class Root extends Element {
           log.warn("Got touch start but have active interaction?")
           iact.cancel()
         }
-        const niact = this.interacts[0] = this.contents.maybeHandlePointerDown(event, pos)
-        // if we click and hit no interactive control, clear the focus
-        if (niact === undefined) this.focus.update(undefined)
+        const niact = this.interacts[0] = this.eventTarget.maybeHandlePointerDown(event, pos)
+        if (niact === undefined) this.droppedClick(event, pos)
 
       } else if (iact) {
         iact.cancel()
@@ -718,6 +718,20 @@ export class Root extends Element {
     }
   }
 
+  private droppedClick (event :MouseEvent|TouchEvent, pos :vec2) {
+    // if we click and hit no interactive control, clear the focus
+    this.focus.update(undefined)
+    // also clear any menu popup
+    if (!!this.menuPopup.current) {
+      this.menuPopup.update(undefined)
+      // if we're clearing a menu popup, recompute the hovered elements because they will previously
+      // have been blocked by the menu modality; we defer this one frame because we are in the
+      // middle of processing an event right now and the removal of the menu root will not happen
+      // until that event dispatch is completed
+      if (event.type === "mousedown") this.clock.once(() => this._updateElementsOver(pos))
+    }
+  }
+
   /** Dispatches a browser keyboard event to this root. */
   dispatchKeyEvent (event :KeyboardEvent) {
     // TODO: focus navigation on Tab/Shift-Tab?
@@ -736,7 +750,7 @@ export class Root extends Element {
   dispatchWheelEvent (host :Host, event :WheelEvent) {
     const pos = host.mouseToRoot(this, event, tmpv)
     if (rect.contains(this.bounds, pos)) event.cancelBubble = true
-    this.contents.maybeHandleWheel(event, pos)
+    this.eventTarget.maybeHandleWheel(event, pos)
   }
 
   wasRemoved () {
@@ -793,6 +807,8 @@ export class Root extends Element {
     canvas.restore()
   }
 
+  private get eventTarget () { return this.targetElem.current || this.contents }
+
   private _validateAndRender () {
     const changed = this.validate() || !rect.isEmpty(this._dirtyRegion)
     if (changed) {
@@ -802,14 +818,14 @@ export class Root extends Element {
     return changed
   }
 
-  private _updateElementsOver (event :MouseEvent, pos :vec2) {
+  private _updateElementsOver (pos :vec2) {
     // TODO: why are we scaling the canvas here? applyToContaining is just adding containing
     // elements to a set, surely nothing is rendering to canvas?
     const sf = this._scale.factor
     this.canvas.save()
     this.canvas.scale(sf, sf)
     const {_elementsOver, _lastElementsOver} = this
-    this.contents.applyToContaining(this.canvas, pos, elem => _elementsOver.add(elem))
+    this.eventTarget.applyToContaining(this.canvas, pos, elem => _elementsOver.add(elem))
     this.canvas.restore()
     for (const element of _lastElementsOver) {
       if (!_elementsOver.has(element)) element.handleMouseLeave(pos)

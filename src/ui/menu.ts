@@ -21,12 +21,19 @@ export class MenuBar extends HGroup implements AbstractList, DropdownHost {
   readonly elements = new Map<string, Element>()
   readonly contents :Element[] = []
 
-  readonly openChild = Mutable.local<Element|undefined>(undefined)
-  get autoActivate () { return !!this.openChild.current }
+  readonly activeChild = Mutable.local<Element|undefined>(undefined)
+  get autoActivate () { return !!this.activeChild.current }
 
   constructor (ctx :ElementContext, parent :Element, readonly config :MenuBarConfig) {
     super(ctx, parent, config)
     this.disposer.add(syncListContents(ctx, this))
+
+    // while we have an active menu, intercept all event handling from the root so that all other
+    // elements are inactive until the menu is dismissed
+    this.activeChild.onValue(child => {
+      if (child) this.root.targetElem.update(this)
+      else this.root.targetElem.updateIf(e => e === this, undefined)
+    })
   }
 }
 
