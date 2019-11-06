@@ -78,10 +78,10 @@ const propertyConfigCreators :PMap<PropertyConfigCreator> = {
       input.setAttribute("type", "file")
       document.body.appendChild(input)
       input.addEventListener("change", event => {
+        document.body.removeChild(input)
         if (!input.files || input.files.length === 0) return
         const url = URL.createObjectURL(input.files[0])
         value.update(url.toString())
-        document.body.removeChild(input)
         // TODO: call revokeObjectURL when finished
       })
       input.click()
