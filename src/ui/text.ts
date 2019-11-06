@@ -1,6 +1,6 @@
 import {dim2, vec2, rect} from "../core/math"
 import {refEquals} from "../core/data"
-import {Remover, PMap, getValue} from "../core/util"
+import {Noop, Remover, PMap, getValue} from "../core/util"
 import {Mutable, Subject, Value, falseValue} from "../core/react"
 import {Control, ControlConfig, ControlStates, Element, ElementConfig, ElementContext,
         PointerInteraction} from "./element"
@@ -353,9 +353,9 @@ export abstract class AbstractText extends Control {
     const hasSel = this.label.selection.map(([ss, se]) => se > ss)
     // we include jiggle here so that we can reset the clock fold on demand when the user clicks the
     // mouse even when we're already focused
-    const blinking = Value.join<any>(this.root.focus, hasSel, this.shadowed, this.jiggle).switchMap(
-      ([focus, hasSel, shadowed, jiggle]) => {
-        if (focus !== this || hasSel || shadowed) return falseValue
+    const blinking = Value.join<any>(this.focused, hasSel, this.shadowed, this.jiggle).switchMap(
+      ([focused, hasSel, shadowed, jiggle]) => {
+        if (!focused || hasSel || shadowed) return falseValue
         else {
           const blinkPeriod = this.cursor.config.blinkPeriod || DefaultBlinkPeriod
           return this.root.clock.fold(0, (acc, c) => acc+c.dt, refEquals).
@@ -397,8 +397,8 @@ export abstract class AbstractText extends Control {
         const mp = pos[0] - label.x - label.xoffset.current
         sel(label.span.current.computeOffset(mp), this.textState)
       },
-      release: () => {},
-      cancel: () => {}
+      release: Noop,
+      cancel: Noop,
     }
   }
 
@@ -632,6 +632,9 @@ export class EditableLabel extends AbstractText {
 
   constructor (ctx :ElementContext, parent :Element, readonly config :EditableLabelConfig) {
     super(ctx, parent, config, ctx.model.resolve(config.text))
+    this.focused.onValue(focused => {
+      if (!focused) this.label.selection.update([0, 0])
+    })
   }
 
   get styleScope () { return EditableLabelStyleScope }
@@ -650,9 +653,4 @@ export class EditableLabel extends AbstractText {
   }
 
   protected onEnter () { this.blur() }
-
-  protected lostFocus () {
-    super.lostFocus()
-    this.label.selection.update([0, 0])
-  }
 }

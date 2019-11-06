@@ -446,7 +446,6 @@ type RootChange = "resized" | "moved" | "rendered" | "removed" | "disposed"
 export class Root extends Element {
   private readonly interacts :Array<PointerInteraction|undefined> = []
   private readonly _clock = new Emitter<Clock>()
-  private readonly _unclaimedKeyEvent = new Emitter<KeyboardEvent>()
   private readonly _scale :Scale
   private readonly _hintSize :Value<dim2>
   private readonly _minSize :Value<dim2>
@@ -458,7 +457,6 @@ export class Root extends Element {
   readonly canvasElem :HTMLCanvasElement = document.createElement("canvas")
   readonly canvas :CanvasRenderingContext2D
   readonly contents :Element
-  readonly focus = Mutable.local<Control|undefined>(undefined)
   readonly cursor = Mutable.local("auto")
 
   /** Emits events pertaining to this root's size, origin, lifecycle, etc. */
@@ -532,9 +530,6 @@ export class Root extends Element {
     * higher zIndexed roots first, under the assumption that they are rendered on top of lower
     * zIndexed roots in cases where they overlap. */
   get zIndex () :number { return this.parent ? this.parent.zIndex+1 : (this.config.zIndex || 0) }
-
-  /** A stream that emits key events not consumed by focus. */
-  get unclaimedKeyEvent () :Stream<KeyboardEvent> { return this._unclaimedKeyEvent }
 
   setCursor (owner :Element, cursor :string) {
     this.cursor.update(cursor)
@@ -625,6 +620,22 @@ export class Root extends Element {
     return super.findTaggedChild(tag) || this.contents.findTaggedChild(tag)
   }
 
+  /** Requests that `control` receive the keyboard focus. */
+  requestFocus (control :Control) {
+    const host = this.host.current
+    if (host) host.focus.update(control)
+  }
+  /** Clears the keyboard focus iff `control` is the current focus. */
+  rescindFocus (control :Control) {
+    const host = this.host.current
+    if (host) host.focus.updateIf(c => c === control, undefined)
+  }
+  /** Clears the keyboard focus regardless of its current state. */
+  clearFocus () {
+    const host = this.host.current
+    if (host) host.focus.update(undefined)
+  }
+
   /** Creates a root that will be popped up over this root. This root will act as the popup root's
     * parent, allowing necessary coordination between roots. */
   createPopup (ctx :ElementContext, config :RootConfig) :Root {
@@ -666,8 +677,10 @@ export class Root extends Element {
         log.warn("Got mouse down but have active interaction?", "button", button)
         iact.cancel()
       }
-      const niact = this.interacts[button] = this.eventTarget.maybeHandlePointerDown(event, pos)
-      if (niact === undefined) this.droppedClick(event, pos)
+      if (inBounds) {
+        const niact = this.interacts[button] = this.eventTarget.maybeHandlePointerDown(event, pos)
+        if (niact === undefined) this.droppedClick(event, pos)
+      }
       break
     case "mousemove":
       if (iact) iact.move(event, pos)
@@ -679,10 +692,9 @@ export class Root extends Element {
         this.interacts[button] = undefined
         this._updateElementsOver(pos)
       }
-      currentEditNumber++
       break
     case "dblclick":
-      this.eventTarget.maybeHandleDoubleClick(event, pos)
+      if (inBounds) this.eventTarget.maybeHandleDoubleClick(event, pos)
       break
     }
     return inBounds
@@ -736,14 +748,13 @@ export class Root extends Element {
         iact.release(event, pos)
         this.interacts[0] = undefined
       }
-      currentEditNumber++
       break
     }
   }
 
   private droppedClick (event :MouseEvent|TouchEvent, pos :vec2) {
     // if we click and hit no interactive control, clear the focus
-    this.focus.update(undefined)
+    this.clearFocus()
     // also clear any menu popup
     if (!!this.menuPopup.current) {
       this.menuPopup.update(undefined)
@@ -751,23 +762,8 @@ export class Root extends Element {
       // have been blocked by the menu modality; we defer this one frame because we are in the
       // middle of processing an event right now and the removal of the menu root will not happen
       // until that event dispatch is completed
-      if (event.type === "mousedown") this.clock.once(() => this._updateElementsOver(pos))
+      if (event.type.startsWith("mouse")) this.clock.once(() => this._updateElementsOver(pos))
     }
-  }
-
-  /** Dispatches a browser keyboard event to this root. */
-  dispatchKeyEvent (event :KeyboardEvent) {
-    // TODO: focus navigation on Tab/Shift-Tab?
-    const focus = this.focus.current
-    if ((focus && focus.handleKeyEvent(event)) ||
-        (event.type === "keydown" && !!this.keymap.invokeAction(event))) {
-      // let the browser know we handled this event
-      event.preventDefault()
-      event.cancelBubble = true
-      return
-    }
-    this._unclaimedKeyEvent.emit(event)
-    if (event.type === "keyup") currentEditNumber++
   }
 
   dispatchWheelEvent (host :Host, event :WheelEvent) {
@@ -792,7 +788,6 @@ export class Root extends Element {
 
   dispose () {
     super.dispose()
-    this.focus.update(undefined)
     this.contents.dispose()
     this.events.emit("disposed")
   }
@@ -900,8 +895,9 @@ function bothEitherOrTrue (a :Value<boolean>|undefined, b :Value<boolean>|undefi
   * used) to visualize the button, and `Button` handles interactions. */
 export class Control extends Element {
   protected readonly _state = Mutable.local(ControlStates[0])
-  protected readonly _hovered = Mutable.local(false)
   protected readonly enabled :Value<boolean>
+  protected readonly hovered = Mutable.local(false)
+  protected readonly focused = Mutable.local(false)
   protected readonly contents :Element
 
   constructor (ctx :ElementContext, parent :Element|undefined, readonly config :ControlConfig) {
@@ -913,45 +909,29 @@ export class Control extends Element {
       ctx.model.resolveOpt(config.enabled),
       (command instanceof Command) ? command.enabled : undefined)
     if (enabled !== trueValue) this.disposer.add(enabled.onValue(updateState))
-    this.disposer.add(this._hovered.onValue(updateState))
+    this.hovered.onValue(updateState)
+    this.focused.onValue(updateState)
     this.contents = ctx.elem.create(ctx, this, this.config.contents)
   }
 
   get styleScope () :StyleScope { return {id: "control", states: ControlStates} }
   get state () :Value<string> { return this._state }
-  get isFocused () :boolean { return this.root.focus.current === this }
-  get isHovered () :boolean { return this._hovered.current }
+  get isFocused () :boolean { return this.focused.current }
+  get isHovered () :boolean { return this.hovered.current }
 
   /** Requests that this control receive input focus. */
-  focus () {
-    // no focus if you're not enabled
-    if (!this.enabled.current) return
-    const root = this.root
-    // if we're already focused, then nothing doing
-    if (root.focus.current === this) return
-
-    root.focus.update(this)
-    this._state.update(this.computeState)
-    const remover = root.focus.onValue(fc => {
-      if (fc !== this) {
-        this._state.update(this.computeState)
-        remover()
-        this.lostFocus()
-      }
-    })
-  }
-
+  focus () { if (this.enabled.current) this.root.requestFocus(this) }
   /** Requests that this control lose input focus. */
-  blur () {
-    this.root.focus.updateIf(c => c === this, undefined)
-  }
+  blur () { this.root.rescindFocus(this) }
 
-  handleMouseEnter (pos :vec2) { this._hovered.update(true) }
-  handleMouseLeave (pos :vec2) { this._hovered.update(false) }
+  handleMouseEnter (pos :vec2) { this.hovered.update(true) }
+  handleMouseLeave (pos :vec2) { this.hovered.update(false) }
 
   /** Requests that this control handle the supplied keyboard event.
     * This will only be called on controls that have the keyboard focus. */
   handleKeyEvent (event :KeyboardEvent) :boolean { return false }
+
+  handleFocus (focused :boolean) { this.focused.update(focused) }
 
   findChild (type :string) :Element|undefined {
     return super.findChild(type) || this.contents.findChild(type)
@@ -990,8 +970,6 @@ export class Control extends Element {
     * enabled state if it is bound to a command. */
   protected actionSpec (config :ControlConfig) :Spec<Action>|undefined { return undefined }
 
-  protected lostFocus () {}
-
   protected computePreferredSize (hintX :number, hintY :number, into :dim2) {
     dim2.copy(into, this.contents.preferredSize(hintX, hintY))
   }
@@ -1027,6 +1005,9 @@ export class Host implements Disposable {
   private readonly _pending :Array<() => void> = []
   private _dispatching = false
 
+  /** The control which has the keyboard focus, if any. */
+  readonly focus = Mutable.local<Control|undefined>(undefined)
+
   constructor (readonly elem :HTMLElement) {
     this.disposer.add(mouseEvents("mousedown", "mousemove", "mouseup", "dblclick").
                       onEmit(ev => this.handleMouseEvent(ev)))
@@ -1038,6 +1019,11 @@ export class Host implements Disposable {
       if (ev.type === "pointerdown") elem.setPointerCapture(ev.pointerId)
       else elem.releasePointerCapture(ev.pointerId)
     }))
+
+    this.focus.onChange((focus, ofocus) => {
+      if (ofocus) ofocus.handleFocus(false)
+      if (focus) focus.handleFocus(true)
+    })
   }
 
   /** The roots currently added to this host. */
@@ -1075,6 +1061,8 @@ export class Host implements Disposable {
         if (dispose) root.dispose()
         this.elem.style.cursor = "auto"
       }
+      const focus = this.focus.current
+      if (focus && focus.root === root) this.focus.update(undefined)
     }
   }
 
@@ -1117,16 +1105,27 @@ export class Host implements Disposable {
       if (r.dispatchMouseEvent(this, event)) hover = r
     })
     this._hoveredRoot.update(hover)
+    if (event.type === "mouseup") currentEditNumber += 1
   }
   handleKeyEvent (event :KeyboardEvent) {
-    // TODO: maintain a notion of which root currently has focus (if any)
-    this.dispatchEvent(event, r => r.dispatchKeyEvent(event))
+    const focus = this.focus.current
+    let handled = focus && focus.handleKeyEvent(event)
+    if (!handled && event.type === "keydown") this.dispatchEvent(event, r => {
+      if (!handled) handled = !!r.keymap.invokeAction(event)
+    })
+    if (handled) {
+      // let the browser know we handled this event
+      event.preventDefault()
+      event.cancelBubble = true
+    }
   }
+
   handleWheelEvent (event :WheelEvent) {
     this.dispatchEvent(event, r => r.dispatchWheelEvent(this, event))
   }
   handleTouchEvent (event :TouchEvent) {
     this.dispatchEvent(event, r => r.dispatchTouchEvent(this, event))
+    if (event.type === "touchend") currentEditNumber += 1
   }
 
   update (clock :Clock) {
@@ -1156,56 +1155,55 @@ export class HTMLHost extends Host {
     text.style.outline = "none"
 
     this.roots.onChange(ev => {
-      if (ev.type === "added") this.rootAdded(ev.elem)
-    })
-  }
-
-  handleKeyEvent (event :KeyboardEvent) {
-    // don't dispatch key events to the root while we have a text overlay
-    if (!this._textOverlay.parentNode) super.handleKeyEvent(event)
-  }
-
-  private rootAdded (root :Root) {
-    this.elem.appendChild(root.canvasElem)
-    const style = root.canvasElem.style
-    style.position = "absolute"
-    style.pointerEvents = "none"
-    style.left = `${root.origin[0]}px`
-    style.top = `${root.origin[1]}px`
-    style.zIndex = `${root.zIndex}`
-    const unpos = root.events.onEmit(c => {
-      if (c === "moved") {
+      if (ev.type === "added") {
+        const root = ev.elem
+        this.elem.appendChild(root.canvasElem)
+        const style = root.canvasElem.style
+        style.position = "absolute"
+        style.pointerEvents = "none"
         style.left = `${root.origin[0]}px`
         style.top = `${root.origin[1]}px`
+        style.zIndex = `${root.zIndex}`
+        const unpos = root.events.onEmit(c => {
+          if (c === "moved") {
+            style.left = `${root.origin[0]}px`
+            style.top = `${root.origin[1]}px`
+          }
+        })
+        const unviz = root.visible.onValue(
+          viz => root.canvasElem.style.visibility = viz ? "visible" : "hidden")
+
+        root.events.whenOnce(e => e === "removed", _ => {
+          this.elem.removeChild(root.canvasElem)
+          unviz(); unpos()
+        })
       }
     })
-    const unviz = root.visible.onValue(
-      viz => root.canvasElem.style.visibility = viz ? "visible" : "hidden")
-    // TODO: this text overlay stuff needs to handle multiple roots, which will need the host to
-    // have some idea of a host-wide focus; we don't have that now so we punt
+
     const clearText = () => {
       const text = this._textOverlay
+      text.setSelectionRange(0, 0)
       if (text.parentNode) {
         this.elem.removeChild(text)
         this._clearText()
         this._clearText = NoopRemover
       }
     }
-    const unfocus = root.focus.onValue(focus => {
+    this.focus.onValue(focus => {
       const text = this._textOverlay
       if (focus && focus.config.type === "text") {
         this._clearText()
         this._clearText = (focus as any).configInput(text) // avoid importing Text here
-        text.style.zIndex = `${root.zIndex+1}`
+        text.style.zIndex = `${focus.root.zIndex+1}`
         this.elem.appendChild(text)
         text.focus() // for mobile (has to happen while handling touch event)
         setTimeout(() => text.focus(), 1) // for desktop (fails if done immediately, yay!)
       } else clearText()
     });
+  }
 
-    root.events.whenOnce(e => e === "removed", _ => {
-      this.elem.removeChild(root.canvasElem)
-      unviz(); unfocus(); unpos(); clearText()
-    })
+  handleKeyEvent (event :KeyboardEvent) {
+    // don't dispatch key events to the root while we have a text overlay
+    if (!this._textOverlay.parentNode) super.handleKeyEvent(event)
   }
 }

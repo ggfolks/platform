@@ -511,7 +511,7 @@ export class GraphView extends AbsGroup {
     if (!event.shiftKey) {
       return
     }
-    this.root.focus.update(undefined)
+    this.root.clearFocus()
     this.root.setCursor(this, "crosshair")
     const [ox, oy] = pos
     const select = this._select = rect.fromValues(ox, oy, 0, 0)
@@ -888,7 +888,7 @@ export class NodeView extends VGroup {
       const position = constraints.position!
       origins.set(key, position.slice())
     }
-    this.root.focus.update(undefined)
+    this.root.clearFocus()
     const cancel = () => this.clearCursor(this)
     return {
       type: "node",
@@ -1384,7 +1384,7 @@ export class Terminal extends Element {
   }
   handlePointerDown (event :MouseEvent|TouchEvent, pos :vec2) {
     if (!this._editable.current) return
-    this.root.focus.update(undefined)
+    this.root.clearFocus()
     const endpoint = this._endpoint = vec2.clone(pos)
     this.dirty()
     const graphView = getGraphView(this)

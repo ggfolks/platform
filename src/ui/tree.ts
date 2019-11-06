@@ -264,9 +264,9 @@ export class TreeViewNode extends DragElement {
 
   private _setDropNode (node :TreeViewNode|undefined) {
     if (this._dropNode === node) return
-    if (this._dropNode) this._dropNode._hovered.update(false)
+    if (this._dropNode) this._dropNode.hovered.update(false)
     this._dropNode = node
-    if (node) node._hovered.update(true)
+    if (node) node.hovered.update(true)
   }
 
   private get _root () :TreeView {

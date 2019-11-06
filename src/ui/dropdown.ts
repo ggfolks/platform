@@ -79,7 +79,7 @@ export abstract class AbstractDropdown extends AbstractButton {
       dhost.activeChild.onValue(child => {
         if (child !== undefined && child !== this) this.setOpen(false)
       })
-      this._hovered.when(h => h === true, _ => {
+      this.hovered.when(h => h === true, _ => {
         if (dhost.autoActivate) this.setOpen(true)
         dhost.activeChild.update(this)
       })
