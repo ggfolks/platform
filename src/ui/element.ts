@@ -401,12 +401,23 @@ const RootState = Value.constant(RootStates[0])
 /** Defines configuration for [[Root]] elements. */
 export interface RootConfig extends ElementConfig {
   type :"root"
+  /** The HiDPI scale factor of the browser. Generally `window.devicePixelRatio`. */
   scale? :Scale
+  /** Whether or not to auto-size this root when its contents are invalidated. */
   autoSize? :boolean
+  /** The maximum size of this root. If supplied, both dimensions must be non-zero. */
   hintSize? :Spec<Value<dim2>>
+  /** The minimum size that will be used when auto-sizing this root. Either dimension can be zero to
+    * indicate that a minimum size should not be effected in that dimension. */
   minSize? :Spec<Value<dim2>>
+  /** The z-index at which to render this root relative to other roots. Higher indices are rendered
+    * on top of lower indices. */
   zIndex? :number
+  /** An inert root will not intercept or handle input events. */
+  inert? :boolean
+  /** Key bindings to be processed by this root. */
   keymap? :PMap<ModMap>
+  /** The main element to display in this root. */
   contents :ElementConfig
 }
 
@@ -459,13 +470,17 @@ export class Root extends Element {
   /** The host which is displaying this root, if the root is currently being displayed. */
   readonly host = Mutable.local<Host|undefined>(undefined)
 
+  /** An element that is intercepting all input events. */
+  readonly targetElem = Mutable.local<Element|undefined>(undefined)
+
   /** The menu popup currently active for this root. Menus set themselves into this value and the
     * root takes care of adding them to its current host and removing them when this value is
     * cleared. */
   readonly menuPopup = Mutable.local<Root|undefined>(undefined)
 
-  /** An element that is intercepting all input events. */
-  readonly targetElem = Mutable.local<Element|undefined>(undefined)
+  /** The drag popup currently active for this root. Elements that perform drag and drop can set
+    * their drag root into this value and remove it when the drag is completed. */
+  readonly dragPopup = Mutable.local<Root|undefined>(undefined)
 
   // TODO: tooltipPopup
 
@@ -484,20 +499,26 @@ export class Root extends Element {
     if (config.keymap) this.keymap.pushBindings(config.keymap, ctx.model)
     this.contents = ctx.elem.create(ctx, this, config.contents)
 
-    this.menuPopup.onChange((pop, opop) => {
+    const managePops = (pop :Root|undefined, opop :Root|undefined) => {
       const host = this.host.current
       if (host && opop) host.removeRoot(opop, false)
       if (host && pop) host.addRoot(pop)
-    })
+    }
+    this.menuPopup.onChange(managePops)
+    this.dragPopup.onChange(managePops)
 
     this.host.onChange((host, ohost) => {
-      const menu = this.menuPopup.current
-      if (menu && ohost) {
-        ohost.removeRoot(menu)
-        // if we're unhosted (dismissed) clear any sub-popups
-        this.menuPopup.update(undefined)
+      const hostPop = (popM :Mutable<Root|undefined>) => {
+        const pop = popM.current
+        if (pop && ohost) {
+          ohost.removeRoot(pop)
+          // if we're unhosted (dismissed) clear any sub-popups
+          popM.update(undefined)
+        }
+        if (pop && host) host.addRoot(pop)
       }
-      if (menu && host) host.addRoot(menu)
+      hostPop(this.menuPopup)
+      hostPop(this.dragPopup)
     })
   }
 
@@ -1063,8 +1084,7 @@ export class Host implements Disposable {
       for (let ii = this._roots.length - 1; ii >= 0; ii--) {
         if (event.cancelBubble) return
         const root = this._roots.elemAt(ii)
-        if (root) op(root)
-        else log.warn("No root at index", "ii", ii, "event", event.type)
+        if (!root.config.inert) op(root)
       }
     } finally {
       this._dispatching = false
