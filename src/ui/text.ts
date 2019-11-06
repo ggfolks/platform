@@ -373,11 +373,6 @@ export abstract class AbstractText extends Control {
   handlePointerDown (event :MouseEvent|TouchEvent, pos :vec2) :PointerInteraction|undefined {
     if (event instanceof MouseEvent && event.button !== 0) return undefined
 
-    // if we're already focused, jiggle the cursor blinker so it restarts; this ensures that the
-    // user immediately sees the cursor at the new location
-    if (this.isFocused) this.jiggle.update(!this.jiggle.current)
-    else this.focus()
-
     // figure out where the click landed
     const label = this.label, dp = pos[0] - label.x - label.xoffset.current
     const doff = label.span.current.computeOffset(dp)
@@ -390,6 +385,11 @@ export abstract class AbstractText extends Control {
     default:
     case 3: sel = allSelector(label.text.current, doff, this.textState) ; break
     }
+
+    // if we're already focused, jiggle the cursor blinker so it restarts; this ensures that the
+    // user immediately sees the cursor at the new location
+    if (this.isFocused) this.jiggle.update(!this.jiggle.current)
+    else this.focus()
 
     // as the mouse moves, move the cursor and update the selection
     return {
@@ -463,6 +463,10 @@ export abstract class AbstractText extends Control {
     }
     input.addEventListener("keypress", onPress)
     this.shadowed.update(true)
+
+    input.value = this.textState.text.current
+    const cpos = this.coffset.current
+    input.setSelectionRange(cpos, cpos)
 
     return () => {
       input.removeEventListener("input", onInput)
