@@ -141,11 +141,14 @@ export function makeModel<K extends ModelKey> (
   return {keys, resolve: resolver(fn)}
 }
 
-/** Provides element models from a model data object.
-  * The keys of the model are the keys of the data object in iteration order. */
-export function dataModel (data :ModelData) :ReadableElementsModel<string> {
+/** Provides element models from a model data object. The keys default to the keys of the data
+  * object in iteration order, but a custom keys value can be provided. */
+export function dataModel (
+  data :ModelData,
+  keys :Value<string[]> = Value.constant(Object.keys(data))
+) :ReadableElementsModel<string> {
   return {
-    keys: Value.constant(Object.keys(data) as Iterable<string>),
+    keys: keys as any as Value<Iterable<string>>,
     resolve: resolver(key => data[key] as ModelData)
   }
 }
