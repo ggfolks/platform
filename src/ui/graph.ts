@@ -368,7 +368,6 @@ export class GraphViewer extends VGroup {
         onClick: "createPage",
       },
       model: "pagesModel",
-      key: "id",
       activeKey: this.activePage,
       updateOrder: "updateOrder",
       constraints: {stretch: true},

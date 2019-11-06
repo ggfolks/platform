@@ -9,10 +9,12 @@ import {DefaultPaint, PaintConfig, Spec} from "./style"
 import {AxisConfig, HGroup, OffAxisPolicy, VGroup} from "./group"
 import {strokeLinePath} from "./util"
 
-export type ElementConfigMaker = (model :Model) => ElementConfig
+export type ElementConfigMaker = (model :Model, key :ModelKey) => ElementConfig
 
-function elementConfig (element :ElementConfig|ElementConfigMaker, model :Model) {
-  return typeof element === "function" ? element(model) : element
+export function elementConfig (
+  element :ElementConfig|ElementConfigMaker, model :Model, key :ModelKey
+) {
+  return typeof element === "function" ? element(model, key) : element
 }
 
 /** Base interface for list-like elements. */
@@ -64,7 +66,6 @@ export class VList extends VGroup implements AbstractList {
 /** Defines configuration for [[DragVList]] elements. */
 export interface DragVListConfig extends AbstractListConfig {
   type :"dragVList"
-  key :Spec<Value<ModelKey>>
   updateOrder :Spec<OrderUpdater>
 }
 
@@ -76,10 +77,10 @@ export class DragVList extends VGroup implements AbstractList {
   constructor (ctx :ElementContext, parent :Element, readonly config :DragVListConfig) {
     super(ctx, parent, config)
     const updateOrder = ctx.model.resolve(config.updateOrder)
-    this.disposer.add(syncListContents(ctx, this, model => ({
+    this.disposer.add(syncListContents(ctx, this, (model, key) => ({
       type: "dragVElement",
-      contents: elementConfig(config.element, model),
-      key: config.key,
+      contents: elementConfig(config.element, model, key),
+      key: Value.constant(key),
       updateOrder,
     })))
   }
@@ -350,7 +351,7 @@ export function syncListContents (
       let elem = elements.get(key)
       if (!elem) {
         const emodel = model.resolve(key)
-        elem = ctx.elem.create(ctx.remodel(emodel), list, elementConfig(element, emodel))
+        elem = ctx.elem.create(ctx.remodel(emodel), list, elementConfig(element, emodel, key))
         list.elements.set(key, elem)
       }
       contents.push(elem)

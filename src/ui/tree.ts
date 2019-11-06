@@ -14,7 +14,6 @@ type ParentOrderUpdater = (key :ModelKey, parent :ModelKey|undefined, index :num
 /** Defines configuration for [[TreeView]] elements. */
 export interface TreeViewConfig extends AbstractListConfig {
   type :"treeView"
-  key :Spec<Value<ModelKey>>
   selectedKeys :Spec<MutableSet<ModelKey>>
   updateParentOrder? :Spec<ParentOrderUpdater>
 }
@@ -32,7 +31,7 @@ export class TreeView extends VGroup implements AbstractList {
     super(ctx, parent, config)
     this._selectedKeys = ctx.model.resolve(config.selectedKeys)
     const updateParentOrder = ctx.model.resolveOpt(config.updateParentOrder)
-    this.disposer.add(syncListContents(ctx, this, {
+    this.disposer.add(syncListContents(ctx, this, (model, key) => ({
       type: "row",
       offPolicy: "stretch",
       contents: [
@@ -65,7 +64,7 @@ export class TreeView extends VGroup implements AbstractList {
             {
               type: "treeViewNode",
               contents: config.element,
-              key: config.key,
+              key: Value.constant(key),
               selectedKeys: this._selectedKeys,
               updateParentOrder,
             },
@@ -74,14 +73,14 @@ export class TreeView extends VGroup implements AbstractList {
               visible: "expanded",
               element: config.element,
               model: "childModel",
-              key: config.key,
+              key: Value.constant(key),
               selectedKeys: this._selectedKeys,
               updateParentOrder,
             },
           ],
         },
       ],
-    }))
+    })))
   }
 
   get styleScope () { return TreeViewStyleScope }

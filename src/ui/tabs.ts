@@ -2,7 +2,10 @@ import {rect} from "../core/math"
 import {Mutable, Value} from "../core/react"
 import {Element, ElementConfig, ElementContext} from "./element"
 import {AxisConfig, OffAxisPolicy, VGroup} from "./group"
-import {DragElementConfig, DragElement, DragElementStates, HList, OrderUpdater} from "./list"
+import {
+  DragElementConfig, DragElement, DragElementStates, ElementConfigMaker,
+  HList, HListConfig, OrderUpdater, elementConfig
+} from "./list"
 import {ModelKey, ElementsModel, Spec} from "./model"
 
 /** Defines configuration for [[TabbedPane]] elements. */
@@ -10,9 +13,8 @@ export interface TabbedPaneConfig extends AxisConfig {
   type :"tabbedPane"
   tabElement :ElementConfig
   addTabElement? :ElementConfig
-  contentElement :ElementConfig
+  contentElement :ElementConfig|ElementConfigMaker
   model :Spec<ElementsModel<ModelKey>>
-  key :Spec<Value<ModelKey>>
   activeKey :Spec<Mutable<ModelKey>>
   updateOrder? :Spec<OrderUpdater>
 }
@@ -27,15 +29,15 @@ export class TabbedPane extends VGroup {
     super(ctx, parent, config)
     const activeKey = ctx.model.resolve(config.activeKey)
     const updateOrder = config.updateOrder && ctx.model.resolve(config.updateOrder)
-    const hlistConfig = {
+    const hlistConfig :HListConfig = {
       type: "hlist",
-      element: {
+      element: (model, key) => ({
         type: "tab",
         contents: config.tabElement,
-        key: config.key,
+        key: Value.constant(key),
         activeKey,
         updateOrder,
-      },
+      }),
       model: config.model,
     }
     this.contents.push(
@@ -55,7 +57,8 @@ export class TabbedPane extends VGroup {
       const oldElement = this.contents[1]
       if (oldElement) oldElement.dispose()
       const model = tabsModel.resolve(activeKey)
-      this.contents[1] = ctx.elem.create(ctx.remodel(model), this, config.contentElement)
+      const contentConfig = elementConfig(config.contentElement, model, activeKey)
+      this.contents[1] = ctx.elem.create(ctx.remodel(model), this, contentConfig)
       this.invalidate()
     }))
   }
