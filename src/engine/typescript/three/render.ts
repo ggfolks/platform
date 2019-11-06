@@ -533,7 +533,9 @@ class ThreeMeshRenderer extends ThreeObjectComponent implements MeshRenderer {
     this._materials.length = mats.length
   }
 
-  get materialConfig () :ConfigurableConfig { return this.material.createConfig() }
+  @property("material", {editable: false}) get materialConfig () :ConfigurableConfig {
+    return this.material.createConfig()
+  }
   set materialConfig (config :ConfigurableConfig) {
     this.material = this.material.reconfigure(undefined, config) as Material
   }
@@ -781,8 +783,9 @@ class ThreeModel extends ThreeObjectComponent implements Model {
 registerConfigurableType("component", ["render"], "model", ThreeModel)
 
 class ThreeAnimation extends TypeScriptComponent implements Animation {
-  readonly playAutomaticallyValue = Mutable.local(true)
-  readonly playingValue = Mutable.local("")
+  @property("boolean") playAutomatically = true
+  @property("select", {options: [""]}) playing = ""
+
   readonly urlsValue = Mutable.local<string[]>([])
 
   private readonly _urls :string[]
@@ -802,14 +805,6 @@ class ThreeAnimation extends TypeScriptComponent implements Animation {
     this._urls.length = urls.length
     for (let ii = 0; ii < urls.length; ii++) this._urls[ii] = urls[ii]
   }
-
-  @property("boolean") get playAutomatically () :boolean {
-    return this.playAutomaticallyValue.current
-  }
-  set playAutomatically (play :boolean) { this.playAutomaticallyValue.update(play) }
-
-  @property("select", {options: [""]}) get playing () :string { return this.playingValue.current }
-  set playing (playing :string) { this.playingValue.update(playing) }
 
   get propertiesMeta () :RMap<string, PropertyMeta> {
     return RMap.fromValue(this.urlsValue, urls => {
@@ -869,8 +864,11 @@ class ThreeAnimation extends TypeScriptComponent implements Animation {
           this._updateUrls()
         })),
     )
+  }
 
-    this._disposer.add(this.playingValue.onValue(name => {
+  init () {
+    super.init()
+    this._disposer.add(this.getProperty<string>("playing").onValue(name => {
       if (name) this.play(name)
       else this.stop()
     }))

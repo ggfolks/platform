@@ -2,7 +2,7 @@ import {loadImage} from "../../core/assets"
 import {Clock} from "../../core/clock"
 import {refEquals} from "../../core/data"
 import {mat4, quat, vec3, vec4, rect} from "../../core/math"
-import {Mutable, Value} from "../../core/react"
+import {ChangeFn, Mutable, Value} from "../../core/react"
 import {MutableMap, RMap} from "../../core/rcollect"
 import {Disposer, NoopRemover, PMap, getValue, log} from "../../core/util"
 import {Graph as GraphObject, GraphConfig} from "../../graph/graph"
@@ -94,13 +94,8 @@ export class TypeScriptConfigurable implements Configurable {
     const valueName = getPropertyValueName(name)
     let property = this[valueName]
     if (!property) {
-      log.warn("Falling back to non-listenable Mutable", "name", name)
-      this[valueName] = property = Mutable.deriveMutable(
-        () => NoopRemover,
-        () => this[name],
-        value => this[name] = value,
-        refEquals,
-      )
+      log.warn("Missing property decorator for field", "name", name)
+      this[valueName] = property = this._createPropertyValue(name, {type: "any", constraints: {}})
     }
     return property as Value<T>|Mutable<T>
   }
@@ -143,21 +138,47 @@ export class TypeScriptConfigurable implements Configurable {
   }
 
   protected _createPropertyValue (name :string, meta :PropertyMeta) :Value<any> {
-    // the default implementation assumes that we want a simple property initialized to the
-    // current value
+    // TODO: provide a way for read-only properties to advertise change, perhaps through a
+    // custom message
     if (meta.constraints.readonly) {
-      const value = Value.constant<any>(this[name])
-      Object.defineProperty(this, name, {enumerable: true, value: this[name]})
-      return value
-    } else {
-      const value = Mutable.local<any>(this[name])
-      Object.defineProperty(this, name, {
-        enumerable: true,
-        get: () => value.current,
-        set: newValue => value.update(newValue),
-      })
-      return value
+      return Value.deriveValue(refEquals, () => NoopRemover, () => this[name])
     }
+    let listener :ChangeFn<any>|undefined
+    const propertyValue = Mutable.deriveMutable(
+      dispatch => {
+        listener = dispatch
+        return () => listener = undefined
+      },
+      () => this[name],
+      value => this[name] = value,
+      refEquals,
+    )
+    const descriptor = this._getPropertyDescriptor(name)
+    const descriptorGet = descriptor.get
+    const getter = descriptorGet
+      ? () => descriptorGet.call(this)
+      : () => descriptor.value
+    const descriptorSet = descriptor.set
+    const setter = descriptorSet
+      ? (value :any) => descriptorSet.call(this, value)
+      : (value :any) => descriptor.value = value
+    Object.defineProperty(this, name, {
+      get: getter,
+      set: value => {
+        const oldValue = getter()
+        setter(value)
+        if (listener && value !== oldValue) listener(value, oldValue)
+      },
+    })
+    return propertyValue
+  }
+
+  protected _getPropertyDescriptor (name :string) :PropertyDescriptor {
+    for (let object = this; object; object = Object.getPrototypeOf(object)) {
+      const descriptor = Object.getOwnPropertyDescriptor(object, name)
+      if (descriptor) return descriptor
+    }
+    return {value: undefined}
   }
 }
 
@@ -1078,7 +1099,7 @@ export class TypeScriptMeshFilter extends TypeScriptComponent implements MeshFil
   get mesh () :Mesh|null { return this.meshValue.current }
   set mesh (mesh :Mesh|null) { this.meshValue.update(mesh as TypeScriptMesh|null) }
 
-  get meshConfig () :ConfigurableConfig|null {
+  @property("mesh", {editable: false}) get meshConfig () :ConfigurableConfig|null {
     return this.gameEngine.createConfigurableConfig(this.mesh)
   }
   set meshConfig (config :ConfigurableConfig|null) {
