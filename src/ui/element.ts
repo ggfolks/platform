@@ -624,20 +624,21 @@ export class Root extends Element {
 
   /** Dispatches a browser mouse event to this root.
     * @param host the host that is liaising between this root and the browser events.
-    * @param event the browser event to dispatch. */
-  dispatchMouseEvent (host :Host, event :MouseEvent) {
+    * @param event the browser event to dispatch.
+    * @return whether this event was in this root's bounds. */
+  dispatchMouseEvent (host :Host, event :MouseEvent) :boolean {
     // TODO: we're assuming the root/renderer scale is the same as the browser display unit to pixel
     // ratio (mouse events come in display units), so everything "just lines up"; if we want to
     // support other weird ratios between browser display units and backing buffers, we have to be
     // more explicit about all this...
-    const pos = host.mouseToRoot(this, event, tmpv)
+    const pos = host.mouseToRoot(this, event, tmpv), inBounds = rect.contains(this.bounds, pos)
+    const button = event.button, iact = this.interacts[button]
 
-    const button = event.button
-    const iact = this.interacts[button]
     // if this mouse event is in our bounds, stop it from propagating to (lower) roots; except in
     // the case of mouseup because a mouse interaction might start on one root and then drag over to
     // our root, but we want to be sure the original root also hears about the mouseup
-    if (event.type !== "mouseup" && rect.contains(this.bounds, pos)) event.cancelBubble = true
+    if (event.type !== "mouseup" && inBounds) event.cancelBubble = true
+
     switch (event.type) {
     case "mousedown":
       if (iact) {
@@ -663,6 +664,7 @@ export class Root extends Element {
       this.eventTarget.maybeHandleDoubleClick(event, pos)
       break
     }
+    return inBounds
   }
 
   /** Dispatches a browser touch event to this root.
@@ -753,11 +755,18 @@ export class Root extends Element {
     this.eventTarget.maybeHandleWheel(event, pos)
   }
 
+  wasAdded (host :Host) {
+    this.host.update(host)
+    const unwatch = host.hoveredRoot.onChange((root, oroot) => {
+      if (oroot === this) this._clearElementsOver()
+    })
+    this.events.whenOnce(e => e === "removed", unwatch)
+  }
+
   wasRemoved () {
     this.events.emit("removed")
     this.host.update(undefined)
-    for (const elem of this._lastElementsOver) elem.handleMouseLeave(vec2zero)
-    this._lastElementsOver.clear()
+    this._clearElementsOver()
   }
 
   dispose () {
@@ -836,6 +845,11 @@ export class Root extends Element {
     _lastElementsOver.clear()
     this._elementsOver = _lastElementsOver
     this._lastElementsOver = _elementsOver
+  }
+
+  private _clearElementsOver () {
+    for (const elem of this._lastElementsOver) elem.handleMouseLeave(vec2zero)
+    this._lastElementsOver.clear()
   }
 }
 
@@ -988,6 +1002,7 @@ export class Control extends Element {
 export class Host implements Disposable {
   private readonly disposer = new Disposer()
   private readonly _roots = MutableList.local<Root>()
+  private readonly _hoveredRoot = Mutable.local<Root|undefined>(undefined)
   private readonly _pending :Array<() => void> = []
   private _dispatching = false
 
@@ -1004,7 +1019,11 @@ export class Host implements Disposable {
     }))
   }
 
+  /** The roots currently added to this host. */
   get roots () :RList<Root> { return this._roots }
+
+  /** The root over which the mouse is currently hovered, if any. */
+  get hoveredRoot () :Value<Root|undefined> { return this._hoveredRoot }
 
   /** Adds `root` to this host. The root will be inserted into the root list after all roots with a
     * lower or equal z-index, and before any roots with a higher z-index. */
@@ -1017,7 +1036,7 @@ export class Host implements Disposable {
         if (roots.elemAt(index).zIndex > root.zIndex) break
       }
       this._roots.insert(root, index)
-      root.host.update(this)
+      root.wasAdded(this)
       // TODO: we should only do this when the mouse is over the root
       root.cursor.onValue(cursor => this.elem.style.cursor = cursor)
     }
@@ -1073,7 +1092,11 @@ export class Host implements Disposable {
   }
 
   handleMouseEvent (event :MouseEvent) {
-    this.dispatchEvent(event, r => r.dispatchMouseEvent(this, event))
+    let hover :Root|undefined = undefined
+    this.dispatchEvent(event, r => {
+      if (r.dispatchMouseEvent(this, event)) hover = r
+    })
+    this._hoveredRoot.update(hover)
   }
   handleKeyEvent (event :KeyboardEvent) {
     // TODO: maintain a notion of which root currently has focus (if any)
