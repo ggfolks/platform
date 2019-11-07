@@ -31,7 +31,7 @@ abstract class TransformedContainer extends Control {
     return intersects
   }
 
-  dirty (region :rect = this.expandBounds(this._bounds), fromChild :boolean = false) {
+  dirty (region :rect = this.renderBounds, fromChild = false) {
     // we might be called from our super constructor, at which time _offset is not yet initialized
     if (this._offset === undefined) return
     if (!fromChild) {
@@ -68,6 +68,11 @@ abstract class TransformedContainer extends Control {
     return this.enabled.current ? "normal" : "disabled"
   }
 
+  protected relayout () {
+    const size = this.contents.preferredSize(this.width, this.height)
+    this.contents.setBounds(rect.fromValues(this.x, this.y, size[0], size[1]))
+  }
+
   protected rerender (canvas :CanvasRenderingContext2D, region :rect) {
     const {x, y, offset, scale} = this
     canvas.save()
@@ -78,11 +83,6 @@ abstract class TransformedContainer extends Control {
     canvas.scale(scale, scale)
     this.contents.render(canvas, this._transformRegion(region))
     canvas.restore()
-  }
-
-  protected relayout () {
-    const size = this.contents.preferredSize(this.width, this.height)
-    this.contents.setBounds(rect.fromValues(this.x, this.y, size[0], size[1]))
   }
 
   protected startScroll (event :MouseEvent|TouchEvent, pos :vec2) :PointerInteraction|undefined {

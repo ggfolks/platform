@@ -71,8 +71,8 @@ function cursorBounds (
 export type OrderUpdater = (key :ModelKey, index :number) => void
 
 export interface ReorderDragger extends DragOwner {
-  validate () :void
-  render (canvas :CanvasRenderingContext2D, region :rect) :void
+  cursor :Cursor
+  layout () :void
 }
 
 export function makeReorderer (
@@ -96,14 +96,12 @@ export function makeReorderer (
       }
     },
     cancelDrag () { dropIndex.update(undefined) },
-    validate () {
+    cursor,
+    layout () {
       const index = dropIndex.current
-      if (index !== undefined) {
-        cursor.setBounds(cursorBounds(host, elements, horizontal, gap, cursor.lineWidth, index))
-        cursor.validate()
-      }
+      if (index !== undefined) cursor.setBounds(
+        cursorBounds(host, elements, horizontal, gap, cursor.lineWidth, index))
     },
-    render (canvas, region) { cursor.render(canvas, region) }
   }
 }
 

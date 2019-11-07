@@ -2,7 +2,7 @@ import {dim2, rect, vec2} from "../core/math"
 import {Mutable, Value} from "../core/react"
 import {Action, NoopAction, Spec} from "./model"
 import {Control, ControlConfig, ControlStates, Element, ElementConfig, ElementContext,
-        PointerInteraction} from "./element"
+        ElementOp, PointerInteraction} from "./element"
 
 export interface ButtonConfig extends ControlConfig {
   type :"button"
@@ -34,10 +34,10 @@ export abstract class AbstractButton extends Control {
     this._pressed.update(true)
     this.focus()
     return {
-      move: (event, pos) => this._pressed.update(rect.contains(this.bounds, pos)),
+      move: (event, pos) => this._pressed.update(rect.contains(this.hitBounds, pos)),
       release: () => {
         this._pressed.update(false)
-        if (rect.contains(this.bounds, pos)) this.onClick()
+        if (rect.contains(this.hitBounds, pos)) this.onClick()
       },
       cancel: () => this._pressed.update(false)
     }
@@ -106,20 +106,19 @@ export class Toggle extends Control {
       (this.checkedContents && this.checkedContents.findTaggedChild(tag))
   }
 
-  applyToContaining (canvas :CanvasRenderingContext2D, pos :vec2, op :(element :Element) => void) {
+  applyToChildren (op :ElementOp) {
+    super.applyToChildren(op)
+    if (this.checkedContents) op(this.checkedContents)
+  }
+  applyToContaining (canvas :CanvasRenderingContext2D, pos :vec2, op :ElementOp) {
     const applied = super.applyToContaining(canvas, pos, op)
     if (applied && this.checkedContents) this.checkedContents.applyToContaining(canvas, pos, op)
     return applied
   }
-  applyToIntersecting (region :rect, op :(element :Element) => void) {
+  applyToIntersecting (region :rect, op :ElementOp) {
     const applied = super.applyToIntersecting(region, op)
     if (applied && this.checkedContents) this.checkedContents.applyToIntersecting(region, op)
     return applied
-  }
-
-  dispose () {
-    super.dispose()
-    if (this.checkedContents) this.checkedContents.dispose()
   }
 
   handlePointerDown (event :MouseEvent|TouchEvent, pos :vec2) :PointerInteraction|undefined {
@@ -128,7 +127,7 @@ export class Toggle extends Control {
     return {
       move: (event, pos) => {},
       release: () => {
-        if (rect.contains(this.bounds, pos)) this.onClick()
+        if (rect.contains(this.hitBounds, pos)) this.onClick()
       },
       cancel: () => {}
     }
@@ -145,12 +144,7 @@ export class Toggle extends Control {
 
   protected relayout () {
     super.relayout()
-    if (this.checkedContents) this.checkedContents.setBounds(this._bounds)
-  }
-
-  protected revalidate () {
-    super.revalidate()
-    if (this.checkedContents) this.checkedContents.validate()
+    if (this.checkedContents) this.checkedContents.setBounds(this.bounds)
   }
 
   protected rerender (canvas :CanvasRenderingContext2D, region :rect) {

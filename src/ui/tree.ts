@@ -40,6 +40,11 @@ abstract class AbstractTreeView extends VGroup implements ListLike {
 
   get styleScope () { return TreeViewStyleScope }
 
+  applyToChildren (op :(elem :Element) => void) {
+    super.applyToChildren(op)
+    op(this.cursor)
+  }
+
   visitNodes (
     op :(node :TreeViewNode, parentKey :ModelKey|undefined, index :number) => void,
     parentKey? :ModelKey,

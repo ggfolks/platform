@@ -7,10 +7,11 @@ import {GraphConfig, getImplicitNodeId} from "../graph/graph"
 import {InputEdge} from "../graph/node"
 import {Box} from "./box"
 import {createDropdownItemConfig} from "./dropdown"
-import {Element, ElementConfig, ElementContext, PointerInteraction, Observer} from "./element"
+import {Element, ElementConfig, ElementContext, ElementOp, PointerInteraction} from "./element"
 import {AbsConstraints, AbsGroup, AxisConfig, VGroup, OffAxisPolicy} from "./group"
 import {VList} from "./list"
-import {Action, Command, Model, ReadableElementsModel, ElementsModel, Spec, dataModel} from "./model"
+import {Action, Command, Model, ReadableElementsModel, ElementsModel, Spec,
+        dataModel} from "./model"
 import {CtrlMask, MetaMask, ShiftMask} from "./keymap"
 import {InputValue, NodeCopier, NodeCreator, NodeEdit} from "./node"
 import {Panner} from "./scroll"
@@ -468,7 +469,7 @@ export class GraphView extends AbsGroup {
     }
   }
 
-  applyToContaining (canvas :CanvasRenderingContext2D, pos :vec2, op :(element :Element) => void) {
+  applyToContaining (canvas :CanvasRenderingContext2D, pos :vec2, op :ElementOp) {
     const applied = super.applyToContaining(canvas, pos, op)
     vec2.set(this._lastContaining, pos[0] - this.x, pos[1] - this.y)
     return applied
@@ -553,28 +554,23 @@ export class GraphView extends AbsGroup {
     }
   }
 
-  expandBounds (bounds :rect) :rect {
-    const base = super.expandBounds(bounds)
-    if (!this._select) return base
-    return rect.union(this._expandedBounds, base, this._expandSelect(this._select))
-  }
-
-  private _expandSelect (select :rect) :rect {
-    return addDecorationBounds(
-      tmpr,
-      select,
-      this._selectBackground.current,
-      this._selectBorder.current,
-    )
+  protected expandBounds (hbounds: rect, rbounds :rect) {
+    if (this._select) rect.union(rbounds, rbounds, this._expandSelect(this._select))
   }
 
   protected rerender (canvas :CanvasRenderingContext2D, region :rect) {
     super.rerender(canvas, region)
-    if (!this._select) return
-    canvas.translate(this._select[0], this._select[1])
-    this._selectBackground.current.render(canvas, dim2.set(tmpd, this._select[2], this._select[3]))
-    this._selectBorder.current.render(canvas, dim2.set(tmpd, this._select[2], this._select[3]))
-    canvas.translate(-this._select[0], -this._select[1])
+    const select = this._select
+    if (!select) return
+    canvas.translate(select[0], select[1])
+    this._selectBackground.current.render(canvas, dim2.set(tmpd, select[2], select[3]))
+    this._selectBorder.current.render(canvas, dim2.set(tmpd, select[2], select[3]))
+    canvas.translate(-select[0], -select[1])
+  }
+
+  private _expandSelect (select :rect) :rect {
+    const background = this._selectBackground.current, border = this._selectBorder.current
+    return addDecorationBounds(tmpr, select, background, border)
   }
 
   private _layoutGraph (keys :string[], models :Model[]) {
@@ -973,7 +969,7 @@ export class EdgeView extends Element {
   private readonly _controlPointOffset = this.observe(DEFAULT_CONTROL_POINT_OFFSET)
   private readonly _outlineWidth = this.observe(0)
   private readonly _outlineAlpha = this.observe(1)
-  private _hoverKeys :Observer<EdgeKeys|undefined> = this.observe(undefined)
+  private _hoverKeys = this.observe<EdgeKeys|undefined>(undefined)
   private _nodeRemovers :Map<Element, Remover> = new Map()
   private _styleRemovers :Map<Value<string>, Remover> = new Map()
 
@@ -1016,9 +1012,8 @@ export class EdgeView extends Element {
     return this._outputsModel.resolve(key).resolve<Value<string>>("style")
   }
 
-  applyToContaining (canvas :CanvasRenderingContext2D, pos :vec2, op :(element :Element) => void) {
-    if (!(rect.contains(this.bounds, pos) && this.visible.current &&
-          this._edges.length)) return false
+  applyToContaining (canvas :CanvasRenderingContext2D, pos :vec2, op :ElementOp) {
+    if (!(this.containsPos(pos) && this._edges.length)) return false
     const view = this.requireParent as GraphView
     canvas.translate(view.x, view.y)
     const lineWidth = this._lineWidth.current * PICK_EXPANSION
@@ -1306,7 +1301,6 @@ export interface TerminalConfig extends ElementConfig {
 
 export const TerminalStyleScope = {id: "terminal", states: ["normal", "hovered", "targeted"]}
 
-const expandedBounds = rect.create()
 const endpointBounds = rect.create()
 
 export class Terminal extends Element {
@@ -1377,11 +1371,6 @@ export class Terminal extends Element {
   handleMouseEnter (pos :vec2) { this._hovered.update(true) }
   handleMouseLeave (pos :vec2) { this._hovered.update(false) }
 
-  maybeHandlePointerDown (event :MouseEvent|TouchEvent, pos :vec2) {
-    return rect.contains(this.expandBounds(this.bounds), pos)
-      ? this.handlePointerDown(event, pos)
-      : undefined
-  }
   handlePointerDown (event :MouseEvent|TouchEvent, pos :vec2) {
     if (!this._editable.current) return
     this.root.clearFocus()
@@ -1397,7 +1386,7 @@ export class Terminal extends Element {
       let closestDistance = Infinity
       graphView.applyToIntersecting(
         rect.set(region, pos[0] - radius, pos[1] - radius, radius * 2, radius * 2),
-        (element :Element) => {
+        element => {
           if (!(element instanceof Terminal && element.sign === -this.sign)) return
           const distance = vec2.distance(pos, element.pos(elementPos))
           if (distance < closestDistance) {
@@ -1423,7 +1412,7 @@ export class Terminal extends Element {
         this.setCursor(this, "move")
         this.dirty()
         vec2.copy(endpoint, pos)
-        this.dirty()
+        this.recomputeBounds()
         visitOver(pos)
       },
       release: () => {
@@ -1455,7 +1444,12 @@ export class Terminal extends Element {
     throw new Error("Missing NodeView ancestor")
   }
 
-  expandBounds (bounds :rect) :rect {
+  protected get computeState () :string {
+    return this.targeted.current ? "targeted" : this._hovered.current ? "hovered" : "normal"
+  }
+
+  protected expandBounds (hbounds: rect, rbounds :rect) {
+    const bounds = this.bounds
     const radius = this._radius.current
     const hoveredOutlineWidth = this.getStyle(this.config.style, "hovered").outlineWidth
     const outlineWidth = this._outlineWidth.current + getValue(hoveredOutlineWidth, 0) * 2
@@ -1463,22 +1457,19 @@ export class Terminal extends Element {
     const radiusWidth = 2 * radius + outlineWidth
     const halfRadiusWidth = radius + halfOutlineWidth
     rect.set(
-      expandedBounds,
+      hbounds,
       bounds[0] + radius * (this.sign - 1) - halfOutlineWidth,
       bounds[1] - halfRadiusWidth,
       radiusWidth,
       radiusWidth,
     )
-    if (!this._endpoint) return expandedBounds
+    rect.copy(rbounds, hbounds)
+    if (!this._endpoint) return
     const controlPointOffset = this.edgeControlPointOffset
     const lineWidth = Math.max(this.edgeLineWidth, this.edgeOutlineWidth)
     const halfLineWidth = Math.round(lineWidth/2)
     const addControlPoint = (x :number, y :number) => {
-      rect.union(
-        expandedBounds,
-        expandedBounds,
-        rect.set(endpointBounds, x, y, radiusWidth, radiusWidth),
-      )
+      rect.union(rbounds, rbounds, rect.set(endpointBounds, x, y, radiusWidth, radiusWidth))
     }
     const startX = bounds[0] + radius * this.sign
     const offsetStartX = startX + controlPointOffset * this.sign - halfLineWidth
@@ -1493,11 +1484,6 @@ export class Terminal extends Element {
       addControlPoint(offsetStartX, offsetY)
       addControlPoint(offsetEndX, offsetY)
     }
-    return expandedBounds
-  }
-
-  protected get computeState () :string {
-    return this.targeted.current ? "targeted" : this._hovered.current ? "hovered" : "normal"
   }
 
   protected computePreferredSize (hintX :number, hintY :number, into :dim2) {

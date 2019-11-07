@@ -390,7 +390,7 @@ export interface BackgroundConfig {
   }
 }
 
-const NoDecor = Subject.constant(NoopDecor)
+export const NoDecor = Subject.constant(NoopDecor)
 
 /** Adds the sizes of the provided background and border to the bounds given, placing the result
   * in `out`. */

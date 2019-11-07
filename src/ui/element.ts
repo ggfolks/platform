@@ -52,6 +52,9 @@ export class Observer<T> implements Disposable {
   }
 }
 
+/** Applies an operation to an element. */
+export type ElementOp = (elem :Element) => void
+
 /** Handles creating elements from a configuration. */
 export interface ElementFactory {
 
@@ -111,8 +114,6 @@ export type StyleScope = {
   states :string[]
 }
 
-const mergedBounds = rect.create()
-
 export function requireAncestor<P> (
   parent :Element|undefined, pclass :new (...args :any[]) => P
 ) :P {
@@ -125,7 +126,6 @@ export function requireAncestor<P> (
   * parent, except for the root element), and participate in the cycle of invalidation, validation
   * and rendering. */
 export abstract class Element implements Disposable {
-  protected readonly _bounds :rect = rect.create()
   protected readonly _psize :dim2 = dim2.fromValues(-1, -1)
   protected readonly _valid = Mutable.local(false)
   protected readonly _dirtyRegion = rect.create()
@@ -135,21 +135,36 @@ export abstract class Element implements Disposable {
   readonly parent :Element|undefined
   readonly visible :Value<boolean>
 
+  /** The layout bounds of this element. These bounds are used to position the element and to lay
+    * out its children. See also [[hitBounds]] and [[renderBounds]]. */
+  readonly bounds = rect.create()
+
+  /** The interactive bounds of this element. When processing input events, these bounds are used to
+    * determine if the event applies to this element. An element can expand these if desired in
+    * [[expandBounds]]. Be careful when expanding an element's hit region as it may cause it to
+    * overlap with the hit regions of other elements in which case the first element in layout order
+    * will generally receive input events. */
+  readonly hitBounds = rect.create()
+
+  /** The bounds that are drawn into by this element. These bounds are used to determine dirty
+    * regions when repainting. Elements that render shadows or other non-interactive "out of bounds"
+    * visualizations can expand these in [[expandBounds]]. */
+  readonly renderBounds = rect.create()
+
   constructor (ctx :ElementContext, parent :Element|undefined, config :ElementConfig) {
     this.parent = parent
-    // base visibility on model value.  if spec is omitted, always assume true.  if spec is given
-    // as a path with missing model elements, always return false
-    this.visible = ctx.model.resolve(config.visible, config.visible ? falseValue : trueValue)
     if (config.scopeId) this._configScope = {id: config.scopeId, states: RootStates}
-    this.invalidateOnChange(this.visible)
-    this.disposer.add(() => this.clearCursor(this))
+    // base visibility on model value: if spec is omitted, always assume true;
+    // if spec is given as a path with missing model elements, always return false
+    this.visible = ctx.model.resolve(config.visible, config.visible ? falseValue : trueValue)
+    // avoid setting up a listener in the common case of always visible
+    if (this.visible !== trueValue) this.invalidateOnChange(this.visible)
   }
 
-  get x () :number { return this._bounds[0] }
-  get y () :number { return this._bounds[1] }
-  get width () :number { return this._bounds[2] }
-  get height () :number { return this._bounds[3] }
-  get bounds () :rect { return this._bounds }
+  get x () :number { return this.bounds[0] }
+  get y () :number { return this.bounds[1] }
+  get width () :number { return this.bounds[2] }
+  get height () :number { return this.bounds[3] }
 
   abstract get config () :ElementConfig
   get styleScope () :StyleScope { return this._configScope || this.requireParent.styleScope }
@@ -199,10 +214,9 @@ export abstract class Element implements Disposable {
   }
 
   setBounds (bounds :rect) {
-    if (rect.eq(this._bounds, bounds)) return
-    rect.union(mergedBounds, this._bounds, bounds)
-    rect.copy(this._bounds, bounds)
-    this.dirty(this.expandBounds(mergedBounds))
+    if (rect.eq(this.bounds, bounds)) return
+    this.dirty()
+    rect.copy(this.bounds, bounds)
     this.invalidate()
   }
 
@@ -215,36 +229,35 @@ export abstract class Element implements Disposable {
     }
   }
 
-  dirty (region :rect = this.expandBounds(this._bounds), fromChild :boolean = false) {
-    if (rect.containsRect(this._dirtyRegion, region)) return
-    rect.union(this._dirtyRegion, this._dirtyRegion, region)
-    if (this.parent) this.parent.dirty(region, true)
+  dirty (region :rect = this.renderBounds, fromChild = false) {
+    const dirty = this._dirtyRegion, odw = dirty[2], odh = dirty[3]
+    rect.union(dirty, dirty, region)
+    if (this.parent && (dirty[2] !== odw || dirty[3] !== odh)) this.parent.dirty(region, true)
   }
 
   validate () :boolean {
-    if (this._valid.current) return false
-    this.revalidate()
+    if (this._valid.current || !this.visible.current) return false
+    this.relayout()
+    this.applyToChildren(child => child.validate())
+    this.recomputeBounds()
     this._valid.update(true)
     return true
   }
 
   render (canvas :CanvasRenderingContext2D, region :rect) {
-    if (this.intersectsRect(region)) this.rerender(canvas, region)
+    if (this.intersectsRect(region, true)) this.rerender(canvas, region)
     rect.zero(this._dirtyRegion)
   }
 
-  /** Expands the supplied bounds to include space for extra details such as shadows. */
-  expandBounds (bounds :rect) :rect {
-    return bounds
-  }
+  /** Applies `op` to all children of this element. */
+  applyToChildren (op :ElementOp) {}
 
   /** Applies the provided operation to all elements containing the specified position.
     * @param canvas the canvas context.
     * @param pos the position relative to the root origin.
     * @param op the operation to apply.
     * @return whether the operation was applied to this element (and potentially its children). */
-  applyToContaining (canvas :CanvasRenderingContext2D, pos :vec2,
-                     op :(element :Element) => void) :boolean {
+  applyToContaining (canvas :CanvasRenderingContext2D, pos :vec2, op :ElementOp) :boolean {
     if (!this.containsPos(pos)) return false
     op(this)
     return true
@@ -254,7 +267,7 @@ export abstract class Element implements Disposable {
     * @param region the region relative to the root origin.
     * @param op the operation to apply.
     * @return whether the operation was applied to this element (and potentially its children). */
-  applyToIntersecting (region :rect, op :(element :Element) => void) :boolean {
+  applyToIntersecting (region :rect, op :ElementOp) :boolean {
     if (!this.intersectsRect(region)) return false
     op(this)
     return true
@@ -274,7 +287,7 @@ export abstract class Element implements Disposable {
     * @return an interaction if an element started an interaction with the pointer, `undefined`
     * otherwise. */
   maybeHandlePointerDown (event :MouseEvent|TouchEvent, pos :vec2) :PointerInteraction|undefined {
-    return rect.contains(this.bounds, pos) ? this.handlePointerDown(event, pos) : undefined
+    return rect.contains(this.hitBounds, pos) ? this.handlePointerDown(event, pos) : undefined
   }
 
   /** Requests that this element handle the supplied pointer down event.
@@ -291,7 +304,7 @@ export abstract class Element implements Disposable {
     * @param pos the position of the event relative to the root origin.
     * @return whether or not the wheel was handled, and thus should not be further propagated. */
   maybeHandleWheel (event :WheelEvent, pos :vec2) :boolean {
-    return rect.contains(this.bounds, pos) && this.handleWheel(event, pos)
+    return rect.contains(this.hitBounds, pos) && this.handleWheel(event, pos)
   }
 
   /** Requests that this element handle the supplied wheel event.
@@ -307,7 +320,7 @@ export abstract class Element implements Disposable {
     * @param pos the position of the event relative to the root origin.
     * @return whether or not the event was handled, and thus should not be further propagated. */
   maybeHandleDoubleClick (event :MouseEvent, pos :vec2) :boolean {
-    return rect.contains(this.bounds, pos) && this.handleDoubleClick(event, pos)
+    return rect.contains(this.hitBounds, pos) && this.handleDoubleClick(event, pos)
   }
 
   /** Requests that this element handle the supplied double click event.
@@ -329,11 +342,13 @@ export abstract class Element implements Disposable {
   }
 
   dispose () {
+    this.applyToChildren(child => child.dispose())
     this.disposer.dispose()
+    this.clearCursor(this)
   }
 
   toString () {
-    return `${this.constructor.name}@${this._bounds}`
+    return `${this.constructor.name}@${this.bounds}`
   }
 
   protected mapStyle<S, C> (style :PMap<S>, fn :(style :S) => C|undefined) :Value<C|undefined> {
@@ -353,13 +368,15 @@ export abstract class Element implements Disposable {
     return {} as S
   }
 
-  /** Returns true if this element is visible and its bounds contain `pos`. */
+  /** Returns true if this element is visible and its hit bounds contain `pos`. */
   protected containsPos (pos :vec2) {
-    return this.visible.current && rect.contains(this.expandBounds(this.bounds), pos)
+    return this.visible.current && rect.contains(this.hitBounds, pos)
   }
-  /** Returns true if this element is visible and its bounds intersect `region`. */
-  protected intersectsRect (region :rect) {
-    return this.visible.current && rect.intersects(this.expandBounds(this.bounds), region)
+  /** Returns true if this element is visible and its hit bounds intersect `region`.
+    * @param render if `true`, the render bounds are checked for intersection instead. */
+  protected intersectsRect (region :rect, render = false) {
+    return this.visible.current && rect.intersects(
+      render ? this.renderBounds : this.hitBounds, region)
   }
 
   protected requireAncestor<P> (pclass :new (...args :any[]) => P) :P {
@@ -374,12 +391,41 @@ export abstract class Element implements Disposable {
     return this.disposer.add(new Observer(this, initial))
   }
 
-  protected revalidate () {
-    if (this.visible.current) this.relayout()
+  /** Recomputes this element's hit and render bounds. They are initialized to its layout bounds,
+    * expanded and then merged with the recomputed bounds of the element's children. This happens
+    * automatically during validation after an element's children have been validated, but can be
+    * called manually if an element needs to temporarily change its bounds. */
+  protected recomputeBounds () {
+    const hb = this.hitBounds
+    const rb = this.renderBounds, rx = rb[0], ry = rb[1], rw = rb[2], rh = rb[3]
+    rect.copy(hb, this.bounds)
+    rect.copy(rb, this.bounds)
+    this.expandBounds(hb, rb)
+    this.applyToChildren(child => {
+      if (child.visible.current) {
+        rect.union(hb, hb, child.hitBounds)
+        rect.union(rb, rb, child.renderBounds)
+      }
+    })
+    if (rb[0] !== rx || rb[1] !== ry || rb[2] !== rw || rb[3] !== rh) this.dirty()
   }
 
+  /** Expands the hit bounds and render bounds if needed for this element. The supplied bounds will
+    * be initialized to the layout bounds and can be expanded in place. */
+  protected expandBounds (hitBounds :rect, renderBounds :rect) {}
+
+  /** Recomputes this element's preferred size and writes it into `into`.
+    * @param hintX indicates the available space in the x direction, this may be unbounded
+    * (i.e. a very large number) so do not prefer this value directly.
+    * @param hintY indicates the available space in the y direction, see hintX for caveat. */
   protected abstract computePreferredSize (hintX :number, hintY :number, into :dim2) :void
+
+  /** Recomputes any internal metrics needed by this element for rendering. */
   protected abstract relayout () :void
+
+  /** Renders this element into the supplied `cavnas`.
+    * @param rect the current dirty region being rendered. Elements may skip rendering anything
+    * that falls outside this region. */
   protected abstract rerender (canvas :CanvasRenderingContext2D, region :rect) :void
 }
 
@@ -593,7 +639,7 @@ export class Root extends Element {
     return remover
   }
 
-  /** Sizes this root to `size` and immediately revalidates and rerenders it.
+  /** Sizes this root to `size` and immediately validates and rerenders it.
     * @return the size assigned to the root. */
   setSize (size :dim2, rerender = true) :dim2 {
     if (size[0] !== this.width || size[1] !== this.height) {
@@ -634,6 +680,8 @@ export class Root extends Element {
     tmpd[1] = height
     return this.setSize(tmpd)
   }
+
+  applyToChildren (op :ElementOp) { op(this.contents) }
 
   findChild (type :string) :Element|undefined {
     return super.findChild(type) || this.contents.findChild(type)
@@ -685,7 +733,7 @@ export class Root extends Element {
     // ratio (mouse events come in display units), so everything "just lines up"; if we want to
     // support other weird ratios between browser display units and backing buffers, we have to be
     // more explicit about all this...
-    const pos = host.mouseToRoot(this, event, tmpv), inBounds = rect.contains(this.bounds, pos)
+    const pos = host.mouseToRoot(this, event, tmpv), inBounds = rect.contains(this.hitBounds, pos)
     const button = event.button, iact = this.interacts[button]
 
     // if this mouse event is in our bounds, stop it from propagating to (lower) roots; except in
@@ -732,7 +780,7 @@ export class Root extends Element {
       if (event.touches.length === 1) {
         const touch = event.changedTouches[0]
         const pos = host.touchToRoot(this, touch, tmpv)
-        if (rect.contains(this.bounds, pos)) {
+        if (rect.contains(this.hitBounds, pos)) {
           // note that we are assuming responsibility for the event
           event.cancelBubble = true
           // prevent any default touch behavior
@@ -777,23 +825,9 @@ export class Root extends Element {
     }
   }
 
-  private droppedClick (event :MouseEvent|TouchEvent, pos :vec2) {
-    // if we click and hit no interactive control, clear the focus
-    this.clearFocus()
-    // also clear any menu popup
-    if (!!this.menuPopup.current) {
-      this.menuPopup.update(undefined)
-      // if we're clearing a menu popup, recompute the hovered elements because they will previously
-      // have been blocked by the menu modality; we defer this one frame because we are in the
-      // middle of processing an event right now and the removal of the menu root will not happen
-      // until that event dispatch is completed
-      if (event.type.startsWith("mouse")) this.clock.once(() => this._updateElementsOver(pos))
-    }
-  }
-
   dispatchWheelEvent (host :Host, event :WheelEvent) {
     const pos = host.mouseToRoot(this, event, tmpv)
-    if (rect.contains(this.bounds, pos)) event.cancelBubble = true
+    if (rect.contains(this.hitBounds, pos)) event.cancelBubble = true
     this.eventTarget.maybeHandleWheel(event, pos)
   }
 
@@ -813,7 +847,6 @@ export class Root extends Element {
 
   dispose () {
     super.dispose()
-    this.contents.dispose()
     this.events.emit("disposed")
   }
 
@@ -822,11 +855,7 @@ export class Root extends Element {
   }
 
   protected relayout () {
-    this.contents.setBounds(this._bounds)
-  }
-
-  protected revalidate () {
-    super.revalidate()
+    this.contents.setBounds(this.bounds)
     const canvas = this.canvasElem, toPixel = this._scale
     const scaledWidth = Math.ceil(toPixel.scaled(this.width))
     const scaledHeight = Math.ceil(toPixel.scaled(this.height))
@@ -837,7 +866,6 @@ export class Root extends Element {
       canvas.style.height = `${this.height}px`
       this.events.emit("resized")
     }
-    this.contents.validate()
   }
 
   protected rerender (canvas :CanvasRenderingContext2D, region :rect) {
@@ -855,6 +883,20 @@ export class Root extends Element {
     canvas.clip()
     this.contents.render(canvas, region)
     canvas.restore()
+  }
+
+  private droppedClick (event :MouseEvent|TouchEvent, pos :vec2) {
+    // if we click and hit no interactive control, clear the focus
+    this.clearFocus()
+    // also clear any menu popup
+    if (!!this.menuPopup.current) {
+      this.menuPopup.update(undefined)
+      // if we're clearing a menu popup, recompute the hovered elements because they will previously
+      // have been blocked by the menu modality; we defer this one frame because we are in the
+      // middle of processing an event right now and the removal of the menu root will not happen
+      // until that event dispatch is completed
+      if (event.type.startsWith("mouse")) this.clock.once(() => this._updateElementsOver(pos))
+    }
   }
 
   private get eventTarget () { return this.targetElem.current || this.contents }
@@ -965,20 +1007,16 @@ export class Control extends Element {
     return super.findTaggedChild(tag) || this.contents.findTaggedChild(tag)
   }
 
-  applyToContaining (canvas :CanvasRenderingContext2D, pos :vec2, op :(element :Element) => void) {
+  applyToChildren (op :ElementOp) { op(this.contents) }
+  applyToContaining (canvas :CanvasRenderingContext2D, pos :vec2, op :ElementOp) {
     const applied = super.applyToContaining(canvas, pos, op)
     if (applied) this.contents.applyToContaining(canvas, pos, op)
     return applied
   }
-  applyToIntersecting (region :rect, op :(element :Element) => void) {
+  applyToIntersecting (region :rect, op :ElementOp) {
     const applied = super.applyToIntersecting(region, op)
     if (applied) this.contents.applyToIntersecting(region, op)
     return applied
-  }
-
-  dispose () {
-    super.dispose()
-    this.contents.dispose()
   }
 
   protected get computeState () :string {
@@ -999,27 +1037,19 @@ export class Control extends Element {
     dim2.copy(into, this.contents.preferredSize(hintX, hintY))
   }
 
-  protected relayout () {
-    this.contents.setBounds(this._bounds)
-  }
-
-  protected revalidate () {
-    super.revalidate()
-    this.contents.validate()
-  }
-
+  protected relayout () { this.contents.setBounds(this.bounds) }
   protected rerender (canvas :CanvasRenderingContext2D, region :rect) {
     this.contents.render(canvas, region)
   }
 }
 
-/** Manages a collection of [[Root]]s: handles dispatching input and frame events, revalidating and
-  * rerendering. Client responsibilities:
+/** Manages a collection of [[Root]]s: handles dispatching input and frame events, validating and
+  * rendering. Client responsibilities:
   * - [[bind]] to the canvas element in which the roots are rendered
   * - call [[update]] on every animation frame
   * - add manually created roots via [[addRoot]]
-  * - keep the root's positions up to date with the positions at which the roots are rendered (either via
-  *   [[Root.setOrigin]] or [[Root.bindOrigin]]).
+  * - keep the root's positions up to date with the positions at which the roots are rendered
+  *   (either via [[Root.setOrigin]] or [[Root.bindOrigin]]).
   *
   * Clients will generally not use this class directly but rather use the `Host2` or `Host3`
   * subclasses which integrate more tightly with the `scene2` and `scene3` libraries. */

@@ -1,21 +1,14 @@
 import {dim2, rect, vec2, vec2zero} from "../core/math"
 import {getValue} from "../core/util"
-import {Element, ElementConfig, ElementContext} from "./element"
+import {Element, ElementConfig, ElementContext, ElementOp} from "./element"
 
 const tmpr = rect.create()
 
 /** Groups contain multiple child elements.
   * Different subclasses of group implement different layout policies. */
 abstract class Group extends Element {
-  protected readonly _expandedBounds = rect.create()
-
   abstract get contents () :Element[]
 
-  maybeHandlePointerDown (event :MouseEvent|TouchEvent, pos :vec2) {
-    return rect.contains(this.expandBounds(this.bounds), pos)
-      ? this.handlePointerDown(event, pos)
-      : undefined
-  }
   handlePointerDown (event :MouseEvent|TouchEvent, pos :vec2) {
     for (const cc of this.contents) {
       const interaction = cc.maybeHandlePointerDown(event, pos)
@@ -23,17 +16,11 @@ abstract class Group extends Element {
     }
     return undefined
   }
-  maybeHandleWheel (event :WheelEvent, pos :vec2) {
-    return rect.contains(this.expandBounds(this.bounds), pos) && this.handleWheel(event, pos)
-  }
   handleWheel (event :WheelEvent, pos :vec2) :boolean {
     for (const cc of this.contents) {
       if (cc.maybeHandleWheel(event, pos)) return true
     }
     return false
-  }
-  maybeHandleDoubleClick (event :MouseEvent, pos :vec2) {
-    return rect.contains(this.expandBounds(this.bounds), pos) && this.handleDoubleClick(event, pos)
   }
   handleDoubleClick (event :MouseEvent, pos :vec2) :boolean {
     for (const cc of this.contents) {
@@ -61,35 +48,18 @@ abstract class Group extends Element {
     return undefined
   }
 
-  applyToContaining (canvas :CanvasRenderingContext2D, pos :vec2, op :(element :Element) => void) {
+  applyToChildren (op :ElementOp) { for (const elem of this.contents) op(elem) }
+  applyToContaining (canvas :CanvasRenderingContext2D, pos :vec2, op :ElementOp) {
     if (!super.applyToContaining(canvas, pos, op)) return false
     for (const cc of this.contents) {
       if (cc.applyToContaining(canvas, pos, op)) return true
     }
     return true
   }
-  applyToIntersecting (region :rect, op :(element :Element) => void) {
+  applyToIntersecting (region :rect, op :ElementOp) {
     if (!super.applyToIntersecting(region, op)) return false
     for (const cc of this.contents) cc.applyToIntersecting(region, op)
     return true
-  }
-
-  dispose () {
-    super.dispose()
-    for (const child of this.contents) child.dispose()
-  }
-
-  expandBounds (bounds :rect) :rect {
-    rect.copy(this._expandedBounds, bounds)
-    for (const elem of this.contents) {
-      rect.union(this._expandedBounds, this._expandedBounds, elem.expandBounds(elem.bounds))
-    }
-    return this._expandedBounds
-  }
-
-  protected revalidate () {
-    super.revalidate()
-    for (const elem of this.contents) elem.validate()
   }
 
   protected rerender (canvas :CanvasRenderingContext2D, region :rect) {
@@ -307,7 +277,7 @@ export abstract class VGroup extends Group {
   protected relayout () {
     const offPolicy = this.config.offPolicy || this.defaultOffPolicy
     const gap = this.config.gap || 0
-    const bounds = this._bounds
+    const bounds = this.bounds
     const left = bounds[0], top = bounds[1], width = bounds[2], height = bounds[3]
     const m = computeMetrics(this, width, height, gap, true)
     const stretchHeight = Math.max(0, height - m.gaps(gap) - m.fixHeight)
@@ -355,7 +325,7 @@ export abstract class HGroup extends Group {
   protected relayout () {
     const offPolicy = this.config.offPolicy || this.defaultOffPolicy
     const gap = this.config.gap || 0
-    const bounds = this._bounds
+    const bounds = this.bounds
     const left = bounds[0], top = bounds[1], width = bounds[2], height = bounds[3]
     const m = computeMetrics(this, width, height, gap, true)
     const stretchWidth = Math.max(0, width - m.gaps(gap) - m.fixWidth)

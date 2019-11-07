@@ -38,6 +38,9 @@ export abstract class AbstractLabel extends Element {
   readonly text :Value<string>
   private selOff = 0
   private selWid = 0
+  // sneaky toggle that allows `text` element to disable rendering of its internal label when it is
+  // overlayed by a DOM input element
+  public rendered = true
 
   constructor (ctx :ElementContext, parent :Element, readonly config :AbstractLabelConfig) {
     super(ctx, parent, config)
@@ -75,6 +78,7 @@ export abstract class AbstractLabel extends Element {
   }
 
   protected rerender (canvas :CanvasRenderingContext2D, region :rect) {
+    if (!this.rendered) return
     const {x, y, width, height, xoffset} = this
     const span = this.span.current, rx = x + xoffset.current
     const needClip = rx < 0 || span.size[0] > width
@@ -281,8 +285,6 @@ export abstract class AbstractText extends Control {
   readonly label :Label
   readonly cursor :Cursor
 
-  private readonly _expandedBounds = rect.create()
-
   constructor (
     ctx :ElementContext,
     parent :Element,
@@ -290,16 +292,19 @@ export abstract class AbstractText extends Control {
     readonly text :Mutable<string>,
     private readonly shadowed = Mutable.local(false)
   ) {
-    super(ctx.inject({label: {text, visible: shadowed.map(s => !s)}}), parent, config)
+    super(ctx.inject({label: {text}}), parent, config)
     this.invalidateOnChange(this.coffset)
     this._onEnter = ctx.model.resolveAction(config.onEnter, NoopAction)
 
     // update state when text changes; we may become invalid
     this.disposer.add(text.onValue(() => this._state.update(this.computeState)))
 
-    const label = this.contents.findChild("label")
-    if (label) this.label = label as Label
+    const label = this.contents.findChild("label") as Label|undefined
+    if (label) this.label = label
     else throw new Error(`Text control must have Label child [config=${JSON.stringify(config)}].`)
+
+    // disable rendering of our label when we're shadowed
+    this.disposer.add(shadowed.onValue(shadowed => label.rendered = !shadowed))
 
     // hide the cursor when the label has a selection
     const hasSel = this.label.selection.map(([ss, se]) => se > ss)
@@ -321,6 +326,11 @@ export abstract class AbstractText extends Control {
   }
 
   get styleScope () { return TextStyleScope }
+
+  applyToChildren (op :(elem :Element) => void) {
+    super.applyToChildren(op)
+    op(this.cursor)
+  }
 
   handlePointerDown (event :MouseEvent|TouchEvent, pos :vec2) :PointerInteraction|undefined {
     if (event instanceof MouseEvent && event.button !== 0) return undefined
@@ -378,14 +388,6 @@ export abstract class AbstractText extends Control {
     return true
   }
 
-  expandBounds (bounds :rect) :rect {
-    return rect.union(
-      this._expandedBounds,
-      this.contents.expandBounds(this.contents.bounds),
-      this.cursor.expandBounds(this.cursor.bounds),
-    )
-  }
-
   configInput (input :HTMLInputElement) :Remover {
     const root = this.root, ibounds = this.bounds
     const unsizer = this.valid.when(v => v, v => {
@@ -438,8 +440,8 @@ export abstract class AbstractText extends Control {
 
   protected onEnter () { this._onEnter() }
 
-  protected revalidate () {
-    super.revalidate()
+  protected relayout () {
+    super.relayout()
     // bound the cursor into the text length
     const coffset = Math.max(0, Math.min(this.text.current.length, this.coffset.current))
     this.coffset.update(coffset)
@@ -453,7 +455,6 @@ export abstract class AbstractText extends Control {
     // finally position the cursor based on our calculations
     const cx = lx + this.label.xoffset.current + cadvance
     this.cursor.setBounds(rect.set(tmpr, cx, ly, this.cursor.lineWidth, lh))
-    this.cursor.validate()
   }
 
   protected rerender (canvas :CanvasRenderingContext2D, region :rect) {

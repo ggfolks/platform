@@ -67,14 +67,18 @@ export class TabbedPane extends VGroup {
     }
   }
 
-  protected revalidate () {
-    super.revalidate()
-    if (this.reorderer) this.reorderer.validate()
+  applyToChildren (op :(elem :Element) => void) {
+    super.applyToChildren(op)
+    if (this.reorderer) op(this.reorderer.cursor)
   }
 
+  protected relayout () {
+    super.relayout()
+    if (this.reorderer) this.reorderer.layout()
+  }
   protected rerender (canvas :CanvasRenderingContext2D, region :rect) {
     super.rerender(canvas, region)
-    if (this.reorderer) this.reorderer.render(canvas, region)
+    if (this.reorderer) this.reorderer.cursor.render(canvas, region)
   }
 
   protected get defaultOffPolicy () :OffAxisPolicy { return "stretch" }

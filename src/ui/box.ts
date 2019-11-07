@@ -1,7 +1,7 @@
 import {rect, dim2, vec2} from "../core/math"
 import {Mutable} from "../core/react"
 import {PMap} from "../core/util"
-import {Element, ElementConfig, ElementContext} from "./element"
+import {Element, ElementConfig, ElementContext, ElementOp} from "./element"
 import {NoopDecor, BackgroundConfig, BorderConfig, Spec, Insets,
         addDecorationBounds, insetWidth, insetHeight, insetRect} from "./style"
 
@@ -55,7 +55,6 @@ export class Box extends Element {
   private background = this.observe(NoopDecor)
   private border = this.observe(NoopDecor)
   readonly contents :Element
-  private readonly _expandedBounds = rect.create()
   private readonly _hovered = Mutable.local(false)
 
   constructor (ctx :ElementContext, parent :Element, readonly config :BoxConfig) {
@@ -91,12 +90,13 @@ export class Box extends Element {
     return super.findTaggedChild(tag) || this.contents.findTaggedChild(tag)
   }
 
-  applyToContaining (canvas :CanvasRenderingContext2D, pos :vec2, op :(element :Element) => void) {
+  applyToChildren (op :ElementOp) { op(this.contents) }
+  applyToContaining (canvas :CanvasRenderingContext2D, pos :vec2, op :ElementOp) {
     const applied = super.applyToContaining(canvas, pos, op)
     if (applied) this.contents.applyToContaining(canvas, pos, op)
     return applied
   }
-  applyToIntersecting (region :rect, op :(element :Element) => void) {
+  applyToIntersecting (region :rect, op :ElementOp) {
     const applied = super.applyToIntersecting(region, op)
     if (applied) this.contents.applyToIntersecting(region, op)
     return applied
@@ -105,44 +105,19 @@ export class Box extends Element {
   handleMouseEnter (pos :vec2) { this._hovered.update(true) }
   handleMouseLeave (pos :vec2) { this._hovered.update(false) }
 
-  maybeHandlePointerDown (event :MouseEvent|TouchEvent, pos :vec2) {
-    return rect.contains(this.expandBounds(this.bounds), pos)
-      ? this.handlePointerDown(event, pos)
-      : undefined
-  }
   handlePointerDown (event :MouseEvent|TouchEvent, pos :vec2) {
     return this.contents.maybeHandlePointerDown(event, pos)
   }
-  maybeHandleWheel (event :WheelEvent, pos :vec2) {
-    return rect.contains(this.expandBounds(this.bounds), pos) && this.handleWheel(event, pos)
-  }
   handleWheel (event :WheelEvent, pos :vec2) {
     return this.contents.maybeHandleWheel(event, pos)
-  }
-  maybeHandleDoubleClick (event :MouseEvent, pos :vec2) {
-    return rect.contains(this.expandBounds(this.bounds), pos) && this.handleDoubleClick(event, pos)
   }
   handleDoubleClick (event :MouseEvent, pos :vec2) {
     return this.contents.maybeHandleDoubleClick(event, pos)
   }
 
-  dispose () {
-    super.dispose()
-    this.contents.dispose()
-  }
-
-  expandBounds (bounds :rect) :rect {
-    addDecorationBounds(this._expandedBounds, bounds, this.background.current, this.border.current)
-    return rect.union(
-      this._expandedBounds,
-      this._expandedBounds,
-      this.contents.expandBounds(this.contents.bounds),
-    )
-  }
-
   private computeInnerBounds (into :rect) :rect {
     const {padding, margin} = this.style
-    rect.copy(into, this._bounds)
+    rect.copy(into, this.bounds)
     if (padding) insetRect(padding, into, into)
     if (margin) insetRect(margin, into, into)
     return into
@@ -173,14 +148,13 @@ export class Box extends Element {
     this.contents.setBounds(rect.set(tmpr, cx, cy, cwidth, cheight))
   }
 
-  protected revalidate () {
-    super.revalidate()
-    this.contents.validate()
+  protected expandBounds (hbounds: rect, rbounds :rect) {
+    addDecorationBounds(rbounds, rbounds, this.background.current, this.border.current)
   }
 
   protected rerender (canvas :CanvasRenderingContext2D, region :rect) {
     const {margin, alpha} = this.style
-    const inbounds = margin ? insetRect(margin, this._bounds, tmpr) : this._bounds
+    const inbounds = margin ? insetRect(margin, this.bounds, tmpr) : this.bounds
     if (alpha !== undefined) canvas.globalAlpha = alpha
     // TODO: should we just do all element rendering translated to the element's origin
     canvas.translate(inbounds[0], inbounds[1])

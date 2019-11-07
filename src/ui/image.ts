@@ -27,10 +27,6 @@ export class Image extends Element {
     }))
   }
 
-  dispose () {
-    super.dispose()
-  }
-
   protected computePreferredSize (hintX :number, hintY :number, into :dim2) {
     const image = this.image.current
     if (image instanceof HTMLImageElement) dim2.set(

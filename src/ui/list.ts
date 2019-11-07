@@ -88,14 +88,18 @@ export class DragVList extends VGroup implements ListLike {
     })))
   }
 
-  protected revalidate () {
-    super.revalidate()
-    this.reorderer.validate()
+  applyToChildren (op :(elem :Element) => void) {
+    super.applyToChildren(op)
+    op(this.reorderer.cursor)
   }
 
+  protected relayout () {
+    super.relayout()
+    this.reorderer.layout()
+  }
   protected rerender (canvas :CanvasRenderingContext2D, region :rect) {
     super.rerender(canvas, region)
-    this.reorderer.render(canvas, region)
+    this.reorderer.cursor.render(canvas, region)
   }
 
   protected get defaultOffPolicy () :OffAxisPolicy { return "stretch" }
