@@ -73,19 +73,7 @@ const propertyConfigCreators :PMap<PropertyConfigCreator> = {
   }),
   url: (model, editable) => {
     const value = model.resolve<Mutable<string>>("value")
-    return createEllipsisConfig(model, editable, () => {
-      const input = document.createElement("input")
-      input.setAttribute("type", "file")
-      document.body.appendChild(input)
-      input.addEventListener("change", event => {
-        document.body.removeChild(input)
-        if (!input.files || input.files.length === 0) return
-        const url = URL.createObjectURL(input.files[0])
-        value.update(url.toString())
-        // TODO: call revokeObjectURL when finished
-      })
-      input.click()
-    })
+    return createEllipsisConfig(model, editable, () => urlSelector(value))
   },
   number: (model, editable) => {
     const constraints = model.resolve<Value<NumberConstraints>>("constraints").current
@@ -309,6 +297,28 @@ const propertyConfigCreators :PMap<PropertyConfigCreator> = {
 /** Sets the element config creator to use for editing properties of the specified type. */
 export function setPropertyConfigCreator (type :string, creator :PropertyConfigCreator) {
   propertyConfigCreators[type] = creator
+}
+
+type UrlSelector = (value :Mutable<string>) => void
+const defaultUrlSelector :UrlSelector = value => {
+  const input = document.createElement("input")
+  input.setAttribute("type", "file")
+  document.body.appendChild(input)
+  input.addEventListener("change", event => {
+    document.body.removeChild(input)
+    if (!input.files || input.files.length === 0) return
+    const url = URL.createObjectURL(input.files[0])
+    value.update(url.toString())
+    // TODO: call revokeObjectURL when finished
+  })
+  input.click()
+}
+let urlSelector = defaultUrlSelector
+
+/** Sets the function to invoke when we want to select an URL.
+  * @param selector the custom URL selector, or undefined to use the default. */
+export function setCustomUrlSelector (selector :UrlSelector|undefined) {
+  urlSelector = selector || defaultUrlSelector
 }
 
 function truncateVec3 (vector :vec3, maxDecimals :number) :vec3 {
