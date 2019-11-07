@@ -731,22 +731,25 @@ export class Root extends Element {
     case "touchmove":
       if (iact) {
         const touch = event.changedTouches[0]
-        const pos = vec2.set(tmpv, touch.clientX-this.origin[0], touch.clientY-this.origin[1])
+        const pos = host.touchToRoot(this, touch, tmpv)
         iact.move(event, pos)
+        event.preventDefault()
       }
       break
     case "touchcancel":
       if (iact) {
         iact.cancel()
         this.interacts[0] = undefined
+        event.preventDefault()
       }
       break
     case "touchend":
       if (iact) {
         const touch = event.changedTouches[0]
-        const pos = vec2.set(tmpv, touch.clientX-this.origin[0], touch.clientY-this.origin[1])
+        const pos = host.touchToRoot(this, touch, tmpv)
         iact.release(event, pos)
         this.interacts[0] = undefined
+        event.preventDefault()
       }
       break
     }
