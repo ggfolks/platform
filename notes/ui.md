@@ -8,14 +8,3 @@
 
 - The host updates the Root every frame so that it can process animations and perform
   re-validation/layout/rendering as needed
-
-## TODO
-
-- Differentiate between invalidation (size may change, relayout and rerendering needed) and
-  dirtying (no size change, no relayout, yes rerendering)
-  - invalid implies dirty
-  - animated style transitions will often dirty but not invalidate
-
-- Unfocus all roots if we click outside any root?
-
-- Clear selection when Text loses focus.
