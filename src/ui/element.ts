@@ -2,16 +2,15 @@ import {Disposable, Disposer, Remover, NoopRemover, PMap, log} from "../core/uti
 import {Clock} from "../core/clock"
 import {dim2, rect, vec2, vec2zero} from "../core/math"
 import {Record} from "../core/data"
-import {Emitter, Mutable, Source, Stream, Value, trueValue, falseValue} from "../core/react"
+import {Emitter, Mutable, Source, Stream, Subject, Value, trueValue, falseValue} from "../core/react"
 import {MutableList, RList} from "../core/rcollect"
 import {Scale} from "../core/ui"
 import {keyEvents, mouseEvents, pointerEvents, touchEvents, wheelEvents} from "../input/react"
 import {Action, Command, Model} from "./model"
 import {Keymap, ModMap} from "./keymap"
-import {Spec, StyleContext} from "./style"
+import {Spec, StyleContext, styleEquals} from "./style"
 
 const tmpr = rect.create(), tmpv = vec2.create(), tmpd = dim2.create()
-export const blankValue = Value.constant("")
 const defScale = new Scale(window.devicePixelRatio)
 const defHintSize = Value.constant(dim2.fromValues(64000, 32000))
 const defMinSize = Value.constant(dim2.fromValues(0, 0))
@@ -29,26 +28,27 @@ export class Observer<T> implements Disposable {
   update (value :T) {
     this.remover()
     this.remover = NoopRemover
-    // dirty first, in case changing the value changes the bounds expansion
-    this.owner.dirty()
-    this.current = value
-    this.owner.invalidate()
+    this.updateValue(value)
   }
 
   /** Updates this observed property with (the reactive) `value`. The owning element will be
     * invalidated when the first value is received and again if it changes. */
   observe (value :Source<T>) {
     this.remover()
-    this.remover = value.onValue(v => {
-      // dirty first, in case changing the value changes the bounds expansion
-      this.owner.dirty()
-      this.current = v
-      this.owner.invalidate()
-    })
+    this.remover = value.onValue(v => this.updateValue(v))
   }
 
   dispose () {
     this.remover()
+  }
+
+  private updateValue (value :T) {
+    if (this.current === value) return
+    // dirty first, in case changing the value changes the bounds expansion
+    this.owner.dirty()
+    // log.info("Observed value changed", "elem", this.owner, "value", value, "old", this.current)
+    this.current = value
+    this.owner.invalidate()
   }
 }
 
@@ -334,6 +334,16 @@ export abstract class Element implements Disposable {
 
   toString () {
     return `${this.constructor.name}@${this._bounds}`
+  }
+
+  protected mapStyle<S, C> (style :PMap<S>, fn :(style :S) => C|undefined) :Value<C|undefined> {
+    return this.state.map(state => fn(this.getStyle(style, state)), styleEquals)
+  }
+
+  protected resolveStyle<S, C, T> (style :PMap<S>, fn :(style :S) => C|undefined,
+                                   resolve :(config :C) => Subject<T>, defval :T) :Subject<T> {
+    return this.mapStyle(style, fn).toSubject().switchMap(
+      config => config ? resolve(config) : Subject.constant(defval))
   }
 
   protected getStyle<S> (styles :PMap<S>, state :string) :S {

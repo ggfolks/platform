@@ -1,10 +1,10 @@
-import {Mutable, Value} from "../core/react"
+import {Mutable, Value, blankValue} from "../core/react"
 import {ButtonStates} from "./button"
 import {
   AbstractDropdown, AbstractDropdownConfig, AbstractDropdownItem,
   AbstractDropdownItemConfig, DropdownHost
 } from "./dropdown"
-import {Element, ElementContext, blankValue} from "./element"
+import {Element, ElementContext} from "./element"
 import {HGroup} from "./group"
 import {ListLike, AbstractListConfig, syncListContents} from "./list"
 import {Spec} from "./model"

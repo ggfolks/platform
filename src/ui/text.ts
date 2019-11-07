@@ -43,18 +43,17 @@ export abstract class AbstractLabel extends Element {
     super(ctx, parent, config)
     this.text = this.resolveText(ctx, config)
     this.invalidateOnChange(this.selection)
-    this.state.onValue(state => {
-      const style = this.getStyle(this.config.style, state)
-      const fillS = ctx.style.resolvePaintOpt(style.fill)
-      const strokeS = ctx.style.resolvePaintOpt(style.stroke)
-      this.span.observe(Subject.join3(this.text, fillS, strokeS).map(([text, fill, stroke]) => {
-        const font = ctx.style.resolveFontOpt(style.font)
-        const shadow = ctx.style.resolveShadowOpt(style.shadow)
-        return new Span(text, font, fill, stroke, shadow)
-      }))
-      if (!style.selection || !style.selection.fill) this.selFill.update(undefined)
-      else this.selFill.observe(ctx.style.resolvePaint(style.selection.fill))
-    })
+    const style = config.style
+    const fillS = this.resolveStyle(
+      style, s => s.fill, f => ctx.style.resolvePaintOpt(f), undefined)
+    const strokeS = this.resolveStyle(
+      style, s => s.stroke, s => ctx.style.resolvePaintOpt(s), undefined)
+    const fontS = this.mapStyle(style, s => s.font).map(f => ctx.style.resolveFontOpt(f))
+    const shadowS = this.mapStyle(style, s => s.shadow).map(s => ctx.style.resolveShadowOpt(s))
+    this.span.observe(Subject.join<any>(this.text, fillS, strokeS, fontS, shadowS).map(
+      ([text, fill, stroke, font, shadow]) => new Span(text, font, fill, stroke, shadow)))
+    this.selFill.observe(this.resolveStyle(style, s => s.selection ? s.selection.fill : undefined,
+                                           f => ctx.style.resolvePaint(f), undefined))
   }
 
   protected abstract resolveText (ctx :ElementContext, config :AbstractLabelConfig) :Value<string>

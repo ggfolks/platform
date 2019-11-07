@@ -61,12 +61,12 @@ export class Box extends Element {
   constructor (ctx :ElementContext, parent :Element, readonly config :BoxConfig) {
     super(ctx, parent, config)
     this.contents = ctx.elem.create(ctx, this, config.contents)
+    this.background.observe(this.resolveStyle(
+      config.style, s => s.background, bg => ctx.style.resolveBackground(bg), NoopDecor))
+    this.border.observe(this.resolveStyle(
+      config.style, s => s.border, border => ctx.style.resolveBorder(border), NoopDecor))
     this.disposer.add(this.state.onValue(state => {
       const style = this.getStyle(this.config.style, state)
-      if (style.background) this.background.observe(ctx.style.resolveBackground(style.background))
-      else this.background.update(NoopDecor)
-      if (style.border) this.border.observe(ctx.style.resolveBorder(style.border))
-      else this.border.update(NoopDecor)
       if (this._hovered.current) {
         if (style.cursor) this.setCursor(this, style.cursor)
         else this.clearCursor(this)

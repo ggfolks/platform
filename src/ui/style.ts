@@ -1,5 +1,6 @@
 import {Noop, PMap, getValue, log} from "../core/util"
 import {dim2, rect} from "../core/math"
+import {dataEquals} from "../core/data"
 import {Color} from "../core/color"
 import {Subject} from "../core/react"
 import {makeRoundRectPath, strokeLinePath, strokeRoundRectSide} from "./util"
@@ -27,6 +28,10 @@ function readDef<C> (type :string, defs :PMap<C>, id :string) :C {
 }
 
 const NoPaint = Subject.constant<Paint|undefined>(undefined)
+
+/** An equality function that can be used to compare style configs structurally.
+  * There's no root type for style configs, so this is typed to operate on `any`. */
+export const styleEquals :(a :any, b :any) => boolean = dataEquals
 
 /** Defines styles which can be referenced by name in element configuration. */
 export interface StyleDefs {

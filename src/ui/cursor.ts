@@ -21,11 +21,8 @@ export class Cursor extends Element {
 
   constructor (ctx :ElementContext, parent :Element, readonly config :CursorConfig) {
     super(ctx, parent, config)
-    this.state.onValue(state => {
-      const style = this.getStyle(this.config.style, state)
-      if (style.fill) this.fill.observe(ctx.style.resolvePaint(style.fill))
-      else this.fill.update(DefaultPaint)
-    })
+    this.fill.observe(this.resolveStyle(
+      config.style, s => s.fill, s => ctx.style.resolvePaint(s), DefaultPaint))
   }
 
   get style () :CursorStyle { return this.getStyle(this.config.style, this.state.current) }

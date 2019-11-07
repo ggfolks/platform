@@ -689,6 +689,9 @@ export const trueValue = Value.constant(true)
 /** A constant value which is always `false`. */
 export const falseValue = Value.constant(false)
 
+/** A constant value which is always the empty string. */
+export const blankValue = Value.constant("")
+
 /** A `Value` which can be mutated by external callers. */
 export class Mutable<T> extends Value<T> implements Prop<T> {
 
