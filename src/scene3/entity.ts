@@ -7,6 +7,7 @@ import {
 import {GLTFLoader} from "three/examples/jsm/loaders/GLTFLoader"
 import {SkeletonUtils} from "three/examples/jsm/utils/SkeletonUtils"
 
+import {getAbsoluteUrl} from "../core/assets"
 import {Clock} from "../core/clock"
 import {Subject} from "../core/react"
 import {RMap} from "../core/rcollect"
@@ -473,6 +474,7 @@ const errorGeom = new BoxBufferGeometry()
 const errorMat = new MeshBasicMaterial({color: 0xFF0000})
 
 export function loadGLTF (url :string) :Subject<GLTF> {
+  url = getAbsoluteUrl(url)
   let gltf = activeGLTFs.get(url)
   if (!gltf) {
     let active = false
