@@ -165,11 +165,6 @@ export function* waitForAll (...generators :Generator<void>[]) {
 }
 
 const IDENTIFIER_PATTERN = /^[a-zA-Z_]\w*$/
-const ESCAPE_PATTERN = /[\"\n\\]/g
-
-function escape (value :string) :string {
-  return value.replace(ESCAPE_PATTERN, char => "\\" + (char === "\n" ? "n" : char))
-}
 
 const constructorStringifiers = new Map<Function, (value :any, indent :number) => string>([
   [Float32Array, value => `Float32Array.of(${value.join(", ")})`],
@@ -186,7 +181,7 @@ const constructorStringifiers = new Map<Function, (value :any, indent :number) =
       } else string += ",\n"
       string += nextIndentString
       if (IDENTIFIER_PATTERN.test(key)) string += key
-      else string += `"${escape(key)}"`
+      else string += JSON.stringify(key)
       string += ": " + JavaScript.stringify(value[key], nextIndent)
     }
     if (!first) string += "\n" + " ".repeat(indent)
@@ -237,7 +232,7 @@ export abstract class JavaScript {
         return String(value)
 
       case "string":
-        return `"${escape(value)}"`
+        return JSON.stringify(value)
 
       case "object":
         if (value === null) return "null"
