@@ -1,4 +1,5 @@
 import {dim2, rect, vec2} from "../core/math"
+import {Noop} from "../core/util"
 import {Mutable, Value, falseValue, trueValue} from "../core/react"
 import {AbstractButton, ButtonStates} from "./button"
 import {VGroup} from "./group"
@@ -54,6 +55,7 @@ export abstract class AbstractDropdown extends AbstractButton {
     // if our parent maintains a list of dropdowns (a menu bar or a dropdown of nested dropdowns),
     // then coordinate with our siblings via its `activeChild`
     const dhost = findDropdownHost(parent)
+    const clearActive = dhost ? () => dhost.activeChild.updateIf(c => c === this, undefined) : Noop
 
     if (ctx.model.resolveOpt(config.model)) {
       this.disposer.add(this._listRoot = this.root.createPopup(ctx, {
@@ -66,22 +68,19 @@ export abstract class AbstractDropdown extends AbstractButton {
           model: config.model,
         }
       }))
-
-      if (dhost) {
-        this._listRoot.host.onEmit(host => {
-          if (!host) dhost.activeChild.updateIf(c => c === this, undefined)
-        })
-      }
+      this._listRoot.host.when(h => !h, clearActive)
     }
 
     if (dhost) {
-      // no need to dispose these connections because all the lifecycles are the same
-      dhost.activeChild.onValue(child => {
+      this.disposer.add(dhost.activeChild.onValue(child => {
         if (child !== undefined && child !== this) this.setOpen(false)
-      })
-      this.hovered.when(h => h === true, _ => {
-        if (dhost.autoActivate) this.setOpen(true)
-        dhost.activeChild.update(this)
+      }))
+      this.hovered.onValue(hovered => {
+        if (hovered) {
+          if (dhost.autoActivate) this.setOpen(true)
+          dhost.activeChild.update(this)
+        }
+        else if (!this.isOpen) clearActive()
       })
     }
   }
