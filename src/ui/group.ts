@@ -117,6 +117,13 @@ function absPosition (c :AbsConstraints) { return c.position || vec2zero }
 /** A group whose contents are positioned absolutely. */
 export abstract class AbsGroup extends Group {
 
+  applyToContaining (canvas :CanvasRenderingContext2D, pos :vec2, op :(element :Element) => void) {
+    if (!super.applyToContaining(canvas, pos, op)) return false
+    // elements may overlap, so don't stop when one of them returns true
+    for (const cc of this.contents) cc.applyToContaining(canvas, pos, op)
+    return true
+  }
+
   handlePointerDown (event :MouseEvent|TouchEvent, pos :vec2) {
     // handle mouse events in reverse order of drawing
     for (let ii = this.contents.length - 1; ii >= 0; ii--) {
