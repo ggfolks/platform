@@ -4,10 +4,11 @@ import {Noop, Remover, PMap, getValue} from "../core/util"
 import {Mutable, Subject, Value, falseValue} from "../core/react"
 import {Control, ControlConfig, ControlStates, Element, ElementConfig, ElementContext,
         PointerInteraction} from "./element"
-import {Spec, FontConfig, Paint, PaintConfig, DefaultPaint, ShadowConfig, Span, EmptySpan,
+import {Spec, FontConfig, Paint, PaintConfig, ShadowConfig, Span, EmptySpan,
         insetsToCSS} from "./style"
 import {Model, Action, NoopAction} from "./model"
 import {CtrlMask, MetaMask, Bindings} from "./keymap"
+import {CursorConfig, Cursor} from "./cursor"
 import {Box} from "./box"
 
 const tmpr = rect.create()
@@ -213,55 +214,6 @@ const textBindings = new Bindings({
   KeyH: {[CtrlMask]: "backspace"},
 }, new Model(textActions))
 
-export interface CursorStyle {
-  stroke? :Spec<PaintConfig>
-  width? :number
-}
-
-const DefaultBlinkPeriod = 0.6
-
-export interface CursorConfig extends ElementConfig {
-  type: "cursor"
-  blinkPeriod? :number
-  style :PMap<CursorStyle>
-}
-
-export class Cursor extends Element {
-  private stroke = this.observe(DefaultPaint)
-
-  constructor (ctx :ElementContext, parent :Element, readonly config :CursorConfig) {
-    super(ctx, parent, config)
-    this.state.onValue(state => {
-      const style = this.getStyle(this.config.style, state)
-      if (style.stroke) this.stroke.observe(ctx.style.resolvePaint(style.stroke))
-      else this.stroke.update(DefaultPaint)
-    })
-  }
-
-  get style () :CursorStyle { return this.getStyle(this.config.style, this.state.current) }
-
-  private get _lineWidth () :number { return this.style.width || 1 }
-
-  expandBounds (bounds :rect) :rect {
-    return rect.expand(tmpr, bounds, Math.ceil(this._lineWidth / 2))
-  }
-
-  protected computePreferredSize (hintX :number, hintY :number, into :dim2) {} // not used
-  protected relayout () {} // not used
-
-  protected rerender (canvas :CanvasRenderingContext2D, region :rect) {
-    // offset by 0.5 so that we're in the middle of the pixel
-    const x = this.x + 0.5, y = this.y, h = this.height
-    this.stroke.current.prepStroke(canvas)
-    canvas.beginPath()
-    canvas.moveTo(x, y)
-    canvas.lineTo(x, y+h)
-    canvas.lineWidth = this._lineWidth
-    canvas.stroke()
-    canvas.lineWidth = 1
-  }
-}
-
 const wordBRegex = new RegExp("\\b")
 
 function wordBounds (words :string[], pos :number) :[number, number] {
@@ -310,6 +262,7 @@ function allSelector (text :string, doff :number, state :TextState) :Selector {
   return (moff, state) => state.cursor.update(moff)
 }
 
+const DefaultBlinkPeriod = 0.6
 const DefaultCursor :CursorConfig = {type: "cursor", style: {}}
 
 /** Defines configuration for text edit elements. */
@@ -499,7 +452,8 @@ export abstract class AbstractText extends Control {
     if (cadvance < ll) this.label.xoffset.update(-cadvance)
     else if (cadvance > ll+lw) this.label.xoffset.update(lw-cadvance)
     // finally position the cursor based on our calculations
-    this.cursor.setBounds(rect.set(tmpr, lx + this.label.xoffset.current + cadvance, ly, 1, lh))
+    const cx = lx + this.label.xoffset.current + cadvance
+    this.cursor.setBounds(rect.set(tmpr, cx, ly, this.cursor.lineWidth, lh))
     this.cursor.validate()
   }
 

@@ -13,6 +13,7 @@ import {
   RootConfig,
 } from "./element"
 import * as B from "./button"
+import * as C from "./cursor"
 import * as D from "./dropdown"
 import * as E from "./element"
 import * as G from "./group"
@@ -98,11 +99,8 @@ export class UI {
 
   createElement (ctx :ElementContext, parent :Element, config :ElementConfig) :Element {
     try {
-      const rstyles = this.resolveStyles(
-        this.getElementScope(parent, config),
-        config.type,
-        config.style as Record,
-      )
+      const scope = this.getElementScope(parent, config)
+      const rstyles = this.resolveStyles(scope, config.type, config.style as Record)
       const rconfig = {...config, style: rstyles} as any
       switch (config.type) {
       case           "box": return new X.Box(ctx, parent, rconfig as X.BoxConfig)
@@ -113,7 +111,7 @@ export class UI {
       case        "spacer": return new G.Spacer(ctx, parent, rconfig as G.SpacerConfig)
       case         "image": return new I.Image(ctx, parent, rconfig as I.ImageConfig)
       case         "label": return new T.Label(ctx, parent, rconfig as T.LabelConfig)
-      case        "cursor": return new T.Cursor(ctx, parent, rconfig as T.CursorConfig)
+      case        "cursor": return new C.Cursor(ctx, parent, rconfig as C.CursorConfig)
       case          "text": return new T.Text(ctx, parent, rconfig as T.TextConfig)
       case    "numberText": return new T.NumberText(ctx, parent, rconfig as T.NumberTextConfig)
       case     "colorText": return new T.ColorText(ctx, parent, rconfig as T.ColorTextConfig)
@@ -127,6 +125,7 @@ export class UI {
       case           "tab": return new TA.Tab(ctx, parent, rconfig as TA.TabConfig)
       case    "tabbedPane": return new TA.TabbedPane(ctx, parent, rconfig as TA.TabbedPaneConfig)
       case      "treeView": return new TR.TreeView(ctx, parent, rconfig as TR.TreeViewConfig)
+      case  "treeViewList": return new TR.TreeViewList(ctx, parent, rconfig as TR.TreeViewListConfig)
       case  "treeViewNode": return new TR.TreeViewNode(ctx, parent, rconfig as TR.TreeViewNodeConfig)
       case      "dropdown": return new D.Dropdown(ctx, parent, rconfig as D.DropdownConfig)
       case  "dropdownList": return new D.DropdownList(ctx, parent, rconfig as D.DropdownListConfig)

@@ -113,6 +113,14 @@ export type StyleScope = {
 
 const mergedBounds = rect.create()
 
+export function requireAncestor<P> (
+  parent :Element|undefined, pclass :new (...args :any[]) => P
+) :P {
+  while (parent && !(parent instanceof pclass)) parent = parent.parent
+  if (!parent) throw new Error(`Expected to find ancestor of type ${pclass}`)
+  return parent
+}
+
 /** The basic building block of UIs. Elements have a bounds, are part of a UI hierarchy (have a
   * parent, except for the root element), and participate in the cycle of invalidation, validation
   * and rendering. */
@@ -342,6 +350,10 @@ export abstract class Element implements Disposable {
   /** Returns true if this element is visible and its bounds intersect `region`. */
   protected intersectsRect (region :rect) {
     return this.visible.current && rect.intersects(this.expandBounds(this.bounds), region)
+  }
+
+  protected requireAncestor<P> (pclass :new (...args :any[]) => P) :P {
+    return requireAncestor(this.parent, pclass)
   }
 
   protected invalidateOnChange (value :Source<any>) {

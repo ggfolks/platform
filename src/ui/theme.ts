@@ -123,6 +123,7 @@ export const DefaultTheme :Theme = {
       hoverFocused: {cursor: "pointer"},
       pressed: {cursor: "pointer"},
     },
+    cursor: {fill: "$white"},
     dropdown: {},
     dropdownItem: {},
     menu: {
@@ -230,7 +231,7 @@ export const DefaultTheme :Theme = {
       invalid: {border: "$textInvalid", cursor: "text"},
     },
     label: {font: "$text", fill: "$black"},
-    cursor: {stroke: "$black"},
+    cursor: {fill: "$black"},
   },
   editableLabel: {
     box: {
@@ -238,7 +239,6 @@ export const DefaultTheme :Theme = {
       hoverFocused: {cursor: "text"},
     },
     label: {font: "$text"},
-    cursor: {stroke: "$white"},
   },
   dropdown: {
     box: {

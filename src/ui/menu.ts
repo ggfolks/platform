@@ -6,7 +6,7 @@ import {
 } from "./dropdown"
 import {Element, ElementContext, blankValue} from "./element"
 import {HGroup} from "./group"
-import {AbstractList, AbstractListConfig, syncListContents} from "./list"
+import {ListLike, AbstractListConfig, syncListContents} from "./list"
 import {Spec} from "./model"
 import {formatBinding} from "./keymap"
 import {AbstractLabel, AbstractLabelConfig} from "./text"
@@ -17,7 +17,7 @@ export interface MenuBarConfig extends AbstractListConfig {
 }
 
 /** A horizontal menu bar. */
-export class MenuBar extends HGroup implements AbstractList, DropdownHost {
+export class MenuBar extends HGroup implements ListLike, DropdownHost {
   readonly elements = new Map<string, Element>()
   readonly contents :Element[] = []
 

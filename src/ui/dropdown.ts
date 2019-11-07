@@ -2,7 +2,7 @@ import {dim2, rect, vec2} from "../core/math"
 import {Mutable, Value, falseValue, trueValue} from "../core/react"
 import {AbstractButton, ButtonStates} from "./button"
 import {VGroup} from "./group"
-import {AbstractList, AbstractListConfig, syncListContents} from "./list"
+import {ListLike, AbstractListConfig, syncListContents} from "./list"
 import {ControlConfig, Element, ElementConfig, ElementContext, Root} from "./element"
 import {Action, ModelKey, ElementsModel, Spec} from "./model"
 
@@ -31,7 +31,7 @@ export interface DropdownListConfig extends AbstractListConfig {
   type :"dropdownList"
 }
 
-export class DropdownList extends VGroup implements AbstractList, DropdownHost {
+export class DropdownList extends VGroup implements ListLike, DropdownHost {
   readonly elements = new Map<ModelKey, Element>()
   readonly contents :Element[] = []
 
