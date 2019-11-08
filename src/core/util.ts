@@ -73,6 +73,27 @@ export interface RVProp<T> extends RProp<T> {
 /** An interface for readable and updatable "vector" properties. */
 export interface VProp<T> extends Prop<T>, RVProp<T> {}
 
+/**
+ * Provides compile-time validation of type-exhaustion, plus a runtime error.
+ * @see unreachableCase */
+export class UnreachableCaseError extends Error {
+  constructor (val :never) {
+    super(`Unreachable case: ${val}`)
+  }
+}
+
+/**
+ * Provides compile-time validation of type-exhaustion, plus a fallback value at runtime.
+ * Usage:<pre>
+ * switch (someEnum) {
+ * case SomeEnum.FOO: return "Foo"
+ * default: return unreachableCase(someEnum, "Untranslated")
+ * }</pre>
+ */
+export function unreachableCase<T> (impossible :never, value :T) :T {
+  return value
+}
+
 /** Maintains a set of positive integers using bits in a backing (typed array) vector. */
 export class BitSet {
   private bits :Uint32Array
