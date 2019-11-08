@@ -55,7 +55,8 @@ export class TabbedPane extends VGroup {
       if (oldElement) oldElement.dispose()
       const model = tabsModel.resolve(activeKey)
       const contentConfig = elementConfig(config.contentElement, model, activeKey)
-      this.contents[1] = ctx.elem.create(ctx.remodel(model), this, contentConfig)
+      const stretchedConfig = {constraints: {stretch: true}, ...contentConfig}
+      this.contents[1] = ctx.elem.create(ctx.remodel(model), this, stretchedConfig)
       this.invalidate()
     }))
 
