@@ -1,7 +1,7 @@
 import {rect, dim2, vec2} from "../core/math"
 import {Mutable} from "../core/react"
 import {PMap} from "../core/util"
-import {Element, ElementConfig, ElementContext, ElementOp} from "./element"
+import {Element, ElementConfig, ElementContext, ElementOp, ElementQuery} from "./element"
 import {NoopDecor, BackgroundConfig, BorderConfig, Spec, Insets,
         addDecorationBounds, insetWidth, insetHeight, insetRect} from "./style"
 
@@ -80,17 +80,8 @@ export class Box extends Element {
 
   get style () :BoxStyle { return this.getStyle(this.config.style, this.state.current) }
 
-  /** Finds the first child with the specified `type`. */
-  findChild (type :string) :Element|undefined {
-    return super.findChild(type) || this.contents.findChild(type)
-  }
-
-  /** Finds the first child with the specified `tag`. */
-  findTaggedChild (tag :string) :Element|undefined {
-    return super.findTaggedChild(tag) || this.contents.findTaggedChild(tag)
-  }
-
   applyToChildren (op :ElementOp) { op(this.contents) }
+  queryChildren<R> (query :ElementQuery<R>) { return query(this.contents) }
   applyToContaining (canvas :CanvasRenderingContext2D, pos :vec2, op :ElementOp) {
     const applied = super.applyToContaining(canvas, pos, op)
     if (applied) this.contents.applyToContaining(canvas, pos, op)

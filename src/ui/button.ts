@@ -2,7 +2,7 @@ import {dim2, rect, vec2} from "../core/math"
 import {Mutable, Value} from "../core/react"
 import {Action, NoopAction, Spec} from "./model"
 import {Control, ControlConfig, ControlStates, Element, ElementConfig, ElementContext,
-        ElementOp, PointerInteraction} from "./element"
+        ElementOp, ElementQuery, PointerInteraction} from "./element"
 
 export interface ButtonConfig extends ControlConfig {
   type :"button"
@@ -98,18 +98,14 @@ export class Toggle extends Control {
       ctx, this, injectViz(config.checkedContents, checked))
   }
 
-  findChild (type :string) :Element|undefined {
-    return super.findChild(type) || (this.checkedContents && this.checkedContents.findChild(type))
-  }
-  findTaggedChild (tag :string) :Element|undefined {
-    return super.findTaggedChild(tag) ||
-      (this.checkedContents && this.checkedContents.findTaggedChild(tag))
-  }
-
   applyToChildren (op :ElementOp) {
     super.applyToChildren(op)
     if (this.checkedContents) op(this.checkedContents)
   }
+  queryChildren<R> (query :ElementQuery<R>) {
+    return super.queryChildren(query) || (this.checkedContents && query(this.checkedContents))
+  }
+
   applyToContaining (canvas :CanvasRenderingContext2D, pos :vec2, op :ElementOp) {
     const applied = super.applyToContaining(canvas, pos, op)
     if (applied && this.checkedContents) this.checkedContents.applyToContaining(canvas, pos, op)

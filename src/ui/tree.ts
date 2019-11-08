@@ -2,7 +2,8 @@ import {rect, vec2} from "../core/math"
 import {Mutable, Value} from "../core/react"
 import {MutableSet} from "../core/rcollect"
 import {ModelKey, Spec} from "./model"
-import {Element, ElementContext, PointerInteraction, RootStates, requireAncestor} from "./element"
+import {Element, ElementContext, ElementOp, ElementQuery, PointerInteraction, RootStates,
+        requireAncestor} from "./element"
 import {OffAxisPolicy, VGroup} from "./group"
 import {ListLike, AbstractListConfig, syncListContents} from "./list"
 import {DragConstraint, DragElement, DragElementConfig, DragElementStates, DragOwner} from "./drag"
@@ -40,9 +41,12 @@ abstract class AbstractTreeView extends VGroup implements ListLike {
 
   get styleScope () { return TreeViewStyleScope }
 
-  applyToChildren (op :(elem :Element) => void) {
+  applyToChildren (op :ElementOp) {
     super.applyToChildren(op)
     op(this.cursor)
+  }
+  queryChildren<R> (query :ElementQuery<R>) {
+    return super.queryChildren(query) || query(this.cursor)
   }
 
   visitNodes (

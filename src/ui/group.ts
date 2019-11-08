@@ -1,6 +1,6 @@
 import {dim2, rect, vec2, vec2zero} from "../core/math"
 import {getValue, log, developMode} from "../core/util"
-import {Element, ElementConfig, ElementContext, ElementOp} from "./element"
+import {Element, ElementConfig, ElementContext, ElementOp, ElementQuery} from "./element"
 
 const tmpr = rect.create()
 
@@ -30,26 +30,15 @@ abstract class Group extends Element {
     return false
   }
 
-  findChild (type :string) :Element|undefined {
-    const self = super.findChild(type)
-    if (self) return self
-    for (const cc of this.contents) {
-      const child = cc.findChild(type)
-      if (child) return child
-    }
-    return undefined
-  }
-  findTaggedChild (tag :string) :Element|undefined {
-    const self = super.findTaggedChild(tag)
-    if (self) return self
-    for (const cc of this.contents) {
-      const child = cc.findTaggedChild(tag)
-      if (child) return child
+  applyToChildren (op :ElementOp) { for (const elem of this.contents) op(elem) }
+  queryChildren<R> (query :ElementQuery<R>) {
+    for (const elem of this.contents) {
+      const r = query(elem)
+      if (r) return r
     }
     return undefined
   }
 
-  applyToChildren (op :ElementOp) { for (const elem of this.contents) op(elem) }
   applyToContaining (canvas :CanvasRenderingContext2D, pos :vec2, op :ElementOp) {
     if (!super.applyToContaining(canvas, pos, op)) return false
     for (const cc of this.contents) {

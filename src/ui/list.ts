@@ -3,7 +3,7 @@ import {Value} from "../core/react"
 import {NoopRemover, Remover} from "../core/util"
 import {Model, ModelKey, ElementsModel} from "./model"
 import {Spec} from "./style"
-import {Element, ElementConfig, ElementContext} from "./element"
+import {Element, ElementConfig, ElementContext, ElementOp, ElementQuery} from "./element"
 import {AxisConfig, HGroup, OffAxisPolicy, VGroup} from "./group"
 import {CursorConfig} from "./cursor"
 import {OrderUpdater, DragElement, DragElementConfig, DragElementStates, ReorderDragger,
@@ -88,9 +88,12 @@ export class DragVList extends VGroup implements ListLike {
     })))
   }
 
-  applyToChildren (op :(elem :Element) => void) {
+  applyToChildren (op :ElementOp) {
     super.applyToChildren(op)
     op(this.reorderer.cursor)
+  }
+  queryChildren<R> (query :ElementQuery<R>) {
+    return super.queryChildren(query) || query(this.reorderer.cursor)
   }
 
   protected relayout () {

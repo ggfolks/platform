@@ -55,6 +55,9 @@ export class Observer<T> implements Disposable {
 /** Applies an operation to an element. */
 export type ElementOp = (elem :Element) => void
 
+/** Applies an operation to an element. */
+export type ElementQuery<R> = (elem :Element) => R|undefined
+
 /** Handles creating elements from a configuration. */
 export interface ElementFactory {
 
@@ -249,8 +252,12 @@ export abstract class Element implements Disposable {
     rect.zero(this._dirtyRegion)
   }
 
-  /** Applies `op` to all children of this element. */
+  /** Applies `op` to all children of this element (and recursively to their children). */
   applyToChildren (op :ElementOp) {}
+
+  /** Applies `query` to all children of this element (and recursively to their children), and
+    * returns the first defined result. */
+  queryChildren<R> (query :ElementQuery<R>) :R|undefined { return undefined }
 
   /** Applies the provided operation to all elements containing the specified position.
     * @param canvas the canvas context.
@@ -336,12 +343,13 @@ export abstract class Element implements Disposable {
 
   /** Finds the first child with the specified `type`. */
   findChild (type :string) :Element|undefined {
-    return (this.config.type === type) ? this : undefined
+    return (this.config.type === type) ? this : this.queryChildren(c => c.findChild(type))
   }
 
   /** Finds the first child with the specified `tag`. */
   findTaggedChild (tag :string) :Element|undefined {
-    return (this.config.tags && this.config.tags.has(tag)) ? this : undefined
+    return (this.config.tags && this.config.tags.has(tag)) ? this :
+      this.queryChildren(c => c.findTaggedChild(tag))
   }
 
   dispose () {
@@ -685,13 +693,7 @@ export class Root extends Element {
   }
 
   applyToChildren (op :ElementOp) { op(this.contents) }
-
-  findChild (type :string) :Element|undefined {
-    return super.findChild(type) || this.contents.findChild(type)
-  }
-  findTaggedChild (tag :string) :Element|undefined {
-    return super.findTaggedChild(tag) || this.contents.findTaggedChild(tag)
-  }
+  queryChildren<R> (query :ElementQuery<R>) { return query(this.contents) }
 
   /** Requests that `control` receive the keyboard focus. */
   requestFocus (control :Control) {
@@ -1003,14 +1005,9 @@ export class Control extends Element {
 
   handleFocus (focused :boolean) { this.focused.update(focused) }
 
-  findChild (type :string) :Element|undefined {
-    return super.findChild(type) || this.contents.findChild(type)
-  }
-  findTaggedChild (tag :string) :Element|undefined {
-    return super.findTaggedChild(tag) || this.contents.findTaggedChild(tag)
-  }
-
   applyToChildren (op :ElementOp) { op(this.contents) }
+  queryChildren<R> (query :ElementQuery<R>) { return query(this.contents) }
+
   applyToContaining (canvas :CanvasRenderingContext2D, pos :vec2, op :ElementOp) {
     const applied = super.applyToContaining(canvas, pos, op)
     if (applied) this.contents.applyToContaining(canvas, pos, op)

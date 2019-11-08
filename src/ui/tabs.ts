@@ -1,7 +1,7 @@
 import {rect} from "../core/math"
 import {Mutable, Value} from "../core/react"
 import {ModelKey, ElementsModel, Spec} from "./model"
-import {Element, ElementConfig, ElementContext} from "./element"
+import {Element, ElementConfig, ElementContext, ElementOp, ElementQuery} from "./element"
 import {AxisConfig, OffAxisPolicy, VGroup} from "./group"
 import {ElementConfigMaker, HList, HListConfig, elementConfig} from "./list"
 import {DragElementConfig, DragElement, DragElementStates, ReorderDragger, OrderUpdater,
@@ -67,9 +67,12 @@ export class TabbedPane extends VGroup {
     }
   }
 
-  applyToChildren (op :(elem :Element) => void) {
+  applyToChildren (op :ElementOp) {
     super.applyToChildren(op)
     if (this.reorderer) op(this.reorderer.cursor)
+  }
+  queryChildren<R> (query :ElementQuery<R>) {
+    return super.queryChildren(query) || (this.reorderer && query(this.reorderer.cursor))
   }
 
   protected relayout () {

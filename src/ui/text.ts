@@ -3,7 +3,7 @@ import {refEquals} from "../core/data"
 import {Noop, Remover, PMap, getValue} from "../core/util"
 import {Mutable, Subject, Value, falseValue} from "../core/react"
 import {Control, ControlConfig, ControlStates, Element, ElementConfig, ElementContext,
-        PointerInteraction} from "./element"
+        ElementOp, ElementQuery, PointerInteraction} from "./element"
 import {Spec, FontConfig, Paint, PaintConfig, ShadowConfig, Span, EmptySpan,
         insetsToCSS} from "./style"
 import {Model, Action, NoopAction} from "./model"
@@ -327,9 +327,12 @@ export abstract class AbstractText extends Control {
 
   get styleScope () { return TextStyleScope }
 
-  applyToChildren (op :(elem :Element) => void) {
+  applyToChildren (op :ElementOp) {
     super.applyToChildren(op)
     op(this.cursor)
+  }
+  queryChildren<R> (query :ElementQuery<R>) {
+    return super.queryChildren(query) || query(this.cursor)
   }
 
   handlePointerDown (event :MouseEvent|TouchEvent, pos :vec2) :PointerInteraction|undefined {
