@@ -40,7 +40,7 @@ pipeline {
     }
     fixed {
       slackSend(
-        message: "Jenkins build is back to normal: `{env.JOB_NAME}` #${env.BUILD_NUMBER}")
+        message: "Jenkins build is back to normal: `${env.JOB_NAME}` #${env.BUILD_NUMBER}")
     }
   }
 }
