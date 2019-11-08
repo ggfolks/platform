@@ -1,5 +1,5 @@
 import {dim2, rect, vec2, vec2zero} from "../core/math"
-import {getValue, log} from "../core/util"
+import {getValue, log, developMode} from "../core/util"
 import {Element, ElementConfig, ElementContext, ElementOp} from "./element"
 
 const tmpr = rect.create()
@@ -61,7 +61,7 @@ abstract class Group extends Element {
   protected rerender (canvas :CanvasRenderingContext2D, region :rect) {
     // render in reverse order since we process events in forward
     for (let ii = this.contents.length - 1; ii >= 0; ii--) this.contents[ii].render(canvas, region)
-    if (this.overflowed) {
+    if (developMode && this.overflowed) {
       canvas.strokeStyle = "red"
       canvas.lineWidth = 2
       const b = this.bounds
@@ -299,7 +299,8 @@ export abstract class VGroup extends Group {
       y += (eheight + gap)
     }
     const layHeight = y - this.bounds[1] - gap
-    if (this.overflowed = layHeight > this.bounds[3]) log.warn(
+    this.overflowed = layHeight > this.bounds[3]
+    if (developMode && this.overflowed) log.warn(
       "Vertical group overflowed bounds", "group", this, "height", layHeight)
   }
 }
@@ -350,7 +351,8 @@ export abstract class HGroup extends Group {
       x += (ewidth + gap)
     }
     const layWidth = x - this.bounds[0] - gap
-    if (this.overflowed = layWidth > this.bounds[2]) log.warn(
+    this.overflowed = layWidth > this.bounds[2]
+    if (developMode && this.overflowed) log.warn(
       "Horizontal group overflowed bounds", "group", this, "width", layWidth)
   }
 }

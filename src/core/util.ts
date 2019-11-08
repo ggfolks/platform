@@ -8,6 +8,10 @@ export const Noop = () => {}
   * potentially undefined remover thunk. */
 export const NoopRemover :Remover = Noop
 
+// NOTE: WebPack magically rewrites process.env.NODE_ENV for us; when we stop using WebPack we
+// should provide some other way to find out if we're in development or production mode
+export const developMode = process.env.NODE_ENV === "development"
+
 /** An interface for things that maintain external resources and should be disposed when no longer
   * needed. */
 export interface Disposable {
