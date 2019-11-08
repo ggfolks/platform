@@ -38,5 +38,9 @@ pipeline {
         color: "#FF9FA1",
         message: "Jenkins build failed: `${env.JOB_NAME}` #${env.BUILD_NUMBER}:\n${env.RUN_DISPLAY_URL}")
     }
+    fixed {
+      slackSend(
+        message: "Jenkins build is back to normal: `{env.JOB_NAME}` #${env.BUILD_NUMBER}")
+    }
   }
 }
