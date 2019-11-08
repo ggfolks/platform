@@ -253,6 +253,7 @@ export abstract class VGroup extends Group {
     const left = bounds[0], top = bounds[1], width = bounds[2], height = bounds[3]
     const m = computeMetrics(this, width, height, gap, true)
     const stretchHeight = Math.max(0, height - m.gaps(gap) - m.fixHeight)
+    let stretchRemain = stretchHeight
     let y = top
     for (const elem of this.contents) {
       if (!elem.visible.current) continue
@@ -260,12 +261,14 @@ export abstract class VGroup extends Group {
       const c = axisConstraints(elem)
       const ewidth = computeOffSize(offPolicy, psize[0], m.maxWidth, width)
       const eheight = computeSize(c, psize[1], m.totalWeight, stretchHeight)
+      const echeight = (c.stretch && stretchRemain < eheight) ? stretchRemain : eheight
+      if (c.stretch) stretchRemain -= echeight
       // if the element is constrained (rather than stretched or equalized), it might be slimmer
       // than the column width, so we center it; this is a more useful default I think, and if you
       // really want left-aligned elements, you can equalize or stretch and put your sub-elements in
       // a left-aligned box
-      elem.setBounds(rect.set(tmpr, left+(width-ewidth)/2, y, ewidth, eheight))
-      y += (eheight + gap)
+      elem.setBounds(rect.set(tmpr, left+(width-ewidth)/2, y, ewidth, echeight))
+      y += (echeight + gap)
     }
     const layHeight = y - this.bounds[1] - gap
     this.overflowed = layHeight > this.bounds[3]
@@ -305,19 +308,22 @@ export abstract class HGroup extends Group {
     const left = bounds[0], top = bounds[1], width = bounds[2], height = bounds[3]
     const m = computeMetrics(this, width, height, gap, true)
     const stretchWidth = Math.max(0, width - m.gaps(gap) - m.fixWidth)
+    let stretchRemain = stretchWidth
     let x = left
     for (const elem of this.contents) {
       if (!elem.visible.current) continue
       const psize = elem.preferredSize(width, height) // will be cached
       const c = axisConstraints(elem)
       const ewidth = computeSize(c, psize[0], m.totalWeight, stretchWidth)
+      const ecwidth = (c.stretch && stretchRemain < ewidth) ? stretchRemain : ewidth
+      if (c.stretch) stretchRemain -= ecwidth
       const eheight = computeOffSize(offPolicy, psize[1], m.maxHeight, height)
       // if the element is constrained (rather than stretched or equalized), it might be slimmer
       // than the row height, so we center it; this is a more useful default I think, and if you
       // really want top-aligned elements, you can equalize or stretch and put your sub-elements in
       // a top-aligned box
-      elem.setBounds(rect.set(tmpr, x, top+(height-eheight)/2, ewidth, eheight))
-      x += (ewidth + gap)
+      elem.setBounds(rect.set(tmpr, x, top+(height-eheight)/2, ecwidth, eheight))
+      x += (ecwidth + gap)
     }
     const layWidth = x - this.bounds[0] - gap
     this.overflowed = layWidth > this.bounds[2]
