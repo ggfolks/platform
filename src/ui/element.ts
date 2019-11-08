@@ -256,7 +256,7 @@ export abstract class Element implements Disposable {
   applyToChildren (op :ElementOp) {}
 
   /** Applies `query` to all children of this element (and recursively to their children), and
-    * returns the first defined result. */
+    * returns the first non-falsey result. */
   queryChildren<R> (query :ElementQuery<R>) :R|undefined { return undefined }
 
   /** Applies the provided operation to all elements containing the specified position.
@@ -306,7 +306,7 @@ export abstract class Element implements Disposable {
     * @return an interaction if an element started an interaction with the pointer, `undefined`
     * otherwise. */
   handlePointerDown (event :MouseEvent|TouchEvent, pos :vec2) :PointerInteraction|undefined {
-    return undefined
+    return this.queryChildren(c => c.maybeHandlePointerDown(event, pos))
   }
 
   /** Requests that this element handle the supplied wheel event if it contains the position.
@@ -322,7 +322,7 @@ export abstract class Element implements Disposable {
     * @param pos the position of the event relative to the root origin.
     * @return whether or not the wheel was handled, and thus should not be further propagated. */
   handleWheel (event :WheelEvent, pos :vec2) :boolean {
-    return false
+    return !!this.queryChildren(c => c.maybeHandleWheel(event, pos))
   }
 
   /** Requests that this element handle the supplied double click event if it contains the position.
@@ -338,7 +338,7 @@ export abstract class Element implements Disposable {
     * @param pos the position of the event relative to the root origin.
     * @return whether or not the event was handled, and thus should not be further propagated. */
   handleDoubleClick (event :MouseEvent, pos :vec2) :boolean {
-    return false
+    return !!this.queryChildren(c => c.maybeHandleDoubleClick(event, pos))
   }
 
   /** Finds the first child with the specified `type`. */

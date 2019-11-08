@@ -91,16 +91,6 @@ export class Box extends Element {
   handleMouseEnter (pos :vec2) { this._hovered.update(true) }
   handleMouseLeave (pos :vec2) { this._hovered.update(false) }
 
-  handlePointerDown (event :MouseEvent|TouchEvent, pos :vec2) {
-    return this.contents.maybeHandlePointerDown(event, pos)
-  }
-  handleWheel (event :WheelEvent, pos :vec2) {
-    return this.contents.maybeHandleWheel(event, pos)
-  }
-  handleDoubleClick (event :MouseEvent, pos :vec2) {
-    return this.contents.maybeHandleDoubleClick(event, pos)
-  }
-
   private computeInnerBounds (into :rect) :rect {
     const {padding, margin} = this.style
     rect.copy(into, this.bounds)

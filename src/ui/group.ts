@@ -10,26 +10,6 @@ abstract class Group extends Element {
   protected overflowed = false
   abstract get contents () :Element[]
 
-  handlePointerDown (event :MouseEvent|TouchEvent, pos :vec2) {
-    for (const cc of this.contents) {
-      const interaction = cc.maybeHandlePointerDown(event, pos)
-      if (interaction) return interaction
-    }
-    return undefined
-  }
-  handleWheel (event :WheelEvent, pos :vec2) :boolean {
-    for (const cc of this.contents) {
-      if (cc.maybeHandleWheel(event, pos)) return true
-    }
-    return false
-  }
-  handleDoubleClick (event :MouseEvent, pos :vec2) :boolean {
-    for (const cc of this.contents) {
-      if (cc.maybeHandleDoubleClick(event, pos)) return true
-    }
-    return false
-  }
-
   applyToChildren (op :ElementOp) { for (const elem of this.contents) op(elem) }
   queryChildren<R> (query :ElementQuery<R>) {
     for (const elem of this.contents) {
