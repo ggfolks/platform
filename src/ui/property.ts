@@ -303,9 +303,15 @@ type UrlSelector = (value :Mutable<string>) => void
 const defaultUrlSelector :UrlSelector = value => {
   const input = document.createElement("input")
   input.setAttribute("type", "file")
-  document.body.appendChild(input)
+  // We need to keep a reference to the input or everything might GC and we'll never get the
+  // change event. Holding onto it for 30s is hacky but should be enough for a user to select
+  // a file, and it seems to (in my browser) greatly increase the chances of success even
+  // over 30s.
+  const timeoutHandle = setTimeout(() => {
+    input.setAttribute("bogus", "bogus") // reference the input element
+  }, 30 * 1000)
   input.addEventListener("change", event => {
-    document.body.removeChild(input)
+    clearTimeout(timeoutHandle)
     if (!input.files || input.files.length === 0) return
     const url = URL.createObjectURL(input.files[0])
     value.update(url.toString())
