@@ -63,7 +63,7 @@ abstract class TransformedContainer extends Control {
   }
   handleWheel (event :WheelEvent, pos :vec2) {
     const transformedPos = this._transformPos(pos)
-    return this.contents.handleWheel(event, transformedPos)
+    return this.contents.maybeHandleWheel(event, transformedPos)
   }
   handleDoubleClick (event :MouseEvent, pos :vec2) {
     const transformedPos = this._transformPos(pos)
