@@ -250,7 +250,7 @@ export class TreeViewNode extends DragElement {
   constructor (ctx :ElementContext, parent :Element, readonly config :TreeViewNodeConfig) {
     super(ctx, parent, config)
     this._selectedKeys = this.requireAncestor(TreeView).selectedKeys
-    this.disposer.add(this._selectedKeys.onValue(_ => this._state.update(this.computeState)))
+    this.recomputeStateOnChange(this._selectedKeys)
 
     this.disposer.add(this.requireAncestor(TreeView).dropCoord.onValue(c => {
       this.hovered.update(!!c && c.parentKey === this.key.current && !c.insert)

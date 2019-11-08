@@ -297,7 +297,7 @@ export abstract class AbstractText extends Control {
     this._onEnter = ctx.model.resolveAction(config.onEnter, NoopAction)
 
     // update state when text changes; we may become invalid
-    this.disposer.add(text.onValue(() => this._state.update(this.computeState)))
+    this.recomputeStateOnChange(text)
 
     const label = this.contents.findChild("label") as Label|undefined
     if (label) this.label = label

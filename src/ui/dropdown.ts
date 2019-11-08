@@ -165,7 +165,7 @@ export class AbstractDropdownItem extends AbstractDropdown {
       },
     )
     this._separator = ctx.model.resolve(config.separator, falseValue)
-    this.disposer.add(this._separator.onValue(() => this._state.update(this.computeState)))
+    this.recomputeStateOnChange(this._separator)
     this._action = ctx.model.resolveActionOpt(config.action)
   }
 

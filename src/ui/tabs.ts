@@ -102,7 +102,7 @@ export class Tab extends DragElement {
   constructor (ctx :ElementContext, parent :Element, readonly config :TabConfig) {
     super(ctx, parent, config)
     this._activeKey = ctx.model.resolve(config.activeKey)
-    this.disposer.add(this._activeKey.onValue(_ => this._state.update(this.computeState)))
+    this.recomputeStateOnChange(this._activeKey)
   }
 
   get styleScope () { return TabStyleScope }

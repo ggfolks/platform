@@ -966,6 +966,7 @@ function bothEitherOrTrue (a :Value<boolean>|undefined, b :Value<boolean>|undefi
   * combines a `Box` with an `Icon` and/or `Label` (and a `Group` if both an icon and label are
   * used) to visualize the button, and `Button` handles interactions. */
 export class Control extends Element {
+  private readonly _updateState = () => this._state.update(this.computeState)
   protected readonly _state = Mutable.local(ControlStates[0])
   protected readonly enabled :Value<boolean>
   protected readonly hovered = Mutable.local(false)
@@ -974,15 +975,14 @@ export class Control extends Element {
 
   constructor (ctx :ElementContext, parent :Element|undefined, readonly config :ControlConfig) {
     super(ctx, parent, config)
-    const updateState = () => this._state.update(this.computeState)
     // our enabled state either comes from our command, is directly specified, or is both (anded)
     const command = ctx.model.resolveOpt(this.actionSpec(config))
     const enabled = this.enabled = bothEitherOrTrue(
       ctx.model.resolveOpt(config.enabled),
       (command instanceof Command) ? command.enabled : undefined)
-    if (enabled !== trueValue) this.disposer.add(enabled.onValue(updateState))
-    this.hovered.onValue(updateState)
-    this.focused.onValue(updateState)
+    if (enabled !== trueValue) this.disposer.add(enabled.onValue(this._updateState))
+    this.hovered.onValue(this._updateState)
+    this.focused.onValue(this._updateState)
     this.contents = ctx.elem.create(ctx, this, this.config.contents)
   }
 
@@ -1026,6 +1026,9 @@ export class Control extends Element {
           : this.isFocused ? "focused" : "normal"
         )
       : "disabled"
+  }
+  protected recomputeStateOnChange (source :Source<any>) {
+    this.disposer.add(source.onValue(this._updateState))
   }
 
   /** If this control triggers an action, it must override this method to return the spec for that

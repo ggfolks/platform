@@ -17,7 +17,7 @@ export abstract class AbstractButton extends Control {
 
   constructor (ctx :ElementContext, parent :Element, config :ControlConfig) {
     super(ctx, parent, config)
-    this._pressed.onValue(_ => this._state.update(this.computeState))
+    this.recomputeStateOnChange(this._pressed)
   }
 
   get styleScope () { return ButtonStyleScope }
