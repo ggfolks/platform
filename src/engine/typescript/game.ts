@@ -731,19 +731,27 @@ const ROTATION_INVALID = (1 << 4)
 const LOSSY_SCALE_INVALID = (1 << 5)
 const LOCAL_TO_WORLD_MATRIX_INVALID = (1 << 6)
 const WORLD_TO_LOCAL_MATRIX_INVALID = (1 << 7)
+const RIGHT_INVALID = (1 << 8)
+const UP_INVALID = (1 << 9)
+const FORWARD_INVALID = (1 << 10)
 
 const LOCAL_INVALID =
   LOCAL_POSITION_INVALID | LOCAL_ROTATION_INVALID |
-  LOCAL_TO_WORLD_MATRIX_INVALID | WORLD_TO_LOCAL_MATRIX_INVALID
+  LOCAL_TO_WORLD_MATRIX_INVALID | WORLD_TO_LOCAL_MATRIX_INVALID |
+  RIGHT_INVALID | UP_INVALID | FORWARD_INVALID
 
 const WORLD_INVALID =
   POSITION_INVALID | ROTATION_INVALID | LOSSY_SCALE_INVALID |
-  LOCAL_TO_WORLD_MATRIX_INVALID | WORLD_TO_LOCAL_MATRIX_INVALID
+  LOCAL_TO_WORLD_MATRIX_INVALID | WORLD_TO_LOCAL_MATRIX_INVALID |
+  RIGHT_INVALID | UP_INVALID | FORWARD_INVALID
 
 class TypeScriptTransform extends TypeScriptComponent implements Transform {
   @property("vec3", {readonly: true, transient: true}) readonly lossyScale :vec3
   readonly localToWorldMatrix :mat4
   readonly worldToLocalMatrix :mat4
+  readonly right :vec3
+  readonly up :vec3
+  readonly forward :vec3
 
   private _parent? :TypeScriptTransform
   private _addedToRoot = false
@@ -761,6 +769,9 @@ class TypeScriptTransform extends TypeScriptComponent implements Transform {
   private readonly _lossyScaleTarget :vec3
   private readonly _localToWorldMatrixTarget :mat4
   private readonly _worldToLocalMatrixTarget :mat4
+  private readonly _rightTarget :vec3
+  private readonly _upTarget :vec3
+  private readonly _forwardTarget :vec3
   private _invalidFlags = 0
 
   constructor (
@@ -795,7 +806,8 @@ class TypeScriptTransform extends TypeScriptComponent implements Transform {
     )
     this._localRotation = makeReadWriteProxy(
       this._localRotationTarget = quat.create(),
-      ROTATION_INVALID | LOCAL_TO_WORLD_MATRIX_INVALID | WORLD_TO_LOCAL_MATRIX_INVALID,
+      ROTATION_INVALID | LOCAL_TO_WORLD_MATRIX_INVALID | WORLD_TO_LOCAL_MATRIX_INVALID |
+        RIGHT_INVALID | UP_INVALID | FORWARD_INVALID,
       LOCAL_ROTATION_INVALID,
     )
     this._localScale = makeReadWriteProxy(
@@ -811,7 +823,8 @@ class TypeScriptTransform extends TypeScriptComponent implements Transform {
     )
     this._rotation = makeReadWriteProxy(
       this._rotationTarget = quat.create(),
-      LOCAL_ROTATION_INVALID | LOCAL_TO_WORLD_MATRIX_INVALID | WORLD_TO_LOCAL_MATRIX_INVALID,
+      LOCAL_ROTATION_INVALID | LOCAL_TO_WORLD_MATRIX_INVALID | WORLD_TO_LOCAL_MATRIX_INVALID |
+        RIGHT_INVALID | UP_INVALID | FORWARD_INVALID,
       ROTATION_INVALID,
     )
 
@@ -835,6 +848,12 @@ class TypeScriptTransform extends TypeScriptComponent implements Transform {
     this.worldToLocalMatrix = makeReadOnlyProxy(
       this._worldToLocalMatrixTarget = mat4.create(),
       WORLD_TO_LOCAL_MATRIX_INVALID,
+    )
+    this.right = makeReadOnlyProxy(this._rightTarget = vec3.fromValues(1, 0, 0), RIGHT_INVALID)
+    this.up = makeReadOnlyProxy(this._upTarget = vec3.fromValues(0, 1, 0), UP_INVALID)
+    this.forward = makeReadOnlyProxy(
+      this._forwardTarget = vec3.fromValues(0, 0, 1),
+      FORWARD_INVALID,
     )
   }
 
@@ -1075,6 +1094,15 @@ class TypeScriptTransform extends TypeScriptComponent implements Transform {
     }
     if (intersection & LOSSY_SCALE_INVALID) {
       mat4.getScaling(this._lossyScaleTarget, this.localToWorldMatrix)
+    }
+    if (intersection & RIGHT_INVALID) {
+      vec3.transformQuat(this._rightTarget, vec3.set(this._rightTarget, 1, 0, 0), this.rotation)
+    }
+    if (intersection & UP_INVALID) {
+      vec3.transformQuat(this._upTarget, vec3.set(this._upTarget, 0, 1, 0), this.rotation)
+    }
+    if (intersection & FORWARD_INVALID) {
+      vec3.transformQuat(this._forwardTarget, vec3.set(this._forwardTarget, 0, 0, 1), this.rotation)
     }
     if (intersection & LOCAL_TO_WORLD_MATRIX_INVALID) {
       this.sendMessage("onTransformChanged")

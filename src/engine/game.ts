@@ -381,6 +381,15 @@ export interface Transform extends Component {
   /** The matrix that transforms from world to local space. */
   readonly worldToLocalMatrix :mat4
 
+  /** The transform's right direction (local X+) in world space. */
+  readonly right :vec3
+
+  /** The transform's up direction (local Y+) in world space. */
+  readonly up :vec3
+
+  /** The transform's forward direction (local Z+) in world space. */
+  readonly forward :vec3
+
   /** Rotates by a set of Euler angles in local (default) or world space.
     * @param euler the angles by which to rotate, in degrees.
     * @param [frame] the coordinate frame in which to rotate (local by default). */

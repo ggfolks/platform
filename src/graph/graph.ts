@@ -130,7 +130,7 @@ export class Graph implements Disposable {
         vec4 modPosition = mod(worldPosition.xzxz, vec4(vec2(1.0), vec2(0.2)));
         vec4 lowerSteps = step(vec4(vec2(0.02), vec2(0.005)), modPosition);
         vec4 upperSteps = vec4(1.0) - step(vec4(vec2(0.98), vec2(0.195)), modPosition);
-        float scale = 0.1 * exp(-0.1 * distance(worldPosition.xz, cameraPosition.xz));
+        float scale = 0.25 * exp(-0.1 * distance(worldPosition.xz, cameraPosition.xz));
         gl_FragColor = mix(
           vec4(scale, scale, scale, 1.0),
           vec4(0.0, 0.0, 0.0, 1.0),
