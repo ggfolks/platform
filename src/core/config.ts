@@ -43,9 +43,9 @@ export function mergeConfig (target :Record, source :Record) :Record {
     // }
     else if (isSet(sprop)) target[key] = mergeSets(tprop as Set<Data>, sprop as DataSet)
     else if (isMap(sprop)) target[key] = mergeMaps(tprop as DataMap, sprop as DataMap)
+    else if (Array.isArray(sprop)) target[key] = sprop.slice(0)
     // if the target is an instance of a class, overwrite the source
     else if (isInstance(tprop)) target[key] = sprop
-    else if (Array.isArray(sprop)) target[key] = sprop.slice(0)
     // if the target prop is not a record, overwrite it; TODO: warn about invalid merge?
     else if (typeof tprop !== "object" || tprop[REPLACE_PROP] === true || Array.isArray(tprop) ||
              isSet(tprop) || isMap(tprop)) target[key] = mergeConfig({}, sprop as Record)
