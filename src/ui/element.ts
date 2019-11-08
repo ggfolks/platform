@@ -686,7 +686,7 @@ export class Root extends Element {
 
   applyToChildren (op :ElementOp) { op(this.contents) }
 
-  findChild<E extends Element> (type :string) :Element|undefined {
+  findChild (type :string) :Element|undefined {
     return super.findChild(type) || this.contents.findChild(type)
   }
   findTaggedChild (tag :string) :Element|undefined {
