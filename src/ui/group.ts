@@ -56,11 +56,6 @@ abstract class Group extends Element {
     }
     return true
   }
-  applyToIntersecting (region :rect, op :ElementOp) {
-    if (!super.applyToIntersecting(region, op)) return false
-    for (const cc of this.contents) cc.applyToIntersecting(region, op)
-    return true
-  }
 
   protected rerender (canvas :CanvasRenderingContext2D, region :rect) {
     // render in reverse order since we process events in forward

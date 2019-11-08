@@ -268,9 +268,12 @@ export abstract class Element implements Disposable {
     * @param op the operation to apply.
     * @return whether the operation was applied to this element (and potentially its children). */
   applyToIntersecting (region :rect, op :ElementOp) :boolean {
-    if (!this.intersectsRect(region)) return false
-    op(this)
-    return true
+    const intersects = this.intersectsRect(region)
+    if (intersects) {
+      op(this)
+      this.applyToChildren(child => child.applyToIntersecting(region, op))
+    }
+    return intersects
   }
 
   /** Requests that this element handle the supplied mouse enter event.
@@ -683,7 +686,7 @@ export class Root extends Element {
 
   applyToChildren (op :ElementOp) { op(this.contents) }
 
-  findChild (type :string) :Element|undefined {
+  findChild<E extends Element> (type :string) :Element|undefined {
     return super.findChild(type) || this.contents.findChild(type)
   }
   findTaggedChild (tag :string) :Element|undefined {

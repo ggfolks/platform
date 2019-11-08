@@ -96,11 +96,6 @@ export class Box extends Element {
     if (applied) this.contents.applyToContaining(canvas, pos, op)
     return applied
   }
-  applyToIntersecting (region :rect, op :ElementOp) {
-    const applied = super.applyToIntersecting(region, op)
-    if (applied) this.contents.applyToIntersecting(region, op)
-    return applied
-  }
 
   handleMouseEnter (pos :vec2) { this._hovered.update(true) }
   handleMouseLeave (pos :vec2) { this._hovered.update(false) }

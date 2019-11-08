@@ -27,7 +27,10 @@ abstract class TransformedContainer extends Control {
   }
   applyToIntersecting (region :rect, op :(element :Element) => void) {
     const intersects = this.intersectsRect(region)
-    if (intersects) this.contents.applyToIntersecting(this._transformRegion(region), op)
+    if (intersects) {
+      op(this)
+      this.contents.applyToIntersecting(this._transformRegion(region), op)
+    }
     return intersects
   }
 

@@ -115,11 +115,6 @@ export class Toggle extends Control {
     if (applied && this.checkedContents) this.checkedContents.applyToContaining(canvas, pos, op)
     return applied
   }
-  applyToIntersecting (region :rect, op :ElementOp) {
-    const applied = super.applyToIntersecting(region, op)
-    if (applied && this.checkedContents) this.checkedContents.applyToIntersecting(region, op)
-    return applied
-  }
 
   handlePointerDown (event :MouseEvent|TouchEvent, pos :vec2) :PointerInteraction|undefined {
     if (event instanceof MouseEvent && event.button !== 0) return undefined
