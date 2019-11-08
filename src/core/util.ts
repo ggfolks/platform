@@ -94,6 +94,8 @@ export function unreachableCase<T> (impossible :never, value :T) :T {
   return value
 }
 
+function (
+
 /** Maintains a set of positive integers using bits in a backing (typed array) vector. */
 export class BitSet {
   private bits :Uint32Array
