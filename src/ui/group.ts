@@ -1,5 +1,5 @@
 import {dim2, rect, vec2, vec2zero} from "../core/math"
-import {getValue} from "../core/util"
+import {getValue, log} from "../core/util"
 import {Element, ElementConfig, ElementContext, ElementOp} from "./element"
 
 const tmpr = rect.create()
@@ -7,6 +7,7 @@ const tmpr = rect.create()
 /** Groups contain multiple child elements.
   * Different subclasses of group implement different layout policies. */
 abstract class Group extends Element {
+  protected overflowed = false
   abstract get contents () :Element[]
 
   handlePointerDown (event :MouseEvent|TouchEvent, pos :vec2) {
@@ -60,6 +61,13 @@ abstract class Group extends Element {
   protected rerender (canvas :CanvasRenderingContext2D, region :rect) {
     // render in reverse order since we process events in forward
     for (let ii = this.contents.length - 1; ii >= 0; ii--) this.contents[ii].render(canvas, region)
+    if (this.overflowed) {
+      canvas.strokeStyle = "red"
+      canvas.lineWidth = 2
+      const b = this.bounds
+      canvas.strokeRect(b[0]+1, b[1]+1, b[2]-2, b[3]-2)
+      canvas.lineWidth = 1
+    }
   }
 
   protected get defaultOffPolicy () :OffAxisPolicy { return "constrain" }
@@ -290,6 +298,9 @@ export abstract class VGroup extends Group {
       elem.setBounds(rect.set(tmpr, left+(width-ewidth)/2, y, ewidth, eheight))
       y += (eheight + gap)
     }
+    const layHeight = y - this.bounds[1] - gap
+    if (this.overflowed = layHeight > this.bounds[3]) log.warn(
+      "Vertical group overflowed bounds", "group", this, "height", layHeight)
   }
 }
 
@@ -338,6 +349,9 @@ export abstract class HGroup extends Group {
       elem.setBounds(rect.set(tmpr, x, top+(height-eheight)/2, ewidth, eheight))
       x += (ewidth + gap)
     }
+    const layWidth = x - this.bounds[0] - gap
+    if (this.overflowed = layWidth > this.bounds[2]) log.warn(
+      "Horizontal group overflowed bounds", "group", this, "width", layWidth)
   }
 }
 
