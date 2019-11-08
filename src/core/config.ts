@@ -36,14 +36,15 @@ export function mergeConfig (target :Record, source :Record) :Record {
   for (const key in source) {
     const sprop = source[key], tprop = target[key]
     const sourceIsObject = typeof sprop === "object"
-    // if the target is an instance of a class, overwrite the source
-    if (!sourceIsObject || sprop === null || isInstance(tprop)) target[key] = sprop
+    if (!sourceIsObject || sprop === null) target[key] = sprop
     // TODO: support custom _merge property
     // else if (sprop._merge) {
     //   target[key] = sprop._merge(tprop)
     // }
     else if (isSet(sprop)) target[key] = mergeSets(tprop as Set<Data>, sprop as DataSet)
     else if (isMap(sprop)) target[key] = mergeMaps(tprop as DataMap, sprop as DataMap)
+    // if the target is an instance of a class, overwrite the source
+    else if (isInstance(tprop)) target[key] = sprop
     else if (Array.isArray(sprop)) target[key] = sprop.slice(0)
     // if the target prop is not a record, overwrite it; TODO: warn about invalid merge?
     else if (typeof tprop !== "object" || tprop[REPLACE_PROP] === true || Array.isArray(tprop) ||
