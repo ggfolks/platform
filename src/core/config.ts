@@ -9,58 +9,58 @@ const REPLACE_PROP = "__replace__"
   * inherits values from its prototype. */
 const PROTOTYPE_PROP = "prototype"
 
-/**
- * Merges a chain of inherited config records. `configs` must be ordered from child-most to
- * parent-most. Records are merged property by property, with child values overriding parent values.
- * In the case of set-valued properties, child sets are unioned with parent sets. Record-valued
- * properties are recursively merged with parent records. For both record- and set-valued
- * properties, if the child declares an explicit empty record or set, that property _overrides_ the
- * parent property instead of being merged with it.
- */
-export function makeConfig (configs :Record[], freeze = true) :Record {
-  function merge (target :Record, source :Record) :Record {
-    for (const key in source) {
-      const sprop = source[key], tprop = target[key]
-      const sourceIsObject = typeof sprop === "object"
-      if (!sourceIsObject || sprop === null) {
-        target[key] = sprop
-      }
-      // TODO: support custom _merge property
-      // else if (sprop._merge) {
-      //   target[key] = sprop._merge(tprop)
-      // }
-      else if (isSet(sprop)) {
-        const sset = sprop as DataSet, merged = new Set(tprop as Set<Data>)
-        sset.forEach(elem => merged.add(elem))
-        target[key] = merged
-      }
-      else if (isMap(sprop)) {
-        const smap = sprop as DataMap, merged = new Map(tprop as DataMap)
-        smap.forEach((val, key) => merged.set(key, val))
-        target[key] = merged
-      }
-      else if (Array.isArray(sprop)) {
-        target[key] = sprop.slice(0)
-      }
-      // if the target prop is not a record, overwrite it; otherwise merge
-      else if (typeof tprop !== "object" || Array.isArray(tprop) || isSet(tprop) ||
-               tprop[REPLACE_PROP] === true) {
-        // TODO: warn about invalid merge?
-        target[key] = merge({}, sprop as Record)
-      }
-      else {
-        target[key] = merge(tprop as Record, sprop as Record)
-      }
-    }
-    return target
+/** Merges sets `a` and `b` into a newly created set. */
+export function mergeSets (a :Set<Data>, b :Set<Data>) :Set<Data> {
+  const merged = new Set(a)
+  b.forEach(elem => merged.add(elem))
+  return merged
+}
+
+/** Merges `added` over `base` into a newly created map. */
+export function mergeMaps (base :DataMap, added :DataMap) :DataMap {
+  const merged = new Map(base)
+  added.forEach((val, key) => merged.set(key, val))
+  return merged
+}
+
+const pojoProto = Object.getPrototypeOf({})
+const isInstance = (value :any) =>
+  typeof value === "object" && Object.getPrototypeOf(value) !== pojoProto
+
+/** Merges `source` into `target` property by property, with source values overriding target values.
+  * In the case of set-valued properties, source sets are unioned with target sets. Record-valued
+  * properties are recursively merged with source records. For both record- and set-valued
+  * properties, if the source declares an explicit empty record or set, that property _overrides_
+  * the target property instead of being merged with it. */
+export function mergeConfig (target :Record, source :Record) :Record {
+  for (const key in source) {
+    const sprop = source[key], tprop = target[key]
+    const sourceIsObject = typeof sprop === "object"
+    // if the target is an instance of a class, overwrite the source
+    if (!sourceIsObject || sprop === null || isInstance(tprop)) target[key] = sprop
+    // TODO: support custom _merge property
+    // else if (sprop._merge) {
+    //   target[key] = sprop._merge(tprop)
+    // }
+    else if (isSet(sprop)) target[key] = mergeSets(tprop as Set<Data>, sprop as DataSet)
+    else if (isMap(sprop)) target[key] = mergeMaps(tprop as DataMap, sprop as DataMap)
+    else if (Array.isArray(sprop)) target[key] = sprop.slice(0)
+    // if the target prop is not a record, overwrite it; TODO: warn about invalid merge?
+    else if (typeof tprop !== "object" || tprop[REPLACE_PROP] === true || Array.isArray(tprop) ||
+             isSet(tprop) || isMap(tprop)) target[key] = mergeConfig({}, sprop as Record)
+    else target[key] = mergeConfig(tprop as Record, sprop as Record)
   }
-  const config = configs.reduceRight(merge, {})
+  return target
+}
+
+/** Merges a chain of config records using [[mergeConfig]]. `configs` must be ordered from
+  * child-most to parent-most. */
+export function makeConfig (configs :Record[], freeze = true) :Record {
+  const config = configs.reduceRight(mergeConfig, {})
   return freeze ? Object.freeze(config) : config
 }
 
-/**
- * Loads config records based on their path. Used by [resolveConfig].
- */
+/** Loads config records based on their path. Used by [resolveConfig]. */
 export interface Source {
 
   /**
