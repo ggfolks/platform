@@ -61,7 +61,10 @@ abstract class TransformedContainer extends Control {
     this.root.clearFocus()
     return this.startScroll(event, pos)
   }
-
+  handleWheel (event :WheelEvent, pos :vec2) {
+    const transformedPos = this._transformPos(pos)
+    return this.contents.handleWheel(event, transformedPos)
+  }
   handleDoubleClick (event :MouseEvent, pos :vec2) {
     const transformedPos = this._transformPos(pos)
     return this.contents.maybeHandleDoubleClick(event, transformedPos)
