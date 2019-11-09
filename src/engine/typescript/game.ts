@@ -671,6 +671,12 @@ export class TypeScriptComponent extends TypeScriptConfigurable implements Compo
     )
   }
 
+  stopAllCoroutines () {
+    for (const coroutine of this._coroutines) {
+      coroutine.dispose()
+    }
+  }
+
   createConfig () :ConfigurableConfig {
     const config :ConfigurableConfig = {}
     if (this.order !== 0) config.order = this.order

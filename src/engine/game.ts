@@ -280,6 +280,9 @@ export interface Component extends Configurable {
     * @return the coroutine object. */
   startCoroutine (fnOrGenerator :(() => Generator<void>)|Generator<void>) :Coroutine
 
+  /** Stops all coroutines on this component. */
+  stopAllCoroutines () :void
+
   /** Optional wake function. */
   readonly awake? :() => void
 
