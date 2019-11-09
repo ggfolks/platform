@@ -36,7 +36,7 @@ pipeline {
     failure {
       slackSend(
         color: "#FF9FA1",
-        message: "Jenkins build failed: `${env.JOB_NAME}` #${env.BUILD_NUMBER}:\nChange: ${env.CHANGE_TITLE}:\n${env.RUN_DISPLAY_URL}")
+        message: "Jenkins build failed: `${env.JOB_NAME}` #${env.BUILD_NUMBER}:\nChange: ${env.CHANGE_TITLE}:\n${env.RUN_DISPLAY_URL}\n${env.BUILD_URL}")
     }
     fixed {
       slackSend(
