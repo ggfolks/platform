@@ -4,8 +4,6 @@ export type Remover = () => void
 /** General no-op function. */
 export const Noop = () => {}
 
-function (
-
 /** A no-op remover thunk. This is useful when doing manual plumbing to avoid having to maintain a
   * potentially undefined remover thunk. */
 export const NoopRemover :Remover = Noop
