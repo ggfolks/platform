@@ -1,4 +1,3 @@
-import {Value} from "../core/react"
 import {PMap} from "../core/util"
 import {Component} from "./game"
 
@@ -30,10 +29,13 @@ export interface Animation extends Component {
 export interface AnimationController extends Component {
 
   /** The controller configuration. */
-  config :AnimationControllerConfig
+  animationControllerConfig :AnimationControllerConfig
 
   /** The current animation state. */
-  state :Value<string>
+  readonly state :string
+
+  /** Any other properties are conditions. */
+  [condition :string] :any
 }
 
 /** The configuration for an animation controller. */
