@@ -85,8 +85,7 @@ export class TypeScriptConfigurable implements Configurable {
   init () :void {
     // create any properties not created in constructor
     for (const [property, meta] of this.propertiesMeta) {
-      const valueName = getPropertyValueName(property)
-      if (!this[valueName]) this[valueName] = this._createPropertyValue(property, meta)
+      this._maybeCreatePropertyValue(property, meta)
     }
   }
 
@@ -135,6 +134,11 @@ export class TypeScriptConfigurable implements Configurable {
 
   dispose () {
     this._disposer.dispose()
+  }
+
+  protected _maybeCreatePropertyValue (property :string, meta :PropertyMeta) {
+    const valueName = getPropertyValueName(property)
+    if (!this[valueName]) this[valueName] = this._createPropertyValue(property, meta)
   }
 
   protected _createPropertyValue (name :string, meta :PropertyMeta) :Value<any> {
