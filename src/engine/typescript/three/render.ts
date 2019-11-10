@@ -1,9 +1,9 @@
 import {
-  AnimationClip, AnimationMixer, AmbientLight, BoxBufferGeometry, BufferGeometry,
-  CylinderBufferGeometry, DirectionalLight, Intersection, Light as LightObject, LoopOnce,
-  LoopRepeat, LoopPingPong, Material as MaterialObject, Mesh, MeshBasicMaterial,
-  MeshStandardMaterial, Object3D, PerspectiveCamera, PlaneBufferGeometry, Raycaster, Scene,
-  ShaderMaterial, SphereBufferGeometry, Vector2, WebGLRenderer,
+  AnimationClip, AnimationMixer, AmbientLight, BackSide, BoxBufferGeometry, BufferGeometry,
+  CylinderBufferGeometry, DirectionalLight, DoubleSide, FrontSide, Intersection,
+  Light as LightObject, LoopOnce, LoopRepeat, LoopPingPong, Material as MaterialObject, Mesh,
+  MeshBasicMaterial, MeshStandardMaterial, Object3D, PerspectiveCamera, PlaneBufferGeometry,
+  Raycaster, Scene, ShaderMaterial, SphereBufferGeometry, Vector2, WebGLRenderer,
 } from "three"
 import {SkeletonUtils} from "three/examples/jsm/utils/SkeletonUtils"
 import {Clock} from "../../../core/clock"
@@ -21,7 +21,8 @@ import {DEFAULT_PAGE, ConfigurableConfig, Hover, Transform} from "../../game"
 import {Animation, WrapMode, WrapModes} from "../../animation"
 import {PropertyMeta, getConfigurableMeta, property} from "../../meta"
 import {
-  Camera, Light, LightType, LightTypes, Material, MeshRenderer, Model, RaycastHit, RenderEngine,
+  Camera, Light, LightType, LightTypes, Material, MaterialSide, MaterialSides, MeshRenderer,
+  Model, RaycastHit, RenderEngine,
 } from "../../render"
 import {
   TypeScriptComponent, TypeScriptConfigurable, TypeScriptCube, TypeScriptCylinder,
@@ -330,9 +331,12 @@ class ThreePage extends TypeScriptPage {
 }
 registerConfigurableType("component", undefined, "page", ThreePage)
 
+setEnumMeta("MaterialSide", MaterialSides)
+
 abstract class ThreeMaterial extends TypeScriptConfigurable implements Material {
   @property("boolean") transparent = false
   @property("number", {min: 0, max: 1, wheelStep: 0.1}) alphaTest = 0
+  @property("MaterialSide") side :MaterialSide = "front"
 
   constructor (
     readonly gameEngine :TypeScriptGameEngine,
@@ -346,12 +350,18 @@ abstract class ThreeMaterial extends TypeScriptConfigurable implements Material 
 
   init () {
     super.init()
-    this.getProperty<boolean>("transparent").onValue(transparent => {
-      this.object.transparent = transparent
-      this.object.needsUpdate = true
-    })
-    this.getProperty<number>("alphaTest").onValue(alphaTest => {
-      this.object.alphaTest = alphaTest
+    for (const property of ["transparent", "alphaTest"]) {
+      this.getProperty<any>(property).onValue(value => {
+        this.object[property] = value
+        this.object.needsUpdate = true
+      })
+    }
+    this.getProperty<MaterialSide>("side").onValue(side => {
+      this.object.side = (side === "front")
+        ? FrontSide
+        : side === "back"
+        ? BackSide
+        : DoubleSide
       this.object.needsUpdate = true
     })
   }

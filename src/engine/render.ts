@@ -73,6 +73,9 @@ export interface MeshRenderer extends Component, Hoverable {
   materialConfigs :ConfigurableConfig[]
 }
 
+export type MaterialSide = "front" | "back" | "double"
+export const MaterialSides = ["front", "back", "double"]
+
 /** Represents a single material. */
 export interface Material extends Configurable {
 
@@ -81,6 +84,9 @@ export interface Material extends Configurable {
 
   /** The alpha test threshold. */
   alphaTest :number
+
+  /** The side to render. */
+  side :MaterialSide
 }
 
 /** Represents a camera attached to a game object. */
