@@ -74,7 +74,14 @@ export interface MeshRenderer extends Component, Hoverable {
 }
 
 /** Represents a single material. */
-export interface Material extends Configurable {}
+export interface Material extends Configurable {
+
+  /** Whether to treat the material as transparent. */
+  transparent :boolean
+
+  /** The alpha test threshold. */
+  alphaTest :number
+}
 
 /** Represents a camera attached to a game object. */
 export interface Camera extends Component, Hoverable {

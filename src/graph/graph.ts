@@ -133,7 +133,7 @@ export class Graph implements Disposable {
         float scale = 0.25 * exp(-0.1 * distance(worldPosition.xz, cameraPosition.xz));
         gl_FragColor = mix(
           vec4(scale, scale, scale, 1.0),
-          vec4(0.0, 0.0, 0.0, 1.0),
+          vec4(0.0, 0.0, 0.0, 0.0),
           lowerSteps.x * lowerSteps.y * lowerSteps.z * lowerSteps.w *
           upperSteps.x * upperSteps.y * upperSteps.z * upperSteps.w
         );

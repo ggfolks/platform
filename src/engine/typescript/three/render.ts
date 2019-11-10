@@ -331,6 +331,8 @@ class ThreePage extends TypeScriptPage {
 registerConfigurableType("component", undefined, "page", ThreePage)
 
 abstract class ThreeMaterial extends TypeScriptConfigurable implements Material {
+  @property("boolean") transparent = false
+  @property("number", {min: 0, max: 1, wheelStep: 0.1}) alphaTest = 0
 
   constructor (
     readonly gameEngine :TypeScriptGameEngine,
@@ -340,6 +342,18 @@ abstract class ThreeMaterial extends TypeScriptConfigurable implements Material 
   ) {
     super(gameEngine, supertype, type)
     this._disposer.add(object)
+  }
+
+  init () {
+    super.init()
+    this.getProperty<boolean>("transparent").onValue(transparent => {
+      this.object.transparent = transparent
+      this.object.needsUpdate = true
+    })
+    this.getProperty<number>("alphaTest").onValue(alphaTest => {
+      this.object.alphaTest = alphaTest
+      this.object.needsUpdate = true
+    })
   }
 }
 
