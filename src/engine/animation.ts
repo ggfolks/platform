@@ -23,6 +23,12 @@ export interface Animation extends Component {
   /** The wrap mode to use for the animation. */
   wrapMode :WrapMode
 
+  /** The time scale for the animation. */
+  timeScale :number
+
+  /** The number of repetitions of the animation. */
+  repetitions: number
+  
   /** Plays an animation
     * @param [name] the name of the animation to play, if not the default. */
   play (name? :string) :void

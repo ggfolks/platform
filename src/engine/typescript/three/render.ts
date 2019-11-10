@@ -812,6 +812,8 @@ class ThreeAnimation extends TypeScriptComponent implements Animation {
   @property("boolean") playAutomatically = true
   @property("select", {options: [""]}) playing = ""
   @property("WrapMode") wrapMode :WrapMode = "once"
+  @property("number", {min: 0, wheelStep: 0.1}) timeScale = 1
+  @property("number", {min: 0}) repetitions = Infinity
 
   readonly urlsValue = Mutable.local<string[]>([])
 
@@ -820,8 +822,7 @@ class ThreeAnimation extends TypeScriptComponent implements Animation {
   private _modelUrlsCount = 0
   private readonly _mixerSubject :Subject<AnimationMixer>
   private _mixer? :AnimationMixer
-  private readonly _clipsByUrl = new Map<string, Subject<AnimationClip>>()
-  private readonly _clipsByName = new Map<string, Subject<AnimationClip>>()
+  private readonly _urlsByName = new Map<string, string>()
 
   get url () :string|undefined { return this.urls[0] }
   set url (url :string|undefined) {
@@ -912,28 +913,39 @@ class ThreeAnimation extends TypeScriptComponent implements Animation {
 
   init () {
     super.init()
-    this._disposer.add(this.getProperty<string>("playing").onValue(name => {
+    this.getProperty<string>("playing").onValue(name => {
       if (name) this.play(name)
       else this.stop()
-    }))
-    this._disposer.add(this.getProperty<WrapMode>("wrapMode").onValue(mode => {
+    })
+    this.getProperty<WrapMode>("wrapMode").onValue(mode => {
       const name = this.playing
       if (!name) return
       const clip = this._requireClip(name)
       Subject.join2(clip, this._mixerSubject).once(([clip, mixer]) => {
         const action = mixer.clipAction(clip)
         action.clampWhenFinished = this._clampWhenFinished
-        action.setLoop(this._loopMode, Infinity).stop().play()
+        action.timeScale = this.timeScale
+        action.setLoop(this._loopMode, this.repetitions).stop().play()
       })
-    }))
+    })
+    for (const property of ["timeScale", "repetitions"]) {
+      this.getProperty<number>(property).onValue(value => {
+        const name = this.playing
+        if (!name) return
+        const clip = this._requireClip(name)
+        Subject.join2(clip, this._mixerSubject).once(([clip, mixer]) => {
+          mixer.clipAction(clip)[property] = value
+        })
+      })
+    }
   }
 
   awake () {
     if (this.playAutomatically && this._urls[0]) this.play()
   }
 
-  play (name? :string) :void {
-    const clip = this._requireClip(name)
+  play (nameOrUrl? :string) :void {
+    const clip = this._requireClip(nameOrUrl)
     Subject.join2(clip, this._mixerSubject).once(([clip, mixer]) => {
       const action = mixer.stopAllAction().clipAction(clip)
       action.clampWhenFinished = this._clampWhenFinished
@@ -954,22 +966,23 @@ class ThreeAnimation extends TypeScriptComponent implements Animation {
     return this.wrapMode === "clampForever"
   }
 
-  stop (name? :string) :void {
-    if (!name) this._mixerSubject.once(mixer => mixer.stopAllAction())
+  stop (nameOrUrl? :string) :void {
+    if (!nameOrUrl) this._mixerSubject.once(mixer => mixer.stopAllAction())
     else {
-      const clip = this._requireClip(name)
+      const clip = this._requireClip(nameOrUrl)
       Subject.join2(clip, this._mixerSubject).once(([clip, mixer]) => {
         mixer.clipAction(clip).stop()
       })
     }
   }
 
-  private _requireClip (name? :string) :Subject<AnimationClip> {
-    let clip :Subject<AnimationClip>|undefined
-    if (name !== undefined) clip = this._clipsByName.get(name) || this._clipsByUrl.get(name)
-    else clip = this._clipsByUrl.get(this._urls[0])
-    if (!clip) throw new Error(`Unknown animation clip "${name}"`)
-    return clip
+  private _requireClip (nameOrUrl? :string) :Subject<AnimationClip> {
+    if (nameOrUrl === undefined) nameOrUrl = this._urls[0]
+    else {
+      const urlForName = this._urlsByName.get(nameOrUrl)
+      if (urlForName) nameOrUrl = urlForName
+    }
+    return loadGLTFAnimationClip(nameOrUrl)
   }
 
   update (clock :Clock) {
@@ -980,22 +993,8 @@ class ThreeAnimation extends TypeScriptComponent implements Animation {
   }
 
   private _updateUrls () {
-    // remove any clips no longer in the set
-    const urlSet = new Set(this._urls)
-    for (const url of this._clipsByUrl.keys()) {
-      if (!urlSet.has(url)) {
-        this._clipsByUrl.delete(url)
-        this._clipsByName.delete(getAnchor(url))
-      }
-    }
-    // add any new clips
-    for (const url of this._urls) {
-      if (!this._clipsByUrl.has(url)) {
-        const clip = loadGLTFAnimationClip(url)
-        this._clipsByUrl.set(url, clip)
-        this._clipsByName.set(getAnchor(url), clip)
-      }
-    }
+    this._urlsByName.clear()
+    for (const url of this._urls) this._urlsByName.set(getAnchor(url), url)
     this.urlsValue.update(this._urls.slice())
   }
 }

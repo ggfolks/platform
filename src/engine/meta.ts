@@ -38,6 +38,14 @@ const configurableMeta = new Map<Configurable, ConfigurableMeta>()
   * @return the stored metadata. */
 export function getConfigurableMeta (prototype :Configurable) :ConfigurableMeta {
   let meta = configurableMeta.get(prototype)
-  if (!meta) configurableMeta.set(prototype, meta = {properties: MutableMap.local()})
+  if (!meta) {
+    configurableMeta.set(prototype, meta = {properties: MutableMap.local()})
+    const superMeta = configurableMeta.get(Object.getPrototypeOf(prototype))
+    if (superMeta) {
+      for (const [property, propertyMeta] of superMeta.properties) {
+        meta.properties.set(property, propertyMeta)
+      }
+    }
+  }
   return meta
 }
