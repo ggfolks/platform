@@ -1,6 +1,10 @@
 import {PMap} from "../core/util"
 import {Component} from "./game"
 
+/** The available wrap modes. */
+export type WrapMode = "once" | "loop" | "pingPong" | "clampForever"
+export const WrapModes = ["once", "loop", "pingPong", "clampForever"]
+
 /** Represents a set of (GLTF) animations loaded from URLs. */
 export interface Animation extends Component {
 
@@ -15,6 +19,9 @@ export interface Animation extends Component {
 
   /** The name of the animation currently playing, or the empty string for none. */
   playing :string
+
+  /** The wrap mode to use for the animation. */
+  wrapMode :WrapMode
 
   /** Plays an animation
     * @param [name] the name of the animation to play, if not the default. */

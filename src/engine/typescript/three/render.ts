@@ -1,9 +1,9 @@
 import {
   AnimationClip, AnimationMixer, AmbientLight, BoxBufferGeometry, BufferGeometry,
-  CylinderBufferGeometry, DirectionalLight, Intersection, Light as LightObject,
-  Material as MaterialObject, Mesh, MeshBasicMaterial, MeshStandardMaterial, Object3D,
-  PerspectiveCamera, PlaneBufferGeometry, Raycaster, Scene, ShaderMaterial, SphereBufferGeometry,
-  Vector2, WebGLRenderer,
+  CylinderBufferGeometry, DirectionalLight, Intersection, Light as LightObject, LoopOnce,
+  LoopRepeat, LoopPingPong, Material as MaterialObject, Mesh, MeshBasicMaterial,
+  MeshStandardMaterial, Object3D, PerspectiveCamera, PlaneBufferGeometry, Raycaster, Scene,
+  ShaderMaterial, SphereBufferGeometry, Vector2, WebGLRenderer,
 } from "three"
 import {SkeletonUtils} from "three/examples/jsm/utils/SkeletonUtils"
 import {Clock} from "../../../core/clock"
@@ -18,10 +18,10 @@ import {setEnumMeta} from "../../../graph/meta"
 import {loadGLTF, loadGLTFAnimationClip} from "../../../scene3/entity"
 import {Hand, Pointer} from "../../../input/hand"
 import {DEFAULT_PAGE, ConfigurableConfig, Hover, Transform} from "../../game"
-import {Animation} from "../../animation"
+import {Animation, WrapMode, WrapModes} from "../../animation"
 import {PropertyMeta, getConfigurableMeta, property} from "../../meta"
 import {
-  Camera, Light, LightType, Material, MeshRenderer, Model, RaycastHit, RenderEngine,
+  Camera, Light, LightType, LightTypes, Material, MeshRenderer, Model, RaycastHit, RenderEngine,
 } from "../../render"
 import {
   TypeScriptComponent, TypeScriptConfigurable, TypeScriptCube, TypeScriptCylinder,
@@ -29,7 +29,7 @@ import {
   TypeScriptQuad, TypeScriptSphere, registerConfigurableType,
 } from "../game"
 
-setEnumMeta("LightType", ["ambient", "directional"])
+setEnumMeta("LightType", LightTypes)
 
 const defaultCamera = new PerspectiveCamera()
 const raycaster :Raycaster = new Raycaster()
@@ -782,13 +782,18 @@ class ThreeModel extends ThreeObjectComponent implements Model {
 }
 registerConfigurableType("component", ["render"], "model", ThreeModel)
 
+setEnumMeta("WrapMode", WrapModes)
+
 class ThreeAnimation extends TypeScriptComponent implements Animation {
   @property("boolean") playAutomatically = true
   @property("select", {options: [""]}) playing = ""
+  @property("WrapMode") wrapMode :WrapMode = "once"
 
   readonly urlsValue = Mutable.local<string[]>([])
 
   private readonly _urls :string[]
+  private _modelUrlsStart = 0
+  private _modelUrlsCount = 0
   private readonly _mixerSubject :Subject<AnimationMixer>
   private _mixer? :AnimationMixer
   private readonly _clipsByUrl = new Map<string, Subject<AnimationClip>>()
@@ -850,19 +855,34 @@ class ThreeAnimation extends TypeScriptComponent implements Animation {
           if (object) dispatch(new AnimationMixer(object))
         })
     })
-    this._disposer.add(this._mixerSubject.onValue(mixer => this._mixer = mixer))
+    this._disposer.add(this._mixerSubject.onValue(mixer => {
+      this._mixer = mixer
+      mixer.addEventListener("finished", () => {
+        if (!this._clampWhenFinished) this.playing = ""
+      })
+    }))
 
     // automatically add the URLs of any model loaded
     this._disposer.add(
       component
         .switchMap(model => model ? model.getProperty<string>("url") : Value.constant(""))
-        .onValue(url => url && loadGLTF(url).onValue(gltf => {
-          for (const clip of gltf.animations) {
-            const fullUrl = url + "#" + clip.name
-            if (this._urls.indexOf(fullUrl) === -1) this._urls.push(url + "#" + clip.name)
+        .onValue(url => {
+          this.playing = ""
+          if (this._modelUrlsCount > 0) {
+            this._urls.splice(this._modelUrlsStart, this._modelUrlsCount)
+            this._modelUrlsCount = 0
+            this._updateUrls()
           }
-          this._updateUrls()
-        })),
+          loadGLTF(url).onValue(gltf => {
+            this._modelUrlsStart = this._urls.length
+            for (const clip of gltf.animations) {
+              const fullUrl = url + "#" + clip.name
+              if (this._urls.indexOf(fullUrl) === -1) this._urls.push(url + "#" + clip.name)
+            }
+            this._modelUrlsCount = this._urls.length - this._modelUrlsStart
+            this._updateUrls()
+          })
+        }),
     )
   }
 
@@ -871,6 +891,16 @@ class ThreeAnimation extends TypeScriptComponent implements Animation {
     this._disposer.add(this.getProperty<string>("playing").onValue(name => {
       if (name) this.play(name)
       else this.stop()
+    }))
+    this._disposer.add(this.getProperty<WrapMode>("wrapMode").onValue(mode => {
+      const name = this.playing
+      if (!name) return
+      const clip = this._requireClip(name)
+      Subject.join2(clip, this._mixerSubject).once(([clip, mixer]) => {
+        const action = mixer.clipAction(clip)
+        action.clampWhenFinished = this._clampWhenFinished
+        action.setLoop(this._loopMode, Infinity).stop().play()
+      })
     }))
   }
 
@@ -881,8 +911,23 @@ class ThreeAnimation extends TypeScriptComponent implements Animation {
   play (name? :string) :void {
     const clip = this._requireClip(name)
     Subject.join2(clip, this._mixerSubject).once(([clip, mixer]) => {
-      mixer.stopAllAction().clipAction(clip).play()
+      const action = mixer.stopAllAction().clipAction(clip)
+      action.clampWhenFinished = this._clampWhenFinished
+      action.setLoop(this._loopMode, Infinity).stop().play()
     })
+  }
+
+  private get _loopMode () :number {
+    switch (this.wrapMode) {
+      case "once": case "clampForever": return LoopOnce
+      case "loop": return LoopRepeat
+      case "pingPong": return LoopPingPong
+      default: throw new Error(`Unknown wrap mode "${this.wrapMode}"`)
+    }
+  }
+
+  private get _clampWhenFinished () :boolean {
+    return this.wrapMode === "clampForever"
   }
 
   stop (name? :string) :void {
@@ -897,7 +942,7 @@ class ThreeAnimation extends TypeScriptComponent implements Animation {
 
   private _requireClip (name? :string) :Subject<AnimationClip> {
     let clip :Subject<AnimationClip>|undefined
-    if (name !== undefined) clip = this._clipsByName.get(name)
+    if (name !== undefined) clip = this._clipsByName.get(name) || this._clipsByUrl.get(name)
     else clip = this._clipsByUrl.get(this._urls[0])
     if (!clip) throw new Error(`Unknown animation clip "${name}"`)
     return clip

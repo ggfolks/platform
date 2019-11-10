@@ -107,6 +107,7 @@ export interface Camera extends Component, Hoverable {
 
 /** The available light types. */
 export type LightType = "ambient" | "directional"
+export const LightTypes = ["ambient", "directional"]
 
 /** Represents a light attached to a game object. */
 export interface Light extends Component {
