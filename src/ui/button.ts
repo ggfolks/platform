@@ -24,13 +24,6 @@ export abstract class AbstractButton extends Control {
   get pressed () :Value<boolean> { return this._pressed }
 
   handlePointerDown (event :MouseEvent|TouchEvent, pos :vec2) :PointerInteraction|undefined {
-    if (
-      event instanceof MouseEvent && event.button !== 0 ||
-      !this.visible.current ||
-      !this.enabled.current
-    ) {
-      return undefined
-    }
     this._pressed.update(true)
     this.focus()
     return {

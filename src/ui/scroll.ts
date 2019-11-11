@@ -57,7 +57,6 @@ abstract class TransformedContainer extends Control {
       release: interaction.release,
       cancel: interaction.cancel,
     }
-    if (event instanceof MouseEvent && event.button !== 0) return undefined
     this.root.clearFocus()
     return this.startScroll(event, pos)
   }

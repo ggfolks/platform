@@ -145,8 +145,6 @@ export abstract class DragElement extends Control {
   handlePointerDown (event :MouseEvent|TouchEvent, pos :vec2) {
     const interaction = this.contents.handlePointerDown(event, pos)
     if (interaction) return interaction
-    const buttonNon0 = event instanceof MouseEvent && event.button !== 0
-    if (buttonNon0 || !this.visible.current || !this.enabled.current) return undefined
 
     this.select(event)
     const owner = this.dragOwner

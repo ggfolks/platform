@@ -297,7 +297,7 @@ export abstract class Element implements Disposable {
     * @return an interaction if an element started an interaction with the pointer, `undefined`
     * otherwise. */
   maybeHandlePointerDown (event :MouseEvent|TouchEvent, pos :vec2) :PointerInteraction|undefined {
-    return rect.contains(this.hitBounds, pos) ? this.handlePointerDown(event, pos) : undefined
+    return this.canHandleEvent(event, pos) ? this.handlePointerDown(event, pos) : undefined
   }
 
   /** Requests that this element handle the supplied pointer down event.
@@ -314,7 +314,7 @@ export abstract class Element implements Disposable {
     * @param pos the position of the event relative to the root origin.
     * @return whether or not the wheel was handled, and thus should not be further propagated. */
   maybeHandleWheel (event :WheelEvent, pos :vec2) :boolean {
-    return rect.contains(this.hitBounds, pos) && this.handleWheel(event, pos)
+    return this.canHandleEvent(event, pos) && this.handleWheel(event, pos)
   }
 
   /** Requests that this element handle the supplied wheel event.
@@ -330,7 +330,7 @@ export abstract class Element implements Disposable {
     * @param pos the position of the event relative to the root origin.
     * @return whether or not the event was handled, and thus should not be further propagated. */
   maybeHandleDoubleClick (event :MouseEvent, pos :vec2) :boolean {
-    return rect.contains(this.hitBounds, pos) && this.handleDoubleClick(event, pos)
+    return this.canHandleEvent(event, pos) && this.handleDoubleClick(event, pos)
   }
 
   /** Requests that this element handle the supplied double click event.
@@ -388,6 +388,10 @@ export abstract class Element implements Disposable {
   protected intersectsRect (region :rect, render = false) {
     return this.visible.current && rect.intersects(
       render ? this.renderBounds : this.hitBounds, region)
+  }
+
+  protected canHandleEvent (event :Event, pos :vec2) :boolean {
+    return this.visible.current && rect.contains(this.hitBounds, pos)
   }
 
   protected requireAncestor<P> (pclass :new (...args :any[]) => P) :P {
@@ -1034,6 +1038,13 @@ export class Control extends Element {
   protected recomputeStateOnChange (source :Source<any>) {
     this.disposer.add(source.onValue(this._updateState))
   }
+
+  protected canHandleEvent (event :Event, pos :vec2) :boolean {
+    if (event instanceof MouseEvent && !this.canHandleButton(event.button)) return false
+    return this.enabled.current && super.canHandleEvent(event, pos)
+  }
+
+  protected canHandleButton (button :number) :boolean { return button === 0}
 
   /** If this control triggers an action, it must override this method to return the spec for that
     * action from its config. The control will use this to bind its enabled state to the action's

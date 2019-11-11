@@ -336,8 +336,6 @@ export abstract class AbstractText extends Control {
   }
 
   handlePointerDown (event :MouseEvent|TouchEvent, pos :vec2) :PointerInteraction|undefined {
-    if (event instanceof MouseEvent && event.button !== 0) return undefined
-
     // figure out where the click landed
     const label = this.label, dp = pos[0] - label.x - label.xoffset.current
     const doff = label.span.current.computeOffset(dp)
@@ -596,17 +594,17 @@ export class EditableLabel extends AbstractText {
 
   get styleScope () { return EditableLabelStyleScope }
 
-  handlePointerDown (event :MouseEvent|TouchEvent, pos :vec2) :PointerInteraction|undefined {
-    return this.isFocused ? super.handlePointerDown(event, pos) : undefined
-  }
-
   handleDoubleClick (event :MouseEvent, pos :vec2) :boolean {
     // we might have a Value instead of a Mutable, in which case we just act as a normal label
-    if (this.isFocused || !(this.text instanceof Mutable)) return false
+    if (!(this.text instanceof Mutable)) return false
     this.focus()
     const interaction = this.handlePointerDown(event, pos)
     if (interaction) interaction.release(event, pos)
     return true
+  }
+
+  protected canHandleEvent (event :Event, pos :vec2) :boolean {
+    return this.isFocused && super.canHandleEvent(event, pos)
   }
 
   protected onEnter () { this.blur() }
