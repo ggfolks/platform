@@ -1,9 +1,10 @@
 import {
   AnimationClip, AnimationMixer, AmbientLight, BackSide, BoxBufferGeometry, BufferGeometry,
-  CylinderBufferGeometry, DirectionalLight, DoubleSide, FrontSide, Intersection,
-  Light as LightObject, LoopOnce, LoopRepeat, LoopPingPong, Material as MaterialObject, Mesh,
-  MeshBasicMaterial, MeshStandardMaterial, Object3D, PerspectiveCamera, PlaneBufferGeometry,
-  Raycaster, Scene, ShaderMaterial, SphereBufferGeometry, Vector2, WebGLRenderer,
+  CylinderBufferGeometry, DefaultLoadingManager, DirectionalLight, DoubleSide, FrontSide,
+  Intersection, Light as LightObject, LoopOnce, LoopRepeat, LoopPingPong,
+  Material as MaterialObject, Mesh, MeshBasicMaterial, MeshStandardMaterial, Object3D,
+  PerspectiveCamera, PlaneBufferGeometry, Raycaster, Scene, ShaderMaterial, SphereBufferGeometry,
+  Vector2, WebGLRenderer,
 } from "three"
 import {SkeletonUtils} from "three/examples/jsm/utils/SkeletonUtils"
 import {Clock} from "../../../core/clock"
@@ -29,6 +30,9 @@ import {
   TypeScriptGameEngine, TypeScriptGameObject, TypeScriptMesh, TypeScriptMeshFilter, TypeScriptPage,
   TypeScriptQuad, TypeScriptSphere, registerConfigurableType,
 } from "../game"
+
+const loading = document.getElementById("loading")
+if (loading) DefaultLoadingManager.onLoad = () => loading.className = "loaded"
 
 setEnumMeta("LightType", LightTypes)
 
