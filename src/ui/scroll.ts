@@ -91,6 +91,10 @@ abstract class TransformedContainer extends Control {
     canvas.restore()
   }
 
+  protected inheritExpandedBounds (hitBounds :rect, renderBounds :rect) {
+    // we don't want to inherit the bounds of our children because we hide/transform them
+  }
+
   protected startScroll (event :MouseEvent|TouchEvent, pos :vec2) :PointerInteraction|undefined {
     return undefined
   }

@@ -412,13 +412,17 @@ export abstract class Element implements Disposable {
     rect.copy(hb, this.bounds)
     rect.copy(rb, this.bounds)
     this.expandBounds(hb, rb)
+    this.inheritExpandedBounds(hb, rb)
+    if (rb[0] !== rx || rb[1] !== ry || rb[2] !== rw || rb[3] !== rh) this.dirty()
+  }
+
+  protected inheritExpandedBounds (hitBounds :rect, renderBounds :rect) {
     this.applyToChildren(child => {
       if (child.visible.current) {
-        rect.union(hb, hb, child.hitBounds)
-        rect.union(rb, rb, child.renderBounds)
+        rect.union(hitBounds, hitBounds, child.hitBounds)
+        rect.union(renderBounds, renderBounds, child.renderBounds)
       }
     })
-    if (rb[0] !== rx || rb[1] !== ry || rb[2] !== rw || rb[3] !== rh) this.dirty()
   }
 
   /** Expands the hit bounds and render bounds if needed for this element. The supplied bounds will
