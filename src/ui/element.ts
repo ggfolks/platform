@@ -224,11 +224,12 @@ export abstract class Element implements Disposable {
     return psize
   }
 
-  setBounds (bounds :rect) {
-    if (rect.eq(this.bounds, bounds)) return
+  setBounds (bounds :rect) :boolean {
+    if (rect.eq(this.bounds, bounds)) return false
     this.dirty()
     rect.copy(this.bounds, bounds)
     this.invalidate()
+    return true
   }
 
   invalidate (dirty :boolean = true) {
@@ -671,10 +672,8 @@ export class Root extends Element {
   /** Sizes this root to `size` and immediately validates and rerenders it.
     * @return the size assigned to the root. */
   setSize (size :dim2, rerender = true) :dim2 {
-    if (size[0] !== this.width || size[1] !== this.height) {
-      this.setBounds(rect.set(tmpr, 0, 0, size[0], size[1]))
-      if (rerender) this._validateAndRender()
-    }
+    const resized = this.setBounds(rect.set(tmpr, 0, 0, size[0], size[1]))
+    if (resized && rerender) this._validateAndRender()
     return size
   }
 
@@ -710,9 +709,6 @@ export class Root extends Element {
     return this.setSize(tmpd)
   }
 
-  applyToChildren (op :ElementOp) { op(this.contents) }
-  queryChildren<R> (query :ElementQuery<R>) { return query(this.contents) }
-
   /** Requests that `control` receive the keyboard focus. */
   requestFocus (control :Control) {
     const host = this.host.current
@@ -740,6 +736,15 @@ export class Root extends Element {
     this.menuPopup.update(undefined)
     if (this.parent) this.parent.clearMenuPopups()
   }
+
+  setBounds (bounds :rect) :boolean {
+    const changed = super.setBounds(bounds)
+    if (changed) this.events.emit("resized")
+    return changed
+  }
+
+  applyToChildren (op :ElementOp) { op(this.contents) }
+  queryChildren<R> (query :ElementQuery<R>) { return query(this.contents) }
 
   update (clock :Clock) :boolean {
     this._clock.emit(clock)
@@ -887,7 +892,6 @@ export class Root extends Element {
       canvas.height = scaledHeight
       canvas.style.width = `${this.width}px`
       canvas.style.height = `${this.height}px`
-      this.events.emit("resized")
     }
   }
 
