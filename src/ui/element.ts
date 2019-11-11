@@ -134,6 +134,7 @@ export abstract class Element implements Disposable {
   protected readonly _dirtyRegion = rect.create()
   protected readonly _configScope? :StyleScope
   protected readonly disposer = new Disposer()
+  protected _validating = false
 
   readonly parent :Element|undefined
   readonly visible :Value<boolean>
@@ -173,6 +174,7 @@ export abstract class Element implements Disposable {
   get styleScope () :StyleScope { return this._configScope || this.requireParent.styleScope }
   get root () :Root { return this.requireParent.root }
   get valid () :Value<boolean> { return this._valid }
+  get validating () :boolean { return this._validating }
   get state () :Value<string> {
     return this.config.overrideParentState
       ? Value.constant(this.config.overrideParentState)
@@ -211,8 +213,14 @@ export abstract class Element implements Disposable {
   }
 
   preferredSize (hintX :number, hintY :number) :dim2 {
-    const psize = this._psize
-    if (psize[0] < 0) this.computePreferredSize(hintX, hintY, psize)
+    let psize = this._psize
+    if (psize[0] < 0) {
+      // if we are computing our preferred size outside the normal validation cycle, it is not safe
+      // to save it (because something could change that triggers an invalidation but snice we're
+      // already invalid, we won't know to clear this cached preferred size)
+      if (this.parent && !this.parent.validating) psize = tmpd
+      this.computePreferredSize(hintX, hintY, psize)
+    }
     return psize
   }
 
@@ -240,9 +248,11 @@ export abstract class Element implements Disposable {
 
   validate () :boolean {
     if (this._valid.current || !this.visible.current) return false
+    this._validating = true
     this.relayout()
     this.applyToChildren(child => child.validate())
     this.recomputeBounds()
+    this._validating = false
     this._valid.update(true)
     return true
   }
