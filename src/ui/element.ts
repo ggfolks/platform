@@ -551,6 +551,7 @@ export class Root extends Element {
   private readonly _cursorOwners = new Map<Element, string>()
   private _elementsOver = new Set<Element>()
   private _lastElementsOver = new Set<Element>()
+  private _activeTouchId :number|undefined = undefined
 
   readonly canvasElem :HTMLCanvasElement = document.createElement("canvas")
   readonly canvas :CanvasRenderingContext2D
@@ -805,15 +806,13 @@ export class Root extends Element {
     * @param event the browser event to dispatch. */
   dispatchTouchEvent (host :Host, event :TouchEvent) {
     const iact = this.interacts[0]
-    switch (event.type) {
-    case "touchstart":
-      if (event.touches.length === 1) {
+    if (event.type === "touchstart") {
+      if (this._activeTouchId === undefined && event.changedTouches.length === 1) {
         const touch = event.changedTouches[0]
         const pos = host.touchToRoot(this, touch, tmpv)
+        // note that we are assuming responsibility for the event
         if (rect.contains(this.hitBounds, pos)) {
-          // note that we are assuming responsibility for the event
           event.cancelBubble = true
-          // prevent any default touch behavior
           event.preventDefault()
         }
         if (iact) {
@@ -821,37 +820,42 @@ export class Root extends Element {
           iact.cancel()
         }
         const niact = this.interacts[0] = this.eventTarget.maybeHandlePointerDown(event, pos)
-        if (niact === undefined) this.droppedClick(event, pos)
+        if (niact !== undefined) this._activeTouchId = touch.identifier
+        else this.droppedClick(event, pos)
+      }
 
-      } else if (iact) {
-        iact.cancel()
-        this.interacts[0] = undefined
+    } else {
+      for (let ii = 0, ll = event.changedTouches.length; ii < ll; ii += 1) {
+        const touch = event.changedTouches[ii]
+        if (touch.identifier !== this._activeTouchId) continue
+        switch (event.type) {
+        case "touchmove":
+          if (iact) {
+            const pos = host.touchToRoot(this, touch, tmpv)
+            iact.move(event, pos)
+            event.preventDefault()
+          }
+          break
+        case "touchend":
+          if (iact) {
+            const pos = host.touchToRoot(this, touch, tmpv)
+            iact.release(event, pos)
+            this.interacts[0] = undefined
+            this._activeTouchId = undefined
+            event.preventDefault()
+          }
+          break
+        case "touchcancel":
+          if (iact) {
+            iact.cancel()
+            this.interacts[0] = undefined
+            this._activeTouchId = undefined
+            event.preventDefault()
+          }
+          break
+        }
+        break
       }
-      break
-    case "touchmove":
-      if (iact) {
-        const touch = event.changedTouches[0]
-        const pos = host.touchToRoot(this, touch, tmpv)
-        iact.move(event, pos)
-        event.preventDefault()
-      }
-      break
-    case "touchcancel":
-      if (iact) {
-        iact.cancel()
-        this.interacts[0] = undefined
-        event.preventDefault()
-      }
-      break
-    case "touchend":
-      if (iact) {
-        const touch = event.changedTouches[0]
-        const pos = host.touchToRoot(this, touch, tmpv)
-        iact.release(event, pos)
-        this.interacts[0] = undefined
-        event.preventDefault()
-      }
-      break
     }
   }
 
