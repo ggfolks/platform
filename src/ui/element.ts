@@ -748,7 +748,9 @@ export class Root extends Element {
 
   update (clock :Clock) :boolean {
     this._clock.emit(clock)
-    if (!this.valid.current && this.config.autoSize) this.sizeToFit(undefined, undefined, false)
+    if (!this.valid.current && this.visible.current && this.config.autoSize) {
+      this.sizeToFit(undefined, undefined, false)
+    }
     return this._validateAndRender()
   }
 
