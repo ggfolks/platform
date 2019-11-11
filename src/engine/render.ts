@@ -13,6 +13,9 @@ export interface RenderEngine extends Disposable {
   /** The renderer stats. */
   readonly stats :Value<string[]>
 
+  /** The percentage of resources loaded (0 to 1). */
+  readonly percentLoaded :Value<number>
+
   /** Sets the onscreen bounds of the renderer. */
   setBounds (bounds :rect) :void
 

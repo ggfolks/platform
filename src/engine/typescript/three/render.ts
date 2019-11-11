@@ -31,9 +31,6 @@ import {
   TypeScriptQuad, TypeScriptSphere, registerConfigurableType,
 } from "../game"
 
-const loading = document.getElementById("loading")
-if (loading) DefaultLoadingManager.onLoad = () => loading.className = "loaded"
-
 setEnumMeta("LightType", LightTypes)
 
 const defaultCamera = new PerspectiveCamera()
@@ -61,6 +58,7 @@ export class ThreeRenderEngine implements RenderEngine {
   private readonly _pressedObjects = new Map<number, ThreeObjectComponent>()
   private readonly _bounds = rect.create()
   private readonly _size = Mutable.local(dim2.create())
+  private readonly _percentLoaded = Mutable.local(1)
   private _frameCount = 0
 
   readonly renderer = new WebGLRenderer()
@@ -70,6 +68,8 @@ export class ThreeRenderEngine implements RenderEngine {
   readonly cameras :ThreeCamera[] = []
 
   get size () :Value<dim2> { return this._size }
+
+  get percentLoaded () :Value<number> { return this._percentLoaded }
 
   constructor (readonly gameEngine :TypeScriptGameEngine) {
     gameEngine._renderEngine = this
@@ -106,6 +106,10 @@ export class ThreeRenderEngine implements RenderEngine {
       },
       () => currentStats,
     )
+
+    DefaultLoadingManager.onStart = DefaultLoadingManager.onProgress =
+      (url, itemsLoaded, itemsTotal) => this._percentLoaded.update(itemsLoaded / itemsTotal)
+    DefaultLoadingManager.onLoad = () => this._percentLoaded.update(1)
 
     gameEngine.root.appendChild(this.renderer.domElement)
     this._disposer.add(() => gameEngine.root.removeChild(this.renderer.domElement))
