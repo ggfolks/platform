@@ -77,7 +77,7 @@ class ResolvedObject extends Resolved implements DataSource {
     const channel = this.channel = this.store.client.createChannel<ObjMsg>(
       "object", this.path, mkObjCodec(this.resolved))
     channel.state.when(s => s === "failed", _ => this.state.update("failed"))
-    if (DebugLog) log.debug("Subscribing to object", "path", this.path)
+    if (DebugLog) log.debug("Subscribing to object", "path", this.path, "channel", channel)
     // TODO: propagate and report subscribe failure?
     channel.messages.onEmit(msg => {
       switch (msg.type) {
