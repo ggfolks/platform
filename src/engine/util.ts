@@ -1,7 +1,7 @@
 import {Color} from "../core/color"
 import {quat, vec3} from "../core/math"
 import {Interp, Easing} from "../core/interp"
-import {PMap} from "../core/util"
+import {PMap, toFloat32String} from "../core/util"
 import {Time, Transform} from "./game"
 
 /** A coroutine that moves a transform over time from its current position to a new one.
@@ -167,8 +167,8 @@ export function* waitForAll (...generators :Generator<void>[]) {
 const IDENTIFIER_PATTERN = /^[a-zA-Z_]\w*$/
 
 const constructorStringifiers = new Map<Function, (value :any, indent :number) => string>([
-  [Float32Array, value => `Float32Array.of(${value.join(", ")})`],
-  [Color, value => `Color.fromARGB(${value.join(", ")})`],
+  [Float32Array, value => `Float32Array.of(${toFloat32ArrayString(value)})`],
+  [Color, value => `Color.fromARGB(${toFloat32ArrayString(value)})`],
   [Object, (value, indent) => {
     let string = (indent === 0) ? "({" : "{"
     const nextIndent = indent + 2
@@ -188,6 +188,15 @@ const constructorStringifiers = new Map<Function, (value :any, indent :number) =
     return string + (indent === 0 ? "})" : "}")
   }],
 ])
+
+function toFloat32ArrayString (array :Float32Array) :string {
+  let value = ""
+  for (let ii = 0; ii < array.length; ii++) {
+    if (value.length > 0) value += ", "
+    value += toFloat32String(array[ii])
+  }
+  return value
+}
 
 const constructorCloners = new Map<Function, (value :any) => any>([
   [Float32Array, value => cloneTypedArray(Float32Array, value)],
@@ -228,8 +237,10 @@ export abstract class JavaScript {
     switch (typeof value) {
       case "undefined":
       case "boolean":
-      case "number":
         return String(value)
+
+      case "number":
+        return toFloat32String(value)
 
       case "string":
         return JSON.stringify(value)

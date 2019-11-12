@@ -289,10 +289,15 @@ export function filteredIterator<E> (iter :Iterator<E>, pred :(elem :E) => boole
 
 /** Converts the supplied value to a string of limited length. */
 export function toLimitedString (value :any, maxLength = 30) {
-  // round numbers to six digits after decimal
-  if (typeof value === "number") return String(Math.round(value * 1000000) / 1000000)
+  if (typeof value === "number") return toFloat32String(value)
   const string = String(value)
   return string.length > maxLength ? string.substring(0, maxLength - 3) + "..." : string
+}
+
+/** Converts a number to a string with roughly the precision of a single precision float. */
+export function toFloat32String (value :number) :string {
+  // round numbers to six digits after decimal
+  return String(Math.round(value * 1000000) / 1000000)
 }
 
 /** Returns the position at which `elem` should be inserted into `elems` to preserve the least to
