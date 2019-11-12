@@ -797,17 +797,7 @@ export class Root extends Element {
 
     switch (event.type) {
     case "mousedown":
-      if (iacts) {
-        log.warn("Got mouse down but have active interaction(s)?", "button", button)
-        for (const iact of iacts) iact.cancel()
-      }
-      if (inBounds) {
-        let niacts  :PointerInteraction[] = []
-        this.eventTarget.maybeHandlePointerDown(event, pos, niacts)
-        this.maybeStartGesture(event, pos, niacts)
-        if (niacts.length == 0) this.droppedClick(event, pos)
-        this.interacts[button] = niacts
-      }
+      if (inBounds) this.maybeStartInteraction(event, pos, button)
       break
 
     case "mousemove":
@@ -834,29 +824,20 @@ export class Root extends Element {
     * @param host the host that is liaising between this root and the browser events.
     * @param event the browser event to dispatch. */
   dispatchTouchEvent (host :Host, event :TouchEvent) {
-    const iacts = this.interacts[0]
     if (event.type === "touchstart") {
       if (this._activeTouchId === undefined && event.changedTouches.length === 1) {
         const touch = event.changedTouches[0]
         const pos = host.touchToRoot(this, touch, tmpv)
-        // note that we are assuming responsibility for the event
         if (rect.contains(this.hitBounds, pos)) {
+          // note that we are assuming responsibility for the event
           event.cancelBubble = true
           event.preventDefault()
+          if (this.maybeStartInteraction(event, pos, 0)) this._activeTouchId = touch.identifier
         }
-        if (iacts) {
-          log.warn("Got touch start but have active interaction?")
-          for (const iact of iacts) iact.cancel()
-        }
-        const niacts :PointerInteraction[] = []
-        this.eventTarget.maybeHandlePointerDown(event, pos, niacts)
-        this.maybeStartGesture(event, pos, niacts)
-        if (niacts.length > 0) this._activeTouchId = touch.identifier
-        else this.droppedClick(event, pos)
-        this.interacts[0] = niacts
       }
 
     } else {
+      const iacts = this.interacts[0]
       for (let ii = 0, ll = event.changedTouches.length; ii < ll; ii += 1) {
         const touch = event.changedTouches[ii]
         if (touch.identifier !== this._activeTouchId) continue
@@ -950,8 +931,34 @@ export class Root extends Element {
     canvas.restore()
   }
 
-  private maybeStartGesture (event :MouseEvent|TouchEvent, pos :vec2, into :PointerInteraction[]) {
-    for (const handler of this._gestureHandlers) handler.handlePointerDown(event, pos, into)
+  private get eventTarget () { return this.targetElem.current || this.contents }
+
+  private maybeStartInteraction (event :MouseEvent|TouchEvent, pos :vec2, button :number) :boolean {
+    const oiacts = this.interacts[button]
+    if (oiacts) {
+      log.warn("Starting new interaction but have old?", "event", event.type, "old", oiacts)
+      for (const iact of oiacts) iact.cancel()
+    }
+
+    const niacts :PointerInteraction[] = []
+    this.eventTarget.maybeHandlePointerDown(event, pos, niacts)
+    for (const handler of this._gestureHandlers) handler.handlePointerDown(event, pos, niacts)
+    if (niacts.length > 0) this.interacts[button] = niacts
+    else {
+      this.interacts[button] = undefined
+      // if we click and hit no interactive control, clear the focus
+      this.clearFocus()
+      // also clear any menu popup
+      if (!!this.menuPopup.current) {
+        this.menuPopup.update(undefined)
+        // if we're clearing a menu popup, recompute the hovered elements because they will
+        // previously have been blocked by the menu modality; we defer this one frame because we are
+        // in the middle of processing an event right now and the removal of the menu root will not
+        // happen until that event dispatch is completed
+        if (event.type.startsWith("mouse")) this.clock.once(() => this._updateElementsOver(pos))
+      }
+    }
+    return (niacts.length > 0)
   }
 
   private dispatchMove (event :MouseEvent|TouchEvent, pos :vec2, iacts :PointerInteraction[]) {
@@ -965,22 +972,6 @@ export class Root extends Element {
       }
     }
   }
-
-  private droppedClick (event :MouseEvent|TouchEvent, pos :vec2) {
-    // if we click and hit no interactive control, clear the focus
-    this.clearFocus()
-    // also clear any menu popup
-    if (!!this.menuPopup.current) {
-      this.menuPopup.update(undefined)
-      // if we're clearing a menu popup, recompute the hovered elements because they will previously
-      // have been blocked by the menu modality; we defer this one frame because we are in the
-      // middle of processing an event right now and the removal of the menu root will not happen
-      // until that event dispatch is completed
-      if (event.type.startsWith("mouse")) this.clock.once(() => this._updateElementsOver(pos))
-    }
-  }
-
-  private get eventTarget () { return this.targetElem.current || this.contents }
 
   private _validateAndRender () {
     const changed = this.validate() || !rect.isEmpty(this._dirtyRegion)
