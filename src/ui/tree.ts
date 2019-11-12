@@ -1,3 +1,4 @@
+import {log} from "../core/util"
 import {rect, vec2} from "../core/math"
 import {Mutable, Value} from "../core/react"
 import {MutableSet} from "../core/rcollect"
@@ -230,7 +231,7 @@ export class TreeView extends AbstractTreeView implements DragOwner {
 
   handlePointerDown (event :MouseEvent|TouchEvent, pos :vec2, into :PointerInteraction[]) {
     super.handlePointerDown(event, pos, into)
-    if (into.length > 0) this.selectedKeys.clear()
+    if (into.length === 0) this.selectedKeys.clear()
   }
 }
 
