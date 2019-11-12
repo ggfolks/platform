@@ -249,12 +249,14 @@ export abstract class Element implements Disposable {
   }
 
   validate () :boolean {
-    if (this._valid.current || !this.visible.current) return false
-    this._validating = true
-    this.relayout()
-    this.applyToChildren(child => child.validate())
-    this.recomputeBounds()
-    this._validating = false
+    if (this._valid.current) return false
+    if (this.visible.current) {
+      this._validating = true
+      this.relayout()
+      this.applyToChildren(child => child.validate())
+      this.recomputeBounds()
+      this._validating = false
+    }
     this._valid.update(true)
     return true
   }
