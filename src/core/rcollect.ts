@@ -509,6 +509,15 @@ export abstract class MutableMap<K,V> extends RMap<K,V> implements Map<K,V> {
   /** Associates `key` with `value` in this map. Notifies listeners of the change. */
   abstract set (key :K, value :V) :this
 
+  /** Applies `fn` to the current value associated with `key` (or `undefined` if `key` is not
+    * currently mapped to a value) and updates the mapping with the result.
+    * @return the value to which `key` is now mapped. */
+  update (key :K, fn :(value :V|undefined) => V) :V {
+    const nvalue = fn(this.get(key))
+    this.set(key, nvalue)
+    return nvalue
+  }
+
   /** Deletes the value associated with `key`. Notifies listeners if a mapping was in fact deleted.
     * @return `true` if a mapping was deleted, `false` if no mapping existed. */
   abstract delete (key :K) :boolean
