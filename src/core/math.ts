@@ -263,13 +263,7 @@ export class Euler extends Float32Array {
     return Euler.set(Euler.create(), x, y, z)
   }
 
-  /** Sets the components of a set of Euler angles. */
-  static set (out :Euler, x :number, y :number, z :number) :Euler {
-    out[0] = x
-    out[1] = y
-    out[2] = z
-    return out
-  }
+  static set :(out :Euler, x :number, y :number, z :number) => Euler = vec3.set as any
 
   /** Sets a set of Euler angles from a quaternion. */
   static fromQuat (out :Euler, q :quat) :Euler {
@@ -286,6 +280,12 @@ export class Euler extends Float32Array {
       toDegree(Math.atan2(2 * (q0*q3 + q1*q2), 1 - 2 * (q2*q2 + q3*q3))),
     )
   }
+
+  /** Rounds the Euler angles to the nearest integer. */
+  static round :(out :Euler, a :Euler) => Euler = vec3.round as any
+
+  /** Compares two sets of Euler angles for equality. */
+  static equals :(a :Euler, b :Euler) => boolean = vec3.equals as any
 }
 
 /** Combines an origin point and a direction vector. */

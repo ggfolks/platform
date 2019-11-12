@@ -158,18 +158,21 @@ const propertyConfigCreators :PMap<PropertyConfigCreator> = {
     })
   },
   quat: (model, editable) => {
-    const quatValue = model.resolve<Mutable<quat>>("value")
-    let euler = Euler.fromQuat(Euler.create(), quatValue.current)
-    const eulerValue = Mutable.deriveMutable(
-      dispatch => quatValue.onChange((value :quat, oldValue :quat) => {
-        const eulerQuat = quat.fromEuler(quat.create(), euler[0], euler[1], euler[2])
-        if (!quat.equals(eulerQuat, value)) euler = Euler.fromQuat(Euler.create(), value)
-        dispatch(euler, Euler.fromQuat(Euler.create(), oldValue))
+    const rawValue = model.resolve<Mutable<quat>>("value")
+    let currentValue = truncateEuler(rawValue.current)
+    const truncatedValue = Mutable.deriveMutable(
+      dispatch => rawValue.onChange((value :quat, oldValue :quat) => {
+        const truncated = truncateEuler(value)
+        if (!Euler.equals(currentValue, truncated)) {
+          const oldValue = currentValue
+          dispatch(currentValue = truncated, oldValue)
+        }
       }),
-      () => euler,
-      (newEuler :Euler) => {
-        euler = newEuler
-        quatValue.update(quat.fromEuler(quat.create(), euler[0], euler[1], euler[2]))
+      () => currentValue,
+      (newValue :Euler) => {
+        if (!Euler.equals(currentValue, newValue)) {
+          rawValue.update(quat.fromEuler(quat.create(), newValue[0], newValue[1], newValue[2]))
+        }
       },
       refEquals,
     )
@@ -180,7 +183,7 @@ const propertyConfigCreators :PMap<PropertyConfigCreator> = {
         {
           type: "numberText",
           constraints: {stretch: true},
-          number: eulerValue.bimap(e => e[0], (e, x) => Euler.fromValues(x, e[1], e[2])),
+          number: truncatedValue.bimap(e => e[0], (e, x) => Euler.fromValues(x, e[1], e[2])),
           contents: NumberBox,
           maxDecimals: 0,
           wheelStep: 10,
@@ -188,7 +191,7 @@ const propertyConfigCreators :PMap<PropertyConfigCreator> = {
         {
           type: "numberText",
           constraints: {stretch: true},
-          number: eulerValue.bimap(e => e[1], (e, y) => Euler.fromValues(e[0], y, e[2])),
+          number: truncatedValue.bimap(e => e[1], (e, y) => Euler.fromValues(e[0], y, e[2])),
           contents: NumberBox,
           maxDecimals: 0,
           wheelStep: 10,
@@ -196,7 +199,7 @@ const propertyConfigCreators :PMap<PropertyConfigCreator> = {
         {
           type: "numberText",
           constraints: {stretch: true},
-          number: eulerValue.bimap(e => e[2], (e, z) => Euler.fromValues(e[0], e[1], z)),
+          number: truncatedValue.bimap(e => e[2], (e, z) => Euler.fromValues(e[0], e[1], z)),
           contents: NumberBox,
           maxDecimals: 0,
           wheelStep: 10,
@@ -332,6 +335,11 @@ function truncateVec3 (vector :vec3, maxDecimals :number) :vec3 {
   const result = vec3.create()
   const scale = 10 ** maxDecimals
   return vec3.scale(result, vec3.round(result, vec3.scale(result, vector, scale)), 1.0 / scale)
+}
+
+function truncateEuler (rotation :quat) :Euler {
+  const euler = Euler.fromQuat(Euler.create(), rotation)
+  return Euler.round(euler, euler)
 }
 
 function createPropertyElementConfig (model :Model, editable :Value<boolean>) {
