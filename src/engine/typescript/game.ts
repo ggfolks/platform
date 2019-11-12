@@ -612,16 +612,14 @@ export function applyConfig (target :PMap<any>, config :PMap<any>) {
 }
 
 export class TypeScriptComponent extends TypeScriptConfigurable implements Component {
+  @property("number", {editable: false}) order = 0
+
   readonly aliases :string[]
-  readonly orderValue = Mutable.local(0)
 
   protected readonly _disposer = new Disposer()
   private readonly _coroutines :Coroutine[] = []
 
   get removable () :boolean { return true }
-
-  get order () :number { return this.orderValue.current }
-  set order (order :number) { this.orderValue.update(order) }
 
   get transform () :Transform { return this.gameObject.transform }
 
@@ -642,11 +640,10 @@ export class TypeScriptComponent extends TypeScriptConfigurable implements Compo
     super.init()
     const componentTypes = this.gameObject.componentTypes.current
     if (componentTypes.length > 0) {
-      this.orderValue.update(
-        this.gameObject.requireComponent(componentTypes[componentTypes.length - 1]).order + 1,
-      )
+      this.order =
+        this.gameObject.requireComponent(componentTypes[componentTypes.length - 1]).order + 1
     }
-    this._disposer.add(this.orderValue.onValue(() => this.gameObject._componentReordered(this)))
+    this.getProperty("order").onValue(() => this.gameObject._componentReordered(this))
   }
 
   requireComponent<T extends Component> (type :string|ComponentConstructor<T>) :T {
@@ -683,14 +680,7 @@ export class TypeScriptComponent extends TypeScriptConfigurable implements Compo
   }
 
   createConfig () :ConfigurableConfig {
-    const config :ConfigurableConfig = {}
-    if (this.order !== 0) config.order = this.order
-    const meta = getConfigurableMeta(Object.getPrototypeOf(this))
-    for (const [key, property] of meta.properties) {
-      if (property.constraints.readonly || property.constraints.transient) continue
-      config[key] = JavaScript.clone(this[key])
-    }
-    return config
+    return super.createConfig(true)
   }
 
   dispose () {
@@ -757,7 +747,7 @@ const WORLD_INVALID =
   RIGHT_INVALID | UP_INVALID | FORWARD_INVALID
 
 class TypeScriptTransform extends TypeScriptComponent implements Transform {
-  @property("vec3", {readonly: true, transient: true}) readonly lossyScale :vec3
+  @property("vec3", {readonly: true, transient: true, editable: false}) readonly lossyScale :vec3
   readonly localToWorldMatrix :mat4
   readonly worldToLocalMatrix :mat4
   readonly right :vec3
@@ -913,10 +903,14 @@ class TypeScriptTransform extends TypeScriptComponent implements Transform {
   @property("vec3") get localScale () :vec3 { return this._localScale }
   set localScale (scale :vec3) { vec3.copy(this._localScale, scale) }
 
-  @property("vec3", {transient: true}) get position () :vec3 { return this._position }
+  @property("vec3", {transient: true, editable: false}) get position () :vec3 {
+    return this._position
+  }
   set position (pos :vec3) { vec3.copy(this._position, pos) }
 
-  @property("quat", {transient: true}) get rotation () :quat { return this._rotation }
+  @property("quat", {transient: true, editable: false}) get rotation () :quat {
+    return this._rotation
+  }
   set rotation (rot :quat) { quat.copy(this._rotation, rot) }
 
   rotate (euler :vec3, frame? :CoordinateFrame) :void {
