@@ -1,4 +1,3 @@
-import {log} from "../core/util"
 import {rect, vec2} from "../core/math"
 import {Mutable, Value} from "../core/react"
 import {MutableSet} from "../core/rcollect"
