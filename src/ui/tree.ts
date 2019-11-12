@@ -228,11 +228,9 @@ export class TreeView extends AbstractTreeView implements DragOwner {
     this.hoveredTreeView.update(undefined)
   }
 
-  handlePointerDown (event :MouseEvent|TouchEvent, pos :vec2) :PointerInteraction|undefined {
-    const interaction = super.handlePointerDown(event, pos)
-    if (interaction) return interaction
-    this.selectedKeys.clear()
-    return undefined
+  handlePointerDown (event :MouseEvent|TouchEvent, pos :vec2, into :PointerInteraction[]) {
+    super.handlePointerDown(event, pos, into)
+    if (into.length > 0) this.selectedKeys.clear()
   }
 }
 

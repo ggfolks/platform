@@ -23,17 +23,20 @@ export abstract class AbstractButton extends Control {
   get styleScope () { return ButtonStyleScope }
   get pressed () :Value<boolean> { return this._pressed }
 
-  handlePointerDown (event :MouseEvent|TouchEvent, pos :vec2) :PointerInteraction|undefined {
+  handlePointerDown (event :MouseEvent|TouchEvent, pos :vec2, into :PointerInteraction[]) {
     this._pressed.update(true)
     this.focus()
-    return {
-      move: (event, pos) => this._pressed.update(rect.contains(this.hitBounds, pos)),
+    into.push({
+      move: (event, pos) => {
+        this._pressed.update(rect.contains(this.hitBounds, pos))
+        return false
+      },
       release: () => {
         this._pressed.update(false)
         if (rect.contains(this.hitBounds, pos)) this.onClick()
       },
       cancel: () => this._pressed.update(false)
-    }
+    })
   }
 
   protected get computeState () {
@@ -105,16 +108,15 @@ export class Toggle extends Control {
     return applied
   }
 
-  handlePointerDown (event :MouseEvent|TouchEvent, pos :vec2) :PointerInteraction|undefined {
-    if (event instanceof MouseEvent && event.button !== 0) return undefined
+  handlePointerDown (event :MouseEvent|TouchEvent, pos :vec2, into :PointerInteraction[]) {
     this.focus()
-    return {
-      move: (event, pos) => {},
+    into.push({
+      move: (event, pos) => false,
       release: () => {
         if (rect.contains(this.hitBounds, pos)) this.onClick()
       },
       cancel: () => {}
-    }
+    })
   }
 
   protected computePreferredSize (hintX :number, hintY :number, into :dim2) {

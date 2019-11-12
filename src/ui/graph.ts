@@ -496,22 +496,24 @@ export class GraphView extends AbsGroup {
     }
   }
 
-  maybeHandlePointerDown (event :MouseEvent|TouchEvent, pos :vec2) :PointerInteraction|undefined {
+  maybeHandlePointerDown (event :MouseEvent|TouchEvent, pos :vec2, into :PointerInteraction[]) {
     // just assume that anything in the scroll view is in the graph view
-    return this.handlePointerDown(event, pos)
+    return this.handlePointerDown(event, pos, into)
   }
 
-  handlePointerDown (event :MouseEvent|TouchEvent, pos :vec2) :PointerInteraction|undefined {
+  handlePointerDown (event :MouseEvent|TouchEvent, pos :vec2, into :PointerInteraction[]) {
     const graphViewer = getGraphViewer(this)
-    const interaction = super.handlePointerDown(event, pos)
-    if (interaction) {
-      if (interaction.type !== "node") graphViewer.selection.clear()
-      return interaction
+    super.handlePointerDown(event, pos, into)
+    for (const iact of into) {
+      if (iact.type !== "node") graphViewer.selection.clear()
     }
+    if (into.length > 0) return
+
     graphViewer.selection.clear()
     if (!event.shiftKey) {
       return
     }
+
     this.root.clearFocus()
     this.root.setCursor(this, "crosshair")
     const [ox, oy] = pos
@@ -524,7 +526,7 @@ export class GraphView extends AbsGroup {
       this.dirty(this._expandSelect(select))
       this._select = undefined
     }
-    return {
+    into.push({
       move: (event, pos) => {
         this.dirty(this._expandSelect(select))
         const [nx, ny] = pos
@@ -545,13 +547,14 @@ export class GraphView extends AbsGroup {
         }
         [hovered, nextHovered] = [nextHovered, hovered]
         nextHovered.clear()
+        return true
       },
       release: () => {
         for (const element of hovered) graphViewer.selection.add(element.id)
         cleanup()
       },
       cancel: cleanup,
-    }
+    })
   }
 
   protected expandBounds (hbounds: rect, rbounds :rect) {
@@ -853,7 +856,7 @@ export class NodeView extends VGroup {
   handleMouseEnter (pos :vec2) { this.hovered.update(true) }
   handleMouseLeave (pos :vec2) { this.hovered.update(false) }
 
-  handlePointerDown (event :MouseEvent|TouchEvent, pos :vec2) :PointerInteraction|undefined {
+  handlePointerDown (event :MouseEvent|TouchEvent, pos :vec2, into :PointerInteraction[]) {
     // move node to end of view
     const graphView = getGraphView(this)
     const parent = this.requireParent
@@ -866,18 +869,19 @@ export class NodeView extends VGroup {
       parent.dirty()
       tmp.dirty()
     }
-    const interaction = super.handlePointerDown(event, pos)
-    if (interaction || !this._editable.current) return interaction
+    super.handlePointerDown(event, pos, into)
+    if (into.length > 0 || !this._editable.current) return
+
     const basePos = vec2.clone(pos)
     const graphViewer = getGraphViewer(graphView)
     if (event.ctrlKey) {
       if (graphViewer.selection.has(this.id)) graphViewer.selection.delete(this.id)
       else graphViewer.selection.add(this.id)
-
     } else if (!graphViewer.selection.has(this.id)) {
       graphViewer.selection.clear()
       graphViewer.selection.add(this.id)
     }
+
     const origins = new Map<string, number[]>()
     for (const key of graphViewer.selection) {
       const constraints = graphView.elements.get(key)!.node.config.constraints as AbsConstraints
@@ -886,7 +890,7 @@ export class NodeView extends VGroup {
     }
     this.root.clearFocus()
     const cancel = () => this.clearCursor(this)
-    return {
+    into.push({
       type: "node",
       move: (event, pos) => {
         this.setCursor(this, "move")
@@ -896,10 +900,11 @@ export class NodeView extends VGroup {
           const node = graphView.elements.get(key)!.node.contents as NodeView
           node.position.update([origin[0] + dx, origin[1] + dy])
         }
+        return true
       },
       release: cancel,
       cancel,
-    }
+    })
   }
 
   protected get computeState () :string {
@@ -1058,9 +1063,10 @@ export class EdgeView extends Element {
 
   handleMouseLeave (pos :vec2) { this._hoverKeys.update(undefined) }
 
-  handlePointerDown (event :MouseEvent|TouchEvent, pos :vec2) {
+  handlePointerDown (event :MouseEvent|TouchEvent, pos :vec2, into :PointerInteraction[]) {
     const keys = this._hoverKeys.current
-    if (keys === undefined || !this._editable.current) return undefined
+    if (keys === undefined || !this._editable.current) return
+
     const [inputKey, targetId, outputKey] = keys
     // sever the connection
     const input = this._inputsModel.resolve(inputKey)
@@ -1090,7 +1096,7 @@ export class EdgeView extends Element {
     const node = view.elements.get(targetId)!.node
     const outputs = node.findTaggedChild("outputs") as VList
     const terminal = outputs.elements.get(outputKey)!.findChild("terminal") as Terminal
-    return terminal.handlePointerDown(event, pos)
+    terminal.handlePointerDown(event, pos, into)
   }
 
   protected get computeState () :string {
@@ -1371,7 +1377,7 @@ export class Terminal extends Element {
   handleMouseEnter (pos :vec2) { this._hovered.update(true) }
   handleMouseLeave (pos :vec2) { this._hovered.update(false) }
 
-  handlePointerDown (event :MouseEvent|TouchEvent, pos :vec2) {
+  handlePointerDown (event :MouseEvent|TouchEvent, pos :vec2, into :PointerInteraction[]) {
     if (!this._editable.current) return
     this.root.clearFocus()
     const endpoint = this._endpoint = vec2.clone(pos)
@@ -1407,20 +1413,21 @@ export class Terminal extends Element {
       this.clearCursor(this)
       if (targetTerminal) targetTerminal.targeted.update(false)
     }
-    return {
+    into.push({
       move: (event :MouseEvent|TouchEvent, pos :vec2) => {
         this.setCursor(this, "move")
         this.dirty()
         vec2.copy(endpoint, pos)
         this.recomputeBounds()
         visitOver(pos)
+        return true
       },
       release: () => {
         cleanup()
         if (targetTerminal) targetTerminal._connect(this)
       },
       cancel: cleanup,
-    }
+    })
   }
 
   private _connect (terminal :Terminal) {

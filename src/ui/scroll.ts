@@ -49,16 +49,17 @@ abstract class TransformedContainer extends Control {
     super.dirty(transformedRegion, true)
   }
 
-  handlePointerDown (event :MouseEvent|TouchEvent, pos :vec2) :PointerInteraction|undefined {
+  handlePointerDown (event :MouseEvent|TouchEvent, pos :vec2, into :PointerInteraction[]) {
     const transformedPos = this._transformPos(pos)
-    const interaction = this.contents.maybeHandlePointerDown(event, transformedPos)
-    if (interaction) return {
-      move: (event, pos) => interaction.move(event, this._transformPos(pos)),
-      release: interaction.release,
-      cancel: interaction.cancel,
-    }
+    const childIacts :PointerInteraction[] = []
+    this.contents.maybeHandlePointerDown(event, transformedPos, childIacts)
+    into.push(...childIacts.map(iact => (<PointerInteraction>{
+      move: (event, pos) => iact.move(event, this._transformPos(pos)),
+      release: iact.release,
+      cancel: iact.cancel,
+    })))
     this.root.clearFocus()
-    return this.startScroll(event, pos)
+    this.startScroll(event, pos, into)
   }
   handleWheel (event :WheelEvent, pos :vec2) {
     const transformedPos = this._transformPos(pos)
@@ -94,9 +95,7 @@ abstract class TransformedContainer extends Control {
     // we don't want to inherit the bounds of our children because we hide/transform them
   }
 
-  protected startScroll (event :MouseEvent|TouchEvent, pos :vec2) :PointerInteraction|undefined {
-    return undefined
-  }
+  protected startScroll (event :MouseEvent|TouchEvent, pos :vec2, into :PointerInteraction[]) {}
 
   protected get maxX () { return this.contents.width * this.scale - this.width }
   protected get maxY () { return this.contents.height * this.scale - this.height }
@@ -162,17 +161,22 @@ export class Panner extends TransformedContainer {
     return true
   }
 
-  protected startScroll (event :MouseEvent|TouchEvent, pos :vec2) :PointerInteraction|undefined {
+  protected startScroll (event :MouseEvent|TouchEvent, pos :vec2, into :PointerInteraction[]) {
     const clearCursor = () => this.clearCursor(this)
     const basePos = vec2.clone(pos), baseOffset = vec2.clone(this._offset.current)
-    return {
+    const ClaimDist = 5
+    let claimed = false
+    into.push({
       move: (event, pos) => {
         this.setCursor(this, "all-scroll")
-        this._updateOffset(vec2.add(tmpv, baseOffset, vec2.subtract(tmpv, basePos, pos)))
+        const delta = vec2.subtract(tmpv, basePos, pos)
+        if (vec2.length(delta) > ClaimDist) claimed = true
+        this._updateOffset(vec2.add(tmpv, baseOffset, delta))
+        return claimed
       },
       release: clearCursor,
       cancel: clearCursor,
-    }
+    })
   }
 
   private _updateScale (scale :number) {
@@ -314,18 +318,21 @@ export class Scroller extends TransformedContainer {
 
   protected get horiz () :boolean { return this.config.orient === "horiz" }
 
-  protected startScroll (event :MouseEvent|TouchEvent, pos :vec2) :PointerInteraction|undefined {
+  protected startScroll (event :MouseEvent|TouchEvent, pos :vec2, into :PointerInteraction[]) {
     const clearCursor = () => this.clearCursor(this)
-    const oidx = this.horiz ? 0 : 1, basePos = pos[oidx], baseOffset = this._offset.current[oidx]
+    const oidx = this.horiz ? 0 : 1, basePos = pos[oidx], baseOffset = this.offset[oidx]
     this.unanim()
     const anim = this.config.noInertial ? undefined : new InertialAnim(this)
     anim && anim.start(basePos, event.timeStamp)
-    return {
+    const ClaimDist = 5
+    let claimed = false
+    into.push({
       move: (event, pos) => {
         this.setCursor(this, "all-scroll")
         anim && anim.move(pos[oidx], event.timeStamp)
-        const offset = baseOffset + basePos - pos[oidx]
-        this._updateAxisOffset(offset)
+        this._updateAxisOffset(baseOffset + basePos - pos[oidx])
+        if (Math.abs(baseOffset - this.offset[oidx]) > ClaimDist) claimed = true
+        return claimed
       },
       release: (event, pos) => {
         anim && anim.release(pos[oidx], event.timeStamp)
@@ -333,7 +340,7 @@ export class Scroller extends TransformedContainer {
         clearCursor()
       },
       cancel: clearCursor,
-    }
+    })
   }
 
   protected _updateAxisOffset (offset :number) {

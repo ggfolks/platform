@@ -335,7 +335,7 @@ export abstract class AbstractText extends Control {
     return super.queryChildren(query) || query(this.cursor)
   }
 
-  handlePointerDown (event :MouseEvent|TouchEvent, pos :vec2) :PointerInteraction|undefined {
+  handlePointerDown (event :MouseEvent|TouchEvent, pos :vec2, into :PointerInteraction[]) {
     // figure out where the click landed
     const label = this.label, dp = pos[0] - label.x - label.xoffset.current
     const doff = label.span.current.computeOffset(dp)
@@ -354,15 +354,19 @@ export abstract class AbstractText extends Control {
     if (this.isFocused) this.jiggle.update(!this.jiggle.current)
     else this.focus()
 
-    // as the mouse moves, move the cursor and update the selection
-    return {
+    // as the mouse moves, move the cursor and update the selection;
+    // we claim the interaction if we change the selection
+    let claim = false
+    into.push({
       move: (event, pos) => {
         const mp = pos[0] - label.x - label.xoffset.current
+        if (dp !== mp) claim = true
         sel(label.span.current.computeOffset(mp), this.textState)
+        return claim
       },
       release: Noop,
       cancel: Noop,
-    }
+    })
   }
 
   handleKeyEvent (event :KeyboardEvent) {
@@ -598,8 +602,9 @@ export class EditableLabel extends AbstractText {
     // we might have a Value instead of a Mutable, in which case we just act as a normal label
     if (!(this.text instanceof Mutable)) return false
     this.focus()
-    const interaction = this.handlePointerDown(event, pos)
-    if (interaction) interaction.release(event, pos)
+    const iacts :PointerInteraction[] = []
+    this.handlePointerDown(event, pos, iacts)
+    for (const iact of iacts) iact.release(event, pos)
     return true
   }
 

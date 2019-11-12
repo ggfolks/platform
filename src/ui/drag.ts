@@ -2,7 +2,8 @@ import {dim2, rect, vec2} from "../core/math"
 import {Mutable, Value} from "../core/react"
 import {Noop} from "../core/util"
 import {ModelKey} from "./model"
-import {Control, ControlConfig, ControlStates, Element, ElementContext, Root} from "./element"
+import {Control, ControlConfig, ControlStates, Element, ElementContext,
+        PointerInteraction, Root} from "./element"
 import {Spec} from "./style"
 import {CursorConfig, Cursor, DefaultCursor} from "./cursor"
 
@@ -142,13 +143,15 @@ export abstract class DragElement extends Control {
   /** Selects this element. */
   select (event :MouseEvent|TouchEvent) :void {}
 
-  handlePointerDown (event :MouseEvent|TouchEvent, pos :vec2) {
-    const interaction = this.contents.handlePointerDown(event, pos)
-    if (interaction) return interaction
+  handlePointerDown (event :MouseEvent|TouchEvent, pos :vec2, into :PointerInteraction[]) {
+    this.contents.handlePointerDown(event, pos, into)
 
     this.select(event)
     const owner = this.dragOwner
-    if (!owner || !owner.canStartDrag) return {move: Noop, release: Noop, cancel: Noop}
+    if (!owner || !owner.canStartDrag) {
+      into.push({move: () => false, release: Noop, cancel: Noop})
+      return
+    }
 
     const startPos = vec2.clone(pos)
     const offsetPos = vec2.fromValues(this.x - startPos[0], this.y - startPos[1])
@@ -157,9 +160,9 @@ export abstract class DragElement extends Control {
     let dragRoot :Root|undefined
     let clear = () => {}
 
-    return {
-      move: (moveEvent :MouseEvent|TouchEvent, pos :vec2) => {
-        if (dragRoot === undefined && vec2.distance(startPos, pos) < DragHysteresis) return
+    into.push({
+      move: (moveEvent, pos) => {
+        if (dragRoot === undefined && vec2.distance(startPos, pos) < DragHysteresis) return false
         if (!dragRoot) {
           dragRoot = this._createDragRoot()
           dragRoot.size(dragSize)
@@ -179,8 +182,9 @@ export abstract class DragElement extends Control {
         }
         dragRoot.setOrigin(vec2.add(dragOrigin, this.root.origin, dragPos))
         owner.handleDrag(this, vec2.scaleAndAdd(dragPos, dragPos, dragSize, 0.5))
+        return dragRoot !== undefined
       },
-      release: (upEvent :MouseEvent|TouchEvent, pos :vec2) => {
+      release: (upEvent, pos) => {
         clear()
         if (dragRoot) owner.handleDrop(this)
       },
@@ -188,7 +192,7 @@ export abstract class DragElement extends Control {
         clear()
         if (dragRoot) owner.cancelDrag()
       },
-    }
+    })
   }
 
   handleWheel (event :WheelEvent, pos :vec2) :boolean {

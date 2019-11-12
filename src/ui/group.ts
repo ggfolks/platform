@@ -1,6 +1,7 @@
 import {dim2, rect, vec2, vec2zero} from "../core/math"
 import {getValue, log, developMode} from "../core/util"
-import {Element, ElementConfig, ElementContext, ElementOp, ElementQuery} from "./element"
+import {Element, ElementConfig, ElementContext, ElementOp, ElementQuery,
+        PointerInteraction} from "./element"
 
 const tmpr = rect.create()
 
@@ -66,13 +67,11 @@ export abstract class AbsGroup extends Group {
     return true
   }
 
-  handlePointerDown (event :MouseEvent|TouchEvent, pos :vec2) {
+  handlePointerDown (event :MouseEvent|TouchEvent, pos :vec2, into :PointerInteraction[]) {
     // handle mouse events in reverse order of drawing
     for (let ii = this.contents.length - 1; ii >= 0; ii--) {
-      const interaction = this.contents[ii].maybeHandlePointerDown(event, pos)
-      if (interaction) return interaction
+      this.contents[ii].maybeHandlePointerDown(event, pos, into)
     }
-    return undefined
   }
 
   handleWheel (event :WheelEvent, pos :vec2) {

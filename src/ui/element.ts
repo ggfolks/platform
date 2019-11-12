@@ -2,7 +2,8 @@ import {Disposable, Disposer, Remover, NoopRemover, PMap, log} from "../core/uti
 import {Clock} from "../core/clock"
 import {dim2, rect, vec2, vec2zero} from "../core/math"
 import {Record} from "../core/data"
-import {Emitter, Mutable, Source, Stream, Subject, Value, trueValue, falseValue} from "../core/react"
+import {Emitter, Mutable, Source, Stream, Subject, Value, trueValue, falseValue,
+        addListener} from "../core/react"
 import {MutableList, RList} from "../core/rcollect"
 import {Scale} from "../core/ui"
 import {keyEvents, mouseEvents, pointerEvents, touchEvents, wheelEvents} from "../input/react"
@@ -307,8 +308,8 @@ export abstract class Element implements Disposable {
     * @param pos the position of the event relative to the root origin.
     * @return an interaction if an element started an interaction with the pointer, `undefined`
     * otherwise. */
-  maybeHandlePointerDown (event :MouseEvent|TouchEvent, pos :vec2) :PointerInteraction|undefined {
-    return this.canHandleEvent(event, pos) ? this.handlePointerDown(event, pos) : undefined
+  maybeHandlePointerDown (event :MouseEvent|TouchEvent, pos :vec2, into :PointerInteraction[]) {
+    if (this.canHandleEvent(event, pos)) this.handlePointerDown(event, pos, into)
   }
 
   /** Requests that this element handle the supplied pointer down event.
@@ -316,8 +317,8 @@ export abstract class Element implements Disposable {
     * @param pos the position of the event relative to the root origin.
     * @return an interaction if an element started an interaction with the pointer, `undefined`
     * otherwise. */
-  handlePointerDown (event :MouseEvent|TouchEvent, pos :vec2) :PointerInteraction|undefined {
-    return this.queryChildren(c => c.maybeHandlePointerDown(event, pos))
+  handlePointerDown (event :MouseEvent|TouchEvent, pos :vec2, into :PointerInteraction[]) {
+    this.applyToChildren(c => c.maybeHandlePointerDown(event, pos, into))
   }
 
   /** Requests that this element handle the supplied wheel event if it contains the position.
@@ -477,20 +478,35 @@ export class ErrorViz extends Element {
   }
 }
 
-/** Encapsulates a mouse or touch interaction with an element. When the button is pressed over an
-  * element, it can start an interaction which will then handle subsequent events until the button
-  * is released or the interaction is canceled. */
+/** Encapsulates a mouse or touch interaction. An interaction can be started by an element when a
+  * button or touch is pressed over it, or by a gesture handler. Multiple interactions may be
+  * started by the same press/touch and based on subsequent input one of the interactions can claim
+  * primacy and the other interactions will be canceled. */
 export type PointerInteraction = {
-  /** Called when the pointer is moved while this interaction is active. */
-  move: (moveEvent :MouseEvent|TouchEvent, pos :vec2) => void
-  /** Called when the pointer is released while this interaction is active. This ends the
-    * interaction. */
+  /** Called when the pointer is moved while this interaction is active.
+    * @return true if this interaction has accumulated enough input to know that it should be
+    * granted exclusive control. */
+  move: (moveEvent :MouseEvent|TouchEvent, pos :vec2) => boolean
+  /** Called when the pointer is released while this interaction is active.
+    * This ends the interaction. */
   release: (upEvent :MouseEvent|TouchEvent, pos :vec2) => void
   /** Called if this action is canceled. This ends the interaction. */
   cancel: () => void
 
   // allow extra stuff in interaction to allow communication with parent elements
   [extra :string] :any
+}
+
+/** Allows arbitrary code to participate in mouse/touch input handling for a root. If no element
+  * starts a pointer interaction, registered gesture handlers are given a chance to do so. As with
+  * elements, once an interaction is started, it gets all move/drag events and the final up/end. */
+export interface GestureHandler {
+
+  /** Checks whether this handler wishes to handle this pointer interaction.
+    * @param event the event forwarded from the browser.
+    * @param pos the position of the event relative to the root origin.
+    * @return an interaction to be started or `undefined`. */
+  handlePointerDown (event :MouseEvent|TouchEvent, pos :vec2, into :PointerInteraction[]) :void
 }
 
 export const RootStates = ["normal"]
@@ -542,13 +558,14 @@ type RootChange = "resized" | "moved" | "rendered" | "removed" | "disposed"
 
 /** The top-level of the UI hierarchy. Manages the canvas into which the UI is rendered. */
 export class Root extends Element {
-  private readonly interacts :Array<PointerInteraction|undefined> = []
+  private readonly interacts :Array<PointerInteraction[]|undefined> = []
   private readonly _clock = new Emitter<Clock>()
   private readonly _scale :Scale
   private readonly _hintSize :Value<dim2>
   private readonly _minSize :Value<dim2>
   private readonly _origin = vec2.create()
   private readonly _cursorOwners = new Map<Element, string>()
+  private readonly _gestureHandlers :GestureHandler[] = []
   private _elementsOver = new Set<Element>()
   private _lastElementsOver = new Set<Element>()
   private _activeTouchId :number|undefined = undefined
@@ -641,6 +658,12 @@ export class Root extends Element {
     if (this.cursor.current !== cursor) return
     if (this._cursorOwners.size > 0) this.cursor.update(this._cursorOwners.values().next().value)
     else this.cursor.update("auto")
+  }
+
+  /** Registers `handler` with this root.
+    * @return a remover that can be invoked to remove the handler registration. */
+  addGestureHandler (handler :GestureHandler) :Remover {
+    return addListener(this._gestureHandlers, handler)
   }
 
   /** Updates the position at which the root is rendered on the screen.
@@ -765,7 +788,7 @@ export class Root extends Element {
     // support other weird ratios between browser display units and backing buffers, we have to be
     // more explicit about all this...
     const pos = host.mouseToRoot(this, event, tmpv), inBounds = rect.contains(this.hitBounds, pos)
-    const button = event.button, iact = this.interacts[button]
+    const button = event.button, iacts = this.interacts[button]
 
     // if this mouse event is in our bounds, stop it from propagating to (lower) roots; except in
     // the case of mouseup because a mouse interaction might start on one root and then drag over to
@@ -774,26 +797,32 @@ export class Root extends Element {
 
     switch (event.type) {
     case "mousedown":
-      if (iact) {
-        log.warn("Got mouse down but have active interaction?", "button", button)
-        iact.cancel()
+      if (iacts) {
+        log.warn("Got mouse down but have active interaction(s)?", "button", button)
+        for (const iact of iacts) iact.cancel()
       }
       if (inBounds) {
-        const niact = this.interacts[button] = this.eventTarget.maybeHandlePointerDown(event, pos)
-        if (niact === undefined) this.droppedClick(event, pos)
+        let niacts  :PointerInteraction[] = []
+        this.eventTarget.maybeHandlePointerDown(event, pos, niacts)
+        this.maybeStartGesture(event, pos, niacts)
+        if (niacts.length == 0) this.droppedClick(event, pos)
+        this.interacts[button] = niacts
       }
       break
+
     case "mousemove":
-      if (iact) iact.move(event, pos)
+      if (iacts) this.dispatchMove(event, pos, iacts)
       else this._updateElementsOver(pos)
       break
+
     case "mouseup":
-      if (iact) {
-        iact.release(event, pos)
+      if (iacts) {
+        for (const iact of iacts) iact.release(event, pos)
         this.interacts[button] = undefined
         this._updateElementsOver(pos)
       }
       break
+
     case "dblclick":
       if (inBounds) this.eventTarget.maybeHandleDoubleClick(event, pos)
       break
@@ -805,7 +834,7 @@ export class Root extends Element {
     * @param host the host that is liaising between this root and the browser events.
     * @param event the browser event to dispatch. */
   dispatchTouchEvent (host :Host, event :TouchEvent) {
-    const iact = this.interacts[0]
+    const iacts = this.interacts[0]
     if (event.type === "touchstart") {
       if (this._activeTouchId === undefined && event.changedTouches.length === 1) {
         const touch = event.changedTouches[0]
@@ -815,13 +844,16 @@ export class Root extends Element {
           event.cancelBubble = true
           event.preventDefault()
         }
-        if (iact) {
+        if (iacts) {
           log.warn("Got touch start but have active interaction?")
-          iact.cancel()
+          for (const iact of iacts) iact.cancel()
         }
-        const niact = this.interacts[0] = this.eventTarget.maybeHandlePointerDown(event, pos)
-        if (niact !== undefined) this._activeTouchId = touch.identifier
+        const niacts :PointerInteraction[] = []
+        this.eventTarget.maybeHandlePointerDown(event, pos, niacts)
+        this.maybeStartGesture(event, pos, niacts)
+        if (niacts.length > 0) this._activeTouchId = touch.identifier
         else this.droppedClick(event, pos)
+        this.interacts[0] = niacts
       }
 
     } else {
@@ -830,24 +862,24 @@ export class Root extends Element {
         if (touch.identifier !== this._activeTouchId) continue
         switch (event.type) {
         case "touchmove":
-          if (iact) {
+          if (iacts) {
             const pos = host.touchToRoot(this, touch, tmpv)
-            iact.move(event, pos)
+            this.dispatchMove(event, pos, iacts)
             event.preventDefault()
           }
           break
         case "touchend":
-          if (iact) {
+          if (iacts) {
             const pos = host.touchToRoot(this, touch, tmpv)
-            iact.release(event, pos)
+            for (const iact of iacts) iact.release(event, pos)
             this.interacts[0] = undefined
             this._activeTouchId = undefined
             event.preventDefault()
           }
           break
         case "touchcancel":
-          if (iact) {
-            iact.cancel()
+          if (iacts) {
+            for (const iact of iacts) iact.cancel()
             this.interacts[0] = undefined
             this._activeTouchId = undefined
             event.preventDefault()
@@ -916,6 +948,22 @@ export class Root extends Element {
     canvas.clip()
     this.contents.render(canvas, region)
     canvas.restore()
+  }
+
+  private maybeStartGesture (event :MouseEvent|TouchEvent, pos :vec2, into :PointerInteraction[]) {
+    for (const handler of this._gestureHandlers) handler.handlePointerDown(event, pos, into)
+  }
+
+  private dispatchMove (event :MouseEvent|TouchEvent, pos :vec2, iacts :PointerInteraction[]) {
+    // if any interaction claims the interaction, cancel all the rest
+    for (const iact of iacts) {
+      if (iact.move(event, pos)) {
+        for (const cc of iacts) if (cc !== iact) cc.cancel()
+        iacts.length = 0
+        iacts.push(iact)
+        return
+      }
+    }
   }
 
   private droppedClick (event :MouseEvent|TouchEvent, pos :vec2) {
