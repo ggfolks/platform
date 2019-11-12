@@ -207,7 +207,10 @@ export class Timestamp {
   minus (count :number, interval :Interval) :Timestamp {
     return new Timestamp(this.millis + interval.millisPer * count)
   }
+
+  toString () { return new Date(this.millis).toLocaleString() }
 }
+
 // TODO: support some sentinel value that means "use a server timestamp when we decode"
 
 // TODO: support setting an offset from client local time then have the data subsystem calibrarte
