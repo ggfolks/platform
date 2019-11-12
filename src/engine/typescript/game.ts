@@ -9,6 +9,7 @@ import {Graph as GraphObject, GraphConfig} from "../../graph/graph"
 import {CategoryNode, NodeConfig, NodeTypeRegistry} from "../../graph/node"
 import {registerLogicNodes} from "../../graph/logic"
 import {registerMathNodes} from "../../graph/math"
+import {PropertyMeta} from "../../graph/meta"
 import {createQuatFn, createVec3Fn, registerMatrixNodes} from "../../graph/matrix"
 import {registerSignalNodes} from "../../graph/signal"
 import {SubgraphRegistry, registerUtilNodes} from "../../graph/util"
@@ -21,7 +22,7 @@ import {
   Coroutine, Cube, Cylinder, GameContext, GameEngine, GameObject, GameObjectConfig, Graph, Mesh,
   MeshFilter, Page, PrimitiveType, Quad, SpaceConfig, Sphere, Time, Transform,
 } from "../game"
-import {PropertyMeta, getConfigurableMeta, property} from "../meta"
+import {getConfigurableMeta, property} from "../meta"
 import {PhysicsEngine} from "../physics"
 import {RenderEngine} from "../render"
 import {registerEngineNodes, registerEngineSubgraphs} from "../node"

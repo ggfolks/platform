@@ -1,23 +1,6 @@
 import {MutableMap} from "../core/rcollect"
+import {PropertyConstraints, PropertyMeta} from "../graph/meta"
 import {Configurable} from "./game"
-
-/** The metadata associated with a viewable/editable property. */
-export interface PropertyMeta {
-  type :string
-  constraints :PropertyConstraints
-}
-
-/** Base interface for property constraints. */
-export interface PropertyConstraints {
-  /** If true, this property is read-only. */
-  readonly? :boolean
-  /** If true, this property should not be persisted. */
-  transient? :boolean
-  /** If false, this property should not be shown in the editor interface. */
-  editable? :boolean
-  /** Extra bits may apply to specific property types. */
-  [extra :string] :any
-}
 
 /** The metadata for a configurable type. */
 export interface ConfigurableMeta {

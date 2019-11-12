@@ -1,8 +1,9 @@
 import {Value} from "../../core/react"
 import {MutableMap, RMap} from "../../core/rcollect"
 import {PMap, getValue} from "../../core/util"
+import {PropertyMeta} from "../../graph/meta"
 import {Animation, AnimationController, AnimationControllerConfig} from "../animation"
-import {PropertyMeta, property} from "../meta"
+import {property} from "../meta"
 import {TypeScriptComponent, registerConfigurableType} from "./game"
 
 const ConditionMeta = {type: "boolean", constraints: {transient: true}}

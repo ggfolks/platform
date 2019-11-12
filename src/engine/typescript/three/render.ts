@@ -15,12 +15,12 @@ import {Mutable, Subject, Value} from "../../../core/react"
 import {MutableMap, RMap} from "../../../core/rcollect"
 import {Disposer, NoopRemover, Remover} from "../../../core/util"
 import {Graph, GraphConfig} from "../../../graph/graph"
-import {setEnumMeta} from "../../../graph/meta"
+import {PropertyMeta, setEnumMeta} from "../../../graph/meta"
 import {loadGLTF, loadGLTFAnimationClip} from "../../../scene3/entity"
 import {Hand, Pointer} from "../../../input/hand"
 import {DEFAULT_PAGE, ConfigurableConfig, Hover, Transform} from "../../game"
 import {Animation, WrapMode, WrapModes} from "../../animation"
-import {PropertyMeta, getConfigurableMeta, property} from "../../meta"
+import {getConfigurableMeta, property} from "../../meta"
 import {
   Camera, Light, LightType, LightTypes, Material, MaterialSide, MaterialSides, MeshRenderer,
   Model, RaycastHit, RenderEngine,

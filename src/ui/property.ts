@@ -3,11 +3,12 @@ import {Color as ThreeColor, Euler as ThreeEuler, Math as M, Vector3} from "thre
 import {refEquals} from "../core/data"
 import {Euler, quat, vec3} from "../core/math"
 import {Mutable, Value} from "../core/react"
-import {PMap, toLimitedString} from "../core/util"
-import {NumberConstraints, SelectConstraints, getEnumMeta} from "../graph/meta"
+import {RMap} from "../core/rcollect"
+import {PMap, filteredIterable, toLimitedString} from "../core/util"
+import {NumberConstraints, PropertyMeta, SelectConstraints, getEnumMeta} from "../graph/meta"
 import {Element, ElementConfig, ElementContext} from "./element"
 import {AxisConfig, VGroup} from "./group"
-import {Action, Model, ElementsModel, Spec} from "./model"
+import {Action, Model, ElementsModel, Spec, mapModel} from "./model"
 
 /** Configuration for [[PropertyView]]. */
 export interface PropertyViewConfig extends AxisConfig {
@@ -434,4 +435,30 @@ export function createPropertyRowConfig (model :Model, valueConfig :ElementConfi
       valueConfig,
     ],
   }
+}
+
+/** Creates a model for the supplied properties.
+  * @param propertiesMeta the property metadata map.
+  * @param getProperty the function to use to get the property values.
+  * @return the model instance. */
+export function makePropertiesModel (
+  propertiesMeta :RMap<string, PropertyMeta>,
+  getProperty :(name :string, meta :Value<PropertyMeta>) => Value<any>,
+) {
+  return mapModel(
+    propertiesMeta.keysValue.map(keys => filteredIterable(
+      keys,
+      key => propertiesMeta.require(key).constraints.editable !== false,
+    )),
+    propertiesMeta,
+    (value, key) => {
+      const propertyName = key as string
+      return {
+        name: Value.constant(propertyName),
+        type: value.map(value => value.type),
+        constraints: value.map(value => value.constraints),
+        value: getProperty(propertyName, value),
+      }
+    },
+  )
 }

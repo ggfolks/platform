@@ -241,6 +241,7 @@ export abstract class AbstractSubgraph extends Node {
               {
                 type: propType!,
                 defaultValue: getValue(defaultValue, propertyDefaults[propType!]),
+                constraints: {},
               },
             )
           })

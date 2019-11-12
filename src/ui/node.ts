@@ -13,6 +13,7 @@ import {
 } from "../graph/node"
 import {HAnchor, Host, Root, RootConfig, VAnchor, getCurrentEditNumber} from "./element"
 import {Action, Command, Model, ModelData, ModelKey, ElementsModel, mapModel} from "./model"
+import {makePropertiesModel} from "./property"
 import {Theme, UI} from "./ui"
 import {ImageResolver, StyleDefs} from "./style"
 
@@ -514,13 +515,10 @@ function createPageModelData (
             position: createPropertyValue("_position"),
             ...subgraphElement,
             defaultOutputKey: Value.constant(node.defaultOutputKey),
-            propertiesModel: mapModel(node.propertiesMeta.keysValue,
-                                      node.propertiesMeta, (value, key) => ({
-              name: Value.constant(key),
-              type: value.map(value => value.type),
-              constraints: value.map(value => value.constraints),
-              value: createPropertyValue(key, value.map(value => value.defaultValue)),
-            })),
+            propertiesModel: makePropertiesModel(
+              node.propertiesMeta,
+              (key, value) => createPropertyValue(key, value.map(value => value.defaultValue)),
+            ),
             inputsModel: mapModel(node.inputsMeta.keysValue, node.inputsMeta, (value, key) => {
               const multiple = value.map(value => value.multiple)
               const input = createPropertyValue(key)

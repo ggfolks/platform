@@ -5,12 +5,19 @@ import {NodeConfig} from "./node"
 /** The metadata associated with a viewable/editable property. */
 export interface PropertyMeta {
   type :string
-  defaultValue :any
-  constraints? :PropertyConstraints
+  defaultValue? :any
+  constraints :PropertyConstraints
 }
 
 /** Base interface for property constraints. */
 export interface PropertyConstraints {
+  /** If true, this property is read-only. */
+  readonly? :boolean
+  /** If true, this property should not be persisted. */
+  transient? :boolean
+  /** If false, this property should not be shown in the editor interface. */
+  editable? :boolean
+  /** Extra bits may apply to specific property types. */
   [extra :string] :any
 }
 
@@ -59,6 +66,7 @@ export function property (type? :string, constraints? :PropertyConstraints) {
       type = typeof defaultValue
       if (type === "object" && defaultValue !== null) type = defaultValue.constructor.name as string
     }
+    if (constraints === undefined) constraints = {}
     getNodeMetaByPrototype(prototype, instance.type).properties.set(
       name,
       {type, defaultValue, constraints},
