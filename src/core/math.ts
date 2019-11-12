@@ -287,3 +287,22 @@ export class Euler extends Float32Array {
     )
   }
 }
+
+/** Combines an origin point and a direction vector. */
+export class Ray {
+  readonly origin :vec3
+  readonly direction :vec3
+
+  private constructor () {
+    this.origin = vec3.create()
+    this.direction = vec3.create()
+  }
+
+  /** Creates a new set of Euler angles set to zero. */
+  static create () :Ray { return new Ray() }
+
+  /** Gets a point along the ray. */
+  static getPoint (out :vec3, ray :Ray, distance :number) :vec3 {
+    return vec3.scaleAndAdd(out, ray.origin, ray.direction, distance)
+  }
+}

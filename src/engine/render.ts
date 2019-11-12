@@ -1,4 +1,4 @@
-import {rect, vec2, vec3} from "../core/math"
+import {Ray, rect, vec2, vec3} from "../core/math"
 import {Color} from "../core/color"
 import {Value} from "../core/react"
 import {Disposable} from "../core/util"
@@ -119,18 +119,18 @@ export interface Camera extends Component, Hoverable {
   getDirection (target? :vec3) :vec3
 
   /** Converts a point in screen coordinates (0,0 at upper left, width-1,height-1 at lower right)
-    * to a direction in world space for this camera.
+    * to a ray in world space for this camera.
     * @param coords the coordinates to convert.
-    * @param [target] an optional vector to hold the result.
-    * @return the direction in world space. */
-  screenPointToDirection (coords :vec2, target? :vec3) :vec3
+    * @param [target] an optional ray to hold the result.
+    * @return the ray in world space. */
+  screenPointToRay (coords :vec2, target? :Ray) :Ray
 
   /** Converts a point in viewport coordinates (0,0 at lower left, 1,1 at upper right) to a
-    * direction in world space for this camera.
+    * ray in world space for this camera.
     * @param coords the coordinates to convert.
-    * @param [target] an optional vector to hold the result.
-    * @return the direction in world space. */
-  viewportPointToDirection (coords :vec2, target? :vec3) :vec3
+    * @param [target] an optional ray to hold the result.
+    * @return the ray in world space. */
+  viewportPointToRay (coords :vec2, target?: Ray) :Ray
 
   /** Converts a point in world space to screen coordinates.
     * @param coords the coordinates to convert.

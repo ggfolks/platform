@@ -10,7 +10,7 @@ import {SkeletonUtils} from "three/examples/jsm/utils/SkeletonUtils"
 import {Clock} from "../../../core/clock"
 import {Color} from "../../../core/color"
 import {refEquals} from "../../../core/data"
-import {Plane, dim2, rect, vec2, vec3} from "../../../core/math"
+import {Plane, Ray, dim2, rect, vec2, vec3} from "../../../core/math"
 import {Mutable, Subject, Value} from "../../../core/react"
 import {MutableMap, RMap} from "../../../core/rcollect"
 import {Disposer, NoopRemover, Remover} from "../../../core/util"
@@ -39,7 +39,7 @@ const raycasterResults :Intersection[] = []
 const raycastHits :RaycastHit[] = []
 
 const coords = vec2.create()
-const rayDirection = vec3.create()
+const tmpr = Ray.create()
 const tmpv = vec3.create()
 const tmpp = vec3.create()
 const tmpPlane = Plane.create()
@@ -176,11 +176,7 @@ export class ThreeRenderEngine implements RenderEngine {
     const cameras = activePage ? activePage.cameras : this.cameras
     for (const camera of cameras) {
       for (const [identifier, pointer] of this._hand.pointers) {
-        const rayOrigin = camera.transform.position
-        camera.screenPointToDirection(
-          vec2.set(coords, pointer.position[0], pointer.position[1]),
-          rayDirection,
-        )
+        camera.screenPointToRay(vec2.set(coords, pointer.position[0], pointer.position[1]), tmpr)
 
         // pressed objects stay hovered until the press ends
         const pressedObject = this._pressedObjects.get(identifier)
@@ -194,8 +190,8 @@ export class ThreeRenderEngine implements RenderEngine {
                 camera.getDirection(tmpv),
                 vec3.transformMat4(tmpp, hover.viewPosition, camera.transform.localToWorldMatrix),
               )
-              const distance = Plane.intersectRay(tmpPlane, rayOrigin, rayDirection)
-              if (distance >= 0) vec3.scaleAndAdd(tmpp, rayOrigin, rayDirection, distance)
+              const distance = Plane.intersectRay(tmpPlane, tmpr.origin, tmpr.direction)
+              if (distance >= 0) Ray.getPoint(tmpp, tmpr, distance)
               else vec3.copy(tmpp, hover.worldPosition)
               this._maybeNoteHovered(identifier, pointer, camera, pressedObject, tmpp)
               continue
@@ -205,7 +201,7 @@ export class ThreeRenderEngine implements RenderEngine {
           }
         }
 
-        this.raycastAll(rayOrigin, rayDirection, 0, Infinity, raycastHits)
+        this.raycastAll(tmpr.origin, tmpr.direction, 0, Infinity, raycastHits)
         let noted = false
         for (const hit of raycastHits) {
           const objectComponent = hit.transform.getComponent<ThreeObjectComponent>("hoverable")
@@ -220,13 +216,15 @@ export class ThreeRenderEngine implements RenderEngine {
         // if we didn't hit anything else, "hover" on the camera
         if (!noted) {
           // use intersection with a plane one unit in front of the camera
-          const dp = vec3.dot(camera.getDirection(tmpv), rayDirection)
+          const distance = camera.orthographic
+            ? 1
+            : 1 / vec3.dot(camera.getDirection(tmpv), tmpr.direction)
           this._maybeNoteHovered(
             identifier,
             pointer,
             camera,
             camera,
-            vec3.scaleAndAdd(tmpp, rayOrigin, rayDirection, 1 / dp),
+            Ray.getPoint(tmpp, tmpr, distance),
           )
         }
       }
@@ -731,11 +729,11 @@ class ThreeCamera extends ThreeObjectComponent implements Camera {
   }
 
   getDirection (target? :vec3) :vec3 {
-    return this.viewportPointToDirection(vec2.set(tmpc, 0.5, 0.5), target)
+    return vec3.negate(target || vec3.create(), this.transform.forward)
   }
 
-  screenPointToDirection (coords :vec2, target? :vec3) :vec3 {
-    return this.viewportPointToDirection(
+  screenPointToRay (coords :vec2, target? :Ray) :Ray {
+    return this.viewportPointToRay(
       vec2.set(
         tmpc,
         coords[0] / this.renderEngine.domElement.clientWidth,
@@ -745,13 +743,15 @@ class ThreeCamera extends ThreeObjectComponent implements Camera {
     )
   }
 
-  viewportPointToDirection (coords :vec2, target? :vec3) :vec3 {
-    if (!target) target = vec3.create()
+  viewportPointToRay (coords :vec2, target?: Ray) :Ray {
+    if (!target) target = Ray.create()
     raycaster.setFromCamera(
       tmpVector2.set(coords[0] * 2 - 1, coords[1] * 2 - 1),
       this.camera,
     )
-    return raycaster.ray.direction.toArray(target) as vec3
+    raycaster.ray.origin.toArray(target.origin)
+    raycaster.ray.direction.toArray(target.direction)
+    return target
   }
 
   worldToScreenPoint (coords :vec3, target? :vec3) :vec3 {
