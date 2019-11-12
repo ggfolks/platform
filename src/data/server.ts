@@ -2,7 +2,7 @@ import {PMap, Remover, log} from "../core/util"
 import {UUID, UUID0} from "../core/uuid"
 import {Path, PathMap} from "../core/path"
 import {Record} from "../core/data"
-import {Mutable, Subject, Value} from "../core/react"
+import {Mutable, Value} from "../core/react"
 import {MutableMap, RMap} from "../core/rcollect"
 import {Auth} from "../auth/auth"
 import {Named, PropMeta, TableMeta, ViewMeta, tableForView, getPropMetas, isPersist} from "./meta"
@@ -39,23 +39,6 @@ export class Resolved implements DataSource {
       this.subscribers.splice(idx, 1)
       this.store.postMeta(this.object, {type: "unsubscribed", id: sub.auth.id})
     }
-  }
-
-  subscribe (sub :Subscriber) :Subject<DObject|Error> {
-    return Subject.deriveSubject(disp => {
-      // wait for object to be active before we do canSubscribe check
-      this.object.state.whenOnce(s => s === "active", _ => {
-        if (!this.object.canSubscribe(sub.auth)) disp(new Error("Access denied."))
-        else {
-          this.subscribers.push(sub)
-          disp(this.object)
-        }
-      })
-      return () => {
-        const idx = this.subscribers.indexOf(sub)
-        if (idx >= 0) this.subscribers.splice(idx, 1)
-      }
-    })
   }
 
   resolvedData () {
@@ -198,7 +181,10 @@ export abstract class DataStore {
       try {
         const meta = object.metas[queue.index]
         if (meta.type !== "queue") throw new Error(`Not a queue prop at path [type=${meta.type}]`)
-        if (meta.system && !auth.isSystem) throw new Error("Access denied.")
+        if (meta.system && !auth.isSystem) {
+          log.warn("Rejecting post to meta queue by non-system", "queue", queue, "auth", auth)
+          throw new Error("Access denied.")
+        }
         // TODO: check canSubscribe permission?
         meta.handler({auth, post: (queue, msg) => this.post(sysAuth, queue, msg)}, object, msg)
       } catch (err) {
@@ -310,8 +296,10 @@ export function channelHandlers (store :DataStore) :PMap<ChannelHandler<any>> {
       // wait for object to be active before we do canSubscribe check
       const res = store.resolve(path), obj = res.object
       obj.state.whenOnce(s => s === "active", _ => {
-        if (!obj.canSubscribe(auth.current)) reject(new Error("Access denied."))
-        else {
+        if (!obj.canSubscribe(auth.current)) {
+          log.warn("Rejecting subscribe to object", "obj", obj, "auth", auth.current)
+          reject(new Error("Access denied."))
+        } else {
           const channel = mkChannel(mkObjCodec(obj))
           channel.messages.onEmit(msg => {
             switch (msg.type) {
