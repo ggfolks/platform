@@ -23,10 +23,17 @@ export function getConfigurableMeta (prototype :Configurable) :ConfigurableMeta 
   let meta = configurableMeta.get(prototype)
   if (!meta) {
     configurableMeta.set(prototype, meta = {properties: MutableMap.local()})
-    const superMeta = configurableMeta.get(Object.getPrototypeOf(prototype))
-    if (superMeta) {
-      for (const [property, propertyMeta] of superMeta.properties) {
-        meta.properties.set(property, propertyMeta)
+    for (
+      let prototypePrototype = Object.getPrototypeOf(prototype);
+      prototypePrototype;
+      prototypePrototype = Object.getPrototypeOf(prototypePrototype)
+    ) {
+      const superMeta = configurableMeta.get(prototypePrototype)
+      if (superMeta) {
+        for (const [property, propertyMeta] of superMeta.properties) {
+          meta.properties.set(property, propertyMeta)
+        }
+        break
       }
     }
   }
