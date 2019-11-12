@@ -4,7 +4,7 @@ import {
   Intersection, Light as LightObject, LoopOnce, LoopRepeat, LoopPingPong,
   Material as MaterialObject, Mesh, MeshBasicMaterial, MeshStandardMaterial, Object3D,
   PerspectiveCamera, PlaneBufferGeometry, Raycaster, Scene, ShaderMaterial, SphereBufferGeometry,
-  Vector2, WebGLRenderer,
+  Vector2, Vector3, WebGLRenderer,
 } from "three"
 import {SkeletonUtils} from "three/examples/jsm/utils/SkeletonUtils"
 import {Clock} from "../../../core/clock"
@@ -647,6 +647,7 @@ registerConfigurableType("component", ["render"], "meshRenderer", ThreeMeshRende
 
 const tmpVector2 = new Vector2()
 const tmpc = vec2.create()
+const tmpVector3 = new Vector3()
 
 class ThreeCamera extends ThreeObjectComponent implements Camera {
   private _perspectiveCamera = new PerspectiveCamera()
@@ -705,6 +706,23 @@ class ThreeCamera extends ThreeObjectComponent implements Camera {
       this._perspectiveCamera,
     )
     return raycaster.ray.direction.toArray(target) as vec3
+  }
+
+  worldToScreenPoint (coords :vec3, target? :vec3) :vec3 {
+    const result = this.worldToViewportPoint(coords, target)
+    result[0] *= this.renderEngine.domElement.clientWidth
+    result[1] = (1 - result[1]) * this.renderEngine.domElement.clientHeight
+    return result
+  }
+
+  worldToViewportPoint (coords :vec3, target? :vec3) :vec3 {
+    if (!target) target = vec3.create()
+    vec3.transformMat4(target, coords, this.transform.worldToLocalMatrix)
+    tmpVector3.fromArray(target).applyMatrix4(this._perspectiveCamera.projectionMatrix)
+    tmpVector3.toArray(target)
+    target[0] = (target[0] + 1) * 0.5
+    target[1] = (target[1] + 1) * 0.5
+    return target
   }
 
   onTransformParentChanged () {

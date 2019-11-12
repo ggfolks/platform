@@ -119,6 +119,18 @@ export interface Camera extends Component, Hoverable {
     * @param [target] an optional vector to hold the result.
     * @return the direction in world space. */
   viewportPointToDirection (coords :vec2, target? :vec3) :vec3
+
+  /** Converts a point in world space to screen coordinates.
+    * @param coords the coordinates to convert.
+    * @param [target] an optional vector to hold the result.
+    * @return the location in screen coordinates. */
+  worldToScreenPoint (coords :vec3, target? :vec3) :vec3
+
+  /** Converts a point in world space to viewport coordinates.
+    * @param coords the coordinates to convert.
+    * @param [target] an optional vector to hold the result.
+    * @return the location in viewport coordinates. */
+  worldToViewportPoint (coords :vec3, target? :vec3) :vec3
 }
 
 /** The available light types. */
