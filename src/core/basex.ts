@@ -31,7 +31,7 @@ export function makeBaseCoder (alphabet :string) :Coder {
   // pre-compute lookup table
   for (let ii = 0; ii < alphabet.length; ii += 1) {
     const x = alphabet[ii]
-    if (alphaMap[x] !== undefined) throw new Error(`${x} is ambiguous`)
+    if (alphaMap.has(x)) throw new Error(`${x} is ambiguous`)
     alphaMap.set(x, ii)
   }
 
