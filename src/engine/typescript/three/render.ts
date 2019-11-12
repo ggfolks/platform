@@ -668,7 +668,6 @@ class ThreeCamera extends ThreeObjectComponent implements Camera {
     gameObject :TypeScriptGameObject,
   ) {
     super(gameEngine, supertype, type, gameObject)
-    this.objectValue.update(new PerspectiveCamera())
     this._addToCameras(this._page)
 
     // for now, just use the renderer size aspect
@@ -679,7 +678,7 @@ class ThreeCamera extends ThreeObjectComponent implements Camera {
 
   init () {
     super.init()
-    this.getProperty<boolean>("orthographic").onChange(orthographic => {
+    this.getProperty<boolean>("orthographic").onValue(orthographic => {
       if (orthographic) {
         const orthoWidth = this.orthographicSize * this.aspect
         this.objectValue.update(new OrthographicCamera(
