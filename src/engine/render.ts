@@ -101,6 +101,18 @@ export interface Camera extends Component, Hoverable {
   /** The camera's vertical field of view in degrees. */
   fieldOfView :number
 
+  /** Whether or not to use an orthographic projection. */
+  orthographic :boolean
+
+  /** The orthographic vertical half-size. */
+  orthographicSize :number
+
+  /** The distance to the near clip plane. */
+  nearClipPlane :number
+
+  /** The distance to the far clip plane. */
+  farClipPlane :number
+
   /** Finds the direction in world space in which the camera is pointing.
     * @param [target] an optional vector to hold the result.
     * @return the direction in world space. */

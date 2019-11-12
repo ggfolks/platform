@@ -3,8 +3,8 @@ import {
   CylinderBufferGeometry, DefaultLoadingManager, DirectionalLight, DoubleSide, FrontSide,
   Intersection, Light as LightObject, LoopOnce, LoopRepeat, LoopPingPong,
   Material as MaterialObject, Mesh, MeshBasicMaterial, MeshStandardMaterial, Object3D,
-  PerspectiveCamera, PlaneBufferGeometry, Raycaster, Scene, ShaderMaterial, SphereBufferGeometry,
-  Vector2, Vector3, WebGLRenderer,
+  OrthographicCamera, PerspectiveCamera, PlaneBufferGeometry, Raycaster, Scene, ShaderMaterial,
+  SphereBufferGeometry, Vector2, Vector3, WebGLRenderer,
 } from "three"
 import {SkeletonUtils} from "three/examples/jsm/utils/SkeletonUtils"
 import {Clock} from "../../../core/clock"
@@ -649,24 +649,17 @@ const tmpVector2 = new Vector2()
 const tmpc = vec2.create()
 const tmpVector3 = new Vector3()
 
+type CameraObject = PerspectiveCamera | OrthographicCamera
+
 class ThreeCamera extends ThreeObjectComponent implements Camera {
-  private _perspectiveCamera = new PerspectiveCamera()
+  @property("number", {min: 0, wheelStep: 0.01}) aspect = 1
+  @property("number", {min: 0, max: 180}) fieldOfView = 50
+  @property("boolean") orthographic = false
+  @property("number", {min: 0, wheelStep: 0.1}) orthographicSize = 10
+  @property("number", {min: 0, wheelStep: 0.1}) nearClipPlane = 0.1
+  @property("number", {min: 0, wheelStep: 0.1}) farClipPlane = 2000
 
-  get camera () :PerspectiveCamera { return this._perspectiveCamera }
-
-  get aspect () :number { return this._perspectiveCamera.aspect }
-  set aspect (aspect :number) {
-    if (this._perspectiveCamera.aspect === aspect) return
-    this._perspectiveCamera.aspect = aspect
-    this._perspectiveCamera.updateProjectionMatrix()
-  }
-
-  get fieldOfView () :number { return this._perspectiveCamera.fov }
-  set fieldOfView (fov :number) {
-    if (this._perspectiveCamera.fov === fov) return
-    this._perspectiveCamera.fov = fov
-    this._perspectiveCamera.updateProjectionMatrix()
-  }
+  get camera () :CameraObject { return this.objectValue.current as CameraObject }
 
   constructor (
     gameEngine :TypeScriptGameEngine,
@@ -675,13 +668,67 @@ class ThreeCamera extends ThreeObjectComponent implements Camera {
     gameObject :TypeScriptGameObject,
   ) {
     super(gameEngine, supertype, type, gameObject)
-    this.objectValue.update(this._perspectiveCamera)
+    this.objectValue.update(new PerspectiveCamera())
     this._addToCameras(this._page)
 
     // for now, just use the renderer size aspect
     this._disposer.add(this.renderEngine.size.onValue(size => {
       this.aspect = size[0] / size[1]
     }))
+  }
+
+  init () {
+    super.init()
+    this.getProperty<boolean>("orthographic").onChange(orthographic => {
+      if (orthographic) {
+        const orthoWidth = this.orthographicSize * this.aspect
+        this.objectValue.update(new OrthographicCamera(
+          -orthoWidth,
+          orthoWidth,
+          this.orthographicSize,
+          -this.orthographicSize,
+          this.nearClipPlane,
+          this.farClipPlane,
+        ))
+      } else {
+        this.objectValue.update(new PerspectiveCamera(
+          this.fieldOfView,
+          this.aspect,
+          this.nearClipPlane,
+          this.farClipPlane,
+        ))
+      }
+    })
+    Value
+      .join2(this.getProperty<number>("aspect"), this.getProperty<number>("orthographicSize"))
+      .onChange(([aspect, orthographicSize]) => {
+        const camera = this.camera
+        if (camera instanceof PerspectiveCamera) {
+          camera.aspect = aspect
+        } else { // camera instanceof OrthographicCamera
+          const orthoWidth = orthographicSize * aspect
+          camera.left = -orthoWidth
+          camera.right = orthoWidth
+          camera.bottom = -orthographicSize
+          camera.top = orthographicSize
+        }
+        camera.updateProjectionMatrix()
+      })
+    this.getProperty<number>("fieldOfView").onChange(fov => {
+      const camera = this.camera
+      if (camera instanceof PerspectiveCamera) {
+        camera.fov = fov
+        camera.updateProjectionMatrix()
+      }
+    })
+    this.getProperty<number>("nearClipPlane").onChange(nearClipPlane => {
+      this.camera.near = nearClipPlane
+      this.camera.updateProjectionMatrix()
+    })
+    this.getProperty<number>("farClipPlane").onChange(farClipPlane => {
+      this.camera.far = farClipPlane
+      this.camera.updateProjectionMatrix()
+    })
   }
 
   getDirection (target? :vec3) :vec3 {
@@ -703,7 +750,7 @@ class ThreeCamera extends ThreeObjectComponent implements Camera {
     if (!target) target = vec3.create()
     raycaster.setFromCamera(
       tmpVector2.set(coords[0] * 2 - 1, coords[1] * 2 - 1),
-      this._perspectiveCamera,
+      this.camera,
     )
     return raycaster.ray.direction.toArray(target) as vec3
   }
@@ -718,7 +765,7 @@ class ThreeCamera extends ThreeObjectComponent implements Camera {
   worldToViewportPoint (coords :vec3, target? :vec3) :vec3 {
     if (!target) target = vec3.create()
     vec3.transformMat4(target, coords, this.transform.worldToLocalMatrix)
-    tmpVector3.fromArray(target).applyMatrix4(this._perspectiveCamera.projectionMatrix)
+    tmpVector3.fromArray(target).applyMatrix4(this.camera.projectionMatrix)
     tmpVector3.toArray(target)
     target[0] = (target[0] + 1) * 0.5
     target[1] = (target[1] + 1) * 0.5
@@ -740,7 +787,7 @@ class ThreeCamera extends ThreeObjectComponent implements Camera {
 
   protected _updateObjectTransform (object :Object3D) {
     super._updateObjectTransform(object)
-    this._perspectiveCamera.matrixWorldInverse.fromArray(this.transform.worldToLocalMatrix)
+    this.camera.matrixWorldInverse.fromArray(this.transform.worldToLocalMatrix)
   }
 
   protected _addToCameras (page :ThreePage|undefined) {
