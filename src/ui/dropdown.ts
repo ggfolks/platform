@@ -32,7 +32,7 @@ export namespace Dropdown {
     readonly contents :Element[] = []
 
     readonly activeChild = Mutable.local<Abstract|undefined>(undefined)
-    get autoActivate () { return true}
+    get autoActivate () { return true }
 
     constructor (ctx :Element.Context, parent :Element, readonly config :ListConfig) {
       super(ctx, parent, config)

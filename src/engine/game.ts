@@ -70,6 +70,15 @@ export interface GameContext extends UINodeContext, InputNodeContext {
 /** The id of the default page. */
 export const DEFAULT_PAGE = "default"
 
+/** The default object layer/mask. */
+export const DEFAULT_LAYER_MASK = 1
+
+/** The editor object layer/mask. */
+export const EDITOR_LAYER_MASK = 2
+
+/** A mask that matches all layers. */
+export const ALL_LAYERS_MASK = ~0
+
 /** Top-level interface to game engine. */
 export interface GameEngine extends Disposable {
 
@@ -142,8 +151,9 @@ export interface GameEngine extends Disposable {
     * @param [config] the configuration of the object's components. */
   createGameObject (name? :string, config? :GameObjectConfig) :GameObject
 
-  /** Returns the configuration of the entire space as a new object. */
-  createConfig () :SpaceConfig
+  /** Returns the configuration of the entire space as a new object.
+    * @param [layerMask=ALL_LAYERS_MASK] the layer mask to use to filter objects. */
+  createConfig (layerMask? :number) :SpaceConfig
 
   /** Updates the game state. */
   update (clock :Clock) :void
@@ -161,17 +171,14 @@ export interface GameObject extends Disposable {
   /** The game object's unique id. */
   readonly id :string
 
+  /** The game object's layer. */
+  layer :number
+
   /** The game object's name. */
   name :string
 
-  /** Reactive view of the game object's name. */
-  readonly nameValue :Mutable<string>
-
   /** The object's sort order. */
   order :number
-
-  /** Reactive view of the game object's sort order. */
-  readonly orderValue :Mutable<number>
 
   /** The game object's transform component. */
   readonly transform :Transform

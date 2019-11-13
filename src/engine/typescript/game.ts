@@ -18,9 +18,10 @@ import {HTMLHost} from "../../ui/element"
 import {registerUINodes} from "../../ui/node"
 import {DefaultStyles, DefaultTheme} from "../../ui/theme"
 import {
-  DEFAULT_PAGE, Component, ComponentConstructor, Configurable, ConfigurableConfig, CoordinateFrame,
-  Coroutine, Cube, Cylinder, GameContext, GameEngine, GameObject, GameObjectConfig, Graph, Mesh,
-  MeshFilter, Page, PrimitiveType, Quad, SpaceConfig, Sphere, Time, Transform,
+  ALL_LAYERS_MASK, DEFAULT_LAYER_MASK, DEFAULT_PAGE, Component, ComponentConstructor, Configurable,
+  ConfigurableConfig, CoordinateFrame, Coroutine, Cube, Cylinder, GameContext, GameEngine,
+  GameObject, GameObjectConfig, Graph, Mesh, MeshFilter, Page, PrimitiveType, Quad, SpaceConfig,
+  Sphere, Time, Transform,
 } from "../game"
 import {getConfigurableMeta, property} from "../meta"
 import {PhysicsEngine} from "../physics"
@@ -309,9 +310,11 @@ export class TypeScriptGameEngine implements GameEngine {
     return new TypeScriptGameObject(this, getValue(name, "object"), config || {})
   }
 
-  createConfig () :SpaceConfig {
+  createConfig (layerMask :number = ALL_LAYERS_MASK) :SpaceConfig {
     const config :SpaceConfig = {}
-    for (const [id, gameObject] of this.gameObjects) config[id] = gameObject.createConfig()
+    for (const [id, gameObject] of this.gameObjects) {
+      if ((1 << gameObject.layer) & layerMask) config[id] = gameObject.createConfig()
+    }
     return config
   }
 
@@ -408,6 +411,7 @@ type MessageHandler = (...args :any[]) => void
 
 export class TypeScriptGameObject implements GameObject {
   readonly id :string
+  readonly layerValue = Mutable.local(DEFAULT_LAYER_MASK)
   readonly nameValue :Mutable<string>
   readonly orderValue = Mutable.local(0)
   readonly transform :Transform
@@ -416,6 +420,9 @@ export class TypeScriptGameObject implements GameObject {
   private readonly _componentTypes = Mutable.local<string[]>([])
   private readonly _components = MutableMap.local<string, Component>()
   private readonly _messageHandlers = new Map<string, MessageHandler[]>()
+
+  get layer () :number { return this.layerValue.current }
+  set layer (layer :number) { this.layerValue.update(layer) }
 
   get name () :string { return this.nameValue.current }
   set name (name :string) { this.nameValue.update(name) }
@@ -552,6 +559,7 @@ export class TypeScriptGameObject implements GameObject {
   getProperty<T> (name :string, overrideDefault? :any) :Value<T>|Mutable<T> {
     switch (name) {
       case "id": return Value.constant(this.id) as unknown as Value<T>
+      case "layer": return this.layerValue as unknown as Value<T>
       case "name": return this.nameValue as unknown as Value<T>
       case "order": return this.orderValue as unknown as Value<T>
       default: return this.components.getValue(name) as unknown as Value<T>
@@ -560,6 +568,7 @@ export class TypeScriptGameObject implements GameObject {
 
   createConfig () :GameObjectConfig {
     const config :GameObjectConfig = {}
+    if (this.layer !== DEFAULT_LAYER_MASK) config.layer = this.layer
     if (this.name !== this.id) config.name = this.name
     if (this.order !== 0) config.order = this.order
     for (const type of this._componentTypes.current) {
