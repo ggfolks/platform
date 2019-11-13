@@ -1,4 +1,4 @@
-import {Remover, NoopRemover, RProp, Prop} from "./util"
+import {Remover, NoopRemover, RProp, Prop, VProp} from "./util"
 import {Data, dataEquals, refEquals} from "./data"
 
 // TypeScript infers literal types for type parameters with bounds, so when we bound our reactive
@@ -794,14 +794,31 @@ export class Mutable<T> extends Value<T> implements Prop<T> {
   }
 }
 
+type TypedArray = Int8Array | Uint8Array | Uint8ClampedArray | Int16Array | Uint16Array
+                | Int32Array | Uint32Array | Float32Array | Float64Array
+
 /** A reactive primitive that contains a changing value. It is similar to [[Value]] except that it
   * is designed for values which are mutated in place. For reactive values which must change every
   * frame, for example, it may be desirable to use a buffer instead of a value to avoid generating a
   * lot of garbage. */
-export class Buffer<T> extends ReadableSource<T> implements Prop<T> {
-  private _listeners :ValueFn<T>[] = []
+export abstract class Buffer<T> extends ReadableSource<T> implements Prop<T> {
+  protected _listeners :ValueFn<T>[] = []
 
-  constructor (public current :T, private readonly updater? :(o :T, n :T) => T) { super() }
+  /** Creates a buffer containing `init`.
+    * @param updater an optional updating function that merges a new value into the old value and
+    * returns the value that should be placed back into the buffer. */
+  static create<T> (init :T, updater? :(o :T, n :T) => T) :Buffer<T> {
+    return new ValueBuffer(init, updater)
+  }
+
+  /** Creates a buffer wrapping `init`, a typed array. The buffer will always contain this array,
+    * updates will be copied into it. */
+  static wrap<T extends TypedArray> (init :T) :Buffer<T> & VProp<T> {
+    return new ArrayBuffer(init)
+  }
+
+  /** Returns the current value of the buffer. */
+  abstract get current () :T
 
   /** Registers `fn` to be called with the updated value whenever this buffer changes.
     * @return a remover thunk (invoke with no args to unregister `fn`). */
@@ -815,11 +832,7 @@ export class Buffer<T> extends ReadableSource<T> implements Prop<T> {
   }
 
   /** Updates this buffer to `newValue` and notifies listeners. */
-  update (newValue :T) {
-    const updater = this.updater
-    const updated = this.current = updater ? updater(this.current, newValue) : newValue
-    dispatchValue(this._listeners, updated)
-  }
+  abstract update (newValue :T) :void
 
   /** Updates this buffer to `newValue` and notifies listeners, iff it differs from the current
     * value based on `eq`. `eq` defaults to reference equality. */
@@ -880,4 +893,36 @@ export class Buffer<T> extends ReadableSource<T> implements Prop<T> {
   }
 
   toString () { return `Buffer(${this.current})` }
+}
+
+class ValueBuffer<T> extends Buffer<T> {
+
+  constructor (public current :T, private readonly updater? :(o :T, n :T) => T) { super() }
+
+  update (newValue :T) {
+    const updater = this.updater
+    const updated = this.current = updater ? updater(this.current, newValue) : newValue
+    dispatchValue(this._listeners, updated)
+  }
+}
+
+function arrayEquals (a :TypedArray, b :TypedArray) {
+  for (let ii = 0, ll = a.length; ii < ll; ii += 1) if (a[ii] !== b[ii]) return false
+  return true
+}
+
+class ArrayBuffer<T extends TypedArray> extends Buffer<T> implements VProp<T> {
+
+  constructor (public current :T) { super() }
+
+  read (into :T) :T { into.set(this.current) ; return into }
+
+  update (newValue :T) {
+    this.current.set(newValue)
+    dispatchValue(this._listeners, this.current)
+  }
+
+  updateIf (newValue :T) {
+    if (!arrayEquals(this.current, newValue)) this.update(newValue)
+  }
 }

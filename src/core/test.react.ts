@@ -240,11 +240,11 @@ test("basic buffer", () => {
     testReadableSource(value, update)
   }
 
-  const str = new Buffer("")
+  const str = Buffer.create("")
   testBuffer(str, v => str.update(v))
 
   let updates = 0
-  const buf = new Buffer({foo: "bar", baz: 3})
+  const buf = Buffer.create({foo: "bar", baz: 3})
   buf.onEmit(v => updates += 1)
   buf.updateVia(v => v.baz = 25)
   expect(buf.current).toEqual({foo: "bar", baz: 25})
@@ -254,7 +254,7 @@ test("basic buffer", () => {
   expect(buf.current).toEqual({foo: "pickle", baz: 25})
   expect(updates).toBe(2)
 
-  const vbuf = new Buffer(vec2.create(), vec2.copy)
+  const vbuf = Buffer.wrap(vec2.create())
   vbuf.update(vec2.fromValues(10, 10))
   expect(vbuf.current).toEqual(vec2.fromValues(10, 10))
   vbuf.update(vec2one)
@@ -420,7 +420,7 @@ test("bimapped values", () => {
 
 test("bimapped buffers", () => {
   const data = {foo: "foo", bar: {baz: 3, berry: false}}
-  const obj = new Buffer(dataCopy(data))
+  const obj = Buffer.create(dataCopy(data))
   const objhist :Array<typeof data> = []
   obj.onValue(v => objhist.push(dataCopy(v)))
 
