@@ -443,8 +443,11 @@ export abstract class AbstractText extends Control {
 
   protected onEnter () { this._onEnter() }
 
-  protected relayout () {
-    super.relayout()
+  // note: we hackily recompute the cursor position and label offset in recomputeBounds because we
+  // know that is run after our children are revalidated; we need the label to be updated with its
+  // new bounds before we can adjust its offset and compute the correct cursor position
+  protected recomputeBounds () {
+    super.recomputeBounds()
     // bound the cursor into the text length
     const coffset = Math.max(0, Math.min(this.text.current.length, this.coffset.current))
     this.coffset.update(coffset)
