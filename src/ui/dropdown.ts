@@ -234,6 +234,7 @@ export namespace Dropdown {
         contents: {type: "label", text: "name"},
         style: {halign: "left"},
       },
+      enabled: "enabled",
       action: "action",
       style: {},
     }
@@ -287,6 +288,7 @@ export namespace Dropdown {
         },
         element,
         model: "model",
+        enabled: "enabled",
         action: "action",
         separator: "separator",
         style: {},
