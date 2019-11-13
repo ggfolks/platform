@@ -947,7 +947,15 @@ class TypeScriptTransform extends TypeScriptComponent implements Transform {
 
   setParent (parent :Transform|undefined, worldPositionStays = true) :void {
     if (this._parent === parent) return
-    this._validate(POSITION_INVALID | ROTATION_INVALID)
+    let preValidate = POSITION_INVALID | ROTATION_INVALID
+    let invalidate = LOCAL_INVALID
+    let postValidate = LOCAL_POSITION_INVALID | LOCAL_ROTATION_INVALID
+    if (!worldPositionStays) {
+      preValidate = LOCAL_POSITION_INVALID | LOCAL_ROTATION_INVALID
+      invalidate = WORLD_INVALID
+      postValidate = POSITION_INVALID | ROTATION_INVALID
+    }
+    this._validate(preValidate)
     this._maybeRemoveFromParent()
     this._parent = parent as TypeScriptTransform|undefined
     if (this._parent) this._parent._childReordered(this)
@@ -955,9 +963,10 @@ class TypeScriptTransform extends TypeScriptComponent implements Transform {
       this.gameObject.gameEngine._rootReordered(this)
       this._addedToRoot = true
     }
-    this._invalidate(worldPositionStays ? LOCAL_INVALID : WORLD_INVALID)
+    this._invalidate(invalidate)
     this.broadcastMessage("onTransformParentChanged")
     this.gameObject._updateActiveInHierarchy()
+    this._validate(postValidate)
   }
 
   get childIds () :Value<string[]> { return this._childIds }
