@@ -1333,7 +1333,7 @@ export class HTMLHost extends Host {
     }
     this.focus.onValue(focus => {
       const text = this._textOverlay
-      if (focus && focus.config.type === "text") {
+      if (focus && (focus as any).configInput) {
         this._clearText()
         this._clearText = (focus as any).configInput(text) // avoid importing Text here
         text.style.zIndex = `${focus.root.zIndex+1}`
