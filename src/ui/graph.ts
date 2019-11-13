@@ -1,6 +1,6 @@
 import {dataCopy, dataEquals} from "../core/data"
 import {dim2, rect, vec2} from "../core/math"
-import {Mutable, Value, falseValue} from "../core/react"
+import {Mutable, Value} from "../core/react"
 import {MutableSet} from "../core/rcollect"
 import {PMap, Remover, getValue} from "../core/util"
 import {GraphConfig, getImplicitNodeId} from "../graph/graph"
@@ -38,7 +38,7 @@ export class GraphViewer extends VGroup {
 
   constructor (ctx :Element.Context, parent :Element, readonly config :GraphViewerConfig) {
     super(ctx, parent, config)
-    this._editable = ctx.model.resolve(this.config.editable, falseValue)
+    this._editable = ctx.model.resolve(this.config.editable, Value.false)
     const typeCategoryModel = ctx.model.resolve<ElementsModel<string>>("typeCategoryModel")
     const subgraphCategoryModel = ctx.model.resolve<ElementsModel<string>>("subgraphCategoryModel")
     const graphModel = this._graphModel = ctx.model.resolve<Value<Model>>("graphModel")

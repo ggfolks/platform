@@ -1,6 +1,6 @@
 import {dim2, rect, vec2} from "../core/math"
 import {Noop} from "../core/util"
-import {Mutable, Value, falseValue, trueValue} from "../core/react"
+import {Mutable, Value} from "../core/react"
 import {AbstractButton, ButtonStates} from "./button"
 import {VGroup} from "./group"
 import {List, List as ListX} from "./list"
@@ -161,12 +161,12 @@ export namespace Dropdown {
         {
           ...config,
           enabled: Value.join(
-            ctx.model.resolve(config.enabled, trueValue),
-            ctx.model.resolve(config.separator, falseValue),
+            ctx.model.resolve(config.enabled, Value.true),
+            ctx.model.resolve(config.separator, Value.false),
           ).map(([enabled, separator]) => enabled && !separator),
         },
       )
-      this._separator = ctx.model.resolve(config.separator, falseValue)
+      this._separator = ctx.model.resolve(config.separator, Value.false)
       this.recomputeStateOnChange(this._separator)
       this._action = ctx.model.resolveActionOpt(config.action)
     }

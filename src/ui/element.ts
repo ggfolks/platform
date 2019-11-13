@@ -2,8 +2,7 @@ import {Disposable, Disposer, Remover, NoopRemover, PMap, log} from "../core/uti
 import {Clock} from "../core/clock"
 import {dim2, rect, vec2, vec2zero} from "../core/math"
 import {Record} from "../core/data"
-import {Emitter, Mutable, Source, Stream, Subject, Value, trueValue, falseValue,
-        addListener} from "../core/react"
+import {Emitter, Mutable, Source, Stream, Subject, Value, addListener} from "../core/react"
 import {MutableList, RList} from "../core/rcollect"
 import {Scale} from "../core/ui"
 import {keyEvents, mouseEvents, pointerEvents, touchEvents, wheelEvents} from "../input/react"
@@ -96,9 +95,9 @@ export abstract class Element implements Disposable {
     if (config.scopeId) this._configScope = {id: config.scopeId, states: Root.States}
     // base visibility on model value: if spec is omitted, always assume true;
     // if spec is given as a path with missing model elements, always return false
-    this.visible = ctx.model.resolve(config.visible, config.visible ? falseValue : trueValue)
+    this.visible = ctx.model.resolve(config.visible, config.visible ? Value.false : Value.true)
     // avoid setting up a listener in the common case of always visible
-    if (this.visible !== trueValue) this.invalidateOnChange(this.visible)
+    if (this.visible !== Value.true) this.invalidateOnChange(this.visible)
   }
 
   get x () :number { return this.bounds[0] }
@@ -1030,7 +1029,7 @@ function bothEitherOrTrue (a :Value<boolean>|undefined, b :Value<boolean>|undefi
   if (a && b) return Value.join2(a, b).map(ab => ab[0] && ab[1])
   else if (a) return a
   else if (b) return b
-  else return trueValue
+  else return Value.true
 }
 
 /** Controls are [[Element]]s that can be interacted with. They can be enabled or disabled and
@@ -1053,7 +1052,7 @@ export class Control extends Element {
     const enabled = this.enabled = bothEitherOrTrue(
       ctx.model.resolveOpt(config.enabled),
       (command instanceof Command) ? command.enabled : undefined)
-    if (enabled !== trueValue) this.disposer.add(enabled.onValue(this._updateState))
+    if (enabled !== Value.true) this.disposer.add(enabled.onValue(this._updateState))
     this.hovered.onValue(this._updateState)
     this.focused.onValue(this._updateState)
     this.contents = ctx.elem.create(ctx, this, this.config.contents)

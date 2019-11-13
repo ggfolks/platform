@@ -506,6 +506,15 @@ export class Subject<T> extends Source<T> {
   * be observed by listening via [[Value.onValue]], or by calling [[Value.current]]. */
 export class Value<T> extends ReadableSource<T> {
 
+  /** A constant value which is always `true`. */
+  static true = Value.constant(true)
+
+  /** A constant value which is always `false`. */
+  static false = Value.constant(false)
+
+  /** A constant value which is always the empty string. */
+  static blank = Value.constant("")
+
   /** Creates a constant value which always contains `value`. */
   static constant<T> (value :T) :Value<T> {
     // note: we use refEquals here as we must provide something for eq, but it's never used because
@@ -682,15 +691,6 @@ export class Value<T> extends ReadableSource<T> {
 
   toString () { return `Value(${this.current})` }
 }
-
-/** A constant value which is always `true`. */
-export const trueValue = Value.constant(true)
-
-/** A constant value which is always `false`. */
-export const falseValue = Value.constant(false)
-
-/** A constant value which is always the empty string. */
-export const blankValue = Value.constant("")
 
 /** A `Value` which can be mutated by external callers. */
 export class Mutable<T> extends Value<T> implements Prop<T> {

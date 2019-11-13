@@ -1,5 +1,5 @@
 import {Noop} from "../core/util"
-import {Source, Value, Mutable, trueValue} from "../core/react"
+import {Source, Value, Mutable} from "../core/react"
 import {RMap, MutableMap} from "../core/rcollect"
 
 /** Model actions executed in response to user actions (like button clicks). */
@@ -7,7 +7,7 @@ export type Action = (...args :any) => void
 
 /** An action that carries its enabled state with it. */
 export class Command {
-  static Noop = new Command(Noop, trueValue)
+  static Noop = new Command(Noop, Value.true)
   constructor (readonly action :Action, readonly enabled :Value<boolean>) {}
 }
 

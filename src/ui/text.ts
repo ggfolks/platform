@@ -1,7 +1,7 @@
 import {dim2, vec2, rect} from "../core/math"
 import {refEquals} from "../core/data"
 import {Noop, Remover, PMap, getValue} from "../core/util"
-import {Mutable, Subject, Value, falseValue} from "../core/react"
+import {Mutable, Subject, Value} from "../core/react"
 import {Control, Element, PointerInteraction} from "./element"
 import {Spec, FontConfig, Insets, Paint, PaintConfig, ShadowConfig, Span, EmptySpan} from "./style"
 import {Model, Action, NoopAction} from "./model"
@@ -310,7 +310,7 @@ export abstract class AbstractText extends Control {
     // mouse even when we're already focused
     const blinking = Value.join<any>(this.focused, hasSel, this.shadowed, this.jiggle).switchMap(
       ([focused, hasSel, shadowed, jiggle]) => {
-        if (!focused || hasSel || shadowed) return falseValue
+        if (!focused || hasSel || shadowed) return Value.false
         else {
           const blinkPeriod = this.cursor.config.blinkPeriod || DefaultBlinkPeriod
           return this.root.clock.fold(0, (acc, c) => acc+c.dt, refEquals).

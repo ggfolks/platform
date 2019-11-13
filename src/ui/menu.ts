@@ -1,4 +1,4 @@
-import {Mutable, Value, blankValue} from "../core/react"
+import {Mutable, Value} from "../core/react"
 import {ButtonStates} from "./button"
 import {Dropdown} from "./dropdown"
 import {Element} from "./element"
@@ -83,7 +83,7 @@ export namespace Menu {
     }
 
     protected resolveText (ctx :Element.Context, config :ShortcutConfig) {
-      return ctx.model.resolve(config.command, blankValue).map((command :string) => {
+      return ctx.model.resolve(config.command, Value.blank).map((command :string) => {
         const commandKeys = this.root.keymap.getCommandBindings(command)
         return (commandKeys.length === 0) ? "" : formatBinding(commandKeys[0])
       })
