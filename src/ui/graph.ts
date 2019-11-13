@@ -6,19 +6,19 @@ import {PMap, Remover, getValue} from "../core/util"
 import {GraphConfig, getImplicitNodeId} from "../graph/graph"
 import {InputEdge} from "../graph/node"
 import {Box} from "./box"
-import {createDropdownItemConfig} from "./dropdown"
-import {Element, ElementConfig, ElementContext, ElementOp, PointerInteraction} from "./element"
+import {Dropdown} from "./dropdown"
+import {Element, PointerInteraction} from "./element"
 import {AbsConstraints, AbsGroup, AxisConfig, VGroup, OffAxisPolicy} from "./group"
-import {VList} from "./list"
+import {List} from "./list"
 import {Action, Command, Model, ReadableElementsModel, ElementsModel, Spec,
         dataModel} from "./model"
 import {CtrlMask, MetaMask, ShiftMask} from "./keymap"
 import {InputValue, NodeCopier, NodeCreator, NodeEdit} from "./node"
 import {Panner} from "./scroll"
-import {BackgroundConfig, BorderConfig, NoopDecor, addDecorationBounds} from "./style"
+import {BackgroundConfig, BorderConfig, Decoration} from "./style"
 
 /** A navigable graph viewer. */
-export interface GraphViewerConfig extends ElementConfig {
+export interface GraphViewerConfig extends Element.Config {
   type :"graphViewer"
   editable? :Spec<Value<boolean>>
 }
@@ -36,7 +36,7 @@ export class GraphViewer extends VGroup {
   private _nodeCreator :Mutable<NodeCreator>
   private _nodeFunctionRemover? :Remover
 
-  constructor (ctx :ElementContext, parent :Element, readonly config :GraphViewerConfig) {
+  constructor (ctx :Element.Context, parent :Element, readonly config :GraphViewerConfig) {
     super(ctx, parent, config)
     this._editable = ctx.model.resolve(this.config.editable, falseValue)
     const typeCategoryModel = ctx.model.resolve<ElementsModel<string>>("typeCategoryModel")
@@ -144,7 +144,7 @@ export class GraphViewer extends VGroup {
                   contents: {type: "label", text: "name"},
                 },
                 // max category depth of two for the moment
-                element: createDropdownItemConfig(2, "menuItem"),
+                element: Dropdown.createItemConfig(2, "menuItem"),
                 model: "model",
                 shortcutsModel: "shortcutsModel",
               },
@@ -325,7 +325,7 @@ export class GraphViewer extends VGroup {
     input.click()
   }
 
-  private _createElement (ctx :ElementContext, model :Model) :Element {
+  private _createElement (ctx :Element.Context, model :Model) :Element {
     return ctx.elem.create(ctx.remodel(model), this, {
       type: "tabbedPane",
       tabElement: {
@@ -385,7 +385,7 @@ export class GraphViewer extends VGroup {
 }
 
 /** Visualizes a graph. */
-export interface GraphViewConfig extends ElementConfig {
+export interface GraphViewConfig extends Element.Config {
   type :"graphView"
   style :PMap<GraphViewStyle>
   editable :Spec<Value<boolean>>
@@ -404,11 +404,11 @@ export class GraphView extends AbsGroup {
   readonly contents :Element[] = []
 
   private _select? :rect
-  private _selectBackground = this.observe(NoopDecor)
-  private _selectBorder = this.observe(NoopDecor)
+  private _selectBackground = this.observe(Decoration.Noop)
+  private _selectBorder = this.observe(Decoration.Noop)
   private readonly _lastContaining = vec2.create()
 
-  constructor (ctx :ElementContext, parent :Element, readonly config :GraphViewConfig) {
+  constructor (ctx :Element.Context, parent :Element, readonly config :GraphViewConfig) {
     super(ctx, parent, config)
     const nodesModel = ctx.model.resolve<ElementsModel<string>>("nodesModel")
     let models :Model[] | null = []
@@ -469,7 +469,7 @@ export class GraphView extends AbsGroup {
     }
   }
 
-  applyToContaining (canvas :CanvasRenderingContext2D, pos :vec2, op :ElementOp) {
+  applyToContaining (canvas :CanvasRenderingContext2D, pos :vec2, op :Element.Op) {
     const applied = super.applyToContaining(canvas, pos, op)
     vec2.set(this._lastContaining, pos[0] - this.x, pos[1] - this.y)
     return applied
@@ -573,7 +573,7 @@ export class GraphView extends AbsGroup {
 
   private _expandSelect (select :rect) :rect {
     const background = this._selectBackground.current, border = this._selectBorder.current
-    return addDecorationBounds(tmpr, select, background, border)
+    return Decoration.addBounds(tmpr, select, background, border)
   }
 
   private _layoutGraph (keys :string[], models :Model[]) {
@@ -704,7 +704,7 @@ export class NodeView extends VGroup {
   private readonly _state = Mutable.local("normal")
   private readonly _editable :Value<boolean>
 
-  constructor (ctx :ElementContext, parent :Element, readonly config :NodeViewConfig) {
+  constructor (ctx :Element.Context, parent :Element, readonly config :NodeViewConfig) {
     super(ctx, parent, config)
     this.id = ctx.model.resolve<Value<string>>("id").current
     this._editable = ctx.model.resolve(this.config.editable)
@@ -718,7 +718,7 @@ export class NodeView extends VGroup {
     this.disposer.add(this.hovered.onValue(updateState))
     this.disposer.add(getGraphViewer(this).selection.onValue(updateState))
 
-    const bodyContents :ElementConfig[] = []
+    const bodyContents :Element.Config[] = []
     if (ctx.model.resolve<Value<string>>("type").current === "subgraph") {
       bodyContents.push({
         type: "button",
@@ -929,7 +929,7 @@ function getGraphView (element :Element) :GraphView {
 }
 
 /** Visualizes a node's input edges. */
-export interface EdgeViewConfig extends ElementConfig {
+export interface EdgeViewConfig extends Element.Config {
   type :"edgeView"
   style :PMap<EdgeViewStyle>
   editable :Spec<Value<boolean>>
@@ -978,7 +978,7 @@ export class EdgeView extends Element {
   private _nodeRemovers :Map<Element, Remover> = new Map()
   private _styleRemovers :Map<Value<string>, Remover> = new Map()
 
-  constructor (ctx :ElementContext, parent :Element, readonly config :EdgeViewConfig) {
+  constructor (ctx :Element.Context, parent :Element, readonly config :EdgeViewConfig) {
     super(ctx, parent, config)
     this._nodeId = ctx.model.resolve<Value<string>>("id")
     this._editable = ctx.model.resolve(this.config.editable)
@@ -1017,7 +1017,7 @@ export class EdgeView extends Element {
     return this._outputsModel.resolve(key).resolve<Value<string>>("style")
   }
 
-  applyToContaining (canvas :CanvasRenderingContext2D, pos :vec2, op :ElementOp) {
+  applyToContaining (canvas :CanvasRenderingContext2D, pos :vec2, op :Element.Op) {
     if (!(this.containsPos(pos) && this._edges.length)) return false
     const view = this.requireParent as GraphView
     canvas.translate(view.x, view.y)
@@ -1094,7 +1094,7 @@ export class EdgeView extends Element {
     // pass the buck to the output terminal
     const view = this.requireParent as GraphView
     const node = view.elements.get(targetId)!.node
-    const outputs = node.findTaggedChild("outputs") as VList
+    const outputs = node.findTaggedChild("outputs") as List.Vert
     const terminal = outputs.elements.get(outputKey)!.findChild("terminal") as Terminal
     terminal.handlePointerDown(event, pos, into)
   }
@@ -1106,7 +1106,7 @@ export class EdgeView extends Element {
   protected computePreferredSize (hintX :number, hintY :number, into :dim2) {
     // find corresponding node
     const node = this._getValidatedNode(this._nodeId.current)!
-    const inputList = node.findTaggedChild("inputs") as VList
+    const inputList = node.findTaggedChild("inputs") as List.Vert
 
     this._edges.length = 0
     const min = vec2.fromValues(Infinity, Infinity)
@@ -1144,7 +1144,7 @@ export class EdgeView extends Element {
         const targetNode = this._getValidatedNode(targetId)
         if (!targetNode) return false
         nodesUsed.add(targetNode)
-        const outputList = targetNode.findTaggedChild("outputs") as VList
+        const outputList = targetNode.findTaggedChild("outputs") as List.Vert
         const targetEdges = this._requireEdges(targetId) as EdgeView
         if (!outputKey) outputKey = targetEdges.getDefaultOutputKey()
         const targetList = outputList.elements.get(outputKey)
@@ -1297,7 +1297,7 @@ export interface TerminalStyle {
 }
 
 /** Visualizes a single node terminal. */
-export interface TerminalConfig extends ElementConfig {
+export interface TerminalConfig extends Element.Config {
   type :"terminal"
   direction :"input" | "output"
   editable :Spec<Value<boolean>>
@@ -1324,7 +1324,7 @@ export class Terminal extends Element {
   private readonly _outlineAlpha = this.observe(1)
   private _endpoint? :vec2
 
-  constructor (ctx :ElementContext, parent :Element, readonly config :TerminalConfig) {
+  constructor (ctx :Element.Context, parent :Element, readonly config :TerminalConfig) {
     super(ctx, parent, config)
     this._name = ctx.model.resolve<Value<string>>("name")
     this._value = ctx.model.resolve(config.value)

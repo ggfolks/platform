@@ -1,34 +1,33 @@
 import {rect} from "../core/math"
 import {Mutable, Value} from "../core/react"
 import {ModelKey, ElementsModel, Spec} from "./model"
-import {Element, ElementConfig, ElementContext, ElementOp, ElementQuery} from "./element"
+import {Element} from "./element"
 import {AxisConfig, OffAxisPolicy, VGroup} from "./group"
-import {ElementConfigMaker, HList, HListConfig, elementConfig} from "./list"
-import {DragElementConfig, DragElement, DragElementStates, ReorderDragger, OrderUpdater,
-        makeReorderer} from "./drag"
+import {ElementConfigMaker, List, elementConfig} from "./list"
+import {Drag} from "./drag"
 import {CursorConfig} from "./cursor"
 
 /** Defines configuration for [[TabbedPane]] elements. */
 export interface TabbedPaneConfig extends AxisConfig {
   type :"tabbedPane"
-  tabElement :ElementConfig
-  addTabElement? :ElementConfig
-  contentElement :ElementConfig|ElementConfigMaker
+  tabElement :Element.Config
+  addTabElement? :Element.Config
+  contentElement :Element.Config|ElementConfigMaker
   model :Spec<ElementsModel<ModelKey>>
   activeKey :Spec<Mutable<ModelKey>>
-  updateOrder? :Spec<OrderUpdater>
+  updateOrder? :Spec<Drag.OrderUpdater>
   dropCursor? :CursorConfig
 }
 
 /** Contains a row of tabs and corresponding content pane. */
 export class TabbedPane extends VGroup {
-  readonly reorderer? :ReorderDragger
+  readonly reorderer? :Drag.ReorderDragger
   readonly contents :Element[] = []
 
-  constructor (ctx :ElementContext, parent :Element, readonly config :TabbedPaneConfig) {
+  constructor (ctx :Element.Context, parent :Element, readonly config :TabbedPaneConfig) {
     super(ctx, parent, config)
     const activeKey = ctx.model.resolve(config.activeKey)
-    const hlistConfig :HListConfig = {
+    const hlistConfig :List.HorizConfig = {
       type: "hlist",
       element: (model, key) => ({
         type: "tab",
@@ -62,17 +61,17 @@ export class TabbedPane extends VGroup {
 
     const orderUpdater = ctx.model.resolveOpt(config.updateOrder)
     if (orderUpdater) {
-      const hlist = this.findChild("hlist") as HList
-      this.reorderer = makeReorderer(ctx, "horizontal", orderUpdater, this, hlist.contents,
-                                     true, config.gap || 0, config.dropCursor)
+      const hlist = this.findChild("hlist") as List.Horiz
+      this.reorderer = Drag.makeReorderer(ctx, "horizontal", orderUpdater, this, hlist.contents,
+                                          true, config.gap || 0, config.dropCursor)
     }
   }
 
-  applyToChildren (op :ElementOp) {
+  applyToChildren (op :Element.Op) {
     super.applyToChildren(op)
     if (this.reorderer) op(this.reorderer.cursor)
   }
-  queryChildren<R> (query :ElementQuery<R>) {
+  queryChildren<R> (query :Element.Query<R>) {
     return super.queryChildren(query) || (this.reorderer && query(this.reorderer.cursor))
   }
 
@@ -89,18 +88,18 @@ export class TabbedPane extends VGroup {
 }
 
 /** Defines configuration for [[Tab]] elements. */
-export interface TabConfig extends DragElementConfig {
+export interface TabConfig extends Drag.ElemConfig {
   type :"tab"
   activeKey :Spec<Mutable<ModelKey>>
 }
 
-const TabStyleScope = {id: "tab", states: DragElementStates}
+const TabStyleScope = {id: "tab", states: Drag.ElementStates}
 
 /** A single tab in a row. */
-export class Tab extends DragElement {
+export class Tab extends Drag.Elem {
   private readonly _activeKey :Mutable<ModelKey>
 
-  constructor (ctx :ElementContext, parent :Element, readonly config :TabConfig) {
+  constructor (ctx :Element.Context, parent :Element, readonly config :TabConfig) {
     super(ctx, parent, config)
     this._activeKey = ctx.model.resolve(config.activeKey)
     this.recomputeStateOnChange(this._activeKey)

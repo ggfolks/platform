@@ -1,9 +1,8 @@
 import {rect, dim2, vec2} from "../core/math"
 import {Mutable} from "../core/react"
 import {PMap} from "../core/util"
-import {Element, ElementConfig, ElementContext, ElementOp, ElementQuery} from "./element"
-import {NoopDecor, BackgroundConfig, BorderConfig, Spec, Insets,
-        addDecorationBounds, insetWidth, insetHeight, insetRect} from "./style"
+import {Element} from "./element"
+import {BackgroundConfig, BorderConfig, Decoration, Spec, Insets} from "./style"
 
 const tmpr = rect.create()
 const tmpd = dim2.create()
@@ -44,26 +43,26 @@ export interface BoxStyle {
 }
 
 /** Defines configuration for [[Box]] elements. */
-export interface BoxConfig extends ElementConfig {
+export interface BoxConfig extends Element.Config {
   type :"box"
-  contents :ElementConfig
+  contents :Element.Config
   style :PMap<BoxStyle>
 }
 
 /** Displays a single child with an optional background, padding, margin, and alignment. */
 export class Box extends Element {
-  private background = this.observe(NoopDecor)
-  private border = this.observe(NoopDecor)
+  private background = this.observe(Decoration.Noop)
+  private border = this.observe(Decoration.Noop)
   readonly contents :Element
   private readonly _hovered = Mutable.local(false)
 
-  constructor (ctx :ElementContext, parent :Element, readonly config :BoxConfig) {
+  constructor (ctx :Element.Context, parent :Element, readonly config :BoxConfig) {
     super(ctx, parent, config)
     this.contents = ctx.elem.create(ctx, this, config.contents)
     this.background.observe(this.resolveStyle(
-      config.style, s => s.background, bg => ctx.style.resolveBackground(bg), NoopDecor))
+      config.style, s => s.background, bg => ctx.style.resolveBackground(bg), Decoration.Noop))
     this.border.observe(this.resolveStyle(
-      config.style, s => s.border, border => ctx.style.resolveBorder(border), NoopDecor))
+      config.style, s => s.border, border => ctx.style.resolveBorder(border), Decoration.Noop))
     this.disposer.add(this.state.onValue(state => {
       const style = this.getStyle(this.config.style, state)
       if (this._hovered.current) {
@@ -80,9 +79,9 @@ export class Box extends Element {
 
   get style () :BoxStyle { return this.getStyle(this.config.style, this.state.current) }
 
-  applyToChildren (op :ElementOp) { op(this.contents) }
-  queryChildren<R> (query :ElementQuery<R>) { return query(this.contents) }
-  applyToContaining (canvas :CanvasRenderingContext2D, pos :vec2, op :ElementOp) {
+  applyToChildren (op :Element.Op) { op(this.contents) }
+  queryChildren<R> (query :Element.Query<R>) { return query(this.contents) }
+  applyToContaining (canvas :CanvasRenderingContext2D, pos :vec2, op :Element.Op) {
     const applied = super.applyToContaining(canvas, pos, op)
     if (applied) this.contents.applyToContaining(canvas, pos, op)
     return applied
@@ -94,15 +93,15 @@ export class Box extends Element {
   private computeInnerBounds (into :rect) :rect {
     const {padding, margin} = this.style
     rect.copy(into, this.bounds)
-    if (padding) insetRect(padding, into, into)
-    if (margin) insetRect(margin, into, into)
+    if (padding) Insets.rect(padding, into, into)
+    if (margin) Insets.rect(margin, into, into)
     return into
   }
 
   protected computePreferredSize (hintX :number, hintY :number, into :dim2) {
     const {padding, margin, minWidth, minHeight, preferredWidth, preferredHeight} = this.style
-    const edgeWidth = insetWidth(padding || 0) + insetWidth(margin || 0)
-    const edgeHeight = insetHeight(padding || 0) + insetHeight(margin || 0)
+    const edgeWidth = Insets.width(padding || 0) + Insets.width(margin || 0)
+    const edgeHeight = Insets.height(padding || 0) + Insets.height(margin || 0)
     const psize = this.contents.preferredSize(hintX-edgeWidth, hintY-edgeHeight)
     dim2.set(into, psize[0] + edgeWidth, psize[1] + edgeHeight)
     if (preferredWidth !== undefined) into[0] = preferredWidth
@@ -125,12 +124,12 @@ export class Box extends Element {
   }
 
   protected expandBounds (hbounds: rect, rbounds :rect) {
-    addDecorationBounds(rbounds, rbounds, this.background.current, this.border.current)
+    Decoration.addBounds(rbounds, rbounds, this.background.current, this.border.current)
   }
 
   protected rerender (canvas :CanvasRenderingContext2D, region :rect) {
     const {margin, alpha} = this.style
-    const inbounds = margin ? insetRect(margin, this.bounds, tmpr) : this.bounds
+    const inbounds = margin ? Insets.rect(margin, this.bounds, tmpr) : this.bounds
     if (alpha !== undefined) canvas.globalAlpha = alpha
     // TODO: should we just do all element rendering translated to the element's origin
     canvas.translate(inbounds[0], inbounds[1])

@@ -1,21 +1,20 @@
 import {dim2, rect, vec2} from "../core/math"
 import {Mutable, Value} from "../core/react"
 import {Action, NoopAction, Spec} from "./model"
-import {Control, ControlConfig, ControlStates, Element, ElementConfig, ElementContext,
-        ElementOp, ElementQuery, PointerInteraction} from "./element"
+import {Control, Element, PointerInteraction} from "./element"
 
-export interface ButtonConfig extends ControlConfig {
+export interface ButtonConfig extends Control.Config {
   type :"button"
   onClick? :Spec<Action>
 }
 
-export const ButtonStates = [...ControlStates, "pressed"]
+export const ButtonStates = [...Control.States, "pressed"]
 const ButtonStyleScope = {id: "button", states: ButtonStates}
 
 export abstract class AbstractButton extends Control {
   protected readonly _pressed = Mutable.local(false)
 
-  constructor (ctx :ElementContext, parent :Element, config :ControlConfig) {
+  constructor (ctx :Element.Context, parent :Element, config :Control.Config) {
     super(ctx, parent, config)
     this.recomputeStateOnChange(this._pressed)
   }
@@ -51,24 +50,24 @@ export abstract class AbstractButton extends Control {
 export class Button extends AbstractButton {
   protected readonly _onClick :Action
 
-  constructor (ctx :ElementContext, parent :Element, config :ButtonConfig) {
+  constructor (ctx :Element.Context, parent :Element, config :ButtonConfig) {
     super(ctx, parent, config)
     this._onClick = ctx.model.resolveAction(config.onClick, NoopAction)
   }
 
-  protected actionSpec (config :ControlConfig) { return (config as ButtonConfig).onClick }
+  protected actionSpec (config :Control.Config) { return (config as ButtonConfig).onClick }
 
   protected onClick () { this._onClick() }
 }
 
-export interface ToggleConfig extends ControlConfig {
+export interface ToggleConfig extends Control.Config {
   type :"toggle"
   checked :Spec<Value<boolean>>
   onClick? :Spec<Action>
-  checkedContents? :ElementConfig
+  checkedContents? :Element.Config
 }
 
-function injectViz (cfg :ElementConfig, visible :Spec<Value<boolean>>) :ElementConfig {
+function injectViz (cfg :Element.Config, visible :Spec<Value<boolean>>) :Element.Config {
   return {...cfg, visible}
 }
 
@@ -76,7 +75,7 @@ export class Toggle extends Control {
   readonly onClick :Action
   readonly checkedContents? :Element
 
-  constructor (ctx :ElementContext, parent :Element,
+  constructor (ctx :Element.Context, parent :Element,
                readonly config :ToggleConfig,
                readonly checked :Value<boolean> = ctx.model.resolve(
                  config.checked,
@@ -94,15 +93,15 @@ export class Toggle extends Control {
       ctx, this, injectViz(config.checkedContents, checked))
   }
 
-  applyToChildren (op :ElementOp) {
+  applyToChildren (op :Element.Op) {
     super.applyToChildren(op)
     if (this.checkedContents) op(this.checkedContents)
   }
-  queryChildren<R> (query :ElementQuery<R>) {
+  queryChildren<R> (query :Element.Query<R>) {
     return super.queryChildren(query) || (this.checkedContents && query(this.checkedContents))
   }
 
-  applyToContaining (canvas :CanvasRenderingContext2D, pos :vec2, op :ElementOp) {
+  applyToContaining (canvas :CanvasRenderingContext2D, pos :vec2, op :Element.Op) {
     const applied = super.applyToContaining(canvas, pos, op)
     if (applied && this.checkedContents) this.checkedContents.applyToContaining(canvas, pos, op)
     return applied

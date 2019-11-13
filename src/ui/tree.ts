@@ -2,20 +2,19 @@ import {rect, vec2} from "../core/math"
 import {Mutable, Value} from "../core/react"
 import {MutableSet} from "../core/rcollect"
 import {ModelKey, Spec} from "./model"
-import {Element, ElementContext, ElementOp, ElementQuery, PointerInteraction, RootStates,
-        requireAncestor} from "./element"
+import {Element, PointerInteraction, Root, requireAncestor} from "./element"
 import {OffAxisPolicy, VGroup} from "./group"
-import {ListLike, AbstractListConfig, syncListContents} from "./list"
-import {DragConstraint, DragElement, DragElementConfig, DragElementStates, DragOwner} from "./drag"
+import {List} from "./list"
+import {Drag} from "./drag"
 import {CursorConfig, DefaultCursor, Cursor} from "./cursor"
 
 type ParentOrderUpdater = (key :ModelKey, parent :ModelKey|undefined, index :number) => void
 
-interface AbstractTreeViewConfig extends AbstractListConfig {
+interface AbstractTreeViewConfig extends List.AbstractConfig {
   dropCursor? :CursorConfig
 }
 
-const TreeViewStyleScope = {id: "treeView", states: RootStates}
+const TreeViewStyleScope = {id: "treeView", states: Root.States}
 
 type DropCoord = {parentKey :ModelKey|undefined, index :number, insert :boolean}
 
@@ -25,12 +24,12 @@ function cursorBounds (node :TreeViewNode, below :boolean, into :rect) :rect {
   return rect.set(into, node.x, node.y + (below ? node.height-1 : 0), node.width, 1)
 }
 
-abstract class AbstractTreeView extends VGroup implements ListLike {
+abstract class AbstractTreeView extends VGroup implements List.Like {
   readonly elements = new Map<ModelKey, Element>()
   readonly contents :Element[] = []
   readonly cursor :Cursor
 
-  constructor (ctx :ElementContext, parent :Element, readonly config :AbstractTreeViewConfig,
+  constructor (ctx :Element.Context, parent :Element, readonly config :AbstractTreeViewConfig,
                readonly key :ModelKey|undefined, readonly selectedKeys :MutableSet<ModelKey>,
                hoveredTreeView :Value<AbstractTreeView|undefined>) {
     super(ctx, parent, config)
@@ -41,11 +40,11 @@ abstract class AbstractTreeView extends VGroup implements ListLike {
 
   get styleScope () { return TreeViewStyleScope }
 
-  applyToChildren (op :ElementOp) {
+  applyToChildren (op :Element.Op) {
     super.applyToChildren(op)
     op(this.cursor)
   }
-  queryChildren<R> (query :ElementQuery<R>) {
+  queryChildren<R> (query :Element.Query<R>) {
     return super.queryChildren(query) || query(this.cursor)
   }
 
@@ -83,8 +82,8 @@ abstract class AbstractTreeView extends VGroup implements ListLike {
   protected get defaultOffPolicy () :OffAxisPolicy { return "stretch" }
 
   // this is called from super constructors to avoid OOP constructor order pain
-  protected syncContents (ctx :ElementContext, config :AbstractTreeViewConfig) {
-    this.disposer.add(syncListContents(ctx, this, (model, key) => ({
+  protected syncContents (ctx :Element.Context, config :AbstractTreeViewConfig) {
+    this.disposer.add(List.syncContents(ctx, this, (model, key) => ({
       type: "row",
       offPolicy: "stretch",
       contents: [
@@ -146,7 +145,7 @@ export interface TreeViewListConfig extends AbstractTreeViewConfig {
 
 export class TreeViewList extends AbstractTreeView {
 
-  constructor (ctx :ElementContext, parent :Element, config :AbstractTreeViewConfig) {
+  constructor (ctx :Element.Context, parent :Element, config :AbstractTreeViewConfig) {
     super(ctx, parent, config, ctx.model.resolve(config.key).current,
           requireAncestor(parent, TreeView).selectedKeys,
           requireAncestor(parent, TreeView).hoveredTreeView)
@@ -162,21 +161,21 @@ export interface TreeViewConfig extends AbstractTreeViewConfig {
 }
 
 /** Contains an expandable tree view. */
-export class TreeView extends AbstractTreeView implements DragOwner {
+export class TreeView extends AbstractTreeView implements Drag.Owner {
   private readonly _updateParentOrder? :ParentOrderUpdater
   readonly dropCoord = Mutable.local<DropCoord|undefined>(undefined)
 
-  constructor (ctx :ElementContext, parent :Element, readonly config :TreeViewConfig,
+  constructor (ctx :Element.Context, parent :Element, readonly config :TreeViewConfig,
                readonly hoveredTreeView = Mutable.local<AbstractTreeView|undefined>(undefined)) {
     super(ctx, parent, config, undefined, ctx.model.resolve(config.selectedKeys), hoveredTreeView)
     this._updateParentOrder = ctx.model.resolveOpt(config.updateParentOrder)
     this.syncContents(ctx, config)
   }
 
-  get dragConstraint () :DragConstraint { return "none" }
+  get dragConstraint () :Drag.Constraint { return "none" }
   get canStartDrag () { return !!this._updateParentOrder }
 
-  handleDrag (elem :DragElement, pos :vec2) {
+  handleDrag (elem :Drag.Elem, pos :vec2) {
     const dragNode = elem as any as TreeViewNode, center = pos[1]
     let dropDistance = Infinity
     let dropCoord :DropCoord|undefined, dropNode :TreeViewNode|undefined
@@ -216,7 +215,7 @@ export class TreeView extends AbstractTreeView implements DragOwner {
     }
   }
 
-  handleDrop (elem :DragElement) {
+  handleDrop (elem :Drag.Elem) {
     const coord = this.dropCoord.current
     if (coord && this._updateParentOrder) this._updateParentOrder(
       elem.key.current, coord.parentKey, coord.index)
@@ -235,17 +234,17 @@ export class TreeView extends AbstractTreeView implements DragOwner {
 }
 
 /** Defines configuration for [[TreeViewNode]] elements. */
-export interface TreeViewNodeConfig extends DragElementConfig {
+export interface TreeViewNodeConfig extends Drag.ElemConfig {
   type :"treeViewNode"
 }
 
-const TreeViewNodeStyleScope = {id: "treeViewNode", states: DragElementStates}
+const TreeViewNodeStyleScope = {id: "treeViewNode", states: Drag.ElementStates}
 
 /** Represents a single node in a tree view. */
-export class TreeViewNode extends DragElement {
+export class TreeViewNode extends Drag.Elem {
   private readonly _selectedKeys :MutableSet<ModelKey>
 
-  constructor (ctx :ElementContext, parent :Element, readonly config :TreeViewNodeConfig) {
+  constructor (ctx :Element.Context, parent :Element, readonly config :TreeViewNodeConfig) {
     super(ctx, parent, config)
     this._selectedKeys = this.requireAncestor(TreeView).selectedKeys
     this.recomputeStateOnChange(this._selectedKeys)

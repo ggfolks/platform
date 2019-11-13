@@ -3,11 +3,7 @@ import {Interp, Easing} from "../core/interp"
 import {clamp, rect, vec2} from "../core/math"
 import {Clock} from "../core/clock"
 import {Mutable, Buffer} from "../core/react"
-import {Control, ControlConfig, Element, ElementContext, PointerInteraction} from "./element"
-
-export interface PannerConfig extends ControlConfig {
-  type :"panner"
-}
+import {Control, Element, PointerInteraction} from "./element"
 
 const transformedPos = vec2.create()
 const transformedRegion = rect.create()
@@ -123,12 +119,16 @@ abstract class TransformedContainer extends Control {
   }
 }
 
+export interface PannerConfig extends Control.Config {
+  type :"panner"
+}
+
 /** Provides a pannable, zoomable window onto its contents. */
 export class Panner extends TransformedContainer {
   private readonly _scale = Mutable.local(1)
   private _laidOut = false
 
-  constructor (ctx :ElementContext, parent :Element, readonly config :PannerConfig) {
+  constructor (ctx :Element.Context, parent :Element, readonly config :PannerConfig) {
     super(ctx, parent, config)
     this.invalidateOnChange(this._offset)
     this.invalidateOnChange(this._scale)
@@ -266,7 +266,7 @@ class InertialAnim extends Anim {
   }
 }
 
-export interface ScrollerConfig extends ControlConfig {
+export interface ScrollerConfig extends Control.Config {
   type :"scroller"
   orient :"horiz"|"vert"
   noInertial? :boolean
@@ -275,7 +275,7 @@ export interface ScrollerConfig extends ControlConfig {
 export class Scroller extends TransformedContainer {
   private unanim = NoopRemover
 
-  constructor (ctx :ElementContext, parent :Element, readonly config :ScrollerConfig) {
+  constructor (ctx :Element.Context, parent :Element, readonly config :ScrollerConfig) {
     super(ctx, parent, config)
     this.invalidateOnChange(this._offset)
   }

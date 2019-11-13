@@ -3,15 +3,7 @@ import {Record} from "../core/data"
 import {makeConfig} from "../core/config"
 import {ImageResolver, StyleContext, StyleDefs} from "./style"
 import {Model, MissingModelElem} from "./model"
-import {
-  Element,
-  ElementConfig,
-  ElementContext,
-  ElementFactory,
-  StyleScope,
-  Root,
-  RootConfig,
-} from "./element"
+import {Element, Root} from "./element"
 import * as B from "./button"
 import * as C from "./cursor"
 import * as D from "./dropdown"
@@ -63,7 +55,7 @@ function processStyles (styles :Record, states: string[]) :Record {
 class StyleResolver {
   private protoStyles = new Map<string,Record>()
 
-  constructor (readonly scope :StyleScope, readonly styles :ElemStyles[]) {
+  constructor (readonly scope :Element.StyleScope, readonly styles :ElemStyles[]) {
     for (let ii = 0; ii < styles.length; ii += 1) {
       if (!styles[ii]) throw new Error(`Missing styles for scope ${scope.id} @ ${scope.states[ii]}`)
     }
@@ -85,7 +77,7 @@ class StyleResolver {
 export class UI {
   private resolvers = new Map<string,StyleResolver>()
   private readonly style :StyleContext
-  private readonly elem :ElementFactory = {
+  private readonly elem :Element.Factory = {
     create: (ctx, parent, config) => this.createElement(ctx, parent, config)
   }
 
@@ -93,18 +85,18 @@ export class UI {
     this.style = new StyleContext(defs, image)
   }
 
-  createRoot (config :RootConfig, model :Model) :Root {
-    return new Root(new ElementContext(model, this.style, this.elem), config)
+  createRoot (config :Root.Config, model :Model) :Root {
+    return new Root(new Element.Context(model, this.style, this.elem), config)
   }
 
-  createElement (ctx :ElementContext, parent :Element, config :ElementConfig) :Element {
+  createElement (ctx :Element.Context, parent :Element, config :Element.Config) :Element {
     try {
       const scope = this.getElementScope(parent, config)
       const rstyles = this.resolveStyles(scope, config.type, config.style as Record)
       const rconfig = {...config, style: rstyles} as any
       switch (config.type) {
       case           "box": return new X.Box(ctx, parent, rconfig as X.BoxConfig)
-      case       "control": return new E.Control(ctx, parent, rconfig as E.ControlConfig)
+      case       "control": return new E.Control(ctx, parent, rconfig as E.Control.Config)
       case           "row": return new G.Row(ctx, parent, rconfig as G.RowConfig)
       case        "column": return new G.Column(ctx, parent, rconfig as G.ColumnConfig)
       case     "absLayout": return new G.AbsLayout(ctx, parent, rconfig as G.AbsLayoutConfig)
@@ -118,28 +110,28 @@ export class UI {
       case "editableLabel": return new T.EditableLabel(ctx, parent, rconfig as T.EditableLabelConfig)
       case        "button": return new B.Button(ctx, parent, rconfig as B.ButtonConfig)
       case        "toggle": return new B.Toggle(ctx, parent, rconfig as B.ToggleConfig)
-      case         "hlist": return new L.HList(ctx, parent, rconfig as L.HListConfig)
-      case         "vlist": return new L.VList(ctx, parent, rconfig as L.VListConfig)
-      case     "dragVList": return new L.DragVList(ctx, parent, rconfig as L.DragVListConfig)
-      case  "dragVElement": return new L.DragVElement(ctx, parent, rconfig as L.DragVElementConfig)
+      case         "hlist": return new L.List.Horiz(ctx, parent, rconfig as L.List.HorizConfig)
+      case         "vlist": return new L.List.Vert(ctx, parent, rconfig as L.List.VertConfig)
+      case     "dragVList": return new L.List.DragVert(ctx, parent, rconfig as L.List.DragVertConfig)
+      case  "dragVElement": return new L.List.DragVElement(ctx, parent, rconfig as L.List.DragVElementConfig)
       case           "tab": return new TA.Tab(ctx, parent, rconfig as TA.TabConfig)
       case    "tabbedPane": return new TA.TabbedPane(ctx, parent, rconfig as TA.TabbedPaneConfig)
       case      "treeView": return new TR.TreeView(ctx, parent, rconfig as TR.TreeViewConfig)
       case  "treeViewList": return new TR.TreeViewList(ctx, parent, rconfig as TR.TreeViewListConfig)
       case  "treeViewNode": return new TR.TreeViewNode(ctx, parent, rconfig as TR.TreeViewNodeConfig)
-      case      "dropdown": return new D.Dropdown(ctx, parent, rconfig as D.DropdownConfig)
-      case  "dropdownList": return new D.DropdownList(ctx, parent, rconfig as D.DropdownListConfig)
-      case  "dropdownItem": return new D.DropdownItem(ctx, parent, rconfig as D.DropdownItemConfig)
-      case       "menuBar": return new M.MenuBar(ctx, parent, rconfig as M.MenuBarConfig)
-      case          "menu": return new M.Menu(ctx, parent, rconfig as M.MenuConfig)
-      case      "menuItem": return new M.MenuItem(ctx, parent, rconfig as M.MenuItemConfig)
-      case      "shortcut": return new M.Shortcut(ctx, parent, rconfig as M.ShortcutConfig)
+      case      "dropdown": return new D.Dropdown.Dropdown(ctx, parent, rconfig as D.Dropdown.Config)
+      case  "dropdownList": return new D.Dropdown.List(ctx, parent, rconfig as D.Dropdown.ListConfig)
+      case  "dropdownItem": return new D.Dropdown.Item(ctx, parent, rconfig as D.Dropdown.ItemConfig)
+      case       "menuBar": return new M.Menu.Bar(ctx, parent, rconfig as M.Menu.BarConfig)
+      case          "menu": return new M.Menu.Menu(ctx, parent, rconfig as M.Menu.Config)
+      case      "menuItem": return new M.Menu.Item(ctx, parent, rconfig as M.Menu.ItemConfig)
+      case      "shortcut": return new M.Menu.Shortcut(ctx, parent, rconfig as M.Menu.ShortcutConfig)
       case        "panner": return new S.Panner(ctx, parent, rconfig as S.PannerConfig)
       case      "scroller": return new S.Scroller(ctx, parent, rconfig as S.ScrollerConfig)
       case   "graphViewer": return new GR.GraphViewer(ctx, parent, rconfig as GR.GraphViewerConfig)
       case     "graphView": return new GR.GraphView(ctx, parent, rconfig as GR.GraphViewConfig)
       case      "nodeView": return new GR.NodeView(ctx, parent, rconfig as GR.NodeViewConfig)
-      case  "propertyView": return new P.PropertyView(ctx, parent, rconfig as P.PropertyViewConfig)
+      case  "propertyView": return new P.PropertyView(ctx, parent, rconfig as P.PropertyView.Config)
       case      "edgeView": return new GR.EdgeView(ctx, parent, rconfig as GR.EdgeViewConfig)
       case      "terminal": return new GR.Terminal(ctx, parent, rconfig as GR.TerminalConfig)
       default: throw new Error(`Unknown element type '${config.type}'.`)
@@ -155,7 +147,7 @@ export class UI {
     }
   }
 
-  getElementScope (parent :Element, config :ElementConfig) :StyleScope {
+  getElementScope (parent :Element, config :Element.Config) :Element.StyleScope {
     switch (config.type) {
       case "terminal": return GR.TerminalStyleScope
       default:
@@ -165,13 +157,13 @@ export class UI {
     }
   }
 
-  resolveStyles (scope :StyleScope, type :string, elemStyles :Record|undefined) :Record {
+  resolveStyles (scope :Element.StyleScope, type :string, elemStyles :Record|undefined) :Record {
     const protoStyles = this.getStyleResolver(scope).resolveStyles(type)
     return elemStyles ? makeConfig([processStyles(elemStyles, scope.states), protoStyles]) :
       protoStyles
   }
 
-  private getStyleResolver (scope :StyleScope) :StyleResolver {
+  private getStyleResolver (scope :Element.StyleScope) :StyleResolver {
     const cached = this.resolvers.get(scope.id)
     if (cached) return cached
     const styles = [this.theme[scope.id]]

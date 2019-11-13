@@ -11,7 +11,7 @@ import {
   CategoryNode, InputEdge, InputEdges, Node, NodeConfig,
   NodeContext, NodeInput, NodeTypeRegistry,
 } from "../graph/node"
-import {HAnchor, Host, Root, RootConfig, VAnchor, getCurrentEditNumber} from "./element"
+import {Host, Root, getCurrentEditNumber} from "./element"
 import {Action, Command, Model, ModelData, ModelKey, ElementsModel, mapModel} from "./model"
 import {makePropertiesModel} from "./property"
 import {Theme, UI} from "./ui"
@@ -32,12 +32,12 @@ export interface UINodeContext extends NodeContext {
 abstract class UINodeConfig implements NodeConfig {
   type = "ui"
   model? :ModelData
-  root :RootConfig = {type: "root", scale: Scale.ONE, contents: {type: ""}}
+  root :Root.Config = {type: "root", scale: Scale.ONE, contents: {type: ""}}
   rootBounds? :rect
-  screenH? :HAnchor
-  screenV? :VAnchor
-  rootH? :HAnchor
-  rootV? :VAnchor
+  screenH? :Root.HAnchor
+  screenV? :Root.VAnchor
+  rootH? :Root.HAnchor
+  rootV? :Root.VAnchor
   @inputEdge("boolean") input = undefined
 }
 

@@ -1,7 +1,6 @@
 import {dim2, rect, vec2, vec2zero} from "../core/math"
 import {getValue, log, developMode} from "../core/util"
-import {Element, ElementConfig, ElementContext, ElementOp, ElementQuery,
-        PointerInteraction} from "./element"
+import {Element, PointerInteraction} from "./element"
 
 const tmpr = rect.create()
 
@@ -11,8 +10,8 @@ abstract class Group extends Element {
   protected overflowed = false
   abstract get contents () :Element[]
 
-  applyToChildren (op :ElementOp) { for (const elem of this.contents) op(elem) }
-  queryChildren<R> (query :ElementQuery<R>) {
+  applyToChildren (op :Element.Op) { for (const elem of this.contents) op(elem) }
+  queryChildren<R> (query :Element.Query<R>) {
     for (const elem of this.contents) {
       const r = query(elem)
       if (r) return r
@@ -20,7 +19,7 @@ abstract class Group extends Element {
     return undefined
   }
 
-  applyToContaining (canvas :CanvasRenderingContext2D, pos :vec2, op :ElementOp) {
+  applyToContaining (canvas :CanvasRenderingContext2D, pos :vec2, op :Element.Op) {
     if (!super.applyToContaining(canvas, pos, op)) return false
     for (const cc of this.contents) {
       if (cc.applyToContaining(canvas, pos, op)) return true
@@ -120,15 +119,15 @@ export abstract class AbsGroup extends Group {
   }
 }
 
-export interface AbsLayoutConfig extends ElementConfig {
+export interface AbsLayoutConfig extends Element.Config {
   type :"absLayout"
-  contents: ElementConfig[]
+  contents: Element.Config[]
 }
 
 export class AbsLayout extends AbsGroup {
   readonly contents :Element[]
 
-  constructor (ctx :ElementContext, parent :Element, readonly config :AbsLayoutConfig) {
+  constructor (ctx :Element.Context, parent :Element, readonly config :AbsLayoutConfig) {
     super(ctx, parent, config)
     this.contents = config.contents.map(cc => ctx.elem.create(ctx, this, cc))
   }
@@ -232,7 +231,7 @@ function computeOffSize (policy :OffAxisPolicy, size :number, maxSize :number, e
   }
 }
 
-export interface AxisConfig extends ElementConfig {
+export interface AxisConfig extends Element.Config {
   gap? :number
   offPolicy? :OffAxisPolicy
 }
@@ -279,14 +278,14 @@ export abstract class VGroup extends Group {
 /** Defines configuration for [[Column]] elements. */
 export interface ColumnConfig extends AxisConfig {
   type :"column"
-  contents: ElementConfig[]
+  contents: Element.Config[]
 }
 
 /** A column lays out its child elements along a vertical axis. */
 export class Column extends VGroup {
   readonly contents :Element[]
 
-  constructor (ctx :ElementContext, parent :Element, readonly config :ColumnConfig) {
+  constructor (ctx :Element.Context, parent :Element, readonly config :ColumnConfig) {
     super(ctx, parent, config)
     this.contents = config.contents.map(cc => ctx.elem.create(ctx, this, cc))
   }
@@ -334,21 +333,21 @@ export abstract class HGroup extends Group {
 /** Defines configuration for [[Row]] elements. */
 export interface RowConfig extends AxisConfig {
   type :"row"
-  contents: ElementConfig[]
+  contents: Element.Config[]
 }
 
 /** A row lays out its child elements along a horizontal axis. */
 export class Row extends HGroup {
   readonly contents :Element[]
 
-  constructor (ctx :ElementContext, parent :Element, readonly config :RowConfig) {
+  constructor (ctx :Element.Context, parent :Element, readonly config :RowConfig) {
     super(ctx, parent, config)
     this.contents = config.contents.map(cc => ctx.elem.create(ctx, this, cc))
   }
 }
 
 /** Defines configuration for [[Spacer]] elements. */
-export interface SpacerConfig extends ElementConfig {
+export interface SpacerConfig extends Element.Config {
   type :"spacer"
   width? :number
   height? :number
@@ -357,7 +356,7 @@ export interface SpacerConfig extends ElementConfig {
 /** An element that simply takes up space. */
 export class Spacer extends Element {
 
-  constructor (ctx :ElementContext, parent :Element, readonly config :SpacerConfig) {
+  constructor (ctx :Element.Context, parent :Element, readonly config :SpacerConfig) {
     super(ctx, parent, config)
   }
 

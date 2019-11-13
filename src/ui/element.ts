@@ -53,71 +53,6 @@ export class Observer<T> implements Disposable {
   }
 }
 
-/** Applies an operation to an element. */
-export type ElementOp = (elem :Element) => void
-
-/** Applies an operation to an element. */
-export type ElementQuery<R> = (elem :Element) => R|undefined
-
-/** Handles creating elements from a configuration. */
-export interface ElementFactory {
-
-  /** Creates an element based on `config`. */
-  create (ctx :ElementContext, parent :Element, config :ElementConfig) :Element
-}
-
-/** Gives elements access to their enclosing context. */
-export class ElementContext {
-
-  constructor (
-    /** Used to obtain model data for elements. */
-    readonly model :Model,
-    /** Used to resolve styles for elements. */
-    readonly style :StyleContext,
-    /** Used to create new elements. */
-    readonly elem :ElementFactory) {}
-
-  /** Creates a new element context with the supplied `model`. */
-  remodel (model :Model) :ElementContext { return new ElementContext(model, this.style, this.elem) }
-
-  /** Creates an element context that will inject the supplied element configuration overrides. This
-    * enables composite elements to inject specific values into their contained children without
-    * having to take control over the configuration entirely. In general we wish to allow the end
-    * user to decide how a particular composite element is arranged (maybe you want an `icon` next
-    * to the `label` inside your `text` element), but we still need to reach in and apply custom
-    * configuration to the `label` element inside the `text` element. */
-  inject (rewrites :{[key :string] :Object}) :ElementContext {
-    return new ElementContext(this.model, this.style, {
-      create: (ctx, parent, config) => {
-        const rewrite = rewrites[config.type]
-        const rconfig = rewrite ? Object.assign(Object.assign({}, config), rewrite) : config
-        return this.elem.create(ctx, parent, rconfig)
-      }
-    })
-  }
-}
-
-/** Configuration shared by all [[Element]]s. */
-export interface ElementConfig {
-  type :string
-  tags? :Set<string>
-  visible? :Spec<Value<boolean>>
-  constraints? :Record
-  scopeId? :string
-  overrideParentState? :string
-  // this allows ElementConfig to contain "extra" stuff that TypeScript will ignore; this is
-  // necessary to allow a subtype of ElementConfig to be supplied where a container element wants
-  // some sort of ElementConfig; we can only plumb sharp types so deep
-  [extra :string] :any
-}
-
-/** Used to define "scoped" styles for controls. A button for example defines the `button` scope,
-  * and elements that are rendered inside a button are styled according to the `button` scope. */
-export type StyleScope = {
-  id :string
-  states :string[]
-}
-
 export function requireAncestor<P> (
   parent :Element|undefined, pclass :new (...args :any[]) => P
 ) :P {
@@ -133,7 +68,7 @@ export abstract class Element implements Disposable {
   protected readonly _psize :dim2 = dim2.fromValues(-1, -1)
   protected readonly _valid = Mutable.local(false)
   protected readonly _dirtyRegion = rect.create()
-  protected readonly _configScope? :StyleScope
+  protected readonly _configScope? :Element.StyleScope
   protected readonly disposer = new Disposer()
   protected _validating = false
 
@@ -156,9 +91,9 @@ export abstract class Element implements Disposable {
     * visualizations can expand these in [[expandBounds]]. */
   readonly renderBounds = rect.create()
 
-  constructor (ctx :ElementContext, parent :Element|undefined, config :ElementConfig) {
+  constructor (ctx :Element.Context, parent :Element|undefined, config :Element.Config) {
     this.parent = parent
-    if (config.scopeId) this._configScope = {id: config.scopeId, states: RootStates}
+    if (config.scopeId) this._configScope = {id: config.scopeId, states: Root.States}
     // base visibility on model value: if spec is omitted, always assume true;
     // if spec is given as a path with missing model elements, always return false
     this.visible = ctx.model.resolve(config.visible, config.visible ? falseValue : trueValue)
@@ -171,8 +106,8 @@ export abstract class Element implements Disposable {
   get width () :number { return this.bounds[2] }
   get height () :number { return this.bounds[3] }
 
-  abstract get config () :ElementConfig
-  get styleScope () :StyleScope { return this._configScope || this.requireParent.styleScope }
+  abstract get config () :Element.Config
+  get styleScope () :Element.StyleScope { return this._configScope || this.requireParent.styleScope }
   get root () :Root { return this.requireParent.root }
   get valid () :Value<boolean> { return this._valid }
   get validating () :boolean { return this._validating }
@@ -267,18 +202,18 @@ export abstract class Element implements Disposable {
   }
 
   /** Applies `op` to all children of this element (and recursively to their children). */
-  applyToChildren (op :ElementOp) {}
+  applyToChildren (op :Element.Op) {}
 
   /** Applies `query` to all children of this element (and recursively to their children), and
     * returns the first non-falsey result. */
-  queryChildren<R> (query :ElementQuery<R>) :R|undefined { return undefined }
+  queryChildren<R> (query :Element.Query<R>) :R|undefined { return undefined }
 
   /** Applies the provided operation to all elements containing the specified position.
     * @param canvas the canvas context.
     * @param pos the position relative to the root origin.
     * @param op the operation to apply.
     * @return whether the operation was applied to this element (and potentially its children). */
-  applyToContaining (canvas :CanvasRenderingContext2D, pos :vec2, op :ElementOp) :boolean {
+  applyToContaining (canvas :CanvasRenderingContext2D, pos :vec2, op :Element.Op) :boolean {
     if (!this.containsPos(pos)) return false
     op(this)
     return true
@@ -288,7 +223,7 @@ export abstract class Element implements Disposable {
     * @param region the region relative to the root origin.
     * @param op the operation to apply.
     * @return whether the operation was applied to this element (and potentially its children). */
-  applyToIntersecting (region :rect, op :ElementOp) :boolean {
+  applyToIntersecting (region :rect, op :Element.Op) :boolean {
     const intersects = this.intersectsRect(region)
     if (intersects) {
       op(this)
@@ -462,10 +397,82 @@ export abstract class Element implements Disposable {
   protected abstract rerender (canvas :CanvasRenderingContext2D, region :rect) :void
 }
 
+export namespace Element {
+
+  /** Used to define "scoped" styles for controls. A button for example defines the `button` scope,
+    * and elements that are rendered inside a button are styled according to the `button` scope. */
+  export type StyleScope = {
+    id :string
+    states :string[]
+  }
+
+  /** Applies an operation to an element. */
+  export type Op = (elem :Element) => void
+
+  /** Applies an operation to an element. */
+  export type Query<R> = (elem :Element) => R|undefined
+
+  /** Creates an element given a context, parent and config. */
+  export type Maker = (ctx :Context, parent :Element, config :Config) => Element
+
+  /** Handles creating elements from a configuration. */
+  export interface Factory {
+    create :Maker
+  }
+
+  /** A catalog of element makers: modules which define elements export a catalog. */
+  export type Catalog = PMap<Maker>
+
+  /** Gives elements access to their enclosing context. */
+  export class Context {
+
+    constructor (
+      /** Used to obtain model data for elements. */
+      readonly model :Model,
+      /** Used to resolve styles for elements. */
+      readonly style :StyleContext,
+      /** Used to create new elements. */
+      readonly elem :Factory) {}
+
+    /** Creates a new element context with the supplied `model`. */
+    remodel (model :Model) :Context { return new Context(model, this.style, this.elem) }
+
+    /** Creates an element context that will inject the supplied element configuration overrides. This
+      * enables composite elements to inject specific values into their contained children without
+      * having to take control over the configuration entirely. In general we wish to allow the end
+      * user to decide how a particular composite element is arranged (maybe you want an `icon` next
+      * to the `label` inside your `text` element), but we still need to reach in and apply custom
+      * configuration to the `label` element inside the `text` element. */
+    inject (rewrites :{[key :string] :Object}) :Context {
+      return new Context(this.model, this.style, {
+        create: (ctx, parent, config) => {
+          const rewrite = rewrites[config.type]
+          const rconfig = rewrite ? Object.assign(Object.assign({}, config), rewrite) : config
+          return this.elem.create(ctx, parent, rconfig)
+        }
+      })
+    }
+  }
+
+  /** Configuration shared by all [[Element]]s. */
+  export interface Config {
+    type :string
+    tags? :Set<string>
+    visible? :Spec<Value<boolean>>
+    constraints? :Record
+    scopeId? :string
+    overrideParentState? :string
+    // this allows Config to contain "extra" stuff that TypeScript will ignore; this is
+    // necessary to allow a subtype of Config to be supplied where a container element wants
+    // some sort of Config; we can only plumb sharp types so deep
+    [extra :string] :any
+  }
+}
+
 /** An element that acts as a placeholder for elements that failed to be created. */
 export class ErrorViz extends Element {
 
-  constructor (ctx :ElementContext, parent :Element, readonly config :ElementConfig) {
+  constructor (ctx :Element.Context, parent :Element, readonly config :Element.Config) {
     super(ctx, parent, config)
   }
 
@@ -511,43 +518,6 @@ export interface GestureHandler {
   handlePointerDown (event :MouseEvent|TouchEvent, pos :vec2, into :PointerInteraction[]) :void
 }
 
-export const RootStates = ["normal"]
-const RootState = Value.constant(RootStates[0])
-
-/** Defines configuration for [[Root]] elements. */
-export interface RootConfig extends ElementConfig {
-  type :"root"
-  /** The HiDPI scale factor of the browser. Generally `window.devicePixelRatio`. */
-  scale? :Scale
-  /** Whether or not to auto-size this root when its contents are invalidated. */
-  autoSize? :boolean
-  /** The maximum size of this root. If supplied, both dimensions must be non-zero. */
-  hintSize? :Spec<Value<dim2>>
-  /** The minimum size that will be used when auto-sizing this root. Either dimension can be zero to
-    * indicate that a minimum size should not be effected in that dimension. */
-  minSize? :Spec<Value<dim2>>
-  /** The z-index at which to render this root relative to other roots. Higher indices are rendered
-    * on top of lower indices. */
-  zIndex? :number
-  /** An inert root will not intercept or handle input events. */
-  inert? :boolean
-  /** Key bindings to be processed by this root. */
-  keymap? :PMap<ModMap>
-  /** The main element to display in this root. */
-  contents :ElementConfig
-}
-
-/** The horizontal anchor point on an anchored root. */
-export type HAnchor = "left" | "center" | "right"
-/** The vertical anchor point on an anchored root. */
-export type VAnchor = "top" | "center" | "bottom"
-
-function pos (align :HAnchor|VAnchor, min :number, max :number) {
-  if (align === "left" || align === "top") return min
-  else if (align == "right" || align === "bottom") return max
-  else return min+(max-min)/2
-}
-
 let currentEditNumber = 0
 
 /** Returns the current value of the edit number, which is simply a number that we increment after
@@ -555,8 +525,6 @@ let currentEditNumber = 0
 export function getCurrentEditNumber () {
   return currentEditNumber
 }
-
-type RootChange = "resized" | "moved" | "rendered" | "removed" | "disposed"
 
 /** The top-level of the UI hierarchy. Manages the canvas into which the UI is rendered. */
 export class Root extends Element {
@@ -578,7 +546,7 @@ export class Root extends Element {
   readonly cursor = Mutable.local("auto")
 
   /** Emits events pertaining to this root's size, origin, lifecycle, etc. */
-  readonly events = new Emitter<RootChange>()
+  readonly events = new Emitter<Root.Change>()
 
   /** Handles key events for menus and other elements that operate outside the focus system. */
   readonly keymap :Keymap
@@ -600,7 +568,7 @@ export class Root extends Element {
 
   // TODO: tooltipPopup
 
-  constructor (readonly ctx :ElementContext, readonly config :RootConfig,
+  constructor (readonly ctx :Element.Context, readonly config :Root.Config,
                readonly parent :Root|undefined = undefined) {
     super(ctx, undefined, config)
     const canvas = this.canvasElem.getContext("2d")
@@ -639,9 +607,9 @@ export class Root extends Element {
   }
 
   get clock () :Stream<Clock> { return this._clock }
-  get styleScope () :StyleScope { return {id: "default", states: RootStates} }
+  get styleScope () :Element.StyleScope { return {id: "default", states: Root.States} }
   get root () :Root { return this }
-  get state () :Value<string> { return RootState }
+  get state () :Value<string> { return Root.State }
   get origin () :vec2 { return this._origin }
 
   /** Returns the desired index of this root relative to other roots. Events will be dispatched to
@@ -682,13 +650,13 @@ export class Root extends Element {
     * of the `screen` bounds.
     * @return a remover that can be used to cancel the binding. The binding will also be cleared
     * when the root is disposed. */
-  bindOrigin (screen :Value<rect>, screenH :HAnchor, screenV :VAnchor,
-              rootH :HAnchor, rootV :VAnchor) :Remover {
+  bindOrigin (screen :Value<rect>, screenH :Root.HAnchor, screenV :Root.VAnchor,
+              rootH :Root.HAnchor, rootV :Root.VAnchor) :Remover {
     const rsize = this.events.filter(c => c === "resized").
       fold(this.size(dim2.create()), (sz, c) => this.size(dim2.create()), dim2.eq)
     const remover = Value.join2(screen, rsize).onValue(([ss, rs]) => {
-      const sh = pos(screenH, 0, ss[2]), sv = pos(screenV, 0, ss[3])
-      const rh = pos(rootH, 0, rs[0]), rv = pos(rootV, 0, rs[1])
+      const sh = Root.pos(screenH, 0, ss[2]), sv = Root.pos(screenV, 0, ss[3])
+      const rh = Root.pos(rootH, 0, rs[0]), rv = Root.pos(rootV, 0, rs[1])
       this.setOrigin(vec2.set(tmpv, Math.round(sh-rh)+ss[0], Math.round(sv-rv)+ss[1]))
     })
     this.disposer.add(remover)
@@ -753,7 +721,7 @@ export class Root extends Element {
 
   /** Creates a root that will be popped up over this root. This root will act as the popup root's
     * parent, allowing necessary coordination between roots. */
-  createPopup (ctx :ElementContext, config :RootConfig) :Root {
+  createPopup (ctx :Element.Context, config :Root.Config) :Root {
     return new Root(ctx, config, this)
   }
 
@@ -769,8 +737,8 @@ export class Root extends Element {
     return changed
   }
 
-  applyToChildren (op :ElementOp) { op(this.contents) }
-  queryChildren<R> (query :ElementQuery<R>) { return query(this.contents) }
+  applyToChildren (op :Element.Op) { op(this.contents) }
+  queryChildren<R> (query :Element.Query<R>) { return query(this.contents) }
 
   update (clock :Clock) :boolean {
     this._clock.emit(clock)
@@ -1010,17 +978,53 @@ export class Root extends Element {
   }
 }
 
+export namespace Root {
+
+  export const States = ["normal"]
+
+  export const State = Value.constant(States[0])
+
+  /** Defines configuration for [[Root]] elements. */
+  export interface Config extends Element.Config {
+    type :"root"
+    /** The HiDPI scale factor of the browser. Generally `window.devicePixelRatio`. */
+    scale? :Scale
+    /** Whether or not to auto-size this root when its contents are invalidated. */
+    autoSize? :boolean
+    /** The maximum size of this root. If supplied, both dimensions must be non-zero. */
+    hintSize? :Spec<Value<dim2>>
+    /** The minimum size that will be used when auto-sizing this root. Either dimension can be zero to
+      * indicate that a minimum size should not be effected in that dimension. */
+    minSize? :Spec<Value<dim2>>
+    /** The z-index at which to render this root relative to other roots. Higher indices are rendered
+      * on top of lower indices. */
+    zIndex? :number
+    /** An inert root will not intercept or handle input events. */
+    inert? :boolean
+    /** Key bindings to be processed by this root. */
+    keymap? :PMap<ModMap>
+    /** The main element to display in this root. */
+    contents :Element.Config
+  }
+
+  /** The horizontal anchor point on an anchored root. */
+  export type HAnchor = "left" | "center" | "right"
+  /** The vertical anchor point on an anchored root. */
+  export type VAnchor = "top" | "center" | "bottom"
+
+  export function pos (align :HAnchor|VAnchor, min :number, max :number) {
+    if (align === "left" || align === "top") return min
+    else if (align == "right" || align === "bottom") return max
+    else return min+(max-min)/2
+  }
+
+  /** Events of interest emitted by roots. */
+  export type Change = "resized" | "moved" | "rendered" | "removed" | "disposed"
+}
+
 const debugDirty = false
 const DebugColors = ["#FF0000", "#00FF00", "#0000FF", "#00FFFF", "#FF00FF", "#FFFF00"]
 let debugColorIndex = 0
-
-export const ControlStates = [...RootStates, "disabled", "focused", "hovered", "hoverFocused"]
-
-/** Configuration shared by all [[Control]]s. */
-export interface ControlConfig extends ElementConfig {
-  enabled? :Spec<Value<boolean>>
-  contents :ElementConfig
-}
 
 function bothEitherOrTrue (a :Value<boolean>|undefined, b :Value<boolean>|undefined) {
   if (a && b) return Value.join2(a, b).map(ab => ab[0] && ab[1])
@@ -1036,13 +1040,13 @@ function bothEitherOrTrue (a :Value<boolean>|undefined, b :Value<boolean>|undefi
   * used) to visualize the button, and `Button` handles interactions. */
 export class Control extends Element {
   private readonly _updateState = () => this._state.update(this.computeState)
-  protected readonly _state = Mutable.local(ControlStates[0])
+  protected readonly _state = Mutable.local(Control.States[0])
   protected readonly enabled :Value<boolean>
   protected readonly hovered = Mutable.local(false)
   protected readonly focused = Mutable.local(false)
   protected readonly contents :Element
 
-  constructor (ctx :ElementContext, parent :Element|undefined, readonly config :ControlConfig) {
+  constructor (ctx :Element.Context, parent :Element|undefined, readonly config :Control.Config) {
     super(ctx, parent, config)
     // our enabled state either comes from our command, is directly specified, or is both (anded)
     const command = ctx.model.resolveOpt(this.actionSpec(config))
@@ -1055,7 +1059,7 @@ export class Control extends Element {
     this.contents = ctx.elem.create(ctx, this, this.config.contents)
   }
 
-  get styleScope () :StyleScope { return {id: "control", states: ControlStates} }
+  get styleScope () :Element.StyleScope { return {id: "control", states: Control.States} }
   get state () :Value<string> { return this._state }
   get isFocused () :boolean { return this.focused.current }
   get isHovered () :boolean { return this.hovered.current }
@@ -1074,15 +1078,15 @@ export class Control extends Element {
 
   handleFocus (focused :boolean) { this.focused.update(focused) }
 
-  applyToChildren (op :ElementOp) { op(this.contents) }
-  queryChildren<R> (query :ElementQuery<R>) { return query(this.contents) }
+  applyToChildren (op :Element.Op) { op(this.contents) }
+  queryChildren<R> (query :Element.Query<R>) { return query(this.contents) }
 
-  applyToContaining (canvas :CanvasRenderingContext2D, pos :vec2, op :ElementOp) {
+  applyToContaining (canvas :CanvasRenderingContext2D, pos :vec2, op :Element.Op) {
     const applied = super.applyToContaining(canvas, pos, op)
     if (applied) this.contents.applyToContaining(canvas, pos, op)
     return applied
   }
-  applyToIntersecting (region :rect, op :ElementOp) {
+  applyToIntersecting (region :rect, op :Element.Op) {
     const applied = super.applyToIntersecting(region, op)
     if (applied) this.contents.applyToIntersecting(region, op)
     return applied
@@ -1110,7 +1114,7 @@ export class Control extends Element {
   /** If this control triggers an action, it must override this method to return the spec for that
     * action from its config. The control will use this to bind its enabled state to the action's
     * enabled state if it is bound to a command. */
-  protected actionSpec (config :ControlConfig) :Spec<Action>|undefined { return undefined }
+  protected actionSpec (config :Control.Config) :Spec<Action>|undefined { return undefined }
 
   protected computePreferredSize (hintX :number, hintY :number, into :dim2) {
     dim2.copy(into, this.contents.preferredSize(hintX, hintY))
@@ -1119,6 +1123,17 @@ export class Control extends Element {
   protected relayout () { this.contents.setBounds(this.bounds) }
   protected rerender (canvas :CanvasRenderingContext2D, region :rect) {
     this.contents.render(canvas, region)
+  }
+}
+
+export namespace Control {
+
+  export const States = [...Root.States, "disabled", "focused", "hovered", "hoverFocused"]
+
+  /** Configuration shared by all [[Control]]s. */
+  export interface Config extends Element.Config {
+    enabled? :Spec<Value<boolean>>
+    contents :Element.Config
   }
 }
 

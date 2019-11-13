@@ -6,23 +6,16 @@ import {Mutable, Value} from "../core/react"
 import {RMap} from "../core/rcollect"
 import {PMap, filteredIterable, toLimitedString} from "../core/util"
 import {NumberConstraints, PropertyMeta, SelectConstraints, getEnumMeta} from "../graph/meta"
-import {Element, ElementConfig, ElementContext} from "./element"
+import {Element} from "./element"
 import {AxisConfig, VGroup} from "./group"
 import {Action, Model, ElementsModel, Spec, mapModel} from "./model"
-
-/** Configuration for [[PropertyView]]. */
-export interface PropertyViewConfig extends AxisConfig {
-  type :"propertyView"
-  editable :Spec<Value<boolean>>
-  model :Spec<ElementsModel<string>>
-}
 
 /** Depicts a node's editable/viewable properties. */
 export class PropertyView extends VGroup {
   readonly elements = new Map<string, Element>()
   readonly contents :Element[] = []
 
-  constructor (ctx :ElementContext, parent :Element, readonly config :PropertyViewConfig) {
+  constructor (ctx :Element.Context, parent :Element, readonly config :PropertyView.Config) {
     super(ctx, parent, config)
     const editable = ctx.model.resolve(config.editable)
     const model = ctx.model.resolve(config.model)
@@ -56,7 +49,17 @@ export class PropertyView extends VGroup {
   }
 }
 
-type PropertyConfigCreator = (model :Model, editable :Value<boolean>) => ElementConfig
+export namespace PropertyView {
+
+  /** Configuration for [[PropertyView]]. */
+  export interface Config extends AxisConfig {
+    type :"propertyView"
+    editable :Spec<Value<boolean>>
+    model :Spec<ElementsModel<string>>
+  }
+}
+
+type PropertyConfigCreator = (model :Model, editable :Value<boolean>) => Element.Config
 
 const NumberBox = {type: "box", contents: {type: "label"}, style: {halign: "right"}}
 
@@ -426,7 +429,7 @@ export function createEllipsisConfig (model :Model, editable :Value<boolean>, el
 /** Creates the element configuration for a property row with the supplied value editor.  This is
   * broken out into a separate function because some property editors will want to use a different
   * (wider) layout. */
-export function createPropertyRowConfig (model :Model, valueConfig :ElementConfig) {
+export function createPropertyRowConfig (model :Model, valueConfig :Element.Config) {
   return {
     type: "row",
     gap: 2,

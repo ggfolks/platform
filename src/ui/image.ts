@@ -1,12 +1,12 @@
 import {dim2, rect} from "../core/math"
 import {Value} from "../core/react"
-import {Element, ElementConfig, ElementContext} from "./element"
+import {Element} from "./element"
 import {Spec} from "./style"
 
 type ImageSpec = {path :string, scaleFactor :number}
 
 /** Defines configuration for [[Image]] elements. */
-export interface ImageConfig extends ElementConfig {
+export interface ImageConfig extends Element.Config {
   type :"image"
   image :Spec<Value<ImageSpec|string>>
   width? :number
@@ -18,7 +18,7 @@ export class Image extends Element {
   private image = this.observe<HTMLImageElement | Error | undefined>(undefined)
   private scaleFactor = 1
 
-  constructor (ctx :ElementContext, parent :Element, readonly config :ImageConfig) {
+  constructor (ctx :Element.Context, parent :Element, readonly config :ImageConfig) {
     super(ctx, parent, config)
     this.disposer.add(ctx.model.resolve(config.image).onValue(spec => {
       const path = typeof spec === "string" ? spec : spec.path

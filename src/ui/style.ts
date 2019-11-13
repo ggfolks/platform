@@ -1,4 +1,4 @@
-import {Noop, PMap, getValue, log} from "../core/util"
+import {PMap, getValue, log} from "../core/util"
 import {dim2, rect} from "../core/math"
 import {dataEquals} from "../core/data"
 import {Color} from "../core/color"
@@ -108,30 +108,33 @@ function requireScratch2D () :CanvasRenderingContext2D {
   * values: `[top, right, bottom, left]`. */
 export type Insets = number | [number,number,number,number]
 
-export function insetWidth (insets :Insets) :number {
-  return typeof insets === 'number' ? (2*insets) : (insets[1] + insets[3])
-}
-export function insetHeight (insets :Insets) :number {
-  return typeof insets === 'number' ? (2*insets) : (insets[0] + insets[2])
-}
-export function insetRect (insets :Insets, source :rect, dest :rect) :rect {
-  let top :number, right :number, bottom :number, left :number
-  if (typeof insets === 'number') {
-    left = insets ; right = insets ; top = insets ; bottom = insets
-  } else {
-    top = insets[0] ; right = insets[1] ; bottom = insets[2], left = insets[3]
-  }
-  dest[0] = source[0] + left
-  dest[1] = source[1] + top
-  dest[2] = source[2] - left - right
-  dest[3] = source[3] - top - bottom
-  return dest
-}
+export namespace Insets {
 
-/** Returns a CSS string that represents `insets`. */
-export function insetsToCSS (insets :Insets) {
-  return typeof insets === 'number' ? `${insets}` :
-    `${insets[0]} ${insets[1]} ${insets[2]} ${insets[3]}`
+  export function width (insets :Insets) :number {
+    return typeof insets === 'number' ? (2*insets) : (insets[1] + insets[3])
+  }
+  export function height (insets :Insets) :number {
+    return typeof insets === 'number' ? (2*insets) : (insets[0] + insets[2])
+  }
+  export function rect (insets :Insets, source :rect, dest :rect) :rect {
+    let top :number, right :number, bottom :number, left :number
+    if (typeof insets === 'number') {
+      left = insets ; right = insets ; top = insets ; bottom = insets
+    } else {
+      top = insets[0] ; right = insets[1] ; bottom = insets[2], left = insets[3]
+    }
+    dest[0] = source[0] + left
+    dest[1] = source[1] + top
+    dest[2] = source[2] - left - right
+    dest[3] = source[3] - top - bottom
+    return dest
+  }
+
+  /** Returns a CSS string that represents `insets`. */
+  export function toCSS (insets :Insets) {
+    return typeof insets === 'number' ? `${insets}` :
+      `${insets[0]} ${insets[1]} ${insets[2]} ${insets[3]}`
+  }
 }
 
 //
@@ -364,8 +367,36 @@ export interface Decoration {
   render (canvas :CanvasRenderingContext2D, size :dim2) :void
 }
 
-/** A decoration that renders nothing. */
-export const NoopDecor :Decoration = {size: [0, 0, 0, 0], render: Noop}
+export namespace Decoration {
+
+  /** A decoration that renders nothing. */
+  export const Noop :Decoration = {size: [0, 0, 0, 0], render: () => {}}
+
+  export const None = Subject.constant(Noop)
+
+  /** Adds the sizes of the provided background and border to the bounds given, placing the result
+    * in `out`. */
+  export function addBounds (
+    out :rect,
+    bounds :rect,
+    background :Decoration,
+    border :Decoration,
+  ) :rect {
+    const backgroundSize = background.size
+    const borderSize = border.size
+    const top = Math.max(backgroundSize[0], borderSize[0])
+    const right = Math.max(backgroundSize[1], borderSize[1])
+    const bottom = Math.max(backgroundSize[2], borderSize[2])
+    const left = Math.max(backgroundSize[3], borderSize[3])
+    return rect.set(
+      out,
+      bounds[0] - left,
+      bounds[1] - top,
+      bounds[2] + left + right,
+      bounds[3] + top + bottom,
+    )
+  }
+}
 
 export type FitConfig = "start" | "center" | "end" | "stretch"
 
@@ -388,31 +419,6 @@ export interface BackgroundConfig {
     /** The fit for the image on the y axis. Supercedes `fit`, defaults to `center`. */
     fitY? :FitConfig
   }
-}
-
-export const NoDecor = Subject.constant(NoopDecor)
-
-/** Adds the sizes of the provided background and border to the bounds given, placing the result
-  * in `out`. */
-export function addDecorationBounds (
-  out :rect,
-  bounds :rect,
-  background :Decoration,
-  border :Decoration,
-) :rect {
-  const backgroundSize = background.size
-  const borderSize = border.size
-  const top = Math.max(backgroundSize[0], borderSize[0])
-  const right = Math.max(backgroundSize[1], borderSize[1])
-  const bottom = Math.max(backgroundSize[2], borderSize[2])
-  const left = Math.max(backgroundSize[3], borderSize[3])
-  return rect.set(
-    out,
-    bounds[0] - left,
-    bounds[1] - top,
-    bounds[2] + left + right,
-    bounds[3] + top + bottom,
-  )
 }
 
 /** Creates a background based on the supplied `config`. */
@@ -444,11 +450,11 @@ export function makeBackground (ctx :StyleContext, config :BackgroundConfig) :Su
   else if (config.image) {
     // TODO
     log.warn("TODO: support for background images.", "src", config.image.source)
-    return NoDecor
+    return Decoration.None
   }
   else {
     log.warn("Unknown background.", "config", config)
-    return NoDecor
+    return Decoration.None
   }
 }
 

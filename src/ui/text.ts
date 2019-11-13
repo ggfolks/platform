@@ -2,10 +2,8 @@ import {dim2, vec2, rect} from "../core/math"
 import {refEquals} from "../core/data"
 import {Noop, Remover, PMap, getValue} from "../core/util"
 import {Mutable, Subject, Value, falseValue} from "../core/react"
-import {Control, ControlConfig, ControlStates, Element, ElementConfig, ElementContext,
-        ElementOp, ElementQuery, PointerInteraction} from "./element"
-import {Spec, FontConfig, Paint, PaintConfig, ShadowConfig, Span, EmptySpan,
-        insetsToCSS} from "./style"
+import {Control, Element, PointerInteraction} from "./element"
+import {Spec, FontConfig, Insets, Paint, PaintConfig, ShadowConfig, Span, EmptySpan} from "./style"
 import {Model, Action, NoopAction} from "./model"
 import {CtrlMask, MetaMask, Bindings} from "./keymap"
 import {CursorConfig, Cursor} from "./cursor"
@@ -25,7 +23,7 @@ export interface LabelStyle {
 }
 
 /** Defines configuration for [[Label]]. */
-export interface AbstractLabelConfig extends ElementConfig {
+export interface AbstractLabelConfig extends Element.Config {
   style :PMap<LabelStyle>
 }
 
@@ -42,7 +40,7 @@ export abstract class AbstractLabel extends Element {
   // overlayed by a DOM input element
   public rendered = true
 
-  constructor (ctx :ElementContext, parent :Element, readonly config :AbstractLabelConfig) {
+  constructor (ctx :Element.Context, parent :Element, readonly config :AbstractLabelConfig) {
     super(ctx, parent, config)
     this.text = this.resolveText(ctx, config)
     this.invalidateOnChange(this.selection)
@@ -59,7 +57,7 @@ export abstract class AbstractLabel extends Element {
                                            f => ctx.style.resolvePaint(f), undefined))
   }
 
-  protected abstract resolveText (ctx :ElementContext, config :AbstractLabelConfig) :Value<string>
+  protected abstract resolveText (ctx :Element.Context, config :AbstractLabelConfig) :Value<string>
 
   protected computePreferredSize (hintX :number, hintY :number, into :dim2) {
     dim2.copy(into, this.span.current.size)
@@ -109,10 +107,10 @@ export interface LabelConfig extends AbstractLabelConfig {
 /** Displays styled text. */
 export class Label extends AbstractLabel {
 
-  constructor (ctx :ElementContext, parent :Element, readonly config :LabelConfig) {
+  constructor (ctx :Element.Context, parent :Element, readonly config :LabelConfig) {
     super(ctx, parent, config)
   }
-  protected resolveText (ctx :ElementContext, config :LabelConfig) {
+  protected resolveText (ctx :Element.Context, config :LabelConfig) {
     return ctx.model.resolve(config.text, Value.constant(""))
   }
 }
@@ -269,12 +267,12 @@ const DefaultBlinkPeriod = 0.6
 const DefaultCursor :CursorConfig = {type: "cursor", style: {}}
 
 /** Defines configuration for text edit elements. */
-export interface AbstractTextConfig extends ControlConfig {
+export interface AbstractTextConfig extends Control.Config {
   cursor? :CursorConfig
   onEnter? :Spec<Action>
 }
 
-const TextStyleScope = {id: "text", states: [...ControlStates, "invalid"]}
+const TextStyleScope = {id: "text", states: [...Control.States, "invalid"]}
 
 /** Base class for text edit elements. */
 export abstract class AbstractText extends Control {
@@ -286,7 +284,7 @@ export abstract class AbstractText extends Control {
   readonly cursor :Cursor
 
   constructor (
-    ctx :ElementContext,
+    ctx :Element.Context,
     parent :Element,
     readonly config :AbstractTextConfig,
     readonly text :Mutable<string>,
@@ -327,11 +325,11 @@ export abstract class AbstractText extends Control {
 
   get styleScope () { return TextStyleScope }
 
-  applyToChildren (op :ElementOp) {
+  applyToChildren (op :Element.Op) {
     super.applyToChildren(op)
     op(this.cursor)
   }
-  queryChildren<R> (query :ElementQuery<R>) {
+  queryChildren<R> (query :Element.Query<R>) {
     return super.queryChildren(query) || query(this.cursor)
   }
 
@@ -409,8 +407,8 @@ export abstract class AbstractText extends Control {
     const box = this.findChild("box")
     if (box) {
       const bstyle = (box as Box).style
-      if (bstyle.padding) input.style.padding = insetsToCSS(bstyle.padding)
-      if (bstyle.margin) input.style.margin = insetsToCSS(bstyle.margin)
+      if (bstyle.padding) input.style.padding = Insets.toCSS(bstyle.padding)
+      if (bstyle.margin) input.style.margin = Insets.toCSS(bstyle.margin)
     }
     this.label.span.current.syncStyle(input.style)
 
@@ -439,7 +437,7 @@ export abstract class AbstractText extends Control {
     return this.inputValid ? super.computeState : "invalid"
   }
 
-  protected actionSpec (config :ControlConfig) { return (config as AbstractTextConfig).onEnter }
+  protected actionSpec (config :Control.Config) { return (config as AbstractTextConfig).onEnter }
 
   protected get inputValid () :boolean { return true }
 
@@ -477,7 +475,7 @@ export interface TextConfig extends AbstractTextConfig {
 /** Displays a span of editable text. */
 export class Text extends AbstractText {
 
-  constructor (ctx :ElementContext, parent :Element, readonly config :TextConfig) {
+  constructor (ctx :Element.Context, parent :Element, readonly config :TextConfig) {
     super(ctx, parent, config, ctx.model.resolve(config.text))
   }
 }
@@ -496,7 +494,7 @@ export interface NumberTextConfig extends AbstractTextConfig {
 export class NumberText extends AbstractText {
   readonly number :Mutable<number>
 
-  constructor (ctx :ElementContext, parent :Element, readonly config :NumberTextConfig) {
+  constructor (ctx :Element.Context, parent :Element, readonly config :NumberTextConfig) {
     super(ctx, parent, config, Mutable.local(""))
     this.number = ctx.model.resolve(config.number)
     const maxDecimals = getValue(config.maxDecimals, 3)
@@ -555,7 +553,7 @@ const ColorPattern = /^[\da-fA-F]{6}$/
 export class ColorText extends AbstractText {
   readonly color :Mutable<string>
 
-  constructor (ctx :ElementContext, parent :Element, readonly config :ColorTextConfig) {
+  constructor (ctx :Element.Context, parent :Element, readonly config :ColorTextConfig) {
     super(ctx, parent, config, Mutable.local(""))
     this.color = ctx.model.resolve(config.color)
     this.disposer.add(
@@ -584,12 +582,12 @@ export interface EditableLabelConfig extends AbstractTextConfig {
   text :Spec<Mutable<string>>
 }
 
-const EditableLabelStyleScope = {id: "editableLabel", states: ControlStates}
+const EditableLabelStyleScope = {id: "editableLabel", states: Control.States}
 
 /** A label that one can edit by double-clicking. */
 export class EditableLabel extends AbstractText {
 
-  constructor (ctx :ElementContext, parent :Element, readonly config :EditableLabelConfig) {
+  constructor (ctx :Element.Context, parent :Element, readonly config :EditableLabelConfig) {
     super(ctx, parent, config, ctx.model.resolve(config.text))
     this.focused.onValue(focused => {
       if (!focused) this.label.selection.update([0, 0])

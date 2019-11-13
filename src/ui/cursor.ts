@@ -1,6 +1,6 @@
 import {dim2, rect} from "../core/math"
 import {PMap} from "../core/util"
-import {Element, ElementConfig, ElementContext} from "./element"
+import {Element} from "./element"
 import {Spec, PaintConfig, DefaultPaint} from "./style"
 
 export interface CursorStyle {
@@ -8,7 +8,7 @@ export interface CursorStyle {
   width? :number
 }
 
-export interface CursorConfig extends ElementConfig {
+export interface CursorConfig extends Element.Config {
   type: "cursor"
   blinkPeriod? :number
   style :PMap<CursorStyle>
@@ -19,7 +19,7 @@ export const DefaultCursor :CursorConfig = {type: "cursor", style: {}}
 export class Cursor extends Element {
   private fill = this.observe(DefaultPaint)
 
-  constructor (ctx :ElementContext, parent :Element, readonly config :CursorConfig) {
+  constructor (ctx :Element.Context, parent :Element, readonly config :CursorConfig) {
     super(ctx, parent, config)
     this.fill.observe(this.resolveStyle(
       config.style, s => s.fill, s => ctx.style.resolvePaint(s), DefaultPaint))
