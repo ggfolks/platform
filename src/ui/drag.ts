@@ -181,7 +181,7 @@ export namespace Drag {
             const posIdx = constraint === "horizontal" ? 1 : 0
             dragPos[posIdx] = this.bounds[posIdx]
           }
-          dragRoot.setOrigin(vec2.add(dragOrigin, this.root.origin, dragPos))
+          dragRoot.origin.update(vec2.add(dragOrigin, this.root.origin.current, dragPos))
           owner.handleDrag(this, vec2.scaleAndAdd(dragPos, dragPos, dragSize, 0.5))
           return dragRoot !== undefined
         },

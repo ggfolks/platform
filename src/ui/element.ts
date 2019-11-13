@@ -2,7 +2,7 @@ import {Disposable, Disposer, Remover, NoopRemover, PMap, log} from "../core/uti
 import {Clock} from "../core/clock"
 import {dim2, rect, vec2, vec2zero} from "../core/math"
 import {Record} from "../core/data"
-import {Emitter, Mutable, Source, Stream, Subject, Value, addListener} from "../core/react"
+import {Buffer, Emitter, Mutable, Source, Stream, Subject, Value, addListener} from "../core/react"
 import {MutableList, RList} from "../core/rcollect"
 import {Scale} from "../core/ui"
 import {keyEvents, mouseEvents, pointerEvents, touchEvents, wheelEvents} from "../input/react"
@@ -532,7 +532,6 @@ export class Root extends Element {
   private readonly _scale :Scale
   private readonly _hintSize :Value<dim2>
   private readonly _minSize :Value<dim2>
-  private readonly _origin = vec2.create()
   private readonly _cursorOwners = new Map<Element, string>()
   private readonly _gestureHandlers :GestureHandler[] = []
   private _elementsOver = new Set<Element>()
@@ -564,6 +563,10 @@ export class Root extends Element {
   /** The drag popup currently active for this root. Elements that perform drag and drop can set
     * their drag root into this value and remove it when the drag is completed. */
   readonly dragPopup = Mutable.local<Root|undefined>(undefined)
+
+  /** The position at which the root is rendered on the screen.
+    * This value is used to interpret mouse and touch events. */
+  readonly origin = Buffer.wrap(vec2.create())
 
   // TODO: tooltipPopup
 
@@ -609,7 +612,6 @@ export class Root extends Element {
   get styleScope () :Element.StyleScope { return {id: "default", states: Root.States} }
   get root () :Root { return this }
   get state () :Value<string> { return Root.State }
-  get origin () :vec2 { return this._origin }
 
   /** Returns the desired index of this root relative to other roots. Events will be dispatched to
     * higher zIndexed roots first, under the assumption that they are rendered on top of lower
@@ -635,15 +637,6 @@ export class Root extends Element {
     return addListener(this._gestureHandlers, handler)
   }
 
-  /** Updates the position at which the root is rendered on the screen.
-    * This value is used to interpret mouse and touch events. */
-  setOrigin (pos :vec2) {
-    if (!vec2.equals(this._origin, pos)) {
-      vec2.copy(this._origin, pos)
-      this.events.emit("moved")
-    }
-  }
-
   /** Binds the origin of this root by matching a point of this root (specified by `rootH` &
     * `rootV`) to a point on the screen (specified by `screenH` & `screenV`), given a reactive view
     * of the `screen` bounds.
@@ -656,7 +649,7 @@ export class Root extends Element {
     const remover = Value.join2(screen, rsize).onValue(([ss, rs]) => {
       const sh = Root.pos(screenH, 0, ss[2]), sv = Root.pos(screenV, 0, ss[3])
       const rh = Root.pos(rootH, 0, rs[0]), rv = Root.pos(rootV, 0, rs[1])
-      this.setOrigin(vec2.set(tmpv, Math.round(sh-rh)+ss[0], Math.round(sv-rv)+ss[1]))
+      this.origin.updateIf(vec2.set(tmpv, Math.round(sh-rh)+ss[0], Math.round(sv-rv)+ss[1]))
     })
     this.disposer.add(remover)
     return remover
@@ -1019,7 +1012,7 @@ export namespace Root {
   }
 
   /** Events of interest emitted by roots. */
-  export type Change = "resized" | "moved" | "rendered" | "added" | "removed" | "disposed"
+  export type Change = "resized" | "rendered" | "added" | "removed" | "disposed"
 }
 
 const debugDirty = false
@@ -1147,7 +1140,7 @@ export namespace Control {
   * - call [[update]] on every animation frame
   * - add manually created roots via [[addRoot]]
   * - keep the root's positions up to date with the positions at which the roots are rendered
-  *   (either via [[Root.setOrigin]] or [[Root.bindOrigin]]).
+  *   (either via [[Root.origin]] or [[Root.bindOrigin]]).
   *
   * Clients will generally not use this class directly but rather use the `Host2` or `Host3`
   * subclasses which integrate more tightly with the `scene2` and `scene3` libraries. */
@@ -1238,12 +1231,12 @@ export class Host implements Disposable {
   }
 
   mouseToRoot (root :Root, event :MouseEvent, into :vec2) :vec2 {
-    return this.adjustPos(
-      vec2.set(into, event.clientX-root.origin[0], event.clientY-root.origin[1]))
+    const ro = root.origin.current
+    return this.adjustPos(vec2.set(into, event.clientX-ro[0], event.clientY-ro[1]))
   }
   touchToRoot (root :Root, touch :Touch, into :vec2) :vec2 {
-    return this.adjustPos(
-      vec2.set(into, touch.clientX-root.origin[0], touch.clientY-root.origin[1]))
+    const ro = root.origin.current
+    return this.adjustPos(vec2.set(into, touch.clientX-ro[0], touch.clientY-ro[1]))
   }
   protected adjustPos (pos :vec2) :vec2 {
     const rect = this.elem.getBoundingClientRect()
@@ -1314,14 +1307,10 @@ export class HTMLHost extends Host {
         const style = root.canvasElem.style
         style.position = "absolute"
         style.pointerEvents = "none"
-        style.left = `${root.origin[0]}px`
-        style.top = `${root.origin[1]}px`
         style.zIndex = `${root.zIndex}`
-        const unpos = root.events.onEmit(c => {
-          if (c === "moved") {
-            style.left = `${root.origin[0]}px`
-            style.top = `${root.origin[1]}px`
-          }
+        const unpos = root.origin.onValue(origin => {
+          style.left = `${origin[0]}px`
+          style.top = `${origin[1]}px`
         })
         const unviz = root.visible.onValue(
           viz => root.canvasElem.style.visibility = viz ? "visible" : "hidden")

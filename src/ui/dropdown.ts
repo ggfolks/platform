@@ -111,7 +111,7 @@ export namespace Dropdown {
           pos[1] += this.height + 1
           break
         }
-        lroot.setOrigin(vec2.add(pos, pos, this.root.origin))
+        lroot.origin.update(vec2.add(pos, pos, this.root.origin.current))
         this.root.menuPopup.update(lroot)
       }
     }

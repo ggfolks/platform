@@ -47,11 +47,11 @@ export class Host3 extends Host {
           // nothing to see; put it behind the camera
           mesh.matrixWorld.makeScale(1, 1, 1).setPosition(0, 0, 1)
         } else {
-          const sx = root.width * width / rendererSize.x
-          const sy = root.height * height / rendererSize.y
+          const ro = root.origin.current, rw = root.width, rh = root.height
+          const sx = rw * width / rendererSize.x, sy = rh * height / rendererSize.y
           mesh.matrixWorld.makeScale(sx, sy, 1).setPosition(
-            (root.origin[0] + root.width / 2) * width / rendererSize.x - width / 2,
-            height / 2 - (root.origin[1] + root.height / 2) * height / rendererSize.y,
+            (ro[0] + rw / 2) * width / rendererSize.x - width / 2,
+            height / 2 - (ro[1] + rh / 2) * height / rendererSize.y,
             -distance,
           )
         }

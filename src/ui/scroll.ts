@@ -11,7 +11,7 @@ const tmpsize = vec2.create(), tmpv = vec2.create(), tmpv2 = vec2.create()
 
 /** Base class for containers that transform their child. */
 abstract class TransformedContainer extends Control {
-  protected readonly _offset = new Buffer(vec2.create(), vec2.copy)
+  protected readonly _offset = Buffer.wrap(vec2.create())
 
   get offset () { return this._offset.current }
   get scale () :number { return 1 }
@@ -99,7 +99,7 @@ abstract class TransformedContainer extends Control {
   protected _updateOffset (offset :vec2) {
     offset[0] = clamp(offset[0], 0, Math.max(this.maxX, 0))
     offset[1] = clamp(offset[1], 0, Math.max(this.maxY, 0))
-    this._offset.updateIf(offset, vec2.equals)
+    this._offset.updateIf(offset)
   }
 
   /** Transforms the supplied position into the space of the contents. */
@@ -163,7 +163,7 @@ export class Panner extends TransformedContainer {
 
   protected startScroll (event :MouseEvent|TouchEvent, pos :vec2, into :PointerInteraction[]) {
     const clearCursor = () => this.clearCursor(this)
-    const basePos = vec2.clone(pos), baseOffset = vec2.clone(this._offset.current)
+    const basePos = vec2.clone(pos), baseOffset = vec2.clone(this.offset)
     const ClaimDist = 5
     let claimed = false
     into.push({
@@ -180,12 +180,12 @@ export class Panner extends TransformedContainer {
   }
 
   private _updateScale (scale :number) {
-    const offset = this._offset, size = this.size(tmpsize) as vec2, oscale = this.scale
-    const ocenter = vec2.scaleAndAdd(tmpv, offset.current, size, 0.5)
+    const offset = this.offset, size = this.size(tmpsize) as vec2, oscale = this.scale
+    const ocenter = vec2.scaleAndAdd(tmpv, offset, size, 0.5)
     this._scale.update(scale)
-    const ncenter = vec2.scaleAndAdd(tmpv2, offset.current, size, 0.5)
+    const ncenter = vec2.scaleAndAdd(tmpv2, offset, size, 0.5)
     const nocenter = vec2.scale(tmpv, ocenter, scale/oscale)
-    this._updateOffset(vec2.add(tmpv, offset.current, vec2.subtract(tmpv, nocenter, ncenter)))
+    this._updateOffset(vec2.add(tmpv, offset, vec2.subtract(tmpv, nocenter, ncenter)))
   }
 
   protected relayout () {
@@ -300,17 +300,17 @@ export class Scroller extends TransformedContainer {
     if (!this.contents.maybeHandleWheel(event, transformedPos)) {
       const horiz = this.horiz, deltav = vec2.set(
         tmpv, horiz ? event.deltaY : 0, horiz ? 0 : event.deltaY)
-      this._updateOffset(vec2.add(tmpv, this._offset.current, deltav))
+      this._updateOffset(vec2.add(tmpv, this.offset, deltav))
     }
     return true
   }
 
   protected setAnim (anim :Anim|undefined) {
-    const offset = this._offset, idx = this.horiz ? 0 : 1
+    const offset = this.offset, idx = this.horiz ? 0 : 1
     this.unanim()
     if (anim && !anim.done) {
       const unanim = this.unanim = this.root.clock.onEmit(clock => {
-        this._updateAxisOffset(anim.update(clock, offset.current[idx]))
+        this._updateAxisOffset(anim.update(clock, offset[idx]))
         if (anim.done) unanim()
       })
     }

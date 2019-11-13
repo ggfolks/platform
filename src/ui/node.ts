@@ -252,7 +252,7 @@ class UINode extends Node {
       root = ui.createRoot(this.config.root, model)
       if (this.config.rootBounds) {
         root.setSize(rect.size(this.config.rootBounds))
-        root.setOrigin(rect.pos(this.config.rootBounds))
+        root.origin.update(rect.pos(this.config.rootBounds))
       }
       else {
         root.setSize(dim2.fromValues(Math.round(ctx.screen.current[2]*0.9),

@@ -394,7 +394,7 @@ export abstract class AbstractText extends Control {
   configInput (input :HTMLInputElement) :Remover {
     const root = this.root, ibounds = this.bounds
     const unsizer = this.valid.when(v => v, v => {
-      const fx = root.origin[0] + ibounds[0], fy = root.origin[1] + ibounds[1]
+      const fx = root.origin.current[0] + ibounds[0], fy = root.origin.current[1] + ibounds[1]
       input.style.left = `${fx}px`
       input.style.top = `${fy}px`
       input.style.width = `${ibounds[2]}px`
