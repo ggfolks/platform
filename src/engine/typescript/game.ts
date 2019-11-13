@@ -320,6 +320,7 @@ export class TypeScriptGameEngine implements GameEngine {
 
   update (clock :Clock) :void {
     Time.deltaTime = clock.dt
+    this._validateDirtyTransforms() // need this for camera transform used in hover computation
     this.renderEngine.updateHovers()
     for (const updatable of this.updatables) updatable.update(clock)
     this.ctx.host.update(clock)
