@@ -222,8 +222,8 @@ export class Timestamp {
 
 export type Level = "debug" | "info" | "warn" | "error"
 
-function hasToString (obj :any) {
-  return typeof obj === "object" &&
+function canToString (obj :any) {
+  return typeof obj !== "object" ||
     Object.getPrototypeOf(obj).toString !== Object.prototype.toString
 }
 
@@ -233,7 +233,7 @@ export function formatArgs (...args :any[]) :string {
     if (str.length > 0) str += ", "
     const val = args[ii+1]
     try {
-      if (hasToString(val)) str += `${args[ii]}=${val}`
+      if (canToString(val)) str += `${args[ii]}=${val}`
       else str += `${args[ii]}=${JSON.stringify(val)}`
     } catch (err) {
       str += `${args[ii]}=${val}`
