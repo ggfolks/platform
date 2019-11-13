@@ -812,7 +812,8 @@ export abstract class Buffer<T> extends ReadableSource<T> implements Prop<T> {
   }
 
   /** Creates a buffer wrapping `init`, a typed array. The buffer will always contain this array,
-    * updates will be copied into it. */
+    * updates will be copied into it. `T` should be a type that represents a fixed sized buffer. It
+    * is _not_ safe to call `update` on a `Buffer` with mismatched array sizes. */
   static wrap<T extends TypedArray> (init :T) :Buffer<T> & VProp<T> {
     return new ArrayBuffer(init)
   }
