@@ -853,6 +853,7 @@ export class Root extends Element {
       if (oroot === this) this._clearElementsOver()
     })
     this.events.whenOnce(e => e === "removed", unwatch)
+    this.events.emit("added")
   }
 
   wasRemoved () {
@@ -1018,7 +1019,7 @@ export namespace Root {
   }
 
   /** Events of interest emitted by roots. */
-  export type Change = "resized" | "moved" | "rendered" | "removed" | "disposed"
+  export type Change = "resized" | "moved" | "rendered" | "added" | "removed" | "disposed"
 }
 
 const debugDirty = false
