@@ -11,7 +11,7 @@ import {Action, Command, Model} from "./model"
 import {Keymap, ModMap} from "./keymap"
 import {Spec, StyleContext, styleEquals} from "./style"
 
-const tmpr = rect.create(), tmpv = vec2.create(), tmpd = dim2.create()
+const tmpr = rect.create(), tmpv = vec2.create(), tmpd = dim2.create(), tmps = dim2.create()
 const defScale = new Scale(window.devicePixelRatio)
 const defHintSize = Value.constant(dim2.fromValues(64000, 32000))
 const defMinSize = Value.constant(dim2.fromValues(0, 0))
@@ -154,7 +154,7 @@ export abstract class Element implements Disposable {
       // if we are computing our preferred size outside the normal validation cycle, it is not safe
       // to save it (because something could change that triggers an invalidation but snice we're
       // already invalid, we won't know to clear this cached preferred size)
-      if (this.parent && !this.parent.validating) psize = tmpd
+      if (this.parent && !this.parent.validating) psize = tmps
       this.computePreferredSize(hintX, hintY, psize)
     }
     return psize
