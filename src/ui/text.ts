@@ -409,6 +409,7 @@ export abstract class AbstractText extends Control {
       const bstyle = (box as Box).style
       if (bstyle.padding) input.style.padding = Insets.toCSS(bstyle.padding)
       if (bstyle.margin) input.style.margin = Insets.toCSS(bstyle.margin)
+      if (bstyle.halign) input.style.textAlign = bstyle.halign
     }
     this.label.span.current.syncStyle(input.style)
 
