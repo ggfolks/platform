@@ -348,3 +348,8 @@ export class Scroller extends TransformedContainer {
     this._updateOffset(vec2.set(tmpv, horiz ? offset : 0, horiz ? 0 : offset))
   }
 }
+
+export const ScrollCatalog :Element.Catalog = {
+  "panner": (ctx, parent, cfg) => new Panner(ctx, parent, cfg as PannerConfig),
+  "scroller": (ctx, parent, cfg) => new Scroller(ctx, parent, cfg as ScrollerConfig),
+}

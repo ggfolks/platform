@@ -473,3 +473,7 @@ export function makePropertiesModel (
     },
   )
 }
+
+export const PropertyCatalog :Element.Catalog = {
+  "propertyView": (ctx, parent, cfg) => new PropertyView(ctx, parent, cfg as PropertyView.Config),
+}

@@ -37,3 +37,7 @@ export class Cursor extends Element {
     canvas.fillRect(bounds[0], bounds[1], bounds[2], bounds[3])
   }
 }
+
+export const CursorCatalog :Element.Catalog = {
+  "cursor": (ctx, parent, config) => new Cursor(ctx, parent, config as CursorConfig),
+}

@@ -612,3 +612,11 @@ export class EditableLabel extends AbstractText {
 
   protected onEnter () { this.blur() }
 }
+
+export const TextCatalog :Element.Catalog = {
+  "label": (ctx, parent, cfg) => new Label(ctx, parent, cfg as LabelConfig),
+  "text": (ctx, parent, cfg) => new Text(ctx, parent, cfg as TextConfig),
+  "numberText": (ctx, parent, cfg) => new NumberText(ctx, parent, cfg as NumberTextConfig),
+  "colorText": (ctx, parent, cfg) => new ColorText(ctx, parent, cfg as ColorTextConfig),
+  "editableLabel": (ctx, parent, cfg) => new EditableLabel(ctx, parent, cfg as EditableLabelConfig),
+}

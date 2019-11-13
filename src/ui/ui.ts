@@ -3,22 +3,22 @@ import {Record} from "../core/data"
 import {makeConfig} from "../core/config"
 import {ImageResolver, StyleContext, StyleDefs} from "./style"
 import {Model, MissingModelElem} from "./model"
-import {Element, Root} from "./element"
-import * as B from "./button"
-import * as C from "./cursor"
-import * as D from "./dropdown"
-import * as E from "./element"
-import * as G from "./group"
-import * as GR from "./graph"
-import * as I from "./image"
-import * as L from "./list"
-import * as M from "./menu"
-import * as P from "./property"
-import * as S from "./scroll"
-import * as TA from "./tabs"
-import * as T from "./text"
-import * as TR from "./tree"
-import * as X from "./box"
+import {Control, Element, ErrorViz, Root} from "./element"
+
+import {BoxCatalog} from "./box"
+import {ButtonCatalog} from "./button"
+import {CursorCatalog} from "./cursor"
+import {Dropdown} from "./dropdown"
+import {GraphCatalog, TerminalStyleScope} from "./graph"
+import {GroupCatalog} from "./group"
+import {ImageCatalog} from "./image"
+import {List} from "./list"
+import {Menu} from "./menu"
+import {PropertyCatalog} from "./property"
+import {ScrollCatalog} from "./scroll"
+import {TabCatalog} from "./tabs"
+import {TextCatalog} from "./text"
+import {TreeCatalog} from "./tree"
 
 /** Defines a set of styles for elements. This is something like:
   * ```
@@ -74,6 +74,12 @@ class StyleResolver {
   }
 }
 
+const catalog = [
+  BoxCatalog, ButtonCatalog, Control.Catalog, CursorCatalog, Dropdown.Catalog, GraphCatalog,
+  GroupCatalog, ImageCatalog, List.Catalog, Menu.Catalog, PropertyCatalog, ScrollCatalog,
+  TabCatalog, TextCatalog, TreeCatalog,
+].reduce(Object.assign, {})
+
 export class UI {
   private resolvers = new Map<string,StyleResolver>()
   private readonly style :StyleContext
@@ -93,49 +99,10 @@ export class UI {
     try {
       const scope = this.getElementScope(parent, config)
       const rstyles = this.resolveStyles(scope, config.type, config.style as Record)
-      const rconfig = {...config, style: rstyles} as any
-      switch (config.type) {
-      case           "box": return new X.Box(ctx, parent, rconfig as X.BoxConfig)
-      case       "control": return new E.Control(ctx, parent, rconfig as E.Control.Config)
-      case           "row": return new G.Row(ctx, parent, rconfig as G.RowConfig)
-      case        "column": return new G.Column(ctx, parent, rconfig as G.ColumnConfig)
-      case     "absLayout": return new G.AbsLayout(ctx, parent, rconfig as G.AbsLayoutConfig)
-      case        "spacer": return new G.Spacer(ctx, parent, rconfig as G.SpacerConfig)
-      case         "image": return new I.Image(ctx, parent, rconfig as I.ImageConfig)
-      case         "label": return new T.Label(ctx, parent, rconfig as T.LabelConfig)
-      case        "cursor": return new C.Cursor(ctx, parent, rconfig as C.CursorConfig)
-      case          "text": return new T.Text(ctx, parent, rconfig as T.TextConfig)
-      case    "numberText": return new T.NumberText(ctx, parent, rconfig as T.NumberTextConfig)
-      case     "colorText": return new T.ColorText(ctx, parent, rconfig as T.ColorTextConfig)
-      case "editableLabel": return new T.EditableLabel(ctx, parent, rconfig as T.EditableLabelConfig)
-      case        "button": return new B.Button(ctx, parent, rconfig as B.ButtonConfig)
-      case        "toggle": return new B.Toggle(ctx, parent, rconfig as B.ToggleConfig)
-      case         "hlist": return new L.List.Horiz(ctx, parent, rconfig as L.List.HorizConfig)
-      case         "vlist": return new L.List.Vert(ctx, parent, rconfig as L.List.VertConfig)
-      case     "dragVList": return new L.List.DragVert(ctx, parent, rconfig as L.List.DragVertConfig)
-      case  "dragVElement": return new L.List.DragVElement(ctx, parent, rconfig as L.List.DragVElementConfig)
-      case           "tab": return new TA.Tab(ctx, parent, rconfig as TA.TabConfig)
-      case    "tabbedPane": return new TA.TabbedPane(ctx, parent, rconfig as TA.TabbedPaneConfig)
-      case      "treeView": return new TR.TreeView(ctx, parent, rconfig as TR.TreeViewConfig)
-      case  "treeViewList": return new TR.TreeViewList(ctx, parent, rconfig as TR.TreeViewListConfig)
-      case  "treeViewNode": return new TR.TreeViewNode(ctx, parent, rconfig as TR.TreeViewNodeConfig)
-      case      "dropdown": return new D.Dropdown.Dropdown(ctx, parent, rconfig as D.Dropdown.Config)
-      case  "dropdownList": return new D.Dropdown.List(ctx, parent, rconfig as D.Dropdown.ListConfig)
-      case  "dropdownItem": return new D.Dropdown.Item(ctx, parent, rconfig as D.Dropdown.ItemConfig)
-      case       "menuBar": return new M.Menu.Bar(ctx, parent, rconfig as M.Menu.BarConfig)
-      case          "menu": return new M.Menu.Menu(ctx, parent, rconfig as M.Menu.Config)
-      case      "menuItem": return new M.Menu.Item(ctx, parent, rconfig as M.Menu.ItemConfig)
-      case      "shortcut": return new M.Menu.Shortcut(ctx, parent, rconfig as M.Menu.ShortcutConfig)
-      case        "panner": return new S.Panner(ctx, parent, rconfig as S.PannerConfig)
-      case      "scroller": return new S.Scroller(ctx, parent, rconfig as S.ScrollerConfig)
-      case   "graphViewer": return new GR.GraphViewer(ctx, parent, rconfig as GR.GraphViewerConfig)
-      case     "graphView": return new GR.GraphView(ctx, parent, rconfig as GR.GraphViewConfig)
-      case      "nodeView": return new GR.NodeView(ctx, parent, rconfig as GR.NodeViewConfig)
-      case  "propertyView": return new P.PropertyView(ctx, parent, rconfig as P.PropertyView.Config)
-      case      "edgeView": return new GR.EdgeView(ctx, parent, rconfig as GR.EdgeViewConfig)
-      case      "terminal": return new GR.Terminal(ctx, parent, rconfig as GR.TerminalConfig)
-      default: throw new Error(`Unknown element type '${config.type}'.`)
-      }
+      const maker = catalog[config.type]
+      if (maker) return maker(ctx, parent, {...config, style: rstyles})
+      else throw new Error(`Unknown element type '${config.type}'.`)
+
     } catch (error) {
       log.warn("Failed to create element", "type", config.type, error)
       log.warn(`- path to element: ${parent.configPath.concat(config.type)}`)
@@ -143,13 +110,13 @@ export class UI {
       if (error instanceof MissingModelElem) {
         log.warn(`- path to model value: ${error.path} (missing @ ${error.pos})`)
       }
-      return new E.ErrorViz(ctx, parent, {type: "error"})
+      return new ErrorViz(ctx, parent, {type: "error"})
     }
   }
 
   getElementScope (parent :Element, config :Element.Config) :Element.StyleScope {
     switch (config.type) {
-      case "terminal": return GR.TerminalStyleScope
+      case "terminal": return TerminalStyleScope
       default:
         return config.scopeId
           ? {id: config.scopeId, states: parent.styleScope.states}

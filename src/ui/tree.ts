@@ -300,3 +300,9 @@ export class TreeViewNode extends Drag.Elem {
 
   protected get dragOwner () { return this.requireAncestor(TreeView) }
 }
+
+export const TreeCatalog :Element.Catalog = {
+  "treeView": (ctx, parent, cfg) => new TreeView(ctx, parent, cfg as TreeViewConfig),
+  "treeViewList": (ctx, parent, cfg) => new TreeViewList(ctx, parent, cfg as TreeViewListConfig),
+  "treeViewNode": (ctx, parent, cfg) => new TreeViewNode(ctx, parent, cfg as TreeViewNodeConfig),
+}

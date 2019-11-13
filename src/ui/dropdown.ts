@@ -296,4 +296,10 @@ export namespace Dropdown {
     }
     return element
   }
+
+  export const Catalog :Element.Catalog = {
+    "dropdown": (ctx, parent, rconfig) => new Dropdown(ctx, parent, rconfig as Config),
+    "dropdownList": (ctx, parent, rconfig) => new List(ctx, parent, rconfig as ListConfig),
+    "dropdownItem": (ctx, parent, rconfig) => new Item(ctx, parent, rconfig as ItemConfig),
+  }
 }

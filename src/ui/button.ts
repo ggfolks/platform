@@ -137,3 +137,8 @@ export class Toggle extends Control {
     else this.contents.render(canvas, region)
   }
 }
+
+export const ButtonCatalog :Element.Catalog = {
+  "button": (ctx, parent, config) => new Button(ctx, parent, config as ButtonConfig),
+  "toggle": (ctx, parent, config) => new Toggle(ctx, parent, config as ToggleConfig),
+}

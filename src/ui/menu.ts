@@ -89,4 +89,11 @@ export namespace Menu {
       })
     }
   }
+
+  export const Catalog :Element.Catalog = {
+    "menuBar": (ctx, parent, cfg) => new Bar(ctx, parent, cfg as BarConfig),
+    "menu": (ctx, parent, cfg) => new Menu(ctx, parent, cfg as Config),
+    "menuItem": (ctx, parent, cfg) => new Item(ctx, parent, cfg as ItemConfig),
+    "shortcut": (ctx, parent, cfg) => new Shortcut(ctx, parent, cfg as ShortcutConfig),
+  }
 }

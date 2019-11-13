@@ -1583,3 +1583,11 @@ function getNodeView (parent :Element|undefined) {
   }
   throw new Error("Element used outside NodeView")
 }
+
+export const GraphCatalog :Element.Catalog = {
+  "graphViewer": (ctx, parent, cfg) => new GraphViewer(ctx, parent, cfg as GraphViewerConfig),
+  "graphView": (ctx, parent, cfg) => new GraphView(ctx, parent, cfg as GraphViewConfig),
+  "nodeView": (ctx, parent, cfg) => new NodeView(ctx, parent, cfg as NodeViewConfig),
+  "edgeView": (ctx, parent, cfg) => new EdgeView(ctx, parent, cfg as EdgeViewConfig),
+  "terminal": (ctx, parent, cfg) => new Terminal(ctx, parent, cfg as TerminalConfig),
+}

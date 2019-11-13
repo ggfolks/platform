@@ -142,3 +142,7 @@ export class Box extends Element {
     if (alpha !== undefined) canvas.globalAlpha = 1
   }
 }
+
+export const BoxCatalog :Element.Catalog = {
+  "box": (ctx, parent, config) => new Box(ctx, parent, config as BoxConfig)
+}

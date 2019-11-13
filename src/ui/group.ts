@@ -367,3 +367,10 @@ export class Spacer extends Element {
   protected relayout () {}
   protected rerender (canvas :CanvasRenderingContext2D, region :rect) {}
 }
+
+export const GroupCatalog :Element.Catalog = {
+  "row": (ctx, parent, cfg) => new Row(ctx, parent, cfg as RowConfig),
+  "column": (ctx, parent, cfg) => new Column(ctx, parent, cfg as ColumnConfig),
+  "absLayout": (ctx, parent, cfg) => new AbsLayout(ctx, parent, cfg as AbsLayoutConfig),
+  "spacer": (ctx, parent, cfg) => new Spacer(ctx, parent, cfg as SpacerConfig),
+}

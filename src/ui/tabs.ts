@@ -116,3 +116,8 @@ export class Tab extends Drag.Elem {
 
   protected get dragOwner () { return this.requireAncestor(TabbedPane).reorderer }
 }
+
+export const TabCatalog :Element.Catalog = {
+  "tab": (ctx, parent, cfg) => new Tab(ctx, parent, cfg as TabConfig),
+  "tabbedPane": (ctx, parent, cfg) => new TabbedPane(ctx, parent, cfg as TabbedPaneConfig),
+}

@@ -59,3 +59,7 @@ export class Image extends Element {
 
   protected scale (size :number) { return size / this.scaleFactor }
 }
+
+export const ImageCatalog :Element.Catalog = {
+  "image": (ctx, parent, cfg) => new Image(ctx, parent, cfg as ImageConfig),
+}

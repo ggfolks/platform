@@ -1135,6 +1135,10 @@ export namespace Control {
     enabled? :Spec<Value<boolean>>
     contents :Element.Config
   }
+
+  export const Catalog :Element.Catalog = {
+    "control": (ctx, parent, cfg) => new Control(ctx, parent, cfg as Config),
+  }
 }
 
 /** Manages a collection of [[Root]]s: handles dispatching input and frame events, validating and

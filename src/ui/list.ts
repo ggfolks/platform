@@ -158,4 +158,11 @@ export namespace List {
       list.invalidate()
     })
   }
+
+  export const Catalog :Element.Catalog = {
+    "hlist": (ctx, parent, cfg) => new Horiz(ctx, parent, cfg as HorizConfig),
+    "vlist": (ctx, parent, cfg) => new Vert(ctx, parent, cfg as VertConfig),
+    "dragVList": (ctx, parent, cfg) => new DragVert(ctx, parent, cfg as DragVertConfig),
+    "dragVElement": (ctx, parent, cfg) => new DragVElement(ctx, parent, cfg as DragVElementConfig),
+  }
 }
