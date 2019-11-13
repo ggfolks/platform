@@ -180,6 +180,12 @@ export interface GameObject extends Disposable {
   /** The object's sort order. */
   order :number
 
+  /** True if this object itself is flagged as active. */
+  activeSelf :boolean
+
+  /**  True if this object and all of its ancestors are active. */
+  activeInHierarchy :boolean
+
   /** The game object's transform component. */
   readonly transform :Transform
 
@@ -291,6 +297,12 @@ export interface Component extends Configurable {
 
   /** Optional wake function. */
   readonly awake? :() => void
+
+  /** Optional function to call on activation. */
+  readonly onEnable? :() => void
+
+  /** Optional function to call on deactivation. */
+  readonly onDisable? :() => void
 
   /** Optional update function. */
   readonly update? :(clock :Clock) => void

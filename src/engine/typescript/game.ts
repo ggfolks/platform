@@ -212,6 +212,7 @@ export class TypeScriptGameEngine implements GameEngine {
   readonly _gameObjects = MutableMap.local<string, GameObject>()
 
   readonly _defaultRootIds = Mutable.local<string[]>([])
+  readonly _defaultRootsActive = Mutable.local(true)
 
   get renderEngine () :RenderEngine {
     if (!this._renderEngine) throw new Error("Missing render engine")
@@ -251,6 +252,20 @@ export class TypeScriptGameEngine implements GameEngine {
         ? this._defaultRootIds
         : this.gameObjects.require(page).transform.childIds,
     )
+    this.activePage.onChange((newPage, oldPage) => {
+      if (oldPage === DEFAULT_PAGE) this._defaultRootsActive.update(false)
+      else {
+        const page = this.gameObjects.get(oldPage)
+        if (page) page.activeSelf = false
+      }
+      if (newPage === DEFAULT_PAGE) this._defaultRootsActive.update(true)
+      else this.gameObjects.require(newPage).activeSelf = true
+    })
+    this._defaultRootsActive.onChange(active => {
+      for (const rootId of this._defaultRootIds.current) {
+        this.gameObjects.require(rootId)._updateActiveInHierarchy()
+      }
+    })
   }
 
   createConfigurableConfig (
@@ -415,6 +430,8 @@ export class TypeScriptGameObject implements GameObject {
   readonly layerValue = Mutable.local(DEFAULT_LAYER_MASK)
   readonly nameValue :Mutable<string>
   readonly orderValue = Mutable.local(0)
+  readonly activeSelfValue = Mutable.local(false)
+  readonly activeInHierarchyValue = Mutable.local(false)
   readonly transform :Transform
   readonly page? :Page
 
@@ -430,6 +447,20 @@ export class TypeScriptGameObject implements GameObject {
 
   get order () :number { return this.orderValue.current }
   set order (order :number) { this.orderValue.update(order) }
+
+  get activeSelf () :boolean { return this.activeSelfValue.current }
+  set activeSelf (active :boolean) { this.activeSelfValue.update(active) }
+
+  get activeInHierarchy () :boolean { return this.activeInHierarchyValue.current }
+  set activeInHierarchy (active :boolean) {
+    if (!active) {
+      this.activeSelf = false
+      return
+    }
+    this.activeSelf = true
+    if (this.transform.parent) this.transform.parent.gameObject.activeInHierarchy = true
+    else this.gameEngine.activePage.update(this.page ? this.id : DEFAULT_PAGE)
+  }
 
   get componentTypes () :Value<string[]> { return this._componentTypes }
   get components () :RMap<string, Component> { return this._components }
@@ -463,6 +494,15 @@ export class TypeScriptGameObject implements GameObject {
       else this[key] = value
     }
     this.sendMessage("awake")
+
+    this.activeInHierarchyValue.onChange(active => {
+      this.sendMessage(active ? "onEnable" : "onDisable")
+      for (let ii = 0; ii < this.transform.childCount; ii++) {
+        this.transform.getChild(ii).gameObject._updateActiveInHierarchy()
+      }
+    })
+    this.activeSelfValue.onValue(() => this._updateActiveInHierarchy())
+    if (config.activeSelf === undefined && !this.page) this.activeSelf = true
   }
 
   addComponents (config :PMap<ConfigurableConfig>, wake = true) {
@@ -563,6 +603,7 @@ export class TypeScriptGameObject implements GameObject {
       case "layer": return this.layerValue as unknown as Value<T>
       case "name": return this.nameValue as unknown as Value<T>
       case "order": return this.orderValue as unknown as Value<T>
+      case "activeSelf": return this.activeSelfValue as unknown as Value<T>
       default: return this.components.getValue(name) as unknown as Value<T>
     }
   }
@@ -579,11 +620,25 @@ export class TypeScriptGameObject implements GameObject {
   }
 
   dispose () {
+    this.activeSelf = false
     this.gameEngine._gameObjects.delete(this.id)
     for (const key in this) {
       const value = this[key]
       if (value instanceof TypeScriptComponent) value.dispose()
     }
+  }
+
+  _updateActiveInHierarchy () {
+    this.activeInHierarchyValue.update(
+      this.activeSelf &&
+      (
+        this.transform.parent
+          ? this.transform.parent.gameObject.activeInHierarchy
+          : this.page
+          ? this.gameEngine.activePage.current === this.id
+          : this.gameEngine._defaultRootsActive.current
+      ),
+    )
   }
 
   _componentReordered (component :Component) {
@@ -627,7 +682,7 @@ export class TypeScriptComponent extends TypeScriptConfigurable implements Compo
   readonly aliases :string[]
 
   protected readonly _disposer = new Disposer()
-  private readonly _coroutines :Coroutine[] = []
+  private readonly _coroutines :TypeScriptCoroutine[] = []
 
   get removable () :boolean { return true }
 
@@ -642,8 +697,16 @@ export class TypeScriptComponent extends TypeScriptConfigurable implements Compo
   ) {
     super(gameEngine, supertype, type, gameObject, ...aliases)
     this.aliases = aliases
-    const updatable = this as unknown as Updatable
-    if (updatable.update) gameObject.gameEngine.updatables.add(updatable)
+    this._disposer.add(gameObject.activeInHierarchyValue.onValue(active => {
+      const updatable = this as unknown as Updatable
+      if (active) {
+        if (updatable.update) gameEngine.updatables.add(updatable)
+        for (const coroutine of this._coroutines) gameEngine.updatables.add(coroutine)
+      } else {
+        if (updatable.update) gameEngine.updatables.delete(updatable)
+        for (const coroutine of this._coroutines) gameEngine.updatables.delete(coroutine)
+      }
+    }))
   }
 
   init () {
@@ -703,12 +766,12 @@ export class TypeScriptComponent extends TypeScriptConfigurable implements Compo
 
   _addCoroutine (coroutine :TypeScriptCoroutine) {
     this._coroutines.push(coroutine)
-    this.gameObject.gameEngine.updatables.add(coroutine)
+    if (this.gameObject.activeInHierarchy) this.gameObject.gameEngine.updatables.add(coroutine)
   }
 
   _removeCoroutine (coroutine :TypeScriptCoroutine) {
     this._coroutines.splice(this._coroutines.indexOf(coroutine), 1)
-    this.gameObject.gameEngine.updatables.delete(coroutine)
+    if (this.gameObject.activeInHierarchy) this.gameObject.gameEngine.updatables.delete(coroutine)
   }
 }
 
@@ -894,6 +957,7 @@ class TypeScriptTransform extends TypeScriptComponent implements Transform {
     }
     this._invalidate(worldPositionStays ? LOCAL_INVALID : WORLD_INVALID)
     this.broadcastMessage("onTransformParentChanged")
+    this.gameObject._updateActiveInHierarchy()
   }
 
   get childIds () :Value<string[]> { return this._childIds }
@@ -1173,7 +1237,7 @@ class NonApplicableConfig<T> {
 export class TypeScriptGraph extends TypeScriptComponent implements Graph {
   private readonly _graph :GraphObject
 
-  get graphConfig () :GraphConfig { return this._graph.config }
+  @property("graph") get graphConfig () :GraphConfig { return this._graph.config }
   set graphConfig (config :GraphConfig) { this._graph.reconfigure(config) }
 
   constructor (
@@ -1188,8 +1252,16 @@ export class TypeScriptGraph extends TypeScriptComponent implements Graph {
     this._graph = new GraphObject(subctx, new NonApplicableConfig<NodeConfig>())
   }
 
+  onEnable () {
+    this._graph.connect()
+  }
+
   update (clock :Clock) {
     this._graph.update(clock)
+  }
+
+  onDisable () {
+    this._graph.disconnect()
   }
 }
 registerConfigurableType("component", ["engine"], "graph", TypeScriptGraph)

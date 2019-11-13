@@ -171,7 +171,7 @@ export abstract class AbstractSubgraph extends Node {
     const subctx = Object.create(graph.ctx)
     subctx.subgraph = this
     this._name = this.getProperty("name", config.type) as Mutable<string>
-    this._disposer.add(this.containedGraph = new Graph(subctx, config.graph || {}))
+    this.containedGraph = new Graph(subctx, config.graph || {})
     // we don't bother with disposers for the values that we listen to on the contained graph
     // because the contained graph will never outlive this node
     this._updateMeta()
@@ -192,15 +192,16 @@ export abstract class AbstractSubgraph extends Node {
         map.delete(change.prev.config.name)
       }
     })
-    this._disposer.add(graph.clock.onValue(clock => this.containedGraph.update(clock)))
-  }
-
-  reconnect () {
-    // no-op; we handle everything dynamically
   }
 
   connect () {
     this.containedGraph.connect()
+    this._disposer.add(this.containedGraph)
+    this._disposer.add(this.graph.clock.onValue(clock => this.containedGraph.update(clock)))
+  }
+
+  reconnect () {
+    // no-op; we handle everything dynamically
   }
 
   toJSON () :NodeConfig {

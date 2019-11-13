@@ -159,7 +159,7 @@ export abstract class Node implements Disposable {
   reconnect () {
     // clear the outputs before recreating the wrapped outputs in case recreating creates a loop,
     // in which case we need the intermediate value created in getOutput
-    this._disposer.dispose()
+    this.disconnect()
     this._outputs.clear()
     for (const [name, wrapped] of this._wrappedOutputs) {
       wrapped.update(this._createOutput(name, wrapped.defaultValue))
@@ -169,6 +169,11 @@ export abstract class Node implements Disposable {
 
   /** Connects and initializes the node. */
   connect () {}
+
+  /** Disconnects the node. */
+  disconnect () {
+    this.dispose()
+  }
 
   /** Returns a JSON representation of this node. */
   toJSON () :NodeConfig {

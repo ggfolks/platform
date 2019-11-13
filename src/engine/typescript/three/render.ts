@@ -807,7 +807,7 @@ class ThreeLight extends ThreeObjectComponent implements Light {
   private _color :Color
   private _lightObject? :LightObject
 
-  get color () :Color { return this._color }
+  @property("Color") get color () :Color { return this._color }
   set color (color :Color) { Color.copy(this._color, color) }
 
   constructor (

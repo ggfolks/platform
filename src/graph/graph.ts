@@ -46,6 +46,7 @@ function getConstantNodeId (value :any) {
 export class Graph implements Disposable {
   private _clock = new Emitter<Clock>()
   private _nodes = MutableMap.local<string, Node>()
+  private _connected = false
 
   /** Returns a reactive view of the clock event stream. */
   get clock () :Stream<Clock> {
@@ -76,8 +77,8 @@ export class Graph implements Disposable {
       this.createNode(id, config[id])
     }
     // connect after everything's in place
-    for (const id in config) {
-      this.nodes.require(id).connect()
+    if (this._connected) {
+      for (const id in config) this.nodes.require(id).connect()
     }
   }
 
@@ -106,9 +107,14 @@ export class Graph implements Disposable {
 
   /** Connects the nodes in the graph. */
   connect () {
-    for (const node of this._nodes.values()) {
-      node.connect()
-    }
+    this._connected = true
+    for (const node of this._nodes.values()) node.connect()
+  }
+
+  /** Disconnects the nodes in the graph. */
+  disconnect () {
+    this._connected = false
+    for (const node of this._nodes.values()) node.disconnect()
   }
 
   /** Creates a string representing a vertex shader for this graph. */
@@ -245,12 +251,13 @@ export class Graph implements Disposable {
       this._nodes.set(key, node)
       node.fromJSON(config)
     }
-    for (const node of this._nodes.values()) node.reconnect()
+    if (this._connected) {
+      for (const node of this._nodes.values()) node.reconnect()
+    }
   }
 
   dispose () {
-    for (const node of this._nodes.values()) {
-      node.dispose()
-    }
+    this._connected = false
+    for (const node of this._nodes.values()) node.dispose()
   }
 }
