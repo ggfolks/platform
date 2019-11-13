@@ -31,7 +31,7 @@ export const wheelEvents :Stream<WheelEvent> = Stream.deriveStream(dispatch => {
   * listeners, event listeners will be connected to the DOM. */
 export function touchEvents (...types :TouchEventTypes[]) :Stream<TouchEvent> {
   return Stream.deriveStream(dispatch => {
-    for (const type of types) document.addEventListener(type, dispatch)
+    for (const type of types) document.addEventListener(type, dispatch, {passive: false})
     return () => {
       for (const type of types) document.removeEventListener(type, dispatch)
     }
