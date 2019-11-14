@@ -14,7 +14,7 @@ import {GroupCatalog} from "./group"
 import {ImageCatalog} from "./image"
 import {List} from "./list"
 import {Menu} from "./menu"
-import {PropertyCatalog} from "./property"
+import {Property} from "./property"
 import {ScrollCatalog} from "./scroll"
 import {TabCatalog} from "./tabs"
 import {TextCatalog} from "./text"
@@ -76,7 +76,7 @@ class StyleResolver {
 
 const catalog = [
   BoxCatalog, ButtonCatalog, Control.Catalog, CursorCatalog, Dropdown.Catalog, GraphCatalog,
-  GroupCatalog, ImageCatalog, List.Catalog, Menu.Catalog, PropertyCatalog, ScrollCatalog,
+  GroupCatalog, ImageCatalog, List.Catalog, Menu.Catalog, Property.Catalog, ScrollCatalog,
   TabCatalog, TextCatalog, TreeCatalog,
 ].reduce(Object.assign, {})
 

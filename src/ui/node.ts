@@ -13,7 +13,7 @@ import {
 } from "../graph/node"
 import {Host, Root, getCurrentEditNumber} from "./element"
 import {Action, Command, Model, ModelData, ModelKey, ElementsModel, mapModel} from "./model"
-import {makePropertiesModel} from "./property"
+import {Property} from "./property"
 import {Theme, UI} from "./ui"
 import {ImageResolver, StyleDefs} from "./style"
 
@@ -515,7 +515,7 @@ function createPageModelData (
             position: createPropertyValue("_position"),
             ...subgraphElement,
             defaultOutputKey: Value.constant(node.defaultOutputKey),
-            propertiesModel: makePropertiesModel(
+            propertiesModel: Property.makeModel(
               node.propertiesMeta,
               (key, value) => createPropertyValue(key, value.map(value => value.defaultValue)),
             ),
