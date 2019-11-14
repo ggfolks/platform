@@ -107,7 +107,29 @@ export class Color extends Float32Array {
     }
   }
 
-  // TODO: toHex, fromHex, toIntARGB, fromIntARGB
+  // TODO: toIntARGB, fromIntARGB
+
+  /** Returns a hex string representing the provided color. */
+  static toHex (c :Color) :string {
+    const r = Math.round(c[1] * 255).toString(16)
+    const g = Math.round(c[2] * 255).toString(16)
+    const b = Math.round(c[3] * 255).toString(16)
+    return (
+      (r.length === 2 ? r : "0" + r) +
+      (g.length === 2 ? g : "0" + g) +
+      (b.length === 2 ? b : "0" + b)
+    )
+  }
+
+  /** Returns a color corresponding to the provided hex string. */
+  static fromHex (hex :string) :Color {
+    const scale = 1 / 255
+    return Color.fromRGB(
+      parseInt(hex.substring(0, 2), 16) * scale,
+      parseInt(hex.substring(2, 4), 16) * scale,
+      parseInt(hex.substring(4, 6), 16) * scale,
+    )
+  }
 
   /** Combines the `a` and `r` channels of this color into a 16-bit value `0xAR`. `A` is the `a`
     * channel scaled to `[0, 255]` and `R` is the `r` channel scaled to `[0, 255]`. Used for

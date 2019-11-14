@@ -1,5 +1,6 @@
 import {Color as ThreeColor, Euler as ThreeEuler, Math as M, Vector3} from "three"
 
+import {Color} from "../core/color"
 import {refEquals} from "../core/data"
 import {Euler, quat, vec3} from "../core/math"
 import {Mutable, Value} from "../core/react"
@@ -210,6 +211,20 @@ const propertyConfigCreators :PMap<PropertyConfigCreator> = {
       ],
     })
   },
+  Color: (model, editable) => {
+    const value = model.resolve<Mutable<Color>>("value")
+    return createPropertyRowConfig(model, {
+      type: "colorText",
+      constraints: {stretch: true},
+      color: value.bimap(c => Color.toHex(c), (c, s) => Color.fromHex(s)),
+      enabled: editable,
+      contents: {
+        type: "box",
+        contents: {type: "label"},
+        style: {halign: "left"},
+      },
+    })
+  },
   Vector3: (model, editable) => {
     const value = model.resolve<Mutable<Vector3>>("value")
     return createPropertyRowConfig(model, {
@@ -281,7 +296,7 @@ const propertyConfigCreators :PMap<PropertyConfigCreator> = {
       ],
     })
   },
-  Color: (model, editable) => {
+  ThreeColor: (model, editable) => {
     const value = model.resolve<Mutable<ThreeColor>>("value")
     return createPropertyRowConfig(model, {
       type: "colorText",

@@ -141,7 +141,7 @@ class ColorNode extends Node {
 /** A constant color value. */
 abstract class ColorConstantConfig implements NodeConfig {
   type = "Color.constant"
-  @property() value = new Color()
+  @property("ThreeColor") value = new Color()
   @outputEdge("Color") output = undefined
 }
 
