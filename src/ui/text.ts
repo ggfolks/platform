@@ -266,10 +266,15 @@ function allSelector (text :string, doff :number, state :TextState) :Selector {
 const DefaultBlinkPeriod = 0.6
 const DefaultCursor :CursorConfig = {type: "cursor", style: {}}
 
+// https://html.spec.whatwg.org/multipage/interaction.html#attr-inputmode
+export type TextInputMode = "none" | "text" | "tel" | "url" | "email" |
+                            "numeric" | "decimal" | "search"
+
 /** Defines configuration for text edit elements. */
 export interface AbstractTextConfig extends Control.Config {
   cursor? :CursorConfig
   onEnter? :Spec<Action>
+  inputMode? :TextInputMode
 }
 
 const TextStyleScope = {id: "text", states: [...Control.States, "invalid"]}
@@ -393,6 +398,7 @@ export abstract class AbstractText extends Control {
 
   configInput (input :HTMLInputElement) :Remover {
     const root = this.root, ibounds = this.bounds
+    if (this.config.inputMode) input.setAttribute("inputmode", this.config.inputMode)
     const unsizer = this.valid.when(v => v, v => {
       const fx = root.origin.current[0] + ibounds[0], fy = root.origin.current[1] + ibounds[1]
       input.style.left = `${fx}px`
@@ -427,6 +433,7 @@ export abstract class AbstractText extends Control {
     input.setSelectionRange(cpos, cpos)
 
     return () => {
+      input.removeAttribute("inputmode")
       input.removeEventListener("input", onInput)
       input.removeEventListener("keypress", onPress)
       this.shadowed.update(false)
