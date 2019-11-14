@@ -618,7 +618,7 @@ export class EditableLabel extends AbstractText {
   }
 
   protected canHandleEvent (event :Event, pos :vec2) :boolean {
-    return this.isFocused && super.canHandleEvent(event, pos)
+    return (this.isFocused || event.type == "dblclick") && super.canHandleEvent(event, pos)
   }
 
   protected onEnter () { this.blur() }
