@@ -187,6 +187,14 @@ const constructorStringifiers = new Map<Function, (value :any, indent :number) =
     if (!first) string += "\n" + " ".repeat(indent)
     return string + (indent === 0 ? "})" : "}")
   }],
+  [Array, (values, indent) => {
+    let string = "["
+    for (const value of values) {
+      if (string.length > 1) string += ", "
+      string += JavaScript.stringify(value, indent)
+    }
+    return string + "]"
+  }]
 ])
 
 function toFloat32ArrayString (array :Float32Array) :string {

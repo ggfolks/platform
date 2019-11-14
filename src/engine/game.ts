@@ -70,11 +70,11 @@ export interface GameContext extends UINodeContext, InputNodeContext {
 /** The id of the default page. */
 export const DEFAULT_PAGE = "default"
 
-/** The default object layer/mask. */
-export const DEFAULT_LAYER_MASK = 1
+/** The default object layer. */
+export const DEFAULT_LAYER = 0
 
-/** The editor object layer/mask. */
-export const EDITOR_LAYER_MASK = 2
+/** The editor object layer. */
+export const EDITOR_LAYER = 1
 
 /** A mask that matches all layers. */
 export const ALL_LAYERS_MASK = ~0

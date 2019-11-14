@@ -6,7 +6,7 @@ import {ChangeFn, Mutable, Value} from "../../core/react"
 import {MutableMap, RMap} from "../../core/rcollect"
 import {Disposer, NoopRemover, PMap, getValue, log} from "../../core/util"
 import {Graph as GraphObject, GraphConfig} from "../../graph/graph"
-import {CategoryNode, NodeConfig, NodeTypeRegistry} from "../../graph/node"
+import {CategoryNode, NodeTypeRegistry} from "../../graph/node"
 import {registerLogicNodes} from "../../graph/logic"
 import {registerMathNodes} from "../../graph/math"
 import {PropertyMeta} from "../../graph/meta"
@@ -18,7 +18,7 @@ import {HTMLHost} from "../../ui/element"
 import {registerUINodes} from "../../ui/node"
 import {DefaultStyles, DefaultTheme} from "../../ui/theme"
 import {
-  ALL_LAYERS_MASK, DEFAULT_LAYER_MASK, DEFAULT_PAGE, Component, ComponentConstructor, Configurable,
+  ALL_LAYERS_MASK, DEFAULT_LAYER, DEFAULT_PAGE, Component, ComponentConstructor, Configurable,
   ConfigurableConfig, CoordinateFrame, Coroutine, Cube, Cylinder, GameContext, GameEngine,
   GameObject, GameObjectConfig, Graph, Mesh, MeshFilter, Page, PrimitiveType, Quad, SpaceConfig,
   Sphere, Time, Transform,
@@ -427,7 +427,7 @@ type MessageHandler = (...args :any[]) => void
 
 export class TypeScriptGameObject implements GameObject {
   readonly id :string
-  readonly layerValue = Mutable.local(DEFAULT_LAYER_MASK)
+  readonly layerValue = Mutable.local(DEFAULT_LAYER)
   readonly nameValue :Mutable<string>
   readonly orderValue = Mutable.local(0)
   readonly activeSelfValue = Mutable.local(false)
@@ -487,7 +487,7 @@ export class TypeScriptGameObject implements GameObject {
     for (const key in config) {
       const value = config[key]
       if (key === "transform") {
-        applyConfig(this.transform, value)
+        this.transform.reconfigure(undefined, value)
         continue
       }
       if (typeof value === "object") this.addComponent(key, value, false)
@@ -610,7 +610,7 @@ export class TypeScriptGameObject implements GameObject {
 
   createConfig () :GameObjectConfig {
     const config :GameObjectConfig = {}
-    if (this.layer !== DEFAULT_LAYER_MASK) config.layer = this.layer
+    if (this.layer !== DEFAULT_LAYER) config.layer = this.layer
     if (this.name !== this.id) config.name = this.name
     if (this.order !== 0) config.order = this.order
     for (const type of this._componentTypes.current) {
@@ -669,8 +669,7 @@ export function applyConfig (target :PMap<any>, config :PMap<any>) {
       typeof value === "object" &&
       value !== null &&
       typeof targetValue === "object" &&
-      targetValue !== null &&
-      !(targetValue instanceof NonApplicableConfig)
+      targetValue !== null
     ) applyConfig(targetValue, value)
     else target[key] = value
   }
@@ -1238,11 +1237,6 @@ registerConfigurableType("mesh", [], "cube", TypeScriptCube)
 export class TypeScriptQuad extends TypeScriptMesh implements Quad {}
 registerConfigurableType("mesh", [], "quad", TypeScriptQuad)
 
-// marker class to flag configurations as being not recursively applicable
-class NonApplicableConfig<T> {
-  [key :string] :T
-}
-
 export class TypeScriptGraph extends TypeScriptComponent implements Graph {
   private readonly _graph :GraphObject
 
@@ -1258,7 +1252,7 @@ export class TypeScriptGraph extends TypeScriptComponent implements Graph {
     super(gameEngine, supertype, type, gameObject)
     const subctx = Object.create(gameObject.gameEngine.ctx)
     subctx.graphComponent = this
-    this._graph = new GraphObject(subctx, new NonApplicableConfig<NodeConfig>())
+    this._graph = new GraphObject(subctx, {})
   }
 
   onEnable () {
