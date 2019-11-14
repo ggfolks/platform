@@ -88,6 +88,7 @@ const propertyConfigCreators :PMap<PropertyConfigCreator> = {
       number: "value",
       enabled: editable,
       contents: NumberBox,
+      inputMode: "numeric",
       ...constraints,
     })
   },
