@@ -1,5 +1,6 @@
 import {loadImage} from "../../core/assets"
 import {Clock} from "../../core/clock"
+import {Color} from "../../core/color"
 import {refEquals} from "../../core/data"
 import {mat4, quat, vec3, vec4, rect} from "../../core/math"
 import {ChangeFn, Mutable, Value} from "../../core/react"
@@ -10,7 +11,7 @@ import {CategoryNode, NodeTypeRegistry} from "../../graph/node"
 import {registerLogicNodes} from "../../graph/logic"
 import {registerMathNodes} from "../../graph/math"
 import {PropertyMeta} from "../../graph/meta"
-import {createQuatFn, createVec3Fn, registerMatrixNodes} from "../../graph/matrix"
+import {createColorFn, createQuatFn, createVec3Fn, registerMatrixNodes} from "../../graph/matrix"
 import {registerSignalNodes} from "../../graph/signal"
 import {SubgraphRegistry, registerUtilNodes} from "../../graph/util"
 import {registerInputNodes} from "../../input/node"
@@ -63,6 +64,15 @@ export function registerConfigurableType (
   }
   configurableSupertype.constructors.set(type, constructor)
   if (categories) configurableSupertype.typeRoot.getCategoryNode(categories).addLeafNode(type)
+}
+
+interface ProxyType<T> {
+  create (populate :(out :T, arg? :any) => T) :(arg? :any) => T
+  copy (out :T, source :T) :T
+}
+
+const ProxyTypes :PMap<ProxyType<any>> = {
+  Color: {create: createColorFn, copy: Color.copy},
 }
 
 export class TypeScriptConfigurable implements Configurable {
@@ -159,6 +169,39 @@ export class TypeScriptConfigurable implements Configurable {
       value => this[name] = value,
       refEquals,
     )
+    const proxyType = ProxyTypes[meta.type]
+    if (proxyType) {
+      const current = proxyType.create(out => proxyType.copy(out, rawObject))
+      const rawObject = this[name]
+      const proxy = new Proxy(rawObject, {
+        set: (obj, prop, value) => {
+          if (listener) {
+            const oldValue = current()
+            obj[prop] = value
+            listener(current(), oldValue)
+          } else {
+            obj[prop] = value
+          }
+          return true
+        },
+        get: (obj, prop) => {
+          return obj[prop]
+        },
+      })
+      Object.defineProperty(this, name, {
+        get: () => proxy,
+        set: value => {
+          if (listener) {
+            const oldValue = current()
+            proxyType.copy(rawObject, value)
+            listener(current(), oldValue)
+          } else {
+            proxyType.copy(rawObject, value)
+          }
+        },
+      })
+      return propertyValue
+    }
     const descriptor = this._getPropertyDescriptor(name)
     const descriptorGet = descriptor.get
     const getter = descriptorGet
@@ -185,6 +228,19 @@ export class TypeScriptConfigurable implements Configurable {
       if (descriptor) return descriptor
     }
     return {value: undefined}
+  }
+
+  protected _createProxy (object :object, onChange :(value :object) => void) {
+    new Proxy(object, {
+      set: (obj, prop, value) => {
+        obj[prop] = value
+        onChange(obj)
+        return true
+      },
+      get: (obj, prop) => {
+        return obj[prop]
+      },
+    })
   }
 }
 

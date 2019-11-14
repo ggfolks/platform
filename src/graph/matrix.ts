@@ -1,3 +1,4 @@
+import {Color} from "../core/color"
 import {quat, vec3} from "../core/math"
 import {Value} from "../core/react"
 import {getValue} from "../core/util"
@@ -45,6 +46,14 @@ export function createVec3Fn (populate :(out :vec3, arg? :any) => vec3) :(arg? :
   * @return the wrapped function. */
 export function createQuatFn (populate :(out :quat, arg? :any) => quat) :(arg? :any) => quat {
   return createDoubleBufferedFn(quat.create, populate, quat.exactEquals)
+}
+
+/** Creates a function that alternates between two output colors, so as to avoid creating new
+  * color objects every time the function is called.
+  * @param populate the function to populate the color.
+  * @return the wrapped function. */
+export function createColorFn (populate :(out :Color, arg? :any) => Color) :(arg? :any) => Color {
+  return createDoubleBufferedFn(Color.create, populate, Color.exactEquals)
 }
 
 /** Creates a function that alternates between two output objects, so as to avoid creating new

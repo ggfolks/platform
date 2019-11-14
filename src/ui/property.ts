@@ -213,16 +213,37 @@ export namespace Property {
     },
     Color: (model, editable) => {
       const value = model.resolve<Mutable<Color>>("value")
+      const hexValue = value.bimap(c => Color.toHex(c), (c, s) => Color.fromHex(s))
       return createRowConfig(model, {
-        type: "colorText",
+        type: "row",
         constraints: {stretch: true},
-        color: value.bimap(c => Color.toHex(c), (c, s) => Color.fromHex(s)),
-        enabled: editable,
-        contents: {
-          type: "box",
-          contents: {type: "label"},
-          style: {halign: "left"},
-        },
+        offPolicy: "stretch",
+        contents: [
+          {
+            type: "colorText",
+            constraints: {stretch: true},
+            color: hexValue,
+            enabled: editable,
+            contents: {
+              type: "box",
+              contents: {type: "label"},
+              style: {halign: "left"},
+            },
+          },
+          {
+            type: "button",
+            visible: editable,
+            contents: {
+              type: "box",
+              scopeId: "propertyButton",
+              contents: {type: "label", text: Value.constant("⋮")},
+            },
+            onClick: () => {
+              const listener = (input :HTMLInputElement) => hexValue.update(input.value.substring(1))
+              clickTempInput("color", listener, "#" + hexValue.current, listener)
+            },
+          },
+        ],
       })
     },
     Vector3: (model, editable) => {
@@ -323,23 +344,12 @@ export namespace Property {
 
   type UrlSelector = (value :Mutable<string>) => void
   const defaultUrlSelector :UrlSelector = value => {
-    const input = document.createElement("input")
-    input.setAttribute("type", "file")
-    // We need to keep a reference to the input or everything might GC and we'll never get the
-    // change event. Holding onto it for 30s is hacky but should be enough for a user to select
-    // a file, and it seems to (in my browser) greatly increase the chances of success even
-    // over 30s.
-    const timeoutHandle = setTimeout(() => {
-      input.setAttribute("bogus", "bogus") // reference the input element
-    }, 30 * 1000)
-    input.addEventListener("change", event => {
-      clearTimeout(timeoutHandle)
+    clickTempInput("file", input => {
       if (!input.files || input.files.length === 0) return
       const url = URL.createObjectURL(input.files[0])
       value.update(url.toString())
       // TODO: call revokeObjectURL when finished
     })
-    input.click()
   }
   let urlSelector = defaultUrlSelector
 
@@ -347,6 +357,30 @@ export namespace Property {
     * @param selector the custom URL selector, or undefined to use the default. */
   export function setCustomUrlSelector (selector :UrlSelector|undefined) {
     urlSelector = selector || defaultUrlSelector
+  }
+
+  function clickTempInput (
+    type :string,
+    changeListener :(input :HTMLInputElement) => void,
+    value? :string,
+    inputListener? :(input :HTMLInputElement) => void,
+  ) {
+    const input = document.createElement("input")
+    input.setAttribute("type", type)
+    if (value) input.setAttribute("value", value)
+    // We need to keep a reference to the input or everything might GC and we'll never get the
+    // change event. Holding onto it for 30s is hacky but should be enough for a user to select
+    // a file, and it seems to (in my browser) greatly increase the chances of success even
+    // over 30s.
+    const timeoutHandle = setTimeout(() => {
+      input.setAttribute("bogus", "bogus") // reference the input element
+    }, 30 * 1000)
+    input.addEventListener("change", () => {
+      clearTimeout(timeoutHandle)
+      changeListener(input)
+    })
+    if (inputListener) input.addEventListener("input", () => inputListener(input))
+    input.click()
   }
 
   function truncateVec3 (vector :vec3, maxDecimals :number) :vec3 {

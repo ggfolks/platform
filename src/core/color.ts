@@ -111,9 +111,9 @@ export class Color extends Float32Array {
 
   /** Returns a hex string representing the provided color. */
   static toHex (c :Color) :string {
-    const r = Math.round(c[1] * 255).toString(16)
-    const g = Math.round(c[2] * 255).toString(16)
-    const b = Math.round(c[3] * 255).toString(16)
+    const r = Math.round(c[1] * 255).toString(16).toUpperCase()
+    const g = Math.round(c[2] * 255).toString(16).toUpperCase()
+    const b = Math.round(c[3] * 255).toString(16).toUpperCase()
     return (
       (r.length === 2 ? r : "0" + r) +
       (g.length === 2 ? g : "0" + g) +
@@ -129,6 +129,11 @@ export class Color extends Float32Array {
       parseInt(hex.substring(2, 4), 16) * scale,
       parseInt(hex.substring(4, 6), 16) * scale,
     )
+  }
+
+  /** Compares two colors for exact equality. */
+  static exactEquals (a :Color, b :Color) :boolean {
+    return a[0] === b[0] && a[1] === b[1] && a[2] === b[2] && a[3] === b[3]
   }
 
   /** Combines the `a` and `r` channels of this color into a 16-bit value `0xAR`. `A` is the `a`

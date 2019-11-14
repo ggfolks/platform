@@ -803,48 +803,21 @@ registerConfigurableType("component", ["render"], "camera", ThreeCamera)
 
 class ThreeLight extends ThreeObjectComponent implements Light {
   @property("LightType") lightType :LightType = "ambient"
+  @property("Color") color = Color.fromRGB(1, 1, 1)
 
-  private _color :Color
-  private _lightObject? :LightObject
-
-  @property("Color") get color () :Color { return this._color }
-  set color (color :Color) { Color.copy(this._color, color) }
-
-  constructor (
-    gameEngine :TypeScriptGameEngine,
-    supertype :string,
-    type :string,
-    gameObject :TypeScriptGameObject,
-  ) {
-    super(gameEngine, supertype, type, gameObject)
-
-    this._color = new Proxy(Color.fromRGB(1, 1, 1), {
-      set: (obj, prop, value) => {
-        obj[prop] = value
-        this._updateColor()
-        return true
-      },
-      get: (obj, prop) => {
-        return obj[prop]
-      },
-    })
-  }
+  get lightObject () :LightObject { return this.objectValue.current as LightObject }
 
   init () {
     super.init()
-    this._disposer.add(this.getProperty<LightType>("lightType").onValue(lightType => {
-      this.objectValue.update(
-        this._lightObject = (lightType === "ambient")
-          ? new AmbientLight()
-          : new DirectionalLight()
-      )
+    this.getProperty<LightType>("lightType").onValue(lightType => {
+      this.objectValue.update(lightType === "ambient" ? new AmbientLight() : new DirectionalLight())
       this._updateColor()
-      this._updateObjectTransform(this._lightObject)
-    }))
+    })
+    this.getProperty<Color>("color").onChange(() => this._updateColor())
   }
 
   private _updateColor () {
-    this._lightObject!.color.fromArray(this._color, 1)
+    this.lightObject.color.fromArray(this.color, 1)
   }
 }
 registerConfigurableType("component", ["render"], "light", ThreeLight)
