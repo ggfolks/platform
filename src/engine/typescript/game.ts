@@ -229,19 +229,6 @@ export class TypeScriptConfigurable implements Configurable {
     }
     return {value: undefined}
   }
-
-  protected _createProxy (object :object, onChange :(value :object) => void) {
-    new Proxy(object, {
-      set: (obj, prop, value) => {
-        obj[prop] = value
-        onChange(obj)
-        return true
-      },
-      get: (obj, prop) => {
-        return obj[prop]
-      },
-    })
-  }
 }
 
 function getPropertyValueName (property :string) :string {
