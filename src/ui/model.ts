@@ -8,7 +8,7 @@ export type Action = (...args :any) => void
 /** An action that carries its enabled state with it. */
 export class Command {
   static Noop = new Command(Noop, Value.true)
-  constructor (readonly action :Action, readonly enabled :Value<boolean>) {}
+  constructor (readonly action :Action, readonly enabled :Value<boolean> = Value.true) {}
 }
 
 /** An action that does nothing. */
