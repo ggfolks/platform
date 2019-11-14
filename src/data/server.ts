@@ -1,6 +1,7 @@
 import {PMap, Remover, log} from "../core/util"
 import {UUID, UUID0} from "../core/uuid"
 import {Path, PathMap} from "../core/path"
+import {mergeConfig} from "../core/config"
 import {Record} from "../core/data"
 import {Mutable, Value} from "../core/react"
 import {MutableMap, RMap} from "../core/rcollect"
@@ -223,11 +224,8 @@ export abstract class DataStore {
   abstract persistSync (obj :DObject, msg :SyncMsg) :void
 }
 
-export class MemoryDataStore extends DataStore {
-  private readonly tables = new PathMap<MutableMap<UUID, Record>>()
-
-  resolveData (res :Resolved, resolver? :Resolver) { res.resolvedData() }
-  persistSync (obj :DObject, msg :SyncMsg) {} // noop!
+export abstract class AbstractDataStore extends DataStore {
+  protected readonly tables = new PathMap<MutableMap<UUID, Record>>()
 
   createRecord (path :Path, key :UUID, data :Record) {
     const table = this.resolveTable(path)
@@ -239,6 +237,7 @@ export class MemoryDataStore extends DataStore {
     const table = this.resolveTable(path)
     if (!table.has(key)) log.warn(
       "updateRecord does not exist", "path", path, "key", key, "data", data)
+    else if (merge) table.update(key, prev => mergeConfig(prev!, data))
     else table.set(key, data)
   }
   deleteRecord (path :Path, key :UUID) {
@@ -265,11 +264,23 @@ export class MemoryDataStore extends DataStore {
     res.resolvedRecords()
   }
 
+  protected resolveTableData (path :Path, table :MutableMap<UUID, Record>) {}
+
   private resolveTable (path :Path) :MutableMap<UUID, Record> {
     let table = this.tables.get(path)
-    if (!table) this.tables.set(path, table = MutableMap.local<UUID, Record>())
+    if (!table) {
+      this.tables.set(path, table = MutableMap.local<UUID, Record>())
+      this.resolveTableData(path, table)
+    }
     return table
   }
+}
+
+/** A data store that maintains everything in memory. For testing. */
+export class MemoryDataStore extends AbstractDataStore {
+
+  resolveData (res :Resolved, resolver? :Resolver) { res.resolvedData() }
+  persistSync (obj :DObject, msg :SyncMsg) {} // noop!
 }
 
 /** Creates channel handlers for `DataStore` services using `store`. */
