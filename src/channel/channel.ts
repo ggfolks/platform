@@ -236,7 +236,8 @@ class ChannelImpl<M> implements Channel<M> {
     switch (this.state.current) {
     case "closed":
     case "failed":
-      throw new Error(`Cannot send on closed channel [channel=${this}]`)
+      log.warn("Cannot send on closed channel", "channel", this, "msg", msg)
+      break
     case "connecting":
       this.state.whenOnce(s => s === "open", _ => this.sendMsg(msg))
       break
