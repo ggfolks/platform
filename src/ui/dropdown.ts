@@ -91,6 +91,10 @@ export namespace Dropdown {
       return this._listRoot ? this._listRoot.host.current !== undefined : false
     }
 
+    get isOpenValue () :Value<boolean> {
+      return this.root.menuPopup.map(pop => pop === this._listRoot)
+    }
+
     setOpen (open :boolean) {
       const lroot = this._listRoot
       if (!lroot) return
@@ -138,6 +142,11 @@ export namespace Dropdown {
 
     constructor (ctx :Element.Context, parent :Element, readonly config :Config) {
       super(ctx, parent, config)
+
+      this.isOpenValue.onValue(open => {
+        if (open) this.root.targetElem.update(this)
+        else this.root.targetElem.updateIf(e => e === this, undefined)
+      })
     }
 
     get styleScope () { return StyleScope }
