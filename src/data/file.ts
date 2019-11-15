@@ -6,7 +6,7 @@ import {UUID} from "../core/uuid"
 import {Record} from "../core/data"
 import {MutableMap} from "../core/rcollect"
 import {Path, PathMap} from "../core/path"
-import {SyncSet, SyncMap, ValueType, setTextCodec} from "../core/codec"
+import {Encoder, Decoder, SyncSet, SyncMap, ValueType, setTextCodec} from "../core/codec"
 import {Timestamp, log} from "../core/util"
 import {MapMeta, isPersist} from "./meta"
 import {SyncMsg, ObjType} from "./protocol"
@@ -106,10 +106,16 @@ function applyData (obj :DObject, data :Record) {
 const pathToDir = (root :string, path :Path) => P.join(root, ...path)
 const pathToFile = (root :string, path :Path, file :string) => P.join(pathToDir(root, path), file)
 
-const readData = (file :string) => fs.promises.readFile(file, "utf8").then(
-  JSON.parse, err => err.code === "ENOENT" ? {} : Promise.reject(err))
+const readData = (file :string) => fs.promises.readFile(file).then(buffer => {
+  const dec = new Decoder(buffer)
+  return dec.getValue("record")
+}, err => err.code === "ENOENT" ? {} : Promise.reject(err))
 
-const writeData = (file :string, data :Record) => fs.promises.writeFile(file, JSON.stringify(data))
+const writeData = (file :string, data :Record) => {
+  const enc = new Encoder()
+  enc.addValue(data, "record")
+  return fs.promises.writeFile(file, enc.finish())
+}
 
 class Syncer {
   private needsFlush = false
@@ -172,7 +178,7 @@ export class FileDataStore extends AbstractDataStore {
   }
 
   async resolveData (res :Resolved, resolver? :Resolver) {
-    const file = pathToFile(this.rootDir, res.object.path, "data.json")
+    const file = pathToFile(this.rootDir, res.object.path, "data.bin")
     try {
       const data = await readData(file)
       const syncer = new Syncer(file, data)
@@ -201,7 +207,7 @@ export class FileDataStore extends AbstractDataStore {
     try {
       const keys = await fs.promises.readdir(dir)
       for (const key of keys) {
-        if (!key.endsWith(".json")) continue
+        if (!key.endsWith(".bin")) continue
         try {
           const data = await readData(P.join(dir, key))
           table.set(key.substring(0, key.length-5), data)
@@ -214,7 +220,7 @@ export class FileDataStore extends AbstractDataStore {
     }
 
     table.onChange(async (change) => {
-      const file = pathToFile(this.rootDir, path, `${change.key}.json`)
+      const file = pathToFile(this.rootDir, path, `${change.key}.bin`)
       switch (change.type) {
       case "set":
         if (DebugLog) log.info(
