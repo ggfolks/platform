@@ -7,6 +7,7 @@ import {Control, Element, PointerInteraction} from "./element"
 
 const transformedPos = vec2.create()
 const transformedRegion = rect.create()
+const transformedDirty = rect.create()
 const tmpsize = vec2.create(), tmpv = vec2.create(), tmpv2 = vec2.create()
 
 /** Base class for containers that transform their child. */
@@ -30,19 +31,22 @@ abstract class TransformedContainer extends Control {
     return intersects
   }
 
-  dirty (region :rect = this.renderBounds, fromChild = false) {
+  dirty (region :rect = this.renderBounds, fromChild? :Element) {
     // we might be called from our super constructor, at which time _offset is not yet initialized
     if (this._offset === undefined) return
     if (!fromChild) {
-      super.dirty(region, false)
+      super.dirty(region, fromChild)
       return
     }
     const {x, y, offset, scale} = this
-    transformedRegion[0] = Math.floor(x + scale * (region[0] - x) - offset[0])
-    transformedRegion[1] = Math.floor(y + scale * (region[1] - y) - offset[1])
-    transformedRegion[2] = Math.ceil(scale * region[2])
-    transformedRegion[3] = Math.ceil(scale * region[3])
-    super.dirty(transformedRegion, true)
+    // we use a special temp rect for transforming dirty regions because misbehaving elements can
+    // dirty themselves in the middle of rendering which would cause us to stomp on the transformed
+    // render region that we pass down to elements during rendering
+    transformedDirty[0] = Math.floor(x + scale * (region[0] - x) - offset[0])
+    transformedDirty[1] = Math.floor(y + scale * (region[1] - y) - offset[1])
+    transformedDirty[2] = Math.ceil(scale * region[2])
+    transformedDirty[3] = Math.ceil(scale * region[3])
+    if (this.intersectsRect(transformedDirty, true)) super.dirty(transformedDirty, fromChild)
   }
 
   handlePointerDown (event :MouseEvent|TouchEvent, pos :vec2, into :PointerInteraction[]) {

@@ -66,7 +66,6 @@ export function requireAncestor<P> (
 export abstract class Element implements Disposable {
   protected readonly _psize :dim2 = dim2.fromValues(-1, -1)
   protected readonly _valid = Mutable.local(false)
-  protected readonly _dirtyRegion = rect.create()
   protected readonly _configScope? :Element.StyleScope
   protected readonly disposer = new Disposer()
   protected _validating = false
@@ -176,10 +175,8 @@ export abstract class Element implements Disposable {
     }
   }
 
-  dirty (region :rect = this.renderBounds, fromChild = false) {
-    const dirty = this._dirtyRegion, odw = dirty[2], odh = dirty[3]
-    rect.union(dirty, dirty, region)
-    if (this.parent && (dirty[2] !== odw || dirty[3] !== odh)) this.parent.dirty(region, true)
+  dirty (region :rect = this.renderBounds, fromChild? :Element) {
+    if (this.parent) this.parent.dirty(region, fromChild || this)
   }
 
   validate () :boolean {
@@ -197,7 +194,6 @@ export abstract class Element implements Disposable {
 
   render (canvas :CanvasRenderingContext2D, region :rect) {
     if (this.intersectsRect(region, true)) this.rerender(canvas, region)
-    rect.zero(this._dirtyRegion)
   }
 
   /** Applies `op` to all children of this element (and recursively to their children). */
@@ -538,9 +534,11 @@ export class Root extends Element {
   private readonly _minSize :Value<dim2>
   private readonly _cursorOwners = new Map<Element, string>()
   private readonly _gestureHandlers :GestureHandler[] = []
+  private readonly _dirtyRegion = rect.create()
   private _elementsOver = new Set<Element>()
   private _lastElementsOver = new Set<Element>()
   private _activeTouchId :number|undefined = undefined
+  private _rendering = false
 
   readonly canvasElem :HTMLCanvasElement = document.createElement("canvas")
   readonly canvas :CanvasRenderingContext2D
@@ -736,6 +734,12 @@ export class Root extends Element {
   applyToChildren (op :Element.Op) { op(this.contents) }
   queryChildren<R> (query :Element.Query<R>) { return query(this.contents) }
 
+  dirty (region :rect = this.renderBounds, fromChild? :Element) {
+    if (this._rendering) log.warn(
+      "Ignoring request to dirty during render", "region", region, "child", fromChild)
+    else rect.union(this._dirtyRegion, this._dirtyRegion, region)
+  }
+
   update (clock :Clock) :boolean {
     this._clock.emit(clock)
     if (!this.valid.current && this.visible.current && this.config.autoSize) {
@@ -894,8 +898,11 @@ export class Root extends Element {
     canvas.beginPath()
     canvas.rect(region[0], region[1], region[2], region[3])
     canvas.clip()
+    this._rendering = true
     this.contents.render(canvas, region)
+    this._rendering = false
     canvas.restore()
+    rect.zero(this._dirtyRegion)
   }
 
   private get eventTarget () { return this.targetElem.current || this.contents }
