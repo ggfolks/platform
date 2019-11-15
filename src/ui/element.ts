@@ -902,7 +902,6 @@ export class Root extends Element {
     this.contents.render(canvas, region)
     this._rendering = false
     canvas.restore()
-    rect.zero(this._dirtyRegion)
   }
 
   private get eventTarget () { return this.targetElem.current || this.contents }
@@ -948,12 +947,12 @@ export class Root extends Element {
   }
 
   private _validateAndRender () {
-    const changed = this.validate() || !rect.isEmpty(this._dirtyRegion)
-    if (changed) {
-      this.render(this.canvas, this._dirtyRegion)
-      this.events.emit("rendered")
-    }
-    return changed
+    const dirty = this._dirtyRegion
+    if (!this.validate() && rect.isEmpty(dirty)) return false
+    this.render(this.canvas, dirty)
+    rect.zero(dirty)
+    this.events.emit("rendered")
+    return true
   }
 
   private _updateElementsOver (pos :vec2) {
