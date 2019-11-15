@@ -338,6 +338,10 @@ export abstract class Element implements Disposable {
       render ? this.renderBounds : this.hitBounds, region)
   }
 
+  protected posToScreen (pos :vec2) :vec2 {
+    return this.parent ? this.parent.posToScreen(pos) : pos
+  }
+
   protected canHandleEvent (event :Event, pos :vec2) :boolean {
     return this.visible.current && rect.contains(this.hitBounds, pos)
   }

@@ -96,6 +96,13 @@ abstract class TransformedContainer extends Control {
   protected get maxX () { return this.contents.width * this.scale - this.width }
   protected get maxY () { return this.contents.height * this.scale - this.height }
 
+  protected posToScreen (pos :vec2) :vec2 {
+    const {x, y, offset, scale} = this
+    const tx = (pos[0] - x) * scale + x - offset[0]
+    const ty = (pos[1] - y) * scale + y - offset[1]
+    return super.posToScreen(vec2.set(pos, tx, ty))
+  }
+
   protected _updateOffset (offset :vec2) {
     offset[0] = clamp(offset[0], 0, Math.max(this.maxX, 0))
     offset[1] = clamp(offset[1], 0, Math.max(this.maxY, 0))
