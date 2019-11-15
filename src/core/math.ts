@@ -142,12 +142,12 @@ export class rect extends Float32Array {
     return a[0] === b[0] && a[1] === b[1] && a[2] === b[2] && a[3] === b[3]
   }
 
-  static pos (r :rect) :vec2 {
-    return vec2.fromValues(r[0], r[1])
+  static pos (r :rect, into = vec2.create()) :vec2 {
+    return vec2.set(into, r[0], r[1])
   }
 
-  static size (r :rect) :dim2 {
-    return dim2.fromValues(r[2], r[3])
+  static size (r :rect, into = dim2.create()) :dim2 {
+    return dim2.set(into, r[2], r[3])
   }
 
   static contains (r :rect, pos :vec2) :boolean {
