@@ -208,7 +208,8 @@ export class Timestamp {
     return new Timestamp(this.millis + interval.millisPer * count)
   }
 
-  toString () { return new Date(this.millis).toLocaleString() }
+  toDate () :Date { return new Date(this.millis) }
+  toString () { return this.toDate().toLocaleString() }
 }
 
 // TODO: support some sentinel value that means "use a server timestamp when we decode"
