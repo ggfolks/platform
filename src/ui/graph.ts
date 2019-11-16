@@ -460,7 +460,7 @@ export class GraphView extends AbsGroup {
       this.invalidate()
     }))
 
-    const style = this.getStyle(this.config.style, this.state.current)
+    const styles = ctx.elem.resolveStyles(this, config.style), style = styles.current
     if (style.selectBackground) {
       this._selectBackground.observe(ctx.style.resolveBackground(style.selectBackground))
     }
@@ -947,8 +947,6 @@ export interface EdgeViewStyle extends EdgeStyle {
   cursor? :string
 }
 
-export const EdgeViewStyleScope = {id: "edgeView", states: ["normal", "hovered"]}
-
 const offsetFrom = vec2.create()
 const offsetTo = vec2.create()
 
@@ -962,6 +960,7 @@ const PICK_EXPANSION = 3
 const DEFAULT_CONTROL_POINT_OFFSET = 30
 
 export class EdgeView extends Element {
+  private readonly styles :Element.Styles<EdgeViewStyle>
   private _nodeId :Value<string>
   private _editable :Value<boolean>
   private _defaultOutputKey :Value<string>
@@ -980,6 +979,7 @@ export class EdgeView extends Element {
 
   constructor (ctx :Element.Context, parent :Element, readonly config :EdgeViewConfig) {
     super(ctx, parent, config)
+    this.styles = ctx.elem.resolveStyles(this, config.style)
     this._nodeId = ctx.model.resolve<Value<string>>("id")
     this._editable = ctx.model.resolve(this.config.editable)
     this._defaultOutputKey = ctx.model.resolve<Value<string>>("defaultOutputKey")
@@ -991,7 +991,7 @@ export class EdgeView extends Element {
       ))
     }))
     this.disposer.add(this.state.onValue(state => {
-      const style = this.style
+      const style = this.styles.forState(state)
       this._lineWidth.update(style.lineWidth === undefined ? 1 : style.lineWidth)
       this._controlPointOffset.update(
         style.controlPointOffset === undefined
@@ -1005,8 +1005,6 @@ export class EdgeView extends Element {
     }))
   }
 
-  get style () :EdgeViewStyle { return this.getStyle(this.config.style, this.state.current) }
-  get styleScope () { return EdgeViewStyleScope }
   get state () :Value<string> { return this._state }
 
   getDefaultOutputKey () {
@@ -1312,6 +1310,7 @@ const endpointBounds = rect.create()
 export class Terminal extends Element {
   readonly targeted = Mutable.local(false)
 
+  private readonly _styles :Element.Styles<TerminalStyle>
   private readonly _state = Mutable.local("normal")
   private readonly _hovered = Mutable.local(false)
   private readonly _name :Value<string>
@@ -1326,6 +1325,7 @@ export class Terminal extends Element {
 
   constructor (ctx :Element.Context, parent :Element, readonly config :TerminalConfig) {
     super(ctx, parent, config)
+    this._styles = ctx.elem.resolveStyles(this, config.style)
     this._name = ctx.model.resolve<Value<string>>("name")
     this._value = ctx.model.resolve(config.value)
     this._editable = ctx.model.resolve(config.editable)
@@ -1338,7 +1338,7 @@ export class Terminal extends Element {
     this.disposer.add(this._hovered.onValue(updateState))
     this.disposer.add(this.targeted.onValue(updateState))
     this.disposer.add(this.state.onValue(state => {
-      const style = this.getStyle(this.config.style, state)
+      const style = this._styles.forState(state)
       this._radius.update(style.radius === undefined ? 5 : style.radius)
       this._outlineWidth.update(style.outlineWidth === undefined ? 0 : style.outlineWidth)
       this._outlineAlpha.update(style.outlineAlpha === undefined ? 1 : style.outlineAlpha)
@@ -1347,30 +1347,29 @@ export class Terminal extends Element {
     }))
   }
 
-  get radius () { return this._radius.current }
-  get style () :TerminalStyle { return this.getStyle(this.config.style, this.state.current) }
   get styleScope () { return TerminalStyleScope }
+  get radius () { return this._radius.current }
   get state () :Value<string> { return this._state }
 
   get sign () {
     return this.config.direction === "input" ? -1 : 1
   }
   get edgeControlPointOffset () {
-    const style = this.style
+    const style = this._styles.current
     return style.edge && style.edge.controlPointOffset !== undefined
       ? style.edge.controlPointOffset
       : DEFAULT_CONTROL_POINT_OFFSET
   }
   get edgeLineWidth () {
-    const style = this.style
+    const style = this._styles.current
     return style.edge && style.edge.lineWidth !== undefined ? style.edge.lineWidth : 1
   }
   get edgeOutlineWidth () {
-    const style = this.style
+    const style = this._styles.current
     return style.edge && style.edge.outlineWidth !== undefined ? style.edge.outlineWidth : 0
   }
   get edgeOutlineAlpha () {
-    const style = this.style
+    const style = this._styles.current
     return style.edge && style.edge.outlineAlpha !== undefined ? style.edge.outlineAlpha : 1
   }
 
@@ -1458,7 +1457,7 @@ export class Terminal extends Element {
   protected expandBounds (hbounds: rect, rbounds :rect) {
     const bounds = this.bounds
     const radius = this._radius.current
-    const hoveredOutlineWidth = this.getStyle(this.config.style, "hovered").outlineWidth
+    const hoveredOutlineWidth = this._styles.forState("hovered").outlineWidth
     const outlineWidth = this._outlineWidth.current + getValue(hoveredOutlineWidth, 0) * 2
     const halfOutlineWidth = Math.round(outlineWidth/2)
     const radiusWidth = 2 * radius + outlineWidth

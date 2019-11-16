@@ -215,11 +215,6 @@ export namespace Dropdown {
 
   /** An item in a dropdown menu. */
   export class Item extends AbstractItem {
-
-    constructor (ctx :Element.Context, parent :Element, readonly config :ItemConfig) {
-      super(ctx, parent, config)
-    }
-
     get styleScope () { return ItemStyleScope }
   }
 

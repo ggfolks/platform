@@ -3,7 +3,7 @@ import {refEquals} from "../core/data"
 import {Noop, Remover, PMap, getValue} from "../core/util"
 import {Mutable, Subject, Value} from "../core/react"
 import {Control, Element, PointerInteraction} from "./element"
-import {Spec, FontConfig, Insets, Paint, PaintConfig, ShadowConfig, Span, EmptySpan} from "./style"
+import {Spec, FontConfig, Paint, PaintConfig, ShadowConfig, Span, EmptySpan} from "./style"
 import {Model, Action, NoopAction} from "./model"
 import {CtrlMask, MetaMask, Bindings} from "./keymap"
 import {CursorConfig, Cursor} from "./cursor"
@@ -44,17 +44,15 @@ export abstract class AbstractLabel extends Element {
     super(ctx, parent, config)
     this.text = this.resolveText(ctx, config)
     this.invalidateOnChange(this.selection)
-    const style = config.style
-    const fillS = this.resolveStyle(
-      style, s => s.fill, f => ctx.style.resolvePaintOpt(f), undefined)
-    const strokeS = this.resolveStyle(
-      style, s => s.stroke, s => ctx.style.resolvePaintOpt(s), undefined)
-    const fontS = this.mapStyle(style, s => s.font).map(f => ctx.style.resolveFontOpt(f))
-    const shadowS = this.mapStyle(style, s => s.shadow).map(s => ctx.style.resolveShadowOpt(s))
+    const styles = ctx.elem.resolveStyles(this, config.style)
+    const fillS = styles.resolve(s => s.fill, f => ctx.style.resolvePaintOpt(f), undefined)
+    const strokeS = styles.resolve(s => s.stroke, s => ctx.style.resolvePaintOpt(s), undefined)
+    const fontS = styles.map(s => s.font).map(f => ctx.style.resolveFontOpt(f))
+    const shadowS = styles.map(s => s.shadow).map(s => ctx.style.resolveShadowOpt(s))
     this.span.observe(Subject.join<any>(this.text, fillS, strokeS, fontS, shadowS).map(
       ([text, fill, stroke, font, shadow]) => new Span(text, font, fill, stroke, shadow)))
-    this.selFill.observe(this.resolveStyle(style, s => s.selection ? s.selection.fill : undefined,
-                                           f => ctx.style.resolvePaint(f), undefined))
+    this.selFill.observe(styles.resolve(s => s.selection ? s.selection.fill : undefined,
+                                        f => ctx.style.resolvePaint(f), undefined))
   }
 
   protected abstract resolveText (ctx :Element.Context, config :AbstractLabelConfig) :Value<string>
@@ -411,12 +409,7 @@ export abstract class AbstractText extends Control {
     // TODO: we should perhaps use the bounds of the box instead of the bounds of the text,
     // in case someone is doing something extra tricky...
     const box = this.findChild("box")
-    if (box) {
-      const bstyle = (box as Box).style
-      if (bstyle.padding) input.style.padding = Insets.toCSS(bstyle.padding)
-      if (bstyle.margin) input.style.margin = Insets.toCSS(bstyle.margin)
-      if (bstyle.halign) input.style.textAlign = bstyle.halign
-    }
+    if (box) (box as Box).syncStyle(input.style)
     this.label.span.current.syncStyle(input.style)
 
     const onInput = (event :Event) => this.textState.text.update(input.value)

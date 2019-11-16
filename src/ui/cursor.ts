@@ -17,16 +17,16 @@ export interface CursorConfig extends Element.Config {
 export const DefaultCursor :CursorConfig = {type: "cursor", style: {}}
 
 export class Cursor extends Element {
+  private readonly styles :Element.Styles<CursorStyle>
   private fill = this.observe(DefaultPaint)
 
   constructor (ctx :Element.Context, parent :Element, readonly config :CursorConfig) {
     super(ctx, parent, config)
-    this.fill.observe(this.resolveStyle(
-      config.style, s => s.fill, s => ctx.style.resolvePaint(s), DefaultPaint))
+    this.styles = ctx.elem.resolveStyles(this, config.style)
+    this.fill.observe(this.styles.resolve(s => s.fill, s => ctx.style.resolvePaint(s), DefaultPaint))
   }
 
-  get style () :CursorStyle { return this.getStyle(this.config.style, this.state.current) }
-  get lineWidth () :number { return this.style.width || 1 }
+  get lineWidth () :number { return this.styles.current.width || 1 }
 
   protected computePreferredSize (hintX :number, hintY :number, into :dim2) {} // not used
   protected relayout () {} // not used

@@ -9,7 +9,7 @@ import {BoxCatalog} from "./box"
 import {ButtonCatalog} from "./button"
 import {CursorCatalog} from "./cursor"
 import {Dropdown} from "./dropdown"
-import {GraphCatalog, TerminalStyleScope} from "./graph"
+import {GraphCatalog} from "./graph"
 import {GroupCatalog} from "./group"
 import {ImageCatalog} from "./image"
 import {List} from "./list"
@@ -84,7 +84,11 @@ export class UI {
   private resolvers = new Map<string,StyleResolver>()
   private readonly style :StyleContext
   private readonly elem :Element.Factory = {
-    create: (ctx, parent, config) => this.createElement(ctx, parent, config)
+    create: (ctx, parent, config) => this.createElement(ctx, parent, config),
+    resolveStyles: <S>(elem :Element, elemStyles :PMap<S>|undefined) :Element.Styles<S> => {
+      const styles = this.resolveStyles(elem.styleScope, elem.config.type, elemStyles as any)
+      return new Element.Styles(elem, styles as any)
+    }
   }
 
   constructor (private theme :Theme, defs :StyleDefs, image :ImageResolver) {
@@ -97,10 +101,8 @@ export class UI {
 
   createElement (ctx :Element.Context, parent :Element, config :Element.Config) :Element {
     try {
-      const scope = this.getElementScope(parent, config)
-      const rstyles = this.resolveStyles(scope, config.type, config.style as Record)
       const maker = catalog[config.type]
-      if (maker) return maker(ctx, parent, {...config, style: rstyles})
+      if (maker) return maker(ctx, parent, config)
       else throw new Error(`Unknown element type '${config.type}'.`)
 
     } catch (error) {
@@ -114,20 +116,9 @@ export class UI {
     }
   }
 
-  getElementScope (parent :Element, config :Element.Config) :Element.StyleScope {
-    switch (config.type) {
-      case "terminal": return TerminalStyleScope
-      default:
-        return config.scopeId
-          ? {id: config.scopeId, states: parent.styleScope.states}
-          : parent.styleScope
-    }
-  }
-
   resolveStyles (scope :Element.StyleScope, type :string, elemStyles :Record|undefined) :Record {
     const protoStyles = this.getStyleResolver(scope).resolveStyles(type)
-    return elemStyles ? makeConfig([processStyles(elemStyles, scope.states), protoStyles]) :
-      protoStyles
+    return elemStyles ? makeConfig([processStyles(elemStyles, scope.states), protoStyles]) : protoStyles
   }
 
   private getStyleResolver (scope :Element.StyleScope) :StyleResolver {

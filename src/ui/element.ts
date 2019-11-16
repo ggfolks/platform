@@ -66,7 +66,7 @@ export function requireAncestor<P> (
 export abstract class Element implements Disposable {
   protected readonly _psize :dim2 = dim2.fromValues(-1, -1)
   protected readonly _valid = Mutable.local(false)
-  protected readonly _configScope? :Element.StyleScope
+  protected readonly _styleScope? :Element.StyleScope
   protected readonly disposer = new Disposer()
   protected _validating = false
 
@@ -91,7 +91,10 @@ export abstract class Element implements Disposable {
 
   constructor (ctx :Element.Context, parent :Element|undefined, config :Element.Config) {
     this.parent = parent
-    if (config.scopeId) this._configScope = {id: config.scopeId, states: Root.States}
+    if (config.scopeId) this._styleScope = {
+      id: config.scopeId,
+      states: parent ? parent.styleScope.states : Root.States
+    }
     // base visibility on model value: if spec is omitted, always assume true;
     // if spec is given as a path with missing model elements, always return false
     this.visible = ctx.model.resolve(config.visible, config.visible ? Value.false : Value.true)
@@ -105,7 +108,7 @@ export abstract class Element implements Disposable {
   get height () :number { return this.bounds[3] }
 
   abstract get config () :Element.Config
-  get styleScope () :Element.StyleScope { return this._configScope || this.requireParent.styleScope }
+  get styleScope () :Element.StyleScope { return this._styleScope || this.requireParent.styleScope }
   get root () :Root { return this.requireParent.root }
   get valid () :Value<boolean> { return this._valid }
   get validating () :boolean { return this._validating }
@@ -306,23 +309,6 @@ export abstract class Element implements Disposable {
     return `${this.constructor.name}@${this.bounds}`
   }
 
-  protected mapStyle<S, C> (style :PMap<S>, fn :(style :S) => C|undefined) :Value<C|undefined> {
-    return this.state.map(state => fn(this.getStyle(style, state)), styleEquals)
-  }
-
-  protected resolveStyle<S, C, T> (style :PMap<S>, fn :(style :S) => C|undefined,
-                                   resolve :(config :C) => Subject<T>, defval :T) :Subject<T> {
-    return this.mapStyle(style, fn).toSubject().switchMap(
-      config => config ? resolve(config) : Subject.constant(defval))
-  }
-
-  protected getStyle<S> (styles :PMap<S>, state :string) :S {
-    const style = styles[state]
-    if (style) return style
-    log.warn(`Missing styles for state '${state}'`, "elem", this)
-    return {} as S
-  }
-
   /** Returns true if this element is visible and its hit bounds contain `pos`. */
   protected containsPos (pos :vec2) {
     return this.visible.current && rect.contains(this.hitBounds, pos)
@@ -405,6 +391,30 @@ export namespace Element {
     states :string[]
   }
 
+  /** Resolved styles for an element. These combine the base styles for the element from the theme
+    * (accounting for a custom scope id provided to the element) with any custom styles provided in
+    * the element's configuration. */
+  export class Styles<S> {
+    constructor (readonly elem :Element, readonly styles :PMap<S>) {}
+
+    get current () :S { return this.forState(this.elem.state.current) }
+
+    forState (state :string) :S {
+      const style = this.styles[state]
+      if (style) return style
+      log.warn(`Missing styles for state '${state}'`, "elem", this.elem)
+      return {} as S
+    }
+
+    map<C> (fn :(style :S) => C|undefined) :Value<C|undefined> {
+      return this.elem.state.map(state => fn(this.forState(state)), styleEquals)
+    }
+
+    resolve<C, T> (fn :(s:S) => C|undefined, resolve :(c:C) => Subject<T>, defval :T) :Subject<T> {
+      return this.map(fn).toSubject().switchMap(cfg => cfg ? resolve(cfg) : Subject.constant(defval))
+    }
+  }
+
   /** Applies an operation to an element. */
   export type Op = (elem :Element) => void
 
@@ -414,9 +424,10 @@ export namespace Element {
   /** Creates an element given a context, parent and config. */
   export type Maker = (ctx :Context, parent :Element, config :Config) => Element
 
-  /** Handles creating elements from a configuration. */
+  /** Handles creating elements and resolving style configuration. */
   export interface Factory {
     create :Maker
+    resolveStyles<S> (elem :Element, styles :PMap<S>) :Styles<S>
   }
 
   /** A catalog of element makers: modules which define elements export a catalog. */
@@ -448,7 +459,8 @@ export namespace Element {
           const rewrite = rewrites[config.type]
           const rconfig = rewrite ? Object.assign(Object.assign({}, config), rewrite) : config
           return this.elem.create(ctx, parent, rconfig)
-        }
+        },
+        resolveStyles: this.elem.resolveStyles
       })
     }
   }
@@ -1059,7 +1071,7 @@ export class Control extends Element {
     if (enabled !== Value.true) this.disposer.add(enabled.onValue(this._updateState))
     this.hovered.onValue(this._updateState)
     this.focused.onValue(this._updateState)
-    this.contents = ctx.elem.create(ctx, this, this.config.contents)
+    this.contents = ctx.elem.create(ctx, this, config.contents)
   }
 
   get styleScope () :Element.StyleScope { return {id: "control", states: Control.States} }

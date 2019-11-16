@@ -51,6 +51,7 @@ export interface BoxConfig extends Element.Config {
 
 /** Displays a single child with an optional background, padding, margin, and alignment. */
 export class Box extends Element {
+  private readonly styles :Element.Styles<BoxStyle>
   private background = this.observe(Decoration.Noop)
   private border = this.observe(Decoration.Noop)
   readonly contents :Element
@@ -58,26 +59,25 @@ export class Box extends Element {
 
   constructor (ctx :Element.Context, parent :Element, readonly config :BoxConfig) {
     super(ctx, parent, config)
+    const styles = this.styles = ctx.elem.resolveStyles(this, config.style)
     this.contents = ctx.elem.create(ctx, this, config.contents)
-    this.background.observe(this.resolveStyle(
-      config.style, s => s.background, bg => ctx.style.resolveBackground(bg), Decoration.Noop))
-    this.border.observe(this.resolveStyle(
-      config.style, s => s.border, border => ctx.style.resolveBorder(border), Decoration.Noop))
+    this.background.observe(styles.resolve(
+      s => s.background, bg => ctx.style.resolveBackground(bg), Decoration.Noop))
+    this.border.observe(styles.resolve(
+      s => s.border, border => ctx.style.resolveBorder(border), Decoration.Noop))
     this.disposer.add(this.state.onValue(state => {
-      const style = this.getStyle(this.config.style, state)
+      const style = styles.forState(state)
       if (this._hovered.current) {
         if (style.cursor) this.setCursor(this, style.cursor)
         else this.clearCursor(this)
       }
     }))
     this.disposer.add(this._hovered.onChange(hovered => {
-      const style = this.style
+      const style = this.styles.current
       if (hovered && style.cursor) this.setCursor(this, style.cursor)
       else this.clearCursor(this)
     }))
   }
-
-  get style () :BoxStyle { return this.getStyle(this.config.style, this.state.current) }
 
   applyToChildren (op :Element.Op) { op(this.contents) }
   queryChildren<R> (query :Element.Query<R>) { return query(this.contents) }
@@ -90,8 +90,15 @@ export class Box extends Element {
   handleMouseEnter (pos :vec2) { this._hovered.update(true) }
   handleMouseLeave (pos :vec2) { this._hovered.update(false) }
 
+  syncStyle (css :CSSStyleDeclaration) {
+    const style = this.styles.current
+    if (style.padding) css.padding = Insets.toCSS(style.padding)
+    if (style.margin) css.margin = Insets.toCSS(style.margin)
+    if (style.halign) css.textAlign = style.halign
+  }
+
   private computeInnerBounds (into :rect) :rect {
-    const {padding, margin} = this.style
+    const {padding, margin} = this.styles.current
     rect.copy(into, this.bounds)
     if (padding) Insets.rect(padding, into, into)
     if (margin) Insets.rect(margin, into, into)
@@ -99,7 +106,7 @@ export class Box extends Element {
   }
 
   protected computePreferredSize (hintX :number, hintY :number, into :dim2) {
-    const {padding, margin, minWidth, minHeight, preferredWidth, preferredHeight} = this.style
+    const {padding, margin, minWidth, minHeight, preferredWidth, preferredHeight} = this.styles.current
     const edgeWidth = Insets.width(padding || 0) + Insets.width(margin || 0)
     const edgeHeight = Insets.height(padding || 0) + Insets.height(margin || 0)
     const psize = this.contents.preferredSize(hintX-edgeWidth, hintY-edgeHeight)
@@ -111,8 +118,8 @@ export class Box extends Element {
   }
 
   protected relayout () {
-    const halign = this.style.halign || "center"
-    const valign = this.style.valign || "center"
+    const halign = this.styles.current.halign || "center"
+    const valign = this.styles.current.valign || "center"
     const inbounds = this.computeInnerBounds(tmpr)
     const bx = inbounds[0], by = inbounds[1], bwidth = inbounds[2], bheight = inbounds[3]
     const psize = this.contents.preferredSize(bwidth, bheight)
@@ -128,7 +135,7 @@ export class Box extends Element {
   }
 
   protected rerender (canvas :CanvasRenderingContext2D, region :rect) {
-    const {margin, alpha} = this.style
+    const {margin, alpha} = this.styles.current
     const inbounds = margin ? Insets.rect(margin, this.bounds, tmpr) : this.bounds
     if (alpha !== undefined) canvas.globalAlpha = alpha
     // TODO: should we just do all element rendering translated to the element's origin
