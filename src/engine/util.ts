@@ -269,6 +269,8 @@ export abstract class JavaScript {
     * @param js the JavaScript string to parse.
     * @return the parsed value. */
   static parse (js :string) :any {
+    // make sure the types we use are in global scope
+    window["Color"] = Color
     return eval(js)
   }
 

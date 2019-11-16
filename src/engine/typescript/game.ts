@@ -1,4 +1,4 @@
-import {loadImage} from "../../core/assets"
+import {getAbsoluteUrl, loadImage} from "../../core/assets"
 import {Clock} from "../../core/clock"
 import {Color} from "../../core/color"
 import {refEquals} from "../../core/data"
@@ -19,7 +19,7 @@ import {HTMLHost} from "../../ui/element"
 import {registerUINodes} from "../../ui/node"
 import {DefaultStyles, DefaultTheme} from "../../ui/theme"
 import {
-  ALL_LAYERS_MASK, DEFAULT_LAYER, DEFAULT_PAGE, Component, ComponentConstructor, Configurable,
+  ALL_LAYERS_MASK, DEFAULT_LAYER_FLAG, DEFAULT_PAGE, Component, ComponentConstructor, Configurable,
   ConfigurableConfig, CoordinateFrame, Coroutine, Cube, Cylinder, GameContext, GameEngine,
   GameObject, GameObjectConfig, Graph, Mesh, MeshFilter, Page, PrimitiveType, Quad, SpaceConfig,
   Sphere, Time, Transform,
@@ -360,6 +360,14 @@ export class TypeScriptGameEngine implements GameEngine {
     return this.createGameObject(type, mergedConfig)
   }
 
+  async loadSpace (url :string, layerMask? :number) :Promise<void> {
+    this.disposeGameObjects(layerMask)
+    const response = await fetch(getAbsoluteUrl(url))
+    if (!response.ok) throw new Error(response.statusText)
+    const contents = await response.text()
+    this.createGameObjects(JavaScript.parse(contents))
+  }
+
   createGameObjects (configs :SpaceConfig) :void {
     for (const name in configs) this.createGameObject(name, configs[name])
   }
@@ -368,10 +376,16 @@ export class TypeScriptGameEngine implements GameEngine {
     return new TypeScriptGameObject(this, getValue(name, "object"), config || {})
   }
 
+  disposeGameObjects (layerMask :number = ALL_LAYERS_MASK) :void {
+    for (const gameObject of this.gameObjects.values()) {
+      if (gameObject.layerFlags & layerMask) gameObject.dispose()
+    }
+  }
+
   createConfig (layerMask :number = ALL_LAYERS_MASK) :SpaceConfig {
     const config :SpaceConfig = {}
     for (const [id, gameObject] of this.gameObjects) {
-      if ((1 << gameObject.layer) & layerMask) config[id] = gameObject.createConfig()
+      if (gameObject.layerFlags & layerMask) config[id] = gameObject.createConfig()
     }
     return config
   }
@@ -470,7 +484,7 @@ type MessageHandler = (...args :any[]) => void
 
 export class TypeScriptGameObject implements GameObject {
   readonly id :string
-  readonly layerValue = Mutable.local(DEFAULT_LAYER)
+  readonly layerFlagsValue = Mutable.local(DEFAULT_LAYER_FLAG)
   readonly nameValue :Mutable<string>
   readonly orderValue = Mutable.local(0)
   readonly activeSelfValue = Mutable.local(false)
@@ -482,8 +496,8 @@ export class TypeScriptGameObject implements GameObject {
   private readonly _components = MutableMap.local<string, Component>()
   private readonly _messageHandlers = new Map<string, MessageHandler[]>()
 
-  get layer () :number { return this.layerValue.current }
-  set layer (layer :number) { this.layerValue.update(layer) }
+  get layerFlags () :number { return this.layerFlagsValue.current }
+  set layerFlags (flags :number) { this.layerFlagsValue.update(flags) }
 
   get name () :string { return this.nameValue.current }
   set name (name :string) { this.nameValue.update(name) }
@@ -643,7 +657,7 @@ export class TypeScriptGameObject implements GameObject {
   getProperty<T> (name :string, overrideDefault? :any) :Value<T>|Mutable<T> {
     switch (name) {
       case "id": return Value.constant(this.id) as unknown as Value<T>
-      case "layer": return this.layerValue as unknown as Value<T>
+      case "layerFlags": return this.layerFlagsValue as unknown as Value<T>
       case "name": return this.nameValue as unknown as Value<T>
       case "order": return this.orderValue as unknown as Value<T>
       case "activeSelf": return this.activeSelfValue as unknown as Value<T>
@@ -653,7 +667,7 @@ export class TypeScriptGameObject implements GameObject {
 
   createConfig () :GameObjectConfig {
     const config :GameObjectConfig = {}
-    if (this.layer !== DEFAULT_LAYER) config.layer = this.layer
+    if (this.layerFlags !== DEFAULT_LAYER_FLAG) config.layerFlags = this.layerFlags
     if (this.name !== this.id) config.name = this.name
     if (this.order !== 0) config.order = this.order
     for (const type of this._componentTypes.current) {

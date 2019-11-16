@@ -1,19 +1,20 @@
 import {
   AnimationClip, AnimationMixer, AmbientLight, BackSide, BoxBufferGeometry, BufferGeometry,
-  CylinderBufferGeometry, DefaultLoadingManager, DirectionalLight, DoubleSide, FrontSide,
-  Intersection, Light as LightObject, LoopOnce, LoopRepeat, LoopPingPong,
+  CylinderBufferGeometry, DefaultLoadingManager, DirectionalLight, DoubleSide, FileLoader,
+  FrontSide, Intersection, Light as LightObject, LoopOnce, LoopRepeat, LoopPingPong,
   Material as MaterialObject, Mesh, MeshBasicMaterial, MeshStandardMaterial, Object3D,
   OrthographicCamera, PerspectiveCamera, PlaneBufferGeometry, Raycaster, Scene, ShaderMaterial,
   SphereBufferGeometry, Vector2, Vector3, WebGLRenderer,
 } from "three"
 import {SkeletonUtils} from "three/examples/jsm/utils/SkeletonUtils"
+import {getAbsoluteUrl} from "../../../core/assets"
 import {Clock} from "../../../core/clock"
 import {Color} from "../../../core/color"
 import {refEquals} from "../../../core/data"
 import {Plane, Ray, dim2, rect, vec2, vec3} from "../../../core/math"
 import {Mutable, Subject, Value} from "../../../core/react"
 import {MutableMap, RMap} from "../../../core/rcollect"
-import {Disposer, NoopRemover, Remover} from "../../../core/util"
+import {Disposer, Noop, NoopRemover, Remover} from "../../../core/util"
 import {Graph, GraphConfig} from "../../../graph/graph"
 import {PropertyMeta, setEnumMeta} from "../../../graph/meta"
 import {loadGLTF, loadGLTFAnimationClip} from "../../../scene3/entity"
@@ -25,6 +26,7 @@ import {
   Camera, Light, LightType, LightTypes, Material, MaterialSide, MaterialSides, MeshRenderer,
   Model, RaycastHit, RenderEngine,
 } from "../../render"
+import {JavaScript} from "../../util"
 import {
   TypeScriptComponent, TypeScriptConfigurable, TypeScriptCube, TypeScriptCylinder,
   TypeScriptGameEngine, TypeScriptGameObject, TypeScriptMesh, TypeScriptMeshFilter, TypeScriptPage,
@@ -73,6 +75,16 @@ export class ThreeRenderEngine implements RenderEngine {
 
   constructor (readonly gameEngine :TypeScriptGameEngine) {
     gameEngine._renderEngine = this
+
+    // replace loadSpace with a version that uses LoadingManager
+    gameEngine.loadSpace = async function (url :string, layerMask? :number) :Promise<void> {
+      this.disposeGameObjects(layerMask)
+      const contents :string|ArrayBuffer = await new Promise((resolve, reject) => {
+        const loader = new FileLoader()
+        loader.load(getAbsoluteUrl(url), resolve, Noop, reject)
+      })
+      this.createGameObjects(JavaScript.parse(contents as string))
+    }
 
     this._disposer.add(this.renderer)
     this._disposer.add(this.scene)

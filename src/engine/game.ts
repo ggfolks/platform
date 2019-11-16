@@ -70,11 +70,8 @@ export interface GameContext extends UINodeContext, InputNodeContext {
 /** The id of the default page. */
 export const DEFAULT_PAGE = "default"
 
-/** The default object layer. */
-export const DEFAULT_LAYER = 0
-
-/** The editor object layer. */
-export const EDITOR_LAYER = 1
+/** The default object layer flag. */
+export const DEFAULT_LAYER_FLAG = (1 << 0)
 
 /** A mask that matches all layers. */
 export const ALL_LAYERS_MASK = ~0
@@ -142,6 +139,14 @@ export interface GameEngine extends Disposable {
     * @param [config] additional configuration to merge in. */
   createPrimitive (type :PrimitiveType, config? :GameObjectConfig) :GameObject
 
+  /** Loads the space at the specified URL, replacing all current game objects.
+    * @param url the url of the space to load.
+    * @param [layerMask=ALL_LAYERS_MASK] the layer mask to use to determine which objects to
+    * replace.
+    * @return a promise that will resolve when the space is loaded.  Note that this doesn't mean
+    * all resources (models, etc.) referenced by the space have loaded. */
+  loadSpace (url :string, layerMask? :number) :Promise<void>
+
   /** Creates a set of game objects on the current page.
     * @param configs the map from name to config. */
   createGameObjects (configs :SpaceConfig) :void
@@ -150,6 +155,10 @@ export interface GameEngine extends Disposable {
     * @param [name] the name of the object.
     * @param [config] the configuration of the object's components. */
   createGameObject (name? :string, config? :GameObjectConfig) :GameObject
+
+  /** Disposes of all game objects matching the given layers.
+    *  @param [layerMask=ALL_LAYERS_MASK] the layer mask to use to filter objects. */
+  disposeGameObjects (layerMask? :number) :void
 
   /** Returns the configuration of the entire space as a new object.
     * @param [layerMask=ALL_LAYERS_MASK] the layer mask to use to filter objects. */
@@ -171,8 +180,8 @@ export interface GameObject extends Disposable {
   /** The game object's unique id. */
   readonly id :string
 
-  /** The game object's layer. */
-  layer :number
+  /** The game object's layer flags. */
+  layerFlags :number
 
   /** The game object's name. */
   name :string
