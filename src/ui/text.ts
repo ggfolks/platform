@@ -1,6 +1,6 @@
 import {dim2, vec2, rect} from "../core/math"
 import {refEquals} from "../core/data"
-import {Noop, Remover, PMap, getValue} from "../core/util"
+import {Noop, NoopRemover, Remover, PMap, getValue, log} from "../core/util"
 import {Mutable, Subject, Value} from "../core/react"
 import {Control, Element, PointerInteraction} from "./element"
 import {Spec, FontConfig, Paint, PaintConfig, ShadowConfig, Span, EmptySpan} from "./style"
@@ -282,6 +282,7 @@ export abstract class AbstractText extends Control {
   private readonly jiggle = Mutable.local(false)
   private readonly textState :TextState
   private readonly _onEnter :Action
+  private _clearOverlay = NoopRemover
   readonly coffset = Mutable.local(0)
   readonly label :Label
   readonly cursor :Cursor
@@ -380,11 +381,12 @@ export abstract class AbstractText extends Control {
     const typed = isPrintable ? (supportsChar ? event.char : event.key) : ""
     const binding = textBindings.getBinding(event)
     const action = textBindings.model.resolveAction<TextAction>(binding)
+    const isCtrlOrMeta = event.ctrlKey || event.metaKey
     if (action) {
       action(this.textState, typed)
-    } else if (isPrintable) {
+    } else if (isPrintable && !isCtrlOrMeta) {
       textActions.insert(this.textState, typed)
-    } else if (event.code === "Enter") {
+    } else if (event.code === "Enter" && !isCtrlOrMeta) {
       this.onEnter()
     } else {
       return false
@@ -394,9 +396,19 @@ export abstract class AbstractText extends Control {
     return true
   }
 
-  configInput (input :HTMLInputElement) :Remover {
+  handleFocus (focused :boolean) {
+    super.handleFocus(focused)
+    this._clearOverlay()
+    if (!focused) return
+    const host = this.root.host.current
+    if (!host) return
+    const text = host.showTextOverlay()
+    if (!text) return
+    this._clearOverlay = this.configInput(text)
+  }
+
+  protected configInput (input :HTMLInputElement) :Remover {
     const root = this.root, ibounds = this.bounds
-    if (this.config.inputMode) input.setAttribute("inputmode", this.config.inputMode)
     const unsizer = this.valid.when(v => v, v => {
       const fx = root.origin.current[0] + ibounds[0], fy = root.origin.current[1] + ibounds[1]
       input.style.left = `${fx}px`
@@ -425,7 +437,14 @@ export abstract class AbstractText extends Control {
     const cpos = this.coffset.current
     input.setSelectionRange(cpos, cpos)
 
+    if (this.config.inputMode) input.setAttribute("inputmode", this.config.inputMode)
+
+    input.style.zIndex = `${root.zIndex+1}`
+    input.focus() // for mobile (has to happen while handling touch event)
+    setTimeout(() => input.focus(), 1) // for desktop (fails if done immediately, yay!)
+
     return () => {
+      input.parentNode && input.parentNode.removeChild(input)
       input.removeAttribute("inputmode")
       input.removeEventListener("input", onInput)
       input.removeEventListener("keypress", onPress)

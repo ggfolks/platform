@@ -1234,6 +1234,10 @@ export class Host implements Disposable {
     }
   }
 
+  /** If this thos supports an HTML input element used to overlay text fields to allow them to work
+    * on mobile, adds that element to the DOM and returns it. Returns `undefined` otherwise. */
+  showTextOverlay () :HTMLInputElement|undefined { return undefined }
+
   dispatchEvent (event :UIEvent, op :(r:Root) => void) {
     this._dispatching = true
     try {
@@ -1312,7 +1316,6 @@ export class Host implements Disposable {
 /** A host that simply appends canvases to an HTML element (which should be positioned). */
 export class HTMLHost extends Host {
   private readonly _textOverlay :HTMLInputElement
-  private _clearText = NoopRemover
 
   constructor (elem :HTMLElement) {
     super(elem)
@@ -1343,27 +1346,12 @@ export class HTMLHost extends Host {
         })
       }
     })
+  }
 
-    const clearText = () => {
-      const text = this._textOverlay
-      text.setSelectionRange(0, 0)
-      if (text.parentNode) {
-        this.elem.removeChild(text)
-        this._clearText()
-        this._clearText = NoopRemover
-      }
-    }
-    this.focus.onValue(focus => {
-      const text = this._textOverlay
-      if (focus && (focus as any).configInput) {
-        this._clearText()
-        this._clearText = (focus as any).configInput(text) // avoid importing Text here
-        text.style.zIndex = `${focus.root.zIndex+1}`
-        this.elem.appendChild(text)
-        text.focus() // for mobile (has to happen while handling touch event)
-        setTimeout(() => text.focus(), 1) // for desktop (fails if done immediately, yay!)
-      } else clearText()
-    });
+  showTextOverlay () :HTMLInputElement|undefined {
+    const text = this._textOverlay
+    this.elem.appendChild(text)
+    return text
   }
 
   handleKeyEvent (event :KeyboardEvent) {
