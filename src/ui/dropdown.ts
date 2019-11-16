@@ -3,7 +3,7 @@ import {Noop} from "../core/util"
 import {Mutable, Value} from "../core/react"
 import {AbstractButton, ButtonStates} from "./button"
 import {VGroup} from "./group"
-import {List, List as ListX} from "./list"
+import {List, List as ListX, ElementConfigMaker} from "./list"
 import {Control, Element, Root} from "./element"
 import {Action, ModelKey, ElementsModel, Spec} from "./model"
 
@@ -153,31 +153,28 @@ export namespace Dropdown {
     get styleScope () { return StyleScope }
   }
 
+  export class Separator extends Element {
+
+    constructor (ctx :Element.Context, parent :Element, readonly config :Element.Config) {
+      super(ctx, parent, config)
+    }
+
+    protected computePreferredSize (hintX :number, hintY :number, into :dim2) { dim2.set(into, 1, 1) }
+    protected relayout () {}
+    protected rerender (canvas :CanvasRenderingContext2D, region :rect) {}
+  }
+
   /** Base configuration for dropdown and menu items. */
   export interface AbstractItemConfig extends AbstractConfig {
     action? :Spec<Action>
-    separator? :Spec<Value<boolean>>
   }
 
   /** Base class for dropdown and menu items. */
   export class AbstractItem extends Abstract {
-    private readonly _separator :Value<boolean>
     protected _action? :Action
 
     constructor (ctx :Element.Context, parent :Element, readonly config :AbstractItemConfig) {
-      super(
-        ctx,
-        parent,
-        {
-          ...config,
-          enabled: Value.join(
-            ctx.model.resolve(config.enabled, Value.true),
-            ctx.model.resolve(config.separator, Value.false),
-          ).map(([enabled, separator]) => enabled && !separator),
-        },
-      )
-      this._separator = ctx.model.resolve(config.separator, Value.false)
-      this.recomputeStateOnChange(this._separator)
+      super(ctx, parent, config)
       this._action = ctx.model.resolveActionOpt(config.action)
     }
 
@@ -185,17 +182,8 @@ export namespace Dropdown {
       return (config as AbstractItemConfig).action
     }
 
-    protected get computeState () {
-      return this._separator && this._separator.current ? "separator" : super.computeState
-    }
-
     protected get _dropDirection () :Direction {
       return this.config.dropLeft ? "left" : "right"
-    }
-
-    protected computePreferredSize (hintX :number, hintY :number, into :dim2) {
-      if (this._separator.current) dim2.set(into, 1, 1)
-      else super.computePreferredSize(hintX, hintY, into)
     }
 
     protected onClick () {
@@ -211,7 +199,7 @@ export namespace Dropdown {
     type :"dropdownItem"
   }
 
-  const ItemStyleScope = {id: "dropdownItem", states: [...ButtonStates, "separator"]}
+  const ItemStyleScope = {id: "dropdownItem", states: ButtonStates}
 
   /** An item in a dropdown menu. */
   export class Item extends AbstractItem {
@@ -224,49 +212,38 @@ export namespace Dropdown {
     * @param [dropLeft=false] if true, drop left rather than right.
     * @param [scopeId] a replacement scope id to use. */
   export function createItemConfig (
-    maxDepth :number,
     type = "dropdownItem",
     dropLeft = false,
     scopeId? :string,
     checkable = false,
-  ) :AbstractItemConfig {
-    let element :AbstractItemConfig = {
-      type,
-      dropLeft,
-      contents: {
-        type: "box",
-        scopeId,
-        contents: {type: "label", text: "name"},
-        style: {halign: "left"},
-      },
-      enabled: "enabled",
-      action: "action",
-      style: {},
-    }
-    const toggle = (type === "menuItem") ? [
-      {
-        type: "box",
-        scopeId: "menuItemCheckBoxContainer",
-        contents: {
-          type: "toggle",
-          visible: "checkable",
-          checked: "checked",
-          onClick: "action",
+  ) :ElementConfigMaker {
+    return (model, key) => {
+      if (typeof key === "string" && key.startsWith("separator")) return {type: "separator"}
+
+      const toggle = (type === "menuItem") ? [
+        {
+          type: "box",
+          scopeId: "menuItemCheckBoxContainer",
           contents: {
-            type: "box",
-            scopeId: "menuItemCheckBox",
-            contents: {type: "label", text: Value.constant(" ")},
-          },
-          checkedContents: {
-            type: "box",
-            scopeId: "menuItemCheckBoxChecked",
-            contents: {type: "label", text: Value.constant("✔︎")},
+            type: "toggle",
+            visible: "checkable",
+            checked: "checked",
+            onClick: "action",
+            contents: {
+              type: "box",
+              scopeId: "menuItemCheckBox",
+              contents: {type: "label", text: Value.constant(" ")},
+            },
+            checkedContents: {
+              type: "box",
+              scopeId: "menuItemCheckBoxChecked",
+              contents: {type: "label", text: Value.constant("✔︎")},
+            },
           },
         },
-      },
-    ] : []
-    for (; maxDepth > 0; maxDepth--) {
-      element = {
+      ] : []
+
+      return {
         type,
         dropLeft,
         contents: {
@@ -291,20 +268,19 @@ export namespace Dropdown {
           },
           style: {halign: "stretch"},
         },
-        element,
+        element: createItemConfig(type, dropLeft, scopeId, checkable),
         model: "model",
         enabled: "enabled",
         action: "action",
-        separator: "separator",
         style: {},
       }
     }
-    return element
   }
 
   export const Catalog :Element.Catalog = {
-    "dropdown": (ctx, parent, rconfig) => new Dropdown(ctx, parent, rconfig as Config),
-    "dropdownList": (ctx, parent, rconfig) => new List(ctx, parent, rconfig as ListConfig),
-    "dropdownItem": (ctx, parent, rconfig) => new Item(ctx, parent, rconfig as ItemConfig),
+    "dropdown": (ctx, parent, config) => new Dropdown(ctx, parent, config as Config),
+    "dropdownList": (ctx, parent, config) => new List(ctx, parent, config as ListConfig),
+    "dropdownItem": (ctx, parent, config) => new Item(ctx, parent, config as ItemConfig),
+    "separator": (ctx, parent, config) => new Separator(ctx, parent, config),
   }
 }

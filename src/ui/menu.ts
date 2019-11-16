@@ -58,7 +58,7 @@ export namespace Menu {
     type :"menuItem"
   }
 
-  const ItemStyleScope = {id: "menuItem", states: [...ButtonStates, "separator"]}
+  const ItemStyleScope = {id: "menuItem", states: ButtonStates}
 
   /** A menu item within a menu. */
   export class Item extends Dropdown.AbstractItem {

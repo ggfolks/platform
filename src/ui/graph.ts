@@ -144,7 +144,7 @@ export class GraphViewer extends VGroup {
                   contents: {type: "label", text: "name"},
                 },
                 // max category depth of two for the moment
-                element: Dropdown.createItemConfig(2, "menuItem"),
+                element: Dropdown.createItemConfig("menuItem"),
                 model: "model",
                 shortcutsModel: "shortcutsModel",
               },
@@ -156,7 +156,7 @@ export class GraphViewer extends VGroup {
                       name: Value.constant("Clear All"),
                       action: menuActions.clearAll,
                     },
-                    sep1: {separator: Value.constant(true)},
+                    separator1: {},
                     import: {
                       name: Value.constant("Import..."),
                       action: menuActions.import,
@@ -165,7 +165,7 @@ export class GraphViewer extends VGroup {
                       name: Value.constant("Export..."),
                       action: menuActions.export,
                     },
-                    sep2: {separator: Value.constant(true)},
+                    separator2: {},
                     close: {
                       name: Value.constant("Close"),
                       action: menuActions.closeTab,
@@ -185,7 +185,7 @@ export class GraphViewer extends VGroup {
                       action: menuActions.redo,
                       shortcut: Value.constant("redo"),
                     },
-                    sep1: {separator: Value.constant(true)},
+                    separator1: {},
                     cut: {
                       name: Value.constant("Cut"),
                       action: menuActions.cut,
@@ -206,7 +206,7 @@ export class GraphViewer extends VGroup {
                       action: menuActions.delete,
                       shortcut: Value.constant("delete"),
                     },
-                    sep2: {separator: Value.constant(true)},
+                    separator2: {},
                     selectAll: {
                       name: Value.constant("Select All"),
                       action: menuActions.selectAll,
