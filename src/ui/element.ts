@@ -320,8 +320,8 @@ export abstract class Element implements Disposable {
       render ? this.renderBounds : this.hitBounds, region)
   }
 
-  protected posToScreen (pos :vec2) :vec2 {
-    return this.parent ? this.parent.posToScreen(pos) : pos
+  protected toHostCoords<T extends Float32Array> (coords :T, rect :boolean) :T {
+    return this.parent ? this.parent.toHostCoords(coords, rect) : coords
   }
 
   protected canHandleEvent (event :Event, pos :vec2) :boolean {
@@ -878,6 +878,11 @@ export class Root extends Element {
   dispose () {
     super.dispose()
     this.events.emit("disposed")
+  }
+
+  protected toHostCoords<T extends Float32Array> (coords :T, rect :boolean) :T {
+    vec2.add(coords as any, this.origin.current, coords as any)
+    return coords
   }
 
   protected computePreferredSize (hintX :number, hintY :number, into :dim2) {

@@ -100,11 +100,15 @@ abstract class TransformedContainer extends Control {
   protected get maxX () { return this.contents.width * this.scale - this.width }
   protected get maxY () { return this.contents.height * this.scale - this.height }
 
-  protected posToScreen (pos :vec2) :vec2 {
+  protected toHostCoords<T extends Float32Array> (coords :T, rect :boolean) :T {
     const {x, y, offset, scale} = this
-    const tx = (pos[0] - x) * scale + x - offset[0]
-    const ty = (pos[1] - y) * scale + y - offset[1]
-    return super.posToScreen(vec2.set(pos, tx, ty))
+    coords[0] = (coords[0] - x) * scale + x - offset[0]
+    coords[1] = (coords[1] - y) * scale + y - offset[1]
+    if (rect) {
+      coords[2] *= scale
+      coords[3] *= scale
+    }
+    return super.toHostCoords(coords, rect)
   }
 
   protected _updateOffset (offset :vec2) {

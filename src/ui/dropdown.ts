@@ -1,4 +1,4 @@
-import {dim2, rect, vec2} from "../core/math"
+import {dim2, rect} from "../core/math"
 import {Noop} from "../core/util"
 import {Mutable, Value} from "../core/react"
 import {AbstractButton, ButtonStates} from "./button"
@@ -115,8 +115,7 @@ export namespace Dropdown {
           pos[1] += this.height + 1
           break
         }
-        this.posToScreen(pos)
-        lroot.origin.update(vec2.add(pos, pos, this.root.origin.current))
+        lroot.origin.update(this.toHostCoords(pos, false))
         this.root.menuPopup.update(lroot)
       }
     }
