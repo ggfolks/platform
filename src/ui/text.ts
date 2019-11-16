@@ -408,16 +408,18 @@ export abstract class AbstractText extends Control {
   }
 
   protected configInput (input :HTMLInputElement) :Remover {
-    // sync the bounds of the input element to the bounds of the text
-    const ibounds = rect.create()
+    // sync the bounds of the input element to the bounds of the text (and scale)
+    let ix = 0, iy = 0, iwidth = 0, iheight = 0, xscale = 0, yscale = 0
     const unbsync = this.root.clock.onEmit(_ => {
-      const hbounds = this.toHostCoords(rect.copy(tmpr, this.bounds), true)
-      if (!rect.eq(ibounds, hbounds)) {
-        rect.copy(ibounds, hbounds)
-        input.style.left = `${ibounds[0]}px`
-        input.style.top = `${ibounds[1]}px`
-        input.style.width = `${ibounds[2]}px`
-        input.style.height = `${ibounds[3]}px`
+      const bounds = this.bounds, hbounds = this.toHostCoords(rect.copy(tmpr, bounds), true)
+      if (hbounds[0] !== ix) input.style.left = `${ix = hbounds[0]}px`
+      if (hbounds[1] !== iy) input.style.top = `${iy = hbounds[1]}px`
+      if (bounds[2] !== iwidth) input.style.width = `${iwidth = bounds[2]}px`
+      if (bounds[3] !== iheight) input.style.height = `${iheight = bounds[3]}px`
+      const cxscale = hbounds[2] / bounds[2], cyscale = hbounds[3] / bounds[3]
+      if (xscale !== cxscale || yscale !== cyscale) {
+        input.style.transform = `scale(${xscale = cxscale}, ${yscale = cyscale})`
+        input.style.transformOrigin = `left top`
       }
     })
     // TODO: we should perhaps use the bounds of the box instead of the bounds
