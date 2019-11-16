@@ -1,6 +1,6 @@
 import {dim2, vec2, rect} from "../core/math"
 import {refEquals} from "../core/data"
-import {Noop, NoopRemover, Remover, PMap, getValue, log} from "../core/util"
+import {Noop, NoopRemover, Remover, PMap, getValue} from "../core/util"
 import {Mutable, Subject, Value} from "../core/react"
 import {Control, Element, PointerInteraction} from "./element"
 import {Spec, FontConfig, Paint, PaintConfig, ShadowConfig, Span, EmptySpan} from "./style"
@@ -408,18 +408,21 @@ export abstract class AbstractText extends Control {
   }
 
   protected configInput (input :HTMLInputElement) :Remover {
-    const root = this.root, ibounds = this.bounds
-    const unsizer = this.valid.when(v => v, v => {
-      const fx = root.origin.current[0] + ibounds[0], fy = root.origin.current[1] + ibounds[1]
-      input.style.left = `${fx}px`
-      input.style.top = `${fy}px`
-      input.style.width = `${ibounds[2]}px`
-      input.style.height = `${ibounds[3]}px`
-      input.value = this.textState.text.current
+    // sync the bounds of the input element to the bounds of the text
+    const ibounds = rect.create()
+    const unbsync = this.root.clock.onEmit(_ => {
+      const hbounds = this.toHostCoords(rect.copy(tmpr, this.bounds), true)
+      if (!rect.eq(ibounds, hbounds)) {
+        rect.copy(ibounds, hbounds)
+        input.style.left = `${ibounds[0]}px`
+        input.style.top = `${ibounds[1]}px`
+        input.style.width = `${ibounds[2]}px`
+        input.style.height = `${ibounds[3]}px`
+      }
     })
+    // TODO: we should perhaps use the bounds of the box instead of the bounds
+    // of the text, in case someone is doing something extra tricky...
 
-    // TODO: we should perhaps use the bounds of the box instead of the bounds of the text,
-    // in case someone is doing something extra tricky...
     const box = this.findChild("box")
     if (box) (box as Box).syncStyle(input.style)
     this.label.span.current.syncStyle(input.style)
@@ -433,23 +436,29 @@ export abstract class AbstractText extends Control {
     input.addEventListener("keypress", onPress)
     this.shadowed.update(true)
 
-    input.value = this.textState.text.current
+    const untsync = this.textState.text.onValue(text => input.value = text)
     const cpos = this.coffset.current
     input.setSelectionRange(cpos, cpos)
 
     if (this.config.inputMode) input.setAttribute("inputmode", this.config.inputMode)
 
-    input.style.zIndex = `${root.zIndex+1}`
+    input.style.zIndex = `${this.root.zIndex+1}`
     input.focus() // for mobile (has to happen while handling touch event)
     setTimeout(() => input.focus(), 1) // for desktop (fails if done immediately, yay!)
+
+    // on desktop blur is called immediately, so defer listening for it
+    const onBlur = () => this.blur()
+    setTimeout(() => input.addEventListener("blur", onBlur))
 
     return () => {
       input.parentNode && input.parentNode.removeChild(input)
       input.removeAttribute("inputmode")
       input.removeEventListener("input", onInput)
       input.removeEventListener("keypress", onPress)
+      input.removeEventListener("blur", onBlur)
       this.shadowed.update(false)
-      unsizer()
+      unbsync()
+      untsync()
     }
   }
 

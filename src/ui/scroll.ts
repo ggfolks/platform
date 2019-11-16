@@ -58,7 +58,6 @@ abstract class TransformedContainer extends Control {
       release: iact.release,
       cancel: iact.cancel,
     })))
-    this.root.clearFocus()
     this.startScroll(event, pos, into)
   }
   handleWheel (event :WheelEvent, pos :vec2) {
