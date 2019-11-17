@@ -76,14 +76,13 @@ export class ThreeRenderEngine implements RenderEngine {
   constructor (readonly gameEngine :TypeScriptGameEngine) {
     gameEngine._renderEngine = this
 
-    // replace loadSpace with a version that uses LoadingManager
-    gameEngine.loadSpace = async function (url :string, layerMask? :number) :Promise<void> {
-      this.disposeGameObjects(layerMask)
+    // replace loadUncached with a version that uses LoadingManager
+    JavaScript.loadUncached = async function (url :string) :Promise<any> {
       const contents :string|ArrayBuffer = await new Promise((resolve, reject) => {
         const loader = new FileLoader()
         loader.load(getAbsoluteUrl(url), resolve, Noop, reject)
       })
-      this.createGameObjects(JavaScript.parse(contents as string))
+      return JavaScript.parse(contents as string)
     }
 
     this._disposer.add(this.renderer)

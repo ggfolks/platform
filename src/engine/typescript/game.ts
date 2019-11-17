@@ -1,4 +1,4 @@
-import {getAbsoluteUrl, loadImage} from "../../core/assets"
+import {loadImage} from "../../core/assets"
 import {Clock} from "../../core/clock"
 import {Color} from "../../core/color"
 import {refEquals} from "../../core/data"
@@ -360,12 +360,10 @@ export class TypeScriptGameEngine implements GameEngine {
     return this.createGameObject(type, mergedConfig)
   }
 
-  async loadSpace (url :string, layerMask? :number) :Promise<void> {
+  async loadSpace (url :string, layerMask? :number, cache? :boolean) :Promise<void> {
     this.disposeGameObjects(layerMask)
-    const response = await fetch(getAbsoluteUrl(url))
-    if (!response.ok) throw new Error(response.statusText)
-    const contents = await response.text()
-    this.createGameObjects(JavaScript.parse(contents))
+    const spaceConfig = await JavaScript.load(url, cache)
+    this.createGameObjects(JavaScript.parse(spaceConfig))
   }
 
   createGameObjects (configs :SpaceConfig) :void {

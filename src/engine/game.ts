@@ -143,9 +143,10 @@ export interface GameEngine extends Disposable {
     * @param url the url of the space to load.
     * @param [layerMask=ALL_LAYERS_MASK] the layer mask to use to determine which objects to
     * replace.
+    * @param [cache=true] whether or not to load the space through the cache.
     * @return a promise that will resolve when the space is loaded.  Note that this doesn't mean
     * all resources (models, etc.) referenced by the space have loaded. */
-  loadSpace (url :string, layerMask? :number) :Promise<void>
+  loadSpace (url :string, layerMask? :number, cache? :boolean) :Promise<void>
 
   /** Creates a set of game objects on the current page.
     * @param configs the map from name to config. */

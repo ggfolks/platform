@@ -23,7 +23,9 @@ let baseUrl = ""
 export function setBaseUrl (url :string) {
   baseUrl = url.endsWith("/") ? url : url + "/"
 }
-setBaseUrl(location.origin + location.pathname)
+setBaseUrl(
+  typeof location === "undefined" ? "http://localhost:8080" : (location.origin + location.pathname),
+)
 
 const ABSOLUTE_URL_PATTERN = /^(https?|file|blob):/
 
