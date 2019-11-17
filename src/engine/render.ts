@@ -1,4 +1,4 @@
-import {Ray, rect, vec2, vec3} from "../core/math"
+import {Bounds, Ray, rect, vec2, vec3} from "../core/math"
 import {Color} from "../core/color"
 import {Value} from "../core/react"
 import {Disposable} from "../core/util"
@@ -164,4 +164,7 @@ export interface Model extends Component, Hoverable {
 
   /** The URL of the model to load. */
   url? :string
+
+  /** The bounds of the model. */
+  readonly bounds :Bounds
 }

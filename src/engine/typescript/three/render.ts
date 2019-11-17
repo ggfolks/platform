@@ -1,5 +1,5 @@
 import {
-  AnimationClip, AnimationMixer, AmbientLight, BackSide, BoxBufferGeometry, BufferGeometry,
+  AnimationClip, AnimationMixer, AmbientLight, BackSide, Box3, BoxBufferGeometry, BufferGeometry,
   CylinderBufferGeometry, DefaultLoadingManager, DirectionalLight, DoubleSide, FileLoader,
   FrontSide, Intersection, Light as LightObject, LoopOnce, LoopRepeat, LoopPingPong,
   Material as MaterialObject, Mesh, MeshBasicMaterial, MeshStandardMaterial, Object3D,
@@ -11,7 +11,7 @@ import {getAbsoluteUrl} from "../../../core/assets"
 import {Clock} from "../../../core/clock"
 import {Color} from "../../../core/color"
 import {refEquals} from "../../../core/data"
-import {Plane, Ray, dim2, rect, vec2, vec3} from "../../../core/math"
+import {Bounds, Plane, Ray, dim2, rect, vec2, vec3} from "../../../core/math"
 import {Mutable, Subject, Value} from "../../../core/react"
 import {MutableMap, RMap} from "../../../core/rcollect"
 import {Disposer, Noop, NoopRemover, Remover} from "../../../core/util"
@@ -834,10 +834,37 @@ class ThreeLight extends ThreeObjectComponent implements Light {
 }
 registerConfigurableType("component", ["render"], "light", ThreeLight)
 
+const tmpBoundingBox = new Box3()
+
 class ThreeModel extends ThreeObjectComponent implements Model {
   @property("url") url = ""
+  readonly bounds :Bounds
 
+  private readonly _boundsTarget = Bounds.create()
+  private _boundsValid = true
   private _urlRemover :Remover = NoopRemover
+
+  constructor (
+    gameEngine :TypeScriptGameEngine,
+    supertype :string,
+    type :string,
+    gameObject :TypeScriptGameObject,
+  ) {
+    super(gameEngine, supertype, type, gameObject)
+    const createReadOnlyProxy = (value :vec3) => new Proxy(value, {
+      set: (obj, prop, value) => {
+        throw new Error("Object is read-only")
+      },
+      get: (obj, prop) => {
+        this._validateBounds()
+        return obj[prop]
+      },
+    })
+    this.bounds = Bounds.create(
+      createReadOnlyProxy(this._boundsTarget.min),
+      createReadOnlyProxy(this._boundsTarget.max),
+    )
+  }
 
   init () {
     super.init()
@@ -846,9 +873,21 @@ class ThreeModel extends ThreeObjectComponent implements Model {
       this.objectValue.update(undefined)
       if (!url) return
       this._urlRemover = loadGLTF(url).onValue(gltf => {
+        const userData = gltf.scene.userData
+        if (!userData.boundingBox) {
+          userData.boundingBox = new Box3()
+          userData.boundingBox.expandByObject(gltf.scene)
+        }
         this.objectValue.update(SkeletonUtils.clone(gltf.scene) as Object3D)
+        this._boundsValid = false
       })
     }))
+  }
+
+  createConfig () :ConfigurableConfig {
+    const config = super.createConfig()
+    config.cache = {bounds: Bounds.clone(this.bounds)}
+    return config
   }
 
   dispose () {
@@ -859,6 +898,20 @@ class ThreeModel extends ThreeObjectComponent implements Model {
   protected _updateObjectTransform (object :Object3D) {
     super._updateObjectTransform(object)
     updateChildren(object)
+    this._boundsValid = false
+  }
+
+  protected _validateBounds () {
+    if (this._boundsValid) return
+    this._boundsValid = true
+    const object = this.objectValue.current
+    if (!object) {
+      Bounds.zero(this._boundsTarget)
+      return
+    }
+    tmpBoundingBox.copy(object.userData.boundingBox).applyMatrix4(object.matrixWorld)
+    tmpBoundingBox.min.toArray(this._boundsTarget.min)
+    tmpBoundingBox.max.toArray(this._boundsTarget.max)
   }
 }
 registerConfigurableType("component", ["render"], "model", ThreeModel)

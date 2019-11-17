@@ -290,19 +290,41 @@ export class Euler extends Float32Array {
 
 /** Combines an origin point and a direction vector. */
 export class Ray {
-  readonly origin :vec3
-  readonly direction :vec3
 
-  private constructor () {
-    this.origin = vec3.create()
-    this.direction = vec3.create()
-  }
+  private constructor (readonly origin = vec3.create(), readonly direction = vec3.create()) {}
 
-  /** Creates a new set of Euler angles set to zero. */
-  static create () :Ray { return new Ray() }
+  /** Creates a new set of Euler angles set to zero.
+    * @param [origin] if provided, the origin vector to reference (not copy).
+    * @param [direction] if provided, the direction vector to reference (not copy). */
+  static create (origin? :vec3, direction? :vec3) :Ray { return new Ray(origin, direction) }
 
   /** Gets a point along the ray. */
   static getPoint (out :vec3, ray :Ray, distance :number) :vec3 {
     return vec3.scaleAndAdd(out, ray.origin, ray.direction, distance)
+  }
+}
+
+/** An axis-aligned bounding box. */
+export class Bounds {
+
+  private constructor (readonly min = vec3.create(), readonly max = vec3.create()) {}
+
+  /** Creates a new set of bounds set to zero.
+    * @param [min] if provided, the min vector to reference (not copy).
+    * @param [max] if provided, the max vector to reference (not copy). */
+  static create (min? :vec3, max? :vec3) :Bounds { return new Bounds(min, max) }
+
+  /** Clones the provided bounds. */
+  static clone (bounds :Bounds) :Bounds {
+    return Bounds.create(vec3.clone(bounds.min), vec3.clone(bounds.max))
+  }
+
+  /** Sets the bounds to zero. */
+  static zero (out :Bounds) :Bounds {
+    // @ts-ignore zero does exist on vec3
+    vec3.zero(out.min)
+    // @ts-ignore ibid
+    vec3.zero(out.max)
+    return out
   }
 }

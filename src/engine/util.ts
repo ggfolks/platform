@@ -1,5 +1,5 @@
 import {Color} from "../core/color"
-import {quat, vec3} from "../core/math"
+import {Bounds, quat, vec3} from "../core/math"
 import {Interp, Easing} from "../core/interp"
 import {PMap, toFloat32String} from "../core/util"
 import {Time, Transform} from "./game"
@@ -169,6 +169,9 @@ const IDENTIFIER_PATTERN = /^[a-zA-Z_]\w*$/
 const constructorStringifiers = new Map<Function, (value :any, indent :number) => string>([
   [Float32Array, value => `Float32Array.of(${toFloat32ArrayString(value)})`],
   [Color, value => `Color.fromARGB(${toFloat32ArrayString(value)})`],
+  [Bounds, value => {
+    return `Bounds.create(${JavaScript.stringify(value.min)}, ${JavaScript.stringify(value.max)})`
+  }],
   [Object, (value, indent) => {
     let string = (indent === 0) ? "({" : "{"
     const nextIndent = indent + 2
@@ -209,6 +212,7 @@ function toFloat32ArrayString (array :Float32Array) :string {
 const constructorCloners = new Map<Function, (value :any) => any>([
   [Float32Array, value => cloneTypedArray(Float32Array, value)],
   [Color, value => Color.clone(value)],
+  [Bounds, value => Bounds.clone(value)],
   [Object, value => {
     const obj :PMap<any> = {}
     for (const key in value) obj[key] = JavaScript.clone(value[key])
@@ -271,6 +275,7 @@ export abstract class JavaScript {
   static parse (js :string) :any {
     // make sure the types we use are in global scope
     window["Color"] = Color
+    window["Bounds"] = Bounds
     return eval(js)
   }
 
