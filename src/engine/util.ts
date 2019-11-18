@@ -1,6 +1,6 @@
 import {getAbsoluteUrl} from "../core/assets"
 import {Color} from "../core/color"
-import {Bounds, quat, vec3} from "../core/math"
+import {Bounds, quat, vec3, vec3unitZ} from "../core/math"
 import {Interp, Easing} from "../core/interp"
 import {PMap, toFloat32String} from "../core/util"
 import {Time, Transform} from "./game"
@@ -31,6 +31,36 @@ export function* rotateTo (
   ease :Interp = Easing.linear,
 ) {
   yield* animateTo(transform, "localRotation", rotation, duration, ease)
+}
+
+/** A coroutine that moves a transform over time from its current position to a new one, passing
+  * near an intermediate position.
+  * @param transform the transform to modify.
+  * @param middle the middle position (in local space).
+  * @param end the end position (in local space).
+  * @param following the following position (in local space).
+  * @param duration the duration, in seconds, over which to move.
+  * @param [easing=linear] the type of easing to use. */
+export function* curveTo (
+  transform :Transform,
+  middle :vec3,
+  end :vec3,
+  following :vec3|undefined,
+  duration :number,
+  ease :Interp = Easing.linear,
+) {
+  const start = transform.localPosition
+  const delta = vec3.subtract(vec3.create(), end, start)
+  const direction = vec3.normalize(vec3.create(), delta)
+  const middleRot = quat.rotationTo(quat.create(), vec3unitZ, direction)
+  if (following) vec3.subtract(delta, following, end)
+  else vec3.subtract(delta, end, middle)
+  vec3.normalize(direction, delta)
+  const endRot = quat.rotationTo(quat.create(), vec3unitZ, direction)
+  yield* waitForAll(
+    animateThrough(transform, "localPosition", middle, end, duration, ease),
+    animateThrough(transform, "localRotation", middleRot, endRot, duration, ease),
+  )
 }
 
 /** A coroutine that rotates at a fixed angular velocity.
@@ -101,6 +131,38 @@ export function* animateTo (
   object[name] = value
 }
 
+/** A coroutine that animations a property over time from its current value to a target value,
+  * approaching an intermediate value along the way.
+  * @param object the object to modify.
+  * @param name the name of the property to modify.
+  * @param middleValue the intermediate value of the property.
+  * @param endValue the new value of the property.
+  * @param duration the duration, in seconds, over which to animate the property.
+  * @param [ease=linear] the type of easing to use in animating. */
+export function* animateThrough (
+  object :PMap<any>,
+  name :string,
+  middleValue :any,
+  endValue :any,
+  duration :number,
+  ease :Interp = Easing.linear,
+) {
+  const value = object[name]
+  const startValue = copy(value)
+  const firstValue = copy(value)
+  const secondValue = copy(value)
+  const interpolate = getInterpolateFn(value)
+  let elapsed = 0
+  do {
+    yield
+    const t = ease(elapsed / duration)
+    interpolate(startValue, middleValue, t, firstValue)
+    interpolate(middleValue, endValue, t, secondValue)
+    object[name] = interpolate(firstValue, secondValue, t)
+  } while ((elapsed += Time.deltaTime) < duration)
+  object[name] = endValue
+}
+
 function copy (value :any) {
   if (typeof value === "number") return value
   if (value instanceof Float32Array) {
@@ -116,18 +178,24 @@ const tmpc = Color.create()
 const tmpq = quat.create()
 const tmpv = vec3.create()
 
-function getInterpolateFn (value :any) :(start :any, end :any, proportion :number) => any {
+function getInterpolateFn (
+  value :any,
+) :(start :any, end :any, proportion :number, result? :any) => any {
   if (typeof value === "number") {
     return (start, end, proportion) => start + (end - start) * proportion
   }
   if (value instanceof Color) {
-    return (start, end, proportion) => Color.lerp(tmpc, start, end, proportion)
+    return (start, end, proportion, result) => Color.lerp(result || tmpc, start, end, proportion)
   }
   if (value instanceof Float32Array) {
     // for the moment, we just assume slerp for four-vector, lerp for three
     switch (value.length) {
-      case 4: return (start, end, proportion) => quat.slerp(tmpq, start, end, proportion)
-      case 3: return (start, end, proportion) => vec3.lerp(tmpv, start, end, proportion)
+      case 4:
+        return (start, end, proportion, result) =>
+          quat.slerp(result || tmpq, start, end, proportion)
+      case 3:
+        return (start, end, proportion, result) =>
+          vec3.lerp(result || tmpv, start, end, proportion)
     }
   }
   throw new Error(`No interpolation function available for value "${value}"`)
