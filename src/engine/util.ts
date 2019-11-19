@@ -1,6 +1,6 @@
 import {getAbsoluteUrl} from "../core/assets"
 import {Color} from "../core/color"
-import {Bounds, quat, vec3, vec3unitZ} from "../core/math"
+import {Bounds, quat, vec3, vec3unitY} from "../core/math"
 import {Interp, Easing} from "../core/interp"
 import {PMap, toFloat32String} from "../core/util"
 import {Time, Transform} from "./game"
@@ -38,29 +38,32 @@ export function* rotateTo (
   * @param transform the transform to modify.
   * @param middle the middle position (in local space).
   * @param end the end position (in local space).
-  * @param following the following position (in local space).
   * @param duration the duration, in seconds, over which to move.
   * @param [easing=linear] the type of easing to use. */
 export function* curveTo (
   transform :Transform,
   middle :vec3,
   end :vec3,
-  following :vec3|undefined,
   duration :number,
   ease :Interp = Easing.linear,
 ) {
-  const start = transform.localPosition
-  const delta = vec3.subtract(vec3.create(), end, start)
-  const direction = vec3.normalize(vec3.create(), delta)
-  const middleRot = quat.rotationTo(quat.create(), vec3unitZ, direction)
-  if (following) vec3.subtract(delta, following, end)
-  else vec3.subtract(delta, end, middle)
-  vec3.normalize(direction, delta)
-  const endRot = quat.rotationTo(quat.create(), vec3unitZ, direction)
+  const direction = vec3.subtract(vec3.create(), end, middle)
+  vec3.normalize(direction, direction)
+  const rotation = yRotationTo(quat.create(), direction)
   yield* waitForAll(
     animateThrough(transform, "localPosition", middle, end, duration, ease),
-    animateThrough(transform, "localRotation", middleRot, endRot, duration, ease),
+    rotateTo(transform, rotation, duration, ease),
   )
+}
+
+/** Finds the quaternion that rotates Z+ to the specified direction about y.  This is useful in
+  * preference to quat.rotateTo because that function sometimes (probably when the angle is close to
+  * 180 degrees) chooses odd rotation axes.
+  * @param out the quaternion to hold the result.
+  * @param direction the direction to rotate to.
+  * @return a reference to the result quaternion. */
+export function yRotationTo (out :quat, direction :vec3) :quat {
+  return quat.setAxisAngle(out, vec3unitY, Math.atan2(direction[0], direction[2]))
 }
 
 /** A coroutine that rotates at a fixed angular velocity.
@@ -156,6 +159,7 @@ export function* animateThrough (
   do {
     yield
     const t = ease(elapsed / duration)
+    // https://en.wikipedia.org/wiki/De_Casteljau%27s_algorithm#B%C3%A9zier_curve
     interpolate(startValue, middleValue, t, firstValue)
     interpolate(middleValue, endValue, t, secondValue)
     object[name] = interpolate(firstValue, secondValue, t)

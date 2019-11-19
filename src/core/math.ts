@@ -6,6 +6,7 @@ export const vec2zero = vec2.create()
 export const vec2one = vec2.fromValues(1, 1)
 
 export const vec3zero = vec3.create()
+export const vec3unitY = vec3.fromValues(0, 1, 0)
 export const vec3unitZ = vec3.fromValues(0, 0, 1)
 
 export const quatIdentity = quat.create()
