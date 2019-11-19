@@ -38,22 +38,73 @@ export function* rotateTo (
   * @param transform the transform to modify.
   * @param middle the middle position (in local space).
   * @param end the end position (in local space).
-  * @param duration the duration, in seconds, over which to move.
-  * @param [easing=linear] the type of easing to use. */
+  * @param radius the (maximum) radius of curvature.
+  * @param speed the speed, in units per second, at which to move. */
 export function* curveTo (
   transform :Transform,
   middle :vec3,
   end :vec3,
+  radius :number,
+  speed :number,
+) {
+  const start = transform.localPosition
+  const middleStart = vec3.subtract(vec3.create(), start, middle)
+  const middleStartLength = vec3.length(middleStart)
+  const middleEnd = vec3.subtract(vec3.create(), end, middle)
+  const middleEndLength = vec3.length(middleEnd)
+  const cornerAngle = vec3.angle(middleStart, middleEnd)
+  if (cornerAngle === 0 || cornerAngle === Math.PI) {
+    // no bend, no curve
+    yield* moveTo(transform, end, (middleStartLength + middleEndLength) / speed)
+    return
+  }
+  const tanHalfAngle = Math.tan(cornerAngle / 2)
+  const curveDistance = Math.min(radius / tanHalfAngle, middleStartLength, middleEndLength)
+  const curveStart = vec3.scaleAndAdd(
+    vec3.create(),
+    middle,
+    middleStart,
+    curveDistance / middleStartLength,
+  )
+  yield* moveTo(transform, curveStart, (middleStartLength - curveDistance) / speed)
+  radius = curveDistance * tanHalfAngle
+  const angle = Math.PI - cornerAngle
+  const duration = angle * radius / speed
+  const rotation = yRotationTo(quat.create(), middleEnd)
+  const crossProduct = vec3.cross(vec3.create(), middleEnd, middleStart)
+  yield* waitForAll(
+    arcTo(transform, radius, angle * Math.sign(crossProduct[1]), duration),
+    rotateTo(transform, rotation, duration),
+  )
+  yield* moveTo(transform, end, (middleEndLength - curveDistance) / speed)
+}
+
+/** Moves the local position of the transform in an arc.
+  * @param transform the transform to modify.
+  * @param radius the radius of curvature.
+  * @param angle the angle to move, in radians (positive for CCW).
+  * @param duration the duration over which to move.
+  * @param [ease=linear] the type of easing to use. */
+export function* arcTo (
+  transform :Transform,
+  radius :number,
+  angle :number,
   duration :number,
   ease :Interp = Easing.linear,
 ) {
-  const direction = vec3.subtract(vec3.create(), end, middle)
-  vec3.normalize(direction, direction)
-  const rotation = yRotationTo(quat.create(), direction)
-  yield* waitForAll(
-    animateThrough(transform, "localPosition", middle, end, duration, ease),
-    rotateTo(transform, rotation, duration, ease),
+  const start = vec3.clone(transform.localPosition)
+  const center = vec3.scaleAndAdd(
+    vec3.create(),
+    start,
+    transform.right,
+    angle > 0 ? radius : -radius,
   )
+  let elapsed = 0
+  do {
+    yield
+    vec3.rotateY(transform.localPosition, start, center, angle * ease(elapsed / duration))
+  } while ((elapsed += Time.deltaTime) < duration)
+  vec3.rotateY(transform.localPosition, start, center, angle)
 }
 
 /** Finds the quaternion that rotates Z+ to the specified direction about y.  This is useful in
