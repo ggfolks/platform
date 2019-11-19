@@ -23,19 +23,19 @@ type ModelElem = ModelValue | ModelData
 export interface ModelData { [key :string] :ModelElem }
 
 export class MissingModelElem extends Error {
-  constructor (readonly path :string[], readonly pos :number) { super() }
-  get message () { return `Missing model element '${this.path[this.pos]}'` }
+  constructor (readonly path :string[], readonly pos :number) {
+    super(`Missing model element '${path[pos]}'`)
+  }
 }
 
-function find<V extends ModelValue> (
-  data :ModelData,
-  path :string[],
-  pos :number,
-  defaultValue? :V,
-) :V {
+export class MissingConfig extends Error {
+  constructor (name :string) { super(`Missing config '${name}'`) }
+}
+
+function find<V extends ModelValue> (data :ModelData, path :string[], pos :number, defval? :V) :V {
   const value = findOpt(data, path, pos)
   if (!value) {
-    if (defaultValue) return defaultValue
+    if (defval) return defval
     console.log(`Missing model elem '${path}' @ ${pos}`)
     throw new MissingModelElem(path, pos)
   }
@@ -62,21 +62,40 @@ export class Model {
 
   constructor (readonly data :ModelData) {}
 
-  /** Resolves the model component identified by `spec`. The may be an immediate value of the
+  /** Resolves the model component at `path`.
+    * @throws `Error` if no component exists at that path. */
+  resolve<V extends ModelValue> (path :string) :V {
+    return find(this.data, path.split("."), 0)
+  }
+
+  /** Resolves the model component identified by `spec`. This may be an immediate value of the
     * desired type or be a path which will be resolved from this model's data.
-    * @throws Will throw an error if model elements are missing and no default value is given. */
-  resolve<V extends ModelValue> (spec :Spec<V>|undefined, defaultValue? :V) :V {
-    if (!spec && defaultValue) return defaultValue
-    return (typeof spec !== "string")
-      ? spec as V
-      : find(this.data, spec.split("."), 0, defaultValue)
+    * @throws `Error` if `spec` is a model component path and no component exists at that path. */
+  resolveAs<V extends ModelValue> (spec :Spec<V>, name :string) :V {
+    if (spec === undefined) throw new MissingConfig(name)
+    return (typeof spec !== "string") ? spec : find(this.data, spec.split("."), 0)
+  }
+
+  /** Resolves the model component identified by `spec`. This may be an immediate value of the
+    * desired type or be a path which will be resolved from this model's data. If `spec` is
+    * undefined or references a missing model element, `defval` will be returned. */
+  resolveOr<V extends ModelValue> (spec :Spec<V>|undefined, defval :V) :V {
+    if (spec === undefined) return defval
+    return (typeof spec !== "string") ? spec : find(this.data, spec.split("."), 0, defval)
   }
 
   /** Resolves the model component identified by `spec`. The may be an immediate value of the
-    * desired type or be a path which will be resolved from this model's data. Returns undefined
+    * desired type or be a path which will be resolved from this model's data. Returns `undefined`
     * if 'spec' is undefined or any of its path's model elements are missing. */
   resolveOpt<V extends ModelValue> (spec :Spec<V>|undefined) :V|undefined {
     return (typeof spec !== "string") ? spec : findOpt(this.data, spec.split("."), 0)
+  }
+
+  /** Resolves the model action at `path`.
+    * @throws `Error` if no action exists at that path. */
+  resolveAction<F extends Action> (path :string) :F {
+    const value = this.resolve<F>(path)
+    return (value instanceof Command) ? value.action as F : value
   }
 
   /** Resolves the action identified by `spec`. This follows the normal resolution process and
@@ -88,8 +107,8 @@ export class Model {
     * the command is enabled before invoking it. The main UI framework takes care of this for
     * elements that trigger actions by binding the enabled state of the element to the enabled state
     * of the command. */
-  resolveAction<F extends Action> (spec :Spec<F>|undefined, defaultAction? :F) :F {
-    const value = this.resolve(spec, defaultAction)
+  resolveActionOr<F extends Action> (spec :Spec<F>|undefined, defaultAction :F) :F {
+    const value = this.resolveOr(spec, defaultAction)
     return (value instanceof Command) ? value.action as F : value
   }
 

@@ -18,8 +18,8 @@ export class PropertyView extends VGroup {
 
   constructor (ctx :Element.Context, parent :Element, readonly config :Property.ViewConfig) {
     super(ctx, parent, config)
-    const editable = ctx.model.resolve(config.editable)
-    const model = ctx.model.resolve(config.model)
+    const editable = ctx.model.resolveAs(config.editable, "editable")
+    const model = ctx.model.resolveAs(config.model, "model")
     this.disposer.add(model.keys.onValue(keys => {
       const {contents, elements} = this
       // first dispose no longer used elements

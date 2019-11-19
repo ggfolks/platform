@@ -36,7 +36,8 @@ export namespace Dropdown {
 
     constructor (ctx :Element.Context, parent :Element, readonly config :ListConfig) {
       super(ctx, parent, config)
-      this.disposer.add(ListX.syncContents(ctx, this))
+      const model = ctx.model.resolveAs(config.model, "model")
+      this.disposer.add(ListX.syncContents(ctx, this, model))
     }
   }
 
@@ -57,7 +58,8 @@ export namespace Dropdown {
       // if our parent maintains a list of dropdowns (a menu bar or a dropdown of nested dropdowns),
       // then coordinate with our siblings via its `activeChild`
       const dhost = findHost(parent)
-      const clearActive = dhost ? () => dhost.activeChild.updateIf(c => c === this, undefined) : Noop
+      const clearActive = dhost ?
+        () => dhost.activeChild.updateIf(c => c === this, undefined) : Noop
 
       if (ctx.model.resolveOpt(config.model)) {
         this.disposer.add(this._listRoot = this.root.createPopup(ctx, {

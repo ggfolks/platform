@@ -38,7 +38,7 @@ export class GraphViewer extends VGroup {
 
   constructor (ctx :Element.Context, parent :Element, readonly config :GraphViewerConfig) {
     super(ctx, parent, config)
-    this._editable = ctx.model.resolve(this.config.editable, Value.false)
+    this._editable = ctx.model.resolveOr(this.config.editable, Value.false)
     const typeCategoryModel = ctx.model.resolve<ElementsModel<string>>("typeCategoryModel")
     const subgraphCategoryModel = ctx.model.resolve<ElementsModel<string>>("subgraphCategoryModel")
     const graphModel = this._graphModel = ctx.model.resolve<Value<Model>>("graphModel")
@@ -46,7 +46,7 @@ export class GraphViewer extends VGroup {
     const remove = ctx.model.resolve<Action>("remove")
     const activePage = this.activePage = ctx.model.resolve<Mutable<string>>("activePage")
     const selection = this.selection = ctx.model.resolve<MutableSet<string>>("selection")
-    this.push = ctx.model.resolveAction<(id :string) => void>("push")
+    this.push = ctx.model.resolve<(id :string) => void>("push")
     const applyEdit = ctx.model.resolve<(edit :NodeEdit) => void>("applyEdit")
 
     const haveSelection = this.selection.sizeValue.map(size => size > 0)
@@ -412,7 +412,7 @@ export class GraphView extends AbsGroup {
     super(ctx, parent, config)
     const nodesModel = ctx.model.resolve<ElementsModel<string>>("nodesModel")
     let models :Model[] | null = []
-    const editable = ctx.model.resolve(this.config.editable)
+    const editable = ctx.model.resolveOpt(this.config.editable)
     this.disposer.add(nodesModel.keys.onValue(keys => {
       const {contents, elements} = this
       // first dispose no longer used elements
@@ -707,7 +707,7 @@ export class NodeView extends VGroup {
   constructor (ctx :Element.Context, parent :Element, readonly config :NodeViewConfig) {
     super(ctx, parent, config)
     this.id = ctx.model.resolve<Value<string>>("id").current
-    this._editable = ctx.model.resolve(this.config.editable)
+    this._editable = ctx.model.resolveAs(config.editable, "editable")
     this.position = ctx.model.resolve<Mutable<[number, number]>>("position")
     this.disposer.add(this.position.onChange(position => {
       const constraints = parent.config.constraints as AbsConstraints
@@ -981,7 +981,7 @@ export class EdgeView extends Element {
     super(ctx, parent, config)
     this.styles = ctx.elem.resolveStyles(this, config.style)
     this._nodeId = ctx.model.resolve<Value<string>>("id")
-    this._editable = ctx.model.resolve(this.config.editable)
+    this._editable = ctx.model.resolveAs(config.editable, "editable")
     this._defaultOutputKey = ctx.model.resolve<Value<string>>("defaultOutputKey")
     this._inputsModel = ctx.model.resolve<ReadableElementsModel<string>>("inputsModel")
     this._outputsModel = ctx.model.resolve<ElementsModel<string>>("outputsModel")
@@ -1327,8 +1327,8 @@ export class Terminal extends Element {
     super(ctx, parent, config)
     this._styles = ctx.elem.resolveStyles(this, config.style)
     this._name = ctx.model.resolve<Value<string>>("name")
-    this._value = ctx.model.resolve(config.value)
-    this._editable = ctx.model.resolve(config.editable)
+    this._value = ctx.model.resolveAs(config.value, "value")
+    this._editable = ctx.model.resolveAs(config.editable, "editable")
     if (config.direction === "input") {
       this._multiple = ctx.model.resolve<Value<boolean>>("multiple")
       this._connections = ctx.model.resolve<Mutable<InputValue>>("value")

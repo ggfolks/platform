@@ -109,7 +109,7 @@ export class Label extends AbstractLabel {
     super(ctx, parent, config)
   }
   protected resolveText (ctx :Element.Context, config :LabelConfig) {
-    return ctx.model.resolve(config.text, Value.constant(""))
+    return ctx.model.resolveOr(config.text, Value.constant(""))
   }
 }
 
@@ -296,7 +296,7 @@ export abstract class AbstractText extends Control {
   ) {
     super(ctx.inject({label: {text}}), parent, config)
     this.invalidateOnChange(this.coffset)
-    this._onEnter = ctx.model.resolveAction(config.onEnter, NoopAction)
+    this._onEnter = ctx.model.resolveActionOr(config.onEnter, NoopAction)
 
     // update state when text changes; we may become invalid
     this.recomputeStateOnChange(text)
@@ -380,7 +380,7 @@ export abstract class AbstractText extends Control {
     )
     const typed = isPrintable ? (supportsChar ? event.char : event.key) : ""
     const binding = textBindings.getBinding(event)
-    const action = textBindings.model.resolveAction<TextAction>(binding)
+    const action = textBindings.model.resolveActionOpt<TextAction>(binding)
     const isCtrlOrMeta = event.ctrlKey || event.metaKey
     if (action) {
       action(this.textState, typed)
@@ -510,7 +510,7 @@ export interface TextConfig extends AbstractTextConfig {
 export class Text extends AbstractText {
 
   constructor (ctx :Element.Context, parent :Element, readonly config :TextConfig) {
-    super(ctx, parent, config, ctx.model.resolve(config.text))
+    super(ctx, parent, config, ctx.model.resolveAs(config.text, "text"))
   }
 }
 
@@ -530,7 +530,7 @@ export class NumberText extends AbstractText {
 
   constructor (ctx :Element.Context, parent :Element, readonly config :NumberTextConfig) {
     super(ctx, parent, config, Mutable.local(""))
-    this.number = ctx.model.resolve(config.number)
+    this.number = ctx.model.resolveAs(config.number, "number")
     const maxDecimals = getValue(config.maxDecimals, 3)
     this.disposer.add(this.number.onValue(value => {
       const textValue = parseFloat(this.text.current)
@@ -589,7 +589,7 @@ export class ColorText extends AbstractText {
 
   constructor (ctx :Element.Context, parent :Element, readonly config :ColorTextConfig) {
     super(ctx, parent, config, Mutable.local(""))
-    this.color = ctx.model.resolve(config.color)
+    this.color = ctx.model.resolveAs(config.color, "color")
     this.disposer.add(
       this.color.onValue(value => this.text.update(value)),
     )
@@ -622,7 +622,7 @@ const EditableLabelStyleScope = {id: "editableLabel", states: Control.States}
 export class EditableLabel extends AbstractText {
 
   constructor (ctx :Element.Context, parent :Element, readonly config :EditableLabelConfig) {
-    super(ctx, parent, config, ctx.model.resolve(config.text))
+    super(ctx, parent, config, ctx.model.resolveAs(config.text, "text"))
     this.focused.onValue(focused => {
       if (!focused) this.label.selection.update([0, 0])
     })

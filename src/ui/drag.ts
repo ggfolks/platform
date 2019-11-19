@@ -122,7 +122,7 @@ export namespace Drag {
 
     constructor (ctx :Element.Context, parent :Element, config :ElemConfig) {
       super(ctx, parent, config)
-      this.key = ctx.model.resolve(config.key)
+      this.key = ctx.model.resolveAs(config.key, "key")
       this._createDragRoot = () => {
         const root = this.root.createPopup(ctx, {
           type: "root",

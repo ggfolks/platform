@@ -1,7 +1,7 @@
 import {rect, vec2} from "../core/math"
 import {Mutable, Value} from "../core/react"
 import {MutableSet} from "../core/rcollect"
-import {ModelKey, Spec} from "./model"
+import {ElementsModel, ModelKey, Spec} from "./model"
 import {Element, PointerInteraction, Root, requireAncestor} from "./element"
 import {OffAxisPolicy, VGroup} from "./group"
 import {List} from "./list"
@@ -83,7 +83,8 @@ abstract class AbstractTreeView extends VGroup implements List.Like {
 
   // this is called from super constructors to avoid OOP constructor order pain
   protected syncContents (ctx :Element.Context, config :AbstractTreeViewConfig) {
-    this.disposer.add(List.syncContents(ctx, this, (model, key) => ({
+    const model :ElementsModel<ModelKey> = ctx.model.resolveAs(config.model, "model")
+    this.disposer.add(List.syncContents(ctx, this, model, (model, key) => ({
       type: "row",
       offPolicy: "stretch",
       contents: [
@@ -146,7 +147,7 @@ export interface TreeViewListConfig extends AbstractTreeViewConfig {
 export class TreeViewList extends AbstractTreeView {
 
   constructor (ctx :Element.Context, parent :Element, config :AbstractTreeViewConfig) {
-    super(ctx, parent, config, ctx.model.resolve(config.key).current,
+    super(ctx, parent, config, ctx.model.resolveAs(config.key, "key").current,
           requireAncestor(parent, TreeView).selectedKeys,
           requireAncestor(parent, TreeView).hoveredTreeView)
     this.syncContents(ctx, config)
@@ -167,7 +168,8 @@ export class TreeView extends AbstractTreeView implements Drag.Owner {
 
   constructor (ctx :Element.Context, parent :Element, readonly config :TreeViewConfig,
                readonly hoveredTreeView = Mutable.local<AbstractTreeView|undefined>(undefined)) {
-    super(ctx, parent, config, undefined, ctx.model.resolve(config.selectedKeys), hoveredTreeView)
+    super(ctx, parent, config, undefined,
+          ctx.model.resolveAs(config.selectedKeys, "selectedKeys"), hoveredTreeView)
     this._updateParentOrder = ctx.model.resolveOpt(config.updateParentOrder)
     this.syncContents(ctx, config)
   }

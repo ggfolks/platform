@@ -20,7 +20,7 @@ export class Image extends Element {
 
   constructor (ctx :Element.Context, parent :Element, readonly config :ImageConfig) {
     super(ctx, parent, config)
-    this.disposer.add(ctx.model.resolve(config.image).onValue(spec => {
+    this.disposer.add(ctx.model.resolveAs(config.image, "image").onValue(spec => {
       const path = typeof spec === "string" ? spec : spec.path
       this.image.observe(ctx.style.image.resolve(path))
       this.scaleFactor = typeof spec === "string" ? 1 : spec.scaleFactor

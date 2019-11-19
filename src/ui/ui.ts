@@ -2,7 +2,7 @@ import {PMap, log} from "../core/util"
 import {Record} from "../core/data"
 import {makeConfig} from "../core/config"
 import {ImageResolver, StyleContext, StyleDefs} from "./style"
-import {Model, MissingModelElem} from "./model"
+import {Model, MissingModelElem, MissingConfig} from "./model"
 import {Control, Element, ErrorViz, Root} from "./element"
 
 import {BoxCatalog} from "./box"
@@ -106,7 +106,9 @@ export class UI {
       else throw new Error(`Unknown element type '${config.type}'.`)
 
     } catch (error) {
-      log.warn("Failed to create element", "type", config.type, error)
+      log.warn(`Failed to create '${config.type}' element: ${error.message}`)
+      const logError = !(error instanceof MissingModelElem || error instanceof MissingConfig)
+      if (logError) console.warn(error)
       log.warn(`- path to element: ${parent.configPath.concat(config.type)}`)
       log.warn(`- element config: ${JSON.stringify(config)}`)
       if (error instanceof MissingModelElem) {

@@ -97,7 +97,7 @@ export abstract class Element implements Disposable {
     }
     // base visibility on model value: if spec is omitted, always assume true;
     // if spec is given as a path with missing model elements, always return false
-    this.visible = ctx.model.resolve(config.visible, config.visible ? Value.false : Value.true)
+    this.visible = ctx.model.resolveOr(config.visible, config.visible ? Value.false : Value.true)
     // avoid setting up a listener in the common case of always visible
     if (this.visible !== Value.true) this.invalidateOnChange(this.visible)
   }
@@ -591,9 +591,9 @@ export class Root extends Element {
     if (canvas) this.canvas = canvas
     else throw new Error(`Canvas rendering context not supported?`)
     this._scale = config.scale ? config.scale : defScale
-    this._hintSize = config.hintSize ? ctx.model.resolve(config.hintSize) : defHintSize
+    this._hintSize = ctx.model.resolveOr(config.hintSize, defHintSize)
     this.invalidateOnChange(this._hintSize)
-    this._minSize = config.minSize ? ctx.model.resolve(config.minSize) : defMinSize
+    this._minSize = ctx.model.resolveOr(config.minSize, defMinSize)
     this.invalidateOnChange(this._minSize)
     this.keymap = new Keymap(parent && parent.keymap)
     if (config.keymap) this.keymap.pushBindings(config.keymap, ctx.model)

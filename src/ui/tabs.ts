@@ -26,7 +26,7 @@ export class TabbedPane extends VGroup {
 
   constructor (ctx :Element.Context, parent :Element, readonly config :TabbedPaneConfig) {
     super(ctx, parent, config)
-    const activeKey = ctx.model.resolve(config.activeKey)
+    const activeKey = ctx.model.resolveAs(config.activeKey, "activeKey")
     const hlistConfig :List.HorizConfig = {
       type: "hlist",
       element: (model, key) => ({
@@ -48,7 +48,7 @@ export class TabbedPane extends VGroup {
         style: {halign: "left"},
       })
     )
-    const tabsModel = ctx.model.resolve(config.model)
+    const tabsModel = ctx.model.resolveAs(config.model, "model")
     this.disposer.add(activeKey.onValue(activeKey => {
       const oldElement = this.contents[1]
       if (oldElement) oldElement.dispose()
@@ -101,7 +101,7 @@ export class Tab extends Drag.Elem {
 
   constructor (ctx :Element.Context, parent :Element, readonly config :TabConfig) {
     super(ctx, parent, config)
-    this._activeKey = ctx.model.resolve(config.activeKey)
+    this._activeKey = ctx.model.resolveAs(config.activeKey, "activeKey")
     this.recomputeStateOnChange(this._activeKey)
   }
 

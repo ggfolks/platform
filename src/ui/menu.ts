@@ -25,7 +25,7 @@ export namespace Menu {
 
     constructor (ctx :Element.Context, parent :Element, readonly config :BarConfig) {
       super(ctx, parent, config)
-      this.disposer.add(List.syncContents(ctx, this))
+      this.disposer.add(List.syncContents(ctx, this, ctx.model.resolveAs(config.model, "model")))
 
       // while we have an active menu, intercept all event handling from the root so that all other
       // elements are inactive until the menu is dismissed
@@ -83,7 +83,7 @@ export namespace Menu {
     }
 
     protected resolveText (ctx :Element.Context, config :ShortcutConfig) {
-      return ctx.model.resolve(config.command, Value.blank).map((command :string) => {
+      return ctx.model.resolveOr(config.command, Value.blank).map((command :string) => {
         const commandKeys = this.root.keymap.getCommandBindings(command)
         return (commandKeys.length === 0) ? "" : formatBinding(commandKeys[0])
       })

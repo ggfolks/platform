@@ -1,6 +1,6 @@
 import {rect} from "../core/math"
 import {Value} from "../core/react"
-import {NoopRemover, Remover} from "../core/util"
+import {Remover} from "../core/util"
 import {Model, ModelKey, ElementsModel} from "./model"
 import {Spec} from "./style"
 import {Element} from "./element"
@@ -43,7 +43,7 @@ export namespace List {
 
     constructor (ctx :Element.Context, parent :Element, readonly config :HorizConfig) {
       super(ctx, parent, config)
-      this.disposer.add(syncContents(ctx, this))
+      this.disposer.add(syncContents(ctx, this, ctx.model.resolveAs(config.model, "model")))
     }
   }
 
@@ -60,7 +60,7 @@ export namespace List {
 
     constructor (ctx :Element.Context, parent :Element, readonly config :VertConfig) {
       super(ctx, parent, config)
-      this.disposer.add(syncContents(ctx, this))
+      this.disposer.add(syncContents(ctx, this, ctx.model.resolveAs(config.model, "model")))
     }
   }
 
@@ -80,10 +80,11 @@ export namespace List {
     constructor (ctx :Element.Context, parent :Element, readonly config :DragVertConfig) {
       super(ctx, parent, config)
       this.reorderer = Drag.makeReorderer(
-        ctx, "vertical", ctx.model.resolve(config.updateOrder),
+        ctx, "vertical", ctx.model.resolveAs(config.updateOrder, "updateOrder"),
         this, this.contents, false, config.gap || 0, config.cursor)
 
-      this.disposer.add(syncContents(ctx, this, (model, key) => ({
+      const model = ctx.model.resolveAs(config.model, "model")
+      this.disposer.add(syncContents(ctx, this, model, (model, key) => ({
         type: "dragVElement",
         key: Value.constant(key),
         contents: elementConfig(config.element, model, key),
@@ -129,11 +130,10 @@ export namespace List {
   export function syncContents (
     ctx :Element.Context,
     list :Element & Like,
+    model :ElementsModel<ModelKey>,
     element :Element.Config|ElementConfigMaker = list.config.element
   ) :Remover {
-    const config = list.config as AbstractConfig
-    const model = ctx.model.resolveOpt(config.model)
-    if (!model) return NoopRemover
+    if (element === undefined) throw new Error(`Missing 'element' config`)
     return model.keys.onValue(keys => {
       const {contents, elements} = list
       // first dispose no longer used elements
