@@ -19,10 +19,10 @@ import {HTMLHost} from "../../ui/element"
 import {registerUINodes} from "../../ui/node"
 import {DefaultStyles, DefaultTheme} from "../../ui/theme"
 import {
-  ALL_LAYERS_MASK, DEFAULT_LAYER_FLAG, DEFAULT_PAGE, Component, ComponentConstructor, Configurable,
-  ConfigurableConfig, CoordinateFrame, Coroutine, Cube, Cylinder, GameContext, GameEngine,
-  GameObject, GameObjectConfig, Graph, Mesh, MeshFilter, Page, PrimitiveType, Quad, SpaceConfig,
-  Sphere, Time, Transform,
+  ALL_LAYERS_MASK, DEFAULT_LAYER_FLAG, ALL_HIDE_FLAGS_MASK, DEFAULT_PAGE, Component,
+  ComponentConstructor, Configurable, ConfigurableConfig, CoordinateFrame, Coroutine, Cube,
+  Cylinder, GameContext, GameEngine, GameObject, GameObjectConfig, Graph, Mesh, MeshFilter, Page,
+  PrimitiveType, Quad, SpaceConfig, Sphere, Time, Transform,
 } from "../game"
 import {getConfigurableMeta, property} from "../meta"
 import {PhysicsEngine} from "../physics"
@@ -380,10 +380,12 @@ export class TypeScriptGameEngine implements GameEngine {
     }
   }
 
-  createConfig (layerMask :number = ALL_LAYERS_MASK) :SpaceConfig {
+  createConfig (layerMask = ALL_LAYERS_MASK, hideMask = ALL_HIDE_FLAGS_MASK) :SpaceConfig {
     const config :SpaceConfig = {}
     for (const [id, gameObject] of this.gameObjects) {
-      if (gameObject.layerFlags & layerMask) config[id] = gameObject.createConfig()
+      if (gameObject.layerFlags & layerMask && !(gameObject.hideFlags & hideMask)) {
+        config[id] = gameObject.createConfig(hideMask)
+      }
     }
     return config
   }
@@ -483,6 +485,7 @@ type MessageHandler = (...args :any[]) => void
 export class TypeScriptGameObject implements GameObject {
   readonly id :string
   readonly layerFlagsValue = Mutable.local(DEFAULT_LAYER_FLAG)
+  readonly hideFlagsValue = Mutable.local(0)
   readonly nameValue :Mutable<string>
   readonly orderValue = Mutable.local(0)
   readonly activeSelfValue = Mutable.local(false)
@@ -496,6 +499,9 @@ export class TypeScriptGameObject implements GameObject {
 
   get layerFlags () :number { return this.layerFlagsValue.current }
   set layerFlags (flags :number) { this.layerFlagsValue.update(flags) }
+
+  get hideFlags () :number { return this.hideFlagsValue.current }
+  set hideFlags (flags :number) { this.hideFlagsValue.update(flags) }
 
   get name () :string { return this.nameValue.current }
   set name (name :string) { this.nameValue.update(name) }
@@ -656,6 +662,7 @@ export class TypeScriptGameObject implements GameObject {
     switch (name) {
       case "id": return Value.constant(this.id) as unknown as Value<T>
       case "layerFlags": return this.layerFlagsValue as unknown as Value<T>
+      case "hideFlags": return this.hideFlagsValue as unknown as Value<T>
       case "name": return this.nameValue as unknown as Value<T>
       case "order": return this.orderValue as unknown as Value<T>
       case "activeSelf": return this.activeSelfValue as unknown as Value<T>
@@ -663,13 +670,15 @@ export class TypeScriptGameObject implements GameObject {
     }
   }
 
-  createConfig () :GameObjectConfig {
+  createConfig (hideMask = ALL_HIDE_FLAGS_MASK) :GameObjectConfig {
     const config :GameObjectConfig = {}
     if (this.layerFlags !== DEFAULT_LAYER_FLAG) config.layerFlags = this.layerFlags
+    if (this.hideFlags !== 0) config.hideFlags = this.hideFlags
     if (this.name !== this.id) config.name = this.name
     if (this.order !== 0) config.order = this.order
     for (const type of this._componentTypes.current) {
-      config[type] = this._components.require(type).createConfig()
+      const component = this._components.require(type)
+      if (!(component.hideFlags & hideMask)) config[type] = component.createConfig()
     }
     return config
   }
@@ -731,6 +740,7 @@ export function applyConfig (target :PMap<any>, config :PMap<any>) {
 }
 
 export class TypeScriptComponent extends TypeScriptConfigurable implements Component {
+  @property("number", {editable: false}) hideFlags = 0
   @property("number", {editable: false}) order = 0
 
   readonly aliases :string[]

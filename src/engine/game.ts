@@ -76,6 +76,9 @@ export const DEFAULT_LAYER_FLAG = (1 << 0)
 /** A mask that matches all layers. */
 export const ALL_LAYERS_MASK = ~0
 
+/** A mask that matches all hide flags. */
+export const ALL_HIDE_FLAGS_MASK = ~0
+
 /** Top-level interface to game engine. */
 export interface GameEngine extends Disposable {
 
@@ -162,8 +165,9 @@ export interface GameEngine extends Disposable {
   disposeGameObjects (layerMask? :number) :void
 
   /** Returns the configuration of the entire space as a new object.
-    * @param [layerMask=ALL_LAYERS_MASK] the layer mask to use to filter objects. */
-  createConfig (layerMask? :number) :SpaceConfig
+    * @param [layerMask=ALL_LAYERS_MASK] the layer mask to use to filter objects in.
+    * @param [hideMask=ALL_HIDE_FLAGS_MASK] the hide mask to use to filter objects out. */
+  createConfig (layerMask? :number, hideMask? :number) :SpaceConfig
 
   /** Updates the game state. */
   update (clock :Clock) :void
@@ -183,6 +187,9 @@ export interface GameObject extends Disposable {
 
   /** The game object's layer flags. */
   layerFlags :number
+
+  /** The game object's hide flags. */
+  hideFlags :number
 
   /** The game object's name. */
   name :string
@@ -247,8 +254,9 @@ export interface GameObject extends Disposable {
     * @return the reactive value, which may or may not be writable. */
   getProperty<T> (name :string, overrideDefault? :any) :Value<T>|Mutable<T>
 
-  /** Returns the configuration of this game object as a new object. */
-  createConfig () :GameObjectConfig
+  /** Returns the configuration of this game object as a new object.
+    * @param [hideMask=ALL_HIDE_FLAGS_MASK] the hide mask to use to filter components out. */
+  createConfig (hideMask? :number) :GameObjectConfig
 
   /** Anything else is an untyped component. */
   readonly [type :string] :any
@@ -268,6 +276,9 @@ export interface Component extends Configurable {
 
   /** Whether or not the component is removable (transforms, for instance, are not). */
   readonly removable :boolean
+
+  /** The component's hide flags. */
+  hideFlags :number
 
   /** The sort order of the component. */
   order :number
