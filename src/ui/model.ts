@@ -194,3 +194,13 @@ export function mutableMapModel<K extends ModelKey, V> (
 ) :ElementsModel<K> {
   return {keys, resolve: resolver(key => maker(map.getMutable(key as K) as Mutable<V>))}
 }
+
+/** Creates an elements model from the supplied `source` array and model data `maker` function. The
+  * keys default to the indices of the array in their natural order, but can be customized if
+  * desired. */
+export function arrayModel<A> (
+  source :Value<A[]>, maker :(v :Value<A>, idx :number) => ModelData,
+  keys = source.map(a => a.map((_, ii) => ii))
+) :ElementsModel<number>{
+  return {keys, resolve: resolver(idx => maker(source.map(a => a[idx]), idx))}
+}
