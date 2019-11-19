@@ -179,6 +179,16 @@ export class Transform {
     if (parent) multiplyMatrix(data, 0, parent.data, 0, data, 0)
   }
 
+  /** Performs this transform on `point`, storing the result in `into`.
+    * @return the vector passed as `into`. */
+  transform (into :vec2, point :vec2) :vec2 {
+    const x = point[0], y = point[1], data = this.data
+    const m00 = data[0], m01 = data[1], m10 = data[2], m11 = data[3]
+    into[0] = m00*x + m10*y + data[4]
+    into[1] = m01*x + m11*y + data[5]
+    return into
+  }
+
   /** Performs the inverse of this transform on `point`, storing the result in `into`.
     * @return the vector passed as `into`. */
   inverseTransform (into :vec2, point :vec2) :vec2 {
