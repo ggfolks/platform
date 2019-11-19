@@ -1007,6 +1007,7 @@ class ThreeAnimation extends TypeScriptComponent implements Animation {
             this._modelUrlsCount = 0
             this._updateUrls()
           }
+          if (!url) return
           loadGLTF(url).onValue(gltf => {
             this._modelUrlsStart = this._urls.length
             for (const clip of gltf.animations) {
