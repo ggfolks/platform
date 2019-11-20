@@ -459,7 +459,7 @@ class ThreeShaderMaterial extends ThreeMaterial {
 }
 registerConfigurableType("material", [], "shader", ThreeShaderMaterial)
 
-abstract class ThreeObjectComponent extends TypeScriptComponent {
+export abstract class ThreeObjectComponent extends TypeScriptComponent {
   readonly objectValue = Mutable.local<Object3D|undefined>(undefined)
   readonly hovers = MutableMap.local<number, Hover>()
 
