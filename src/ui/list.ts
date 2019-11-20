@@ -120,9 +120,7 @@ export namespace List {
 
   /** A non-selectable draggable element to use in [[DragVert]]. */
   export class DragVElement extends Drag.Elem {
-
-    get styleScope () { return DragVElementStyleScope }
-
+    protected get customStyleScope () { return DragVElementStyleScope }
     protected get dragOwner () { return (this.parent as DragVert).reorderer }
   }
 

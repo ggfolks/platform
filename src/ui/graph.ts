@@ -850,7 +850,6 @@ export class NodeView extends VGroup {
     )
   }
 
-  get styleScope () { return NodeViewStyleScope }
   get state () :Value<string> { return this._state }
 
   handleMouseEnter (pos :vec2) { this.hovered.update(true) }
@@ -906,6 +905,8 @@ export class NodeView extends VGroup {
       cancel,
     })
   }
+
+  protected get customStyleScope () { return NodeViewStyleScope }
 
   protected get computeState () :string {
     return getGraphViewer(this).selection.has(this.id)
@@ -1347,7 +1348,6 @@ export class Terminal extends Element {
     }))
   }
 
-  get styleScope () { return TerminalStyleScope }
   get radius () { return this._radius.current }
   get state () :Value<string> { return this._state }
 
@@ -1449,6 +1449,8 @@ export class Terminal extends Element {
     }
     throw new Error("Missing NodeView ancestor")
   }
+
+  protected get customStyleScope () { return TerminalStyleScope }
 
   protected get computeState () :string {
     return this.targeted.current ? "targeted" : this._hovered.current ? "hovered" : "normal"

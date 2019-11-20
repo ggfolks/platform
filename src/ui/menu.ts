@@ -50,7 +50,7 @@ export namespace Menu {
       super(ctx, parent, config)
     }
 
-    get styleScope () { return MenuStyleScope }
+    protected get customStyleScope () { return MenuStyleScope }
   }
 
   /** Defines configuration for [[Item]] elements. */
@@ -67,7 +67,7 @@ export namespace Menu {
       super(ctx, parent, config)
     }
 
-    get styleScope () { return ItemStyleScope }
+    protected get customStyleScope () { return ItemStyleScope }
   }
 
   /** Defines configuration for [[Item]] elements. */

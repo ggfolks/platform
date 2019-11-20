@@ -91,9 +91,10 @@ export abstract class Element implements Disposable {
 
   constructor (ctx :Element.Context, parent :Element|undefined, config :Element.Config) {
     this.parent = parent
-    if (config.scopeId) this._styleScope = {
-      id: config.scopeId,
-      states: parent ? parent.styleScope.states : Root.States
+    if (config.scopeId) {
+      const custom = this.customStyleScope
+      const states = custom ? custom.states : parent ? parent.styleScope.states : Root.States
+      this._styleScope = {id: config.scopeId, states}
     }
     // base visibility on model value: if spec is omitted, always assume true;
     // if spec is given as a path with missing model elements, always return false
@@ -108,7 +109,11 @@ export abstract class Element implements Disposable {
   get height () :number { return this.bounds[3] }
 
   abstract get config () :Element.Config
-  get styleScope () :Element.StyleScope { return this._styleScope || this.requireParent.styleScope }
+
+  get styleScope () :Element.StyleScope {
+    return this._styleScope || this.customStyleScope || this.requireParent.styleScope
+  }
+
   get root () :Root { return this.requireParent.root }
   get valid () :Value<boolean> { return this._valid }
   get validating () :boolean { return this._validating }
@@ -308,6 +313,8 @@ export abstract class Element implements Disposable {
   toString () {
     return `${this.constructor.name}@${this.bounds}`
   }
+
+  protected get customStyleScope () :Element.StyleScope|undefined { return undefined }
 
   /** Returns true if this element is visible and its hit bounds contain `pos`. */
   protected containsPos (pos :vec2) {
@@ -623,7 +630,6 @@ export class Root extends Element {
   }
 
   get clock () :Stream<Clock> { return this._clock }
-  get styleScope () :Element.StyleScope { return {id: "default", states: Root.States} }
   get root () :Root { return this }
   get state () :Value<string> { return Root.State }
 
@@ -880,6 +886,8 @@ export class Root extends Element {
     this.events.emit("disposed")
   }
 
+  protected get customStyleScope () { return Root.StyleScope }
+
   protected toHostCoords<T extends Float32Array> (coords :T, rect :boolean) :T {
     vec2.add(coords as any, this.origin.current, coords as any)
     return coords
@@ -1001,7 +1009,7 @@ export class Root extends Element {
 export namespace Root {
 
   export const States = ["normal"]
-
+  export const StyleScope = {id: "default", states: States}
   export const State = Value.constant(States[0])
 
   /** Defines configuration for [[Root]] elements. */
@@ -1079,7 +1087,6 @@ export class Control extends Element {
     this.contents = ctx.elem.create(ctx, this, config.contents)
   }
 
-  get styleScope () :Element.StyleScope { return {id: "control", states: Control.States} }
   get state () :Value<string> { return this._state }
   get isFocused () :boolean { return this.focused.current }
   get isHovered () :boolean { return this.hovered.current }
@@ -1111,6 +1118,8 @@ export class Control extends Element {
     if (applied) this.contents.applyToIntersecting(region, op)
     return applied
   }
+
+  protected get customStyleScope () { return Control.StyleScope }
 
   protected get computeState () :string {
     return this.enabled.current
@@ -1149,6 +1158,7 @@ export class Control extends Element {
 export namespace Control {
 
   export const States = [...Root.States, "disabled", "focused", "hovered", "hoverFocused"]
+  export const StyleScope = {id: "control", states: Control.States}
 
   /** Configuration shared by all [[Control]]s. */
   export interface Config extends Element.Config {

@@ -151,7 +151,7 @@ export namespace Dropdown {
       })
     }
 
-    get styleScope () { return StyleScope }
+    protected get customStyleScope () { return StyleScope }
   }
 
   export class Separator extends Element {
@@ -204,7 +204,7 @@ export namespace Dropdown {
 
   /** An item in a dropdown menu. */
   export class Item extends AbstractItem {
-    get styleScope () { return ItemStyleScope }
+    protected get customStyleScope () { return ItemStyleScope }
   }
 
   /** Creates and returns a generic dropdown item config with support for submenus and separators.

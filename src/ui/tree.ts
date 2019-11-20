@@ -38,8 +38,6 @@ abstract class AbstractTreeView extends VGroup implements List.Like {
     this.cursor = ctx.elem.create(ctx, this, cursorConfig) as Cursor
   }
 
-  get styleScope () { return TreeViewStyleScope }
-
   applyToChildren (op :Element.Op) {
     super.applyToChildren(op)
     op(this.cursor)
@@ -79,6 +77,7 @@ abstract class AbstractTreeView extends VGroup implements List.Like {
     this.cursor.validate()
   }
 
+  protected get customStyleScope () { return TreeViewStyleScope }
   protected get defaultOffPolicy () :OffAxisPolicy { return "stretch" }
 
   // this is called from super constructors to avoid OOP constructor order pain
@@ -256,7 +255,6 @@ export class TreeViewNode extends Drag.Elem {
     }))
   }
 
-  get styleScope () { return TreeViewNodeStyleScope }
   get treeViewList () { return this.requireParent.findChild("treeViewList") as TreeViewList }
 
   get selected () :boolean {
@@ -300,6 +298,7 @@ export class TreeViewNode extends Drag.Elem {
     }
   }
 
+  protected get customStyleScope () { return TreeViewNodeStyleScope }
   protected get dragOwner () { return this.requireAncestor(TreeView) }
 }
 

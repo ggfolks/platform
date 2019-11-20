@@ -327,8 +327,6 @@ export abstract class AbstractText extends Control {
     this.textState = {text: this.text, cursor: this.coffset, selection: this.label.selection}
   }
 
-  get styleScope () { return TextStyleScope }
-
   applyToChildren (op :Element.Op) {
     super.applyToChildren(op)
     op(this.cursor)
@@ -463,6 +461,8 @@ export abstract class AbstractText extends Control {
       untsync()
     }
   }
+
+  protected get customStyleScope () { return TextStyleScope }
 
   protected get computeState () :string {
     return this.inputValid ? super.computeState : "invalid"
@@ -628,8 +628,6 @@ export class EditableLabel extends AbstractText {
     })
   }
 
-  get styleScope () { return EditableLabelStyleScope }
-
   handleDoubleClick (event :MouseEvent, pos :vec2) :boolean {
     // we might have a Value instead of a Mutable, in which case we just act as a normal label
     if (!(this.text instanceof Mutable)) return false
@@ -639,6 +637,8 @@ export class EditableLabel extends AbstractText {
     for (const iact of iacts) iact.release(event, pos)
     return true
   }
+
+  protected get customStyleScope () { return EditableLabelStyleScope }
 
   protected canHandleEvent (event :Event, pos :vec2) :boolean {
     return (this.isFocused || event.type == "dblclick") && super.canHandleEvent(event, pos)

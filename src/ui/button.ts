@@ -19,7 +19,6 @@ export abstract class AbstractButton extends Control {
     this.recomputeStateOnChange(this._pressed)
   }
 
-  get styleScope () { return ButtonStyleScope }
   get pressed () :Value<boolean> { return this._pressed }
 
   handlePointerDown (event :MouseEvent|TouchEvent, pos :vec2, into :PointerInteraction[]) {
@@ -37,6 +36,8 @@ export abstract class AbstractButton extends Control {
       cancel: () => this._pressed.update(false)
     })
   }
+
+  protected get customStyleScope () { return ButtonStyleScope }
 
   protected get computeState () {
     // meh, this can be called before our constructor runs...

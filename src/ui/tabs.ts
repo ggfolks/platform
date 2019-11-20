@@ -105,14 +105,14 @@ export class Tab extends Drag.Elem {
     this.recomputeStateOnChange(this._activeKey)
   }
 
-  get styleScope () { return TabStyleScope }
-
   get selected () :boolean {
     // can be called before constructor is complete
     return this.key && this._activeKey && this._activeKey.current === this.key.current
   }
 
   select () :void { this._activeKey.update(this.key.current) }
+
+  protected get customStyleScope () { return TabStyleScope }
 
   protected get dragOwner () { return this.requireAncestor(TabbedPane).reorderer }
 }
