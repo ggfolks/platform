@@ -1,6 +1,6 @@
 import {Vector3} from "three"
 import {Timestamp} from "../core/util"
-import {uuidv1} from "../core/uuid"
+import {UUID0, uuidv1} from "../core/uuid"
 import {Encoder, Decoder, ValueType, setTextCodec, registerCustomCodec} from "./codec"
 
 import {TextEncoder, TextDecoder} from "util"
@@ -38,6 +38,7 @@ test("codec", () => {
     [uuidv1(), "uuid"],
     [Timestamp.now(), "timestamp"],
     [{name: "bob", coords: new Vector3(1, 2, 3), time: Timestamp.now()}, "record"],
+    [{ids: [UUID0, undefined, undefined, UUID0]}, "record"],
   ]
 
   for (const [v,t] of vts) enc.addValue(v, t)

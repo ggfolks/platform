@@ -272,7 +272,9 @@ function valuesTypeId (iter :Iterable<Data>) :number {
   let id = 0
   for (const elem of iter) {
     if (id === 0) id = dataTypeId(elem)
-    else if (dataTypeId(elem) !== id) return 8
+    // if the array contains different types, use 'data'
+    // which will prefix each element with a type marker
+    else if (dataTypeId(elem) !== id) return 9
   }
   return id
 }
