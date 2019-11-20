@@ -521,16 +521,26 @@ abstract class ThreeObjectComponent extends TypeScriptComponent {
 
   _setHovers (map :HoverMap) {
     // remove anything no longer in the map
-    for (const identifier of this.hovers.keys()) {
+    for (const [identifier, hover] of this.hovers) {
       if (!map.has(identifier)) {
         this.hovers.delete(identifier)
-        this.sendMessage("onHoverEnd", identifier)
+        if (hover.pressed) this.sendMessage("onPointerUp", identifier)
+        this.sendMessage("onPointerExit", identifier)
       }
     }
     // add/update everything in the map
     for (const [identifier, hover] of map) {
+      const oldHover = this.hovers.get(identifier)
       this.hovers.set(identifier, hover)
-      this.sendMessage("onHover", identifier, hover)
+
+      if (!oldHover) this.sendMessage("onPointerEnter", identifier, hover)
+      if (hover.pressed) {
+        if (!(oldHover && oldHover.pressed)) this.sendMessage("onPointerDown", identifier, hover)
+        this.sendMessage("onPointerDrag", identifier, hover)
+      } else if (oldHover && oldHover.pressed) {
+        this.sendMessage("onPointerUp", identifier, hover)
+      }
+      this.sendMessage("onPointerOver", identifier, hover)
     }
   }
 

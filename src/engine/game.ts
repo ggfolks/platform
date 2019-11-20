@@ -334,11 +334,23 @@ export interface Component extends Configurable {
   /** Optional function to call if any ancestor of the transform changed. */
   readonly onTransformParentChanged? :() => void
 
-  /** Optional function to call each frame we hover over the object. */
-  readonly onHover? :(identifier :number, hover :Hover) => void
+  /** Optional function to call when we start hovering over the object. */
+  readonly onPointerEnter? :(identifier :number, hover :Hover) => void
 
   /** Optional function to call when we stop hovering over the object. */
-  readonly onHoverEnd? :(identifier :number) => void
+  readonly onPointerExit? :(identifier :number) => void
+
+  /** Optional function to call each frame we hover over the object. */
+  readonly onPointerOver? :(identifier :number, hover :Hover) => void
+
+  /** Optional function to call when we press on the object. */
+  readonly onPointerDown? :(identifier :number, hover :Hover) => void
+
+  /** Optional function to call when we release from the object. */
+  readonly onPointerUp? :(identifier :number) => void
+
+  /** Optional function to call each frame we're pressing on the object. */
+  readonly onPointerDrag? :(identifier :number, hover :Hover) => void
 }
 
 /** Describes a hover point. */
