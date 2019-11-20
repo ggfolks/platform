@@ -1,10 +1,10 @@
 import {
   AnimationClip, AnimationMixer, AmbientLight, BackSide, Box3, BoxBufferGeometry, BufferGeometry,
-  CylinderBufferGeometry, DefaultLoadingManager, DirectionalLight, DoubleSide, FileLoader,
-  FrontSide, Intersection, Light as LightObject, LoopOnce, LoopRepeat, LoopPingPong,
+  ConeBufferGeometry, CylinderBufferGeometry, DefaultLoadingManager, DirectionalLight, DoubleSide,
+  FileLoader, FrontSide, Intersection, Light as LightObject, LoopOnce, LoopRepeat, LoopPingPong,
   Material as MaterialObject, Mesh, MeshBasicMaterial, MeshStandardMaterial, Object3D,
   OrthographicCamera, PerspectiveCamera, PlaneBufferGeometry, Raycaster, Scene, ShaderMaterial,
-  SphereBufferGeometry, Vector2, Vector3, WebGLRenderer,
+  SphereBufferGeometry, TorusBufferGeometry, Vector2, Vector3, WebGLRenderer,
 } from "three"
 import {SkeletonUtils} from "three/examples/jsm/utils/SkeletonUtils"
 import {getAbsoluteUrl} from "../../../core/assets"
@@ -28,9 +28,9 @@ import {
 } from "../../render"
 import {JavaScript} from "../../util"
 import {
-  TypeScriptComponent, TypeScriptConfigurable, TypeScriptCube, TypeScriptCylinder,
+  TypeScriptComponent, TypeScriptCone, TypeScriptConfigurable, TypeScriptCube, TypeScriptCylinder,
   TypeScriptGameEngine, TypeScriptGameObject, TypeScriptMesh, TypeScriptMeshFilter, TypeScriptPage,
-  TypeScriptQuad, TypeScriptSphere, registerConfigurableType,
+  TypeScriptQuad, TypeScriptSphere, TypeScriptTorus, registerConfigurableType,
 } from "../game"
 
 setEnumMeta("LightType", LightTypes)
@@ -560,6 +560,12 @@ TypeScriptQuadPrototype._bufferGeometry = new PlaneBufferGeometry()
 
 const TypeScriptSpherePrototype = TypeScriptSphere.prototype as any
 TypeScriptSpherePrototype._bufferGeometry = new SphereBufferGeometry(1, 16, 12)
+
+const TypeScriptConePrototype = TypeScriptCone.prototype as any
+TypeScriptConePrototype._bufferGeometry = new ConeBufferGeometry(1, 1, 16)
+
+const TypeScriptTorusPrototype = TypeScriptTorus.prototype as any
+TypeScriptTorusPrototype._bufferGeometry = new TorusBufferGeometry(1, 0.4, 16, 12)
 
 const emptyGeometry = new BufferGeometry()
 

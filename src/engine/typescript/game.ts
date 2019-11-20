@@ -20,9 +20,9 @@ import {registerUINodes} from "../../ui/node"
 import {DefaultStyles, DefaultTheme} from "../../ui/theme"
 import {
   ALL_LAYERS_MASK, DEFAULT_LAYER_FLAG, ALL_HIDE_FLAGS_MASK, DEFAULT_PAGE, Component,
-  ComponentConstructor, Configurable, ConfigurableConfig, CoordinateFrame, Coroutine, Cube,
+  ComponentConstructor, Cone, Configurable, ConfigurableConfig, CoordinateFrame, Coroutine, Cube,
   Cylinder, GameContext, GameEngine, GameObject, GameObjectConfig, Graph, Mesh, MeshFilter, Page,
-  PrimitiveType, Quad, SpaceConfig, Sphere, Time, Transform,
+  PrimitiveType, Quad, SpaceConfig, Sphere, Time, Torus, Transform,
 } from "../game"
 import {getConfigurableMeta, property} from "../meta"
 import {PhysicsEngine} from "../physics"
@@ -1301,6 +1301,12 @@ registerConfigurableType("mesh", [], "cube", TypeScriptCube)
 
 export class TypeScriptQuad extends TypeScriptMesh implements Quad {}
 registerConfigurableType("mesh", [], "quad", TypeScriptQuad)
+
+export class TypeScriptCone extends TypeScriptMesh implements Cone {}
+registerConfigurableType("mesh", [], "cone", TypeScriptCone)
+
+export class TypeScriptTorus extends TypeScriptMesh implements Torus {}
+registerConfigurableType("mesh", [], "torus", TypeScriptTorus)
 
 export class TypeScriptGraph extends TypeScriptComponent implements Graph {
   private readonly _graph :GraphObject

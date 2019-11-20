@@ -47,8 +47,8 @@ export interface Configurable extends Disposable {
 }
 
 /** The available primitive types. */
-export type PrimitiveType = "sphere" | "cylinder" | "cube" | "quad"
-export const PrimitiveTypes = ["sphere", "cylinder", "cube", "quad"]
+export type PrimitiveType = "sphere" | "cylinder" | "cube" | "quad" | "cone" | "torus"
+export const PrimitiveTypes = ["sphere", "cylinder", "cube", "quad", "cone", "torus"]
 
 /** The type used to configure game objects. */
 export interface GameObjectConfig {
@@ -506,6 +506,12 @@ export interface Cube extends Mesh {}
 
 /** A quad mesh. */
 export interface Quad extends Mesh {}
+
+/** A cone mesh. */
+export interface Cone extends Mesh {}
+
+/** A torus mesh. */
+export interface Torus extends Mesh {}
 
 /** Manages the object's behavior graph. */
 export interface Graph extends Component {
