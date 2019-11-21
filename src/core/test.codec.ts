@@ -1,7 +1,9 @@
 import {Vector3} from "three"
 import {Timestamp} from "../core/util"
+import {vec2} from "../core/math"
 import {UUID0, uuidv1} from "../core/uuid"
-import {MIN_CUSTOM_ID, Encoder, Decoder, ValueType, setTextCodec, registerCustomCodec} from "./codec"
+import {MIN_CUSTOM_ID, Encoder, Decoder, ValueType,
+        setTextCodec, registerCustomCodec} from "./codec"
 
 import {TextEncoder, TextDecoder} from "util"
 setTextCodec(() => new TextEncoder() as any, () => new TextDecoder() as any)
@@ -39,7 +41,7 @@ test("codec", () => {
     [Timestamp.now(), "timestamp"],
     [{name: "bob", coords: new Vector3(1, 2, 3), time: Timestamp.now()}, "record"],
     [{ids: [UUID0, undefined, undefined, UUID0]}, "record"],
-    [{ids: [null, null, null, UUID0]}, "record"],
+    [{ids: [null, null, null, UUID0], data: vec2.fromValues(1, 5)}, "record"],
   ]
 
   for (const [v,t] of vts) enc.addValue(v, t)

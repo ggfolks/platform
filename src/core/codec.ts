@@ -105,6 +105,12 @@ function addDataIterable (enc :Encoder, iter :Iterable<Data>, size :number) {
 
 const addDataArray = (enc :Encoder, arr :DataArray) => addDataIterable(enc, arr, arr.length)
 
+function addFloatArray (enc :Encoder, arr :Float32Array) {
+  const length = arr.length
+  addSize32(enc, length)
+  for (let ii = 0; ii < length; ii += 1) addFloat32(enc, arr[ii])
+}
+
 const addDataSet = (enc :Encoder, set :DataSet) => addDataIterable(enc, set, set.size)
 
 function addDataMap (enc :Encoder, map :DataMap) {
@@ -177,6 +183,13 @@ function getDataArray (dec :Decoder) {
     const decoder = requireDecoder<Data>(getSize16(dec))
     for (let ii = 0; ii < size; ii += 1) arr.push(decoder(dec))
   }
+  return arr
+}
+
+function getFloatArray (dec :Decoder) {
+  const size = getSize32(dec)
+  const arr = new Float32Array(size)
+  for (let ii = 0; ii < size; ii += 1) arr[ii] = getFloat32(dec)
   return arr
 }
 
@@ -263,6 +276,7 @@ const STAMP_ID  = 7 ; registerCodec<Timestamp>(STAMP_ID, addTimestamp, getTimest
 const RECORD_ID = 8 ; registerCodec<Record>(RECORD_ID, addRecord, getRecord)
 const DATA_ID   = 9 ; registerCodec<Data>(DATA_ID, addData, getData)
 const NULL_ID   = 10 ; registerCodec<null>(NULL_ID, addNull, getNull)
+const FLOATV_ID = 11 ; registerCodec<Float32Array>(FLOATV_ID, addFloatArray, getFloatArray)
 
 function dataTypeId (data :Data) :number {
   if (data === undefined) return UNDEF_ID
@@ -274,6 +288,7 @@ function dataTypeId (data :Data) :number {
   else if (isSet(data)) return SET_ID
   else if (isMap(data)) return MAP_ID
   else if (data instanceof Timestamp) return STAMP_ID
+  else if (data instanceof Float32Array) return FLOATV_ID
   else if ("__typeId" in data) return data["__typeId"] as number
   else return RECORD_ID
 }
