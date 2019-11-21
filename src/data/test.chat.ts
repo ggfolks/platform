@@ -19,7 +19,7 @@ type RoomState = {type :"none"}
                | {type :"joined", id :UUID}
 
 @dobject
-export class UserObject extends DObject {
+class UserObject extends DObject {
 
   @dvalue("string")
   username = this.value("")
@@ -84,7 +84,7 @@ interface OccupantInfo {
 }
 
 @dobject
-export class RoomObject extends DObject {
+class RoomObject extends DObject {
 
   @dvalue("uuid")
   readonly owner = this.value("")
@@ -192,7 +192,7 @@ interface RoomInfo {
 }
 
 @dobject
-export class RootObject extends DObject {
+class RootObject extends DObject {
 
   canSubscribe (auth :Auth) { return true }
 
@@ -257,7 +257,6 @@ test("metas", () => {
   const rmetas = getPropMetas(RootObject.prototype)
   expect(rmetas[0]).toEqual({
     type: "map", name: "publicRooms", index: 0, ktype: "uuid", vtype: "record", persist: false})
-  expect(rmetas[1]).toEqual({type: "collection", name: "users", index: 1, otype: UserObject})
   expect(rmetas[3]).toEqual({type: "queue", name: "chatq", system: false, index: 3, handler: handleChatReq})
 
   const umetas = getPropMetas(UserObject.prototype)

@@ -6,7 +6,7 @@ import {ChangeFn, Eq, Mutable, Value, ValueFn, addListener, dispatchChange} from
 import {MutableSet, MutableMap} from "../core/rcollect"
 import {Auth} from "../auth/auth"
 import {WhereClause, OrderClause, PropMeta, ValueMeta, SetMeta, MapMeta, CollectionMeta, TableMeta,
-        tableForView, getPropMetas} from "./meta"
+        DObjectTypeMap, tableForView, getPropMetas} from "./meta"
 import {SyncMsg, ObjType} from "./protocol"
 
 // re-export Auth to make life easier for modules that define DObjects & DQueues & handlers
@@ -105,7 +105,7 @@ export class DIndex<O extends DObject> {
 
 export class DCollection<O extends DObject> {
 
-  constructor (readonly owner :DObject, readonly name :string, readonly otype :DObjectType<O>) {}
+  constructor (readonly owner :DObject, readonly name :string, readonly otype :DObjectTypeMap<O>) {}
 
   get path () :Path { return this.owner.path.concat(this.name) }
 
@@ -174,8 +174,8 @@ export function findObjectType (rtype :DObjectType<any>, path :Path) :DObjectTyp
     if (!col) throw new Error(`Missing metadata for path component [path=${path}, idx=${idx}]`)
     if (col.type !== "collection") throw new Error(
       `Expected 'collection' property at path component [path=${path}, idx=${idx}]`)
-    curtype = col.otype
-    idx += 2 // skip the collection key
+    curtype = col.otype(path[idx+1])
+    idx += 2 // skip the collection name and key
   }
   return curtype
 }

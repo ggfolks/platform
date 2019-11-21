@@ -1,3 +1,4 @@
+import {UUID} from "../core/uuid"
 import {Record} from "../core/data"
 import {KeyType, ValueType} from "../core/codec"
 import {DHandler, DObject, DObjectType} from "./data"
@@ -23,10 +24,12 @@ export function orderBy (prop :string, order :Order) :OrderClause {
 //
 // Metadata decorators
 
+export type DObjectTypeMap<O extends DObject> = (uuid :UUID) => DObjectType<O>
+
 export type ValueMeta = {type: "value", vtype: ValueType, persist :boolean}
 export type SetMeta = {type: "set", etype: KeyType, persist :boolean}
 export type MapMeta = {type: "map", ktype: KeyType, vtype: ValueType, persist :boolean}
-export type CollectionMeta = {type: "collection", otype: DObjectType<any>}
+export type CollectionMeta = {type: "collection", otype: DObjectTypeMap<any>}
 export type TableMeta = {type: "table"}
 export type ViewMeta = {type: "view", table :string, where :WhereClause[], order :OrderClause[]}
 export type QueueMeta = {type: "queue", handler :DHandler<any,any>, system :boolean}
@@ -58,9 +61,9 @@ export function tableForView (
 
 export function getPropMetas (proto :Function|Object) :PropMeta[] {
   const atarget = proto as any
-  const props = atarget["__props__"]
-  if (props) return props
-  return atarget["__props__"] = []
+  if (atarget.hasOwnProperty("__props__")) return atarget["__props__"]
+  const pprops = atarget["__props__"]
+  return atarget["__props__"] = (pprops ? pprops.slice() : [])
 }
 
 export function dobject (ctor :Function) {
@@ -83,6 +86,8 @@ export const dset = (etype :KeyType, persist = false) =>
 export const dmap = (ktype :KeyType, vtype :ValueType, persist = false) =>
   propAdder({type: "map", ktype, vtype, persist})
 export const dcollection = (otype :DObjectType<any>) =>
+  propAdder({type: "collection", otype: id => otype})
+export const dhierarchy = (otype :DObjectTypeMap<any>) =>
   propAdder({type: "collection", otype})
 export const dtable = () =>
   propAdder({type: "table"})
