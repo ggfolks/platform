@@ -762,7 +762,7 @@ export class TypeScriptComponent extends TypeScriptConfigurable implements Compo
     super(gameEngine, supertype, type, gameObject, ...aliases)
     this.aliases = aliases
     this._disposer.add(gameObject.activeInHierarchyValue.onValue(active => {
-      const updatable = this as unknown as Updatable
+      const updatable = this as any
       if (active) {
         if (updatable.update) gameEngine.updatables.add(updatable)
         for (const coroutine of this._coroutines) gameEngine.updatables.add(coroutine)
@@ -824,7 +824,7 @@ export class TypeScriptComponent extends TypeScriptConfigurable implements Compo
     this._disposer.dispose()
     this.gameObject._componentRemoved(this)
     for (const coroutine of this._coroutines) coroutine.dispose()
-    const updatable = this as unknown as Updatable
+    const updatable = this as any
     if (updatable.update) this.gameObject.gameEngine.updatables.delete(updatable)
   }
 
