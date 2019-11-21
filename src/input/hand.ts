@@ -42,23 +42,26 @@ export class Hand implements Disposable {
   update () {
     this.mouse.update()
 
-    if (this.mouse.entered && this.mouse.lastOffset) {
+    const rect = this._canvas.getBoundingClientRect()
+    const mouseClient = this.mouse.lastClient
+    if (this.mouse.entered && mouseClient) {
       const pressed = (
         this.mouse.getButtonState(0).current ||
         this.mouse.getButtonState(1).current ||
         this.mouse.getButtonState(2).current
       )
+      vec2.set(position, mouseClient[0] - rect.left, mouseClient[1] - rect.top)
       const pointer = this._pointers.get(MOUSE_ID)
       if (!(
         pointer &&
-        vec2.exactEquals(pointer.position, this.mouse.lastOffset) &&
+        vec2.exactEquals(pointer.position, position) &&
         vec2.exactEquals(pointer.movement, this.mouse.movement.current) &&
         pointer.pressed === pressed
       )) {
         this._pointers.set(
           MOUSE_ID,
           new Pointer(
-            vec2.clone(this.mouse.lastOffset),
+            vec2.clone(position),
             vec2.clone(this.mouse.movement.current),
             pressed,
           ),
@@ -68,7 +71,6 @@ export class Hand implements Disposable {
       this._pointers.delete(MOUSE_ID)
     }
 
-    const rect = this._canvas.getBoundingClientRect()
     for (const touch of this.touchpad.touches.values()) {
       vec2.set(position, touch.clientX - rect.left, touch.clientY - rect.top)
       const pointer = this._pointers.get(touch.identifier)

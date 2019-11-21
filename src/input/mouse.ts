@@ -11,7 +11,7 @@ export class Mouse implements Disposable {
   private _movement = Mutable.local(vec2.create())
   private _doubleClicked :Emitter<void> = new Emitter()
   private _lastScreen? :vec2
-  private _lastOffset? :vec2
+  private _lastClient? :vec2
   private _accumulatedMovement = vec2.create()
   private _entered = true
 
@@ -25,9 +25,9 @@ export class Mouse implements Disposable {
     return this._doubleClicked
   }
 
-  /** Returns the last offset position recorded for the mouse, if any. */
-  get lastOffset () {
-    return this._lastOffset
+  /** Returns the last client position recorded for the mouse, if any. */
+  get lastClient () {
+    return this._lastClient
   }
 
   /** Returns whether or not the mouse has entered the canvas. */
@@ -48,15 +48,15 @@ export class Mouse implements Disposable {
       if (!event.cancelBubble && this.canvasContains(event)) this._doubleClicked.emit()
     }))
     this._disposer.add(mouseEvents("mousemove").onEmit(event => {
-      if (!(this._lastScreen && this._lastOffset)) {
+      if (!(this._lastScreen && this._lastClient)) {
         this._lastScreen = vec2.fromValues(event.screenX, event.screenY)
-        this._lastOffset = vec2.fromValues(event.offsetX, event.offsetY)
+        this._lastClient = vec2.fromValues(event.clientX, event.clientY)
         return
       }
       this._accumulatedMovement[0] += event.screenX - this._lastScreen[0]
       this._accumulatedMovement[1] += event.screenY - this._lastScreen[1]
       vec2.set(this._lastScreen, event.screenX, event.screenY)
-      vec2.set(this._lastOffset, event.offsetX, event.offsetY)
+      vec2.set(this._lastClient, event.clientX, event.clientY)
     }))
     this._disposer.add(mouseEvents("mouseenter").onEmit(event => {
       this._entered = true
