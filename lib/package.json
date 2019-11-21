@@ -47,8 +47,8 @@
     "@types/cannon": "^0.1.4",
     "@types/gl-matrix": "^2.4.5",
     "cannon": "^0.6.2",
-    "firebase": "^6.6.1",
-    "firebase-admin": "^8.5.0",
+    "firebase": "^7.4.0",
+    "firebase-admin": "^8.8.0",
     "gl-matrix": "^3.0.0",
     "three": "^0.108.0",
     "ws": "^7.1.2"
