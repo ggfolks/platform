@@ -171,8 +171,13 @@ export class ClientStore implements Disposable {
   private data :Channel<DataMsg>
 
   constructor (readonly client :ChannelClient) {
-    // TODO: handle disconnect/reconnect
     this.data = client.createChannel("data", [], DataCodec)
+    this.client.state.onChange(state => {
+      if (state === "open") {
+        this.data.dispose()
+        this.data = client.createChannel("data", [], DataCodec)
+      }
+    })
   }
 
   resolve<T extends DObject> (path :Path, otype :DObjectType<T>) :[T, Remover] {
