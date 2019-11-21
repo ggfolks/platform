@@ -42,6 +42,7 @@ test("codec", () => {
     [{name: "bob", coords: new Vector3(1, 2, 3), time: Timestamp.now()}, "record"],
     [{ids: [UUID0, undefined, undefined, UUID0]}, "record"],
     [{ids: [null, null, null, UUID0], data: vec2.fromValues(1, 5)}, "record"],
+    [{ids: [undefined, undefined, undefined, "bang!"]}, "record"],
   ]
 
   for (const [v,t] of vts) enc.addValue(v, t)
