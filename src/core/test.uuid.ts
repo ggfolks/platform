@@ -14,3 +14,7 @@ test("toFromString", () => {
     expect(uuidFromString(uuidToString(id))).toEqual(id)
   }
 })
+
+// test("genUUIDs", () => {
+//   for (let ii = 0; ii < 10; ii += 1) console.log(uuidToString(uuidv1b()))
+// })
