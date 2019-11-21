@@ -72,6 +72,8 @@ interface ProxyType<T> {
 }
 
 const ProxyTypes :PMap<ProxyType<any>> = {
+  vec3: {create: createVec3Fn, copy: vec3.copy},
+  quat: {create: createQuatFn, copy: quat.copy},
   Color: {create: createColorFn, copy: Color.copy},
 }
 

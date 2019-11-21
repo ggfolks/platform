@@ -24,6 +24,7 @@ export interface RenderEngine extends Disposable {
     * @param direction the direction of the ray in world space.
     * @param [minDistance=0] the minimum intersection distance.
     * @param [maxDistance=Infinity] the maximum intersection distance.
+    * @param [layerMask=ALL_LAYERS_MASK] the mask that determines which layers to include.
     * @param [target] an array to populate; otherwise, a new one will be created.
     * @return the array of hit objects. */
   raycastAll (
@@ -31,6 +32,7 @@ export interface RenderEngine extends Disposable {
     direction :vec3,
     minDistance? :number,
     maxDistance? :number,
+    layerMask? :number,
     target? :RaycastHit[],
   ) :RaycastHit[]
 
@@ -112,6 +114,12 @@ export interface Camera extends Component, Hoverable {
 
   /** The distance to the far clip plane. */
   farClipPlane :number
+
+  /** The mask that determines which layers to render. */
+  cullingMask :number
+
+  /** The mask that determines which layers to send events to. */
+  eventMask :number
 
   /** Finds the direction in world space in which the camera is pointing.
     * @param [target] an optional vector to hold the result.

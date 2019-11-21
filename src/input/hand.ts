@@ -43,15 +43,26 @@ export class Hand implements Disposable {
     this.mouse.update()
 
     if (this.mouse.entered && this.mouse.lastOffset) {
-      const pressed = this.mouse.getButtonState(0).current
+      const pressed = (
+        this.mouse.getButtonState(0).current ||
+        this.mouse.getButtonState(1).current ||
+        this.mouse.getButtonState(2).current
+      )
       const pointer = this._pointers.get(MOUSE_ID)
-      if (!(pointer &&
-            vec2.exactEquals(pointer.position, this.mouse.lastOffset) &&
-            vec2.exactEquals(pointer.movement, this.mouse.movement.current) &&
-            pointer.pressed === pressed)) {
-        this._pointers.set(MOUSE_ID, new Pointer(vec2.clone(this.mouse.lastOffset),
-                                                 vec2.clone(this.mouse.movement.current),
-                                                 pressed))
+      if (!(
+        pointer &&
+        vec2.exactEquals(pointer.position, this.mouse.lastOffset) &&
+        vec2.exactEquals(pointer.movement, this.mouse.movement.current) &&
+        pointer.pressed === pressed
+      )) {
+        this._pointers.set(
+          MOUSE_ID,
+          new Pointer(
+            vec2.clone(this.mouse.lastOffset),
+            vec2.clone(this.mouse.movement.current),
+            pressed,
+          ),
+        )
       }
     } else if (this._pointers.has(MOUSE_ID)) {
       this._pointers.delete(MOUSE_ID)
@@ -67,12 +78,15 @@ export class Hand implements Disposable {
         // @ts-ignore zero missing from type definition
         vec2.zero(movement)
       }
-      if (!(pointer &&
-            vec2.exactEquals(pointer.position, position) &&
-            vec2.exactEquals(pointer.movement, movement))) {
-        this._pointers.set(touch.identifier, new Pointer(vec2.clone(position),
-                                                         vec2.clone(movement),
-                                                         true))
+      if (!(
+        pointer &&
+        vec2.exactEquals(pointer.position, position) &&
+        vec2.exactEquals(pointer.movement, movement))
+      ) {
+        this._pointers.set(
+          touch.identifier,
+          new Pointer(vec2.clone(position), vec2.clone(movement), true),
+        )
       }
     }
     for (const id of this._pointers.keys()) {
@@ -89,9 +103,12 @@ export class Hand implements Disposable {
 
 /** Describes a touch or mouse point. */
 export class Pointer {
-  constructor (readonly position :vec2 = vec2.create(),
-               readonly movement :vec2 = vec2.create(),
-               readonly pressed :boolean = false) {}
+
+  constructor (
+    readonly position :vec2 = vec2.create(),
+    readonly movement :vec2 = vec2.create(),
+    readonly pressed :boolean = false,
+  ) {}
 
   toString () {
     const p = this.position, m = this.movement, pd = this.pressed

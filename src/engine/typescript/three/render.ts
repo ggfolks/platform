@@ -19,7 +19,7 @@ import {Graph, GraphConfig} from "../../../graph/graph"
 import {PropertyMeta, setEnumMeta} from "../../../graph/meta"
 import {loadGLTF, loadGLTFAnimationClip} from "../../../scene3/entity"
 import {Hand, Pointer} from "../../../input/hand"
-import {DEFAULT_PAGE, ConfigurableConfig, Hover, Transform} from "../../game"
+import {ALL_LAYERS_MASK, DEFAULT_PAGE, ConfigurableConfig, Hover, Transform} from "../../game"
 import {Animation, WrapMode, WrapModes} from "../../animation"
 import {getConfigurableMeta, property} from "../../meta"
 import {
@@ -161,6 +161,7 @@ export class ThreeRenderEngine implements RenderEngine {
     direction :vec3,
     minDistance :number = 0,
     maxDistance :number = Infinity,
+    layerMask :number = ALL_LAYERS_MASK,
     target? :RaycastHit[],
   ) :RaycastHit[] {
     raycaster.near = minDistance
@@ -173,10 +174,12 @@ export class ThreeRenderEngine implements RenderEngine {
     if (target) target.length = 0
     else target = []
     for (const result of raycasterResults) {
+      const transform = getTransform(result.object)
+      if (!(transform.gameObject.layerFlags & layerMask)) continue
       target.push({
         distance: result.distance,
         point: result.point.toArray(vec3.create()) as vec3,
-        transform: getTransform(result.object),
+        transform,
         textureCoord: result.uv ? result.uv.toArray(vec2.create()) as vec2 : undefined,
         triangleIndex: result.faceIndex,
       })
@@ -216,7 +219,7 @@ export class ThreeRenderEngine implements RenderEngine {
           }
         }
 
-        this.raycastAll(tmpr.origin, tmpr.direction, 0, Infinity, raycastHits)
+        this.raycastAll(tmpr.origin, tmpr.direction, 0, Infinity, camera.eventMask, raycastHits)
         let noted = false
         for (const hit of raycastHits) {
           const objectComponent = hit.transform.getComponent<ThreeObjectComponent>("hoverable")
@@ -229,7 +232,7 @@ export class ThreeRenderEngine implements RenderEngine {
           }
         }
         // if we didn't hit anything else, "hover" on the camera
-        if (!noted) {
+        if (!noted && (camera.gameObject.layerFlags & camera.eventMask)) {
           // use intersection with a plane one unit in front of the camera
           const distance = camera.orthographic
             ? 1
@@ -491,9 +494,14 @@ export abstract class ThreeObjectComponent extends TypeScriptComponent {
       if (object) {
         object.matrixAutoUpdate = false
         this._updateObjectTransform(object)
+        this._updateObjectLayers(object)
         object.userData.transform = this.transform
         this._addToPage(this._page, object)
       }
+    }))
+    this._disposer.add(gameObject.getProperty<number>("layerFlags").onChange(flags => {
+      const object = this.objectValue.current
+      if (object) this._updateObjectLayers(object)
     }))
   }
 
@@ -553,6 +561,10 @@ export abstract class ThreeObjectComponent extends TypeScriptComponent {
 
   protected _updateObjectTransform (object :Object3D) {
     object.matrixWorld.fromArray(this.transform.localToWorldMatrix)
+  }
+
+  protected _updateObjectLayers (object :Object3D) {
+    object.traverse(node => node.layers.mask = this.gameObject.layerFlags)
   }
 }
 
@@ -690,6 +702,8 @@ class ThreeCamera extends ThreeObjectComponent implements Camera {
   @property("number", {min: 0, wheelStep: 0.1}) orthographicSize = 10
   @property("number", {min: 0, wheelStep: 0.1}) nearClipPlane = 0.1
   @property("number", {min: 0, wheelStep: 0.1}) farClipPlane = 2000
+  @property("number") cullingMask = ALL_LAYERS_MASK
+  @property("number") eventMask = ALL_LAYERS_MASK
 
   get camera () :CameraObject { return this.objectValue.current as CameraObject }
 
@@ -760,6 +774,9 @@ class ThreeCamera extends ThreeObjectComponent implements Camera {
       this.camera.far = farClipPlane
       this.camera.updateProjectionMatrix()
     })
+    this.getProperty<number>("cullingMask").onChange(() => {
+      this._updateObjectLayers(this.camera)
+    })
   }
 
   getDirection (target? :vec3) :vec3 {
@@ -821,6 +838,10 @@ class ThreeCamera extends ThreeObjectComponent implements Camera {
   protected _updateObjectTransform (object :Object3D) {
     super._updateObjectTransform(object)
     this.camera.matrixWorldInverse.fromArray(this.transform.worldToLocalMatrix)
+  }
+
+  protected _updateObjectLayers (object :Object3D) {
+    this.camera.layers.mask = this.cullingMask
   }
 
   protected _addToCameras (page :ThreePage|undefined) {

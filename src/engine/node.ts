@@ -9,7 +9,9 @@ import {
 import {Node, NodeConfig, NodeTypeRegistry} from "../graph/node"
 import {SubgraphRegistry} from "../graph/util"
 import {PointerConfig} from "../input/node"
-import {Component, CoordinateFrame, Graph as GraphComponent, Hover, Hoverable} from "./game"
+import {
+  ALL_LAYERS_MASK, Component, CoordinateFrame, Graph as GraphComponent, Hover, Hoverable,
+} from "./game"
 import {getConfigurableMeta} from "./meta"
 import {RaycastHit} from "./render"
 
@@ -183,6 +185,7 @@ class HoverNode extends AbstractComponentNode<Hoverable> {
 abstract class RaycastConfig implements NodeConfig {
   type = "raycast"
   @property("CoordinateFrame") frame = "local"
+  @property("number") layerMask = ALL_LAYERS_MASK
   @inputEdge("vec3") origin = undefined
   @inputEdge("vec3") direction = undefined
   @outputEdge("number") distance = undefined
@@ -214,6 +217,7 @@ class Raycast extends Node {
         worldDirection,
         0,
         Infinity,
+        this.config.layerMask,
         hits,
       )
       for (const hit of hits) {

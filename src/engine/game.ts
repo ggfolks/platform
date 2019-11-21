@@ -17,27 +17,36 @@ export type ConfigurableConfig = PMap<any>
 /** Base interface for objects that are configurable--that is, whose state can be captured in a
   * JavaScript object and that can be reconfigured with instances of same. */
 export interface Configurable extends Disposable {
+
   /** Flags this object as configurable. */
   readonly isConfigurable :true
+
   /** The owning game engine. */
   readonly gameEngine :GameEngine
+
   /** The supertype of the configurable object. */
   readonly supertype :string
+
   /** The type of the configurable object. */
   readonly type :string
+
   /** The metadata for the object's viewable/editable properties. */
   readonly propertiesMeta :RMap<string, PropertyMeta>
+
   /** Initializes the object.  Called immediately after creation. */
   init () :void
+
   /** Returns a reactive view of the specified property.
     * @param name the name of the desired property.
     * @param [overrideDefault] if specified, a value that will override the default default.
     * @return the reactive value, which may or may not be writable. */
   getProperty<T> (name :string, overrideDefault? :any) :Value<T>|Mutable<T>
+
   /** Returns the config of this object as a a new object.
     * @param [omitType=false] if true, leave the type out of the config.
     * @return the newly created config. */
   createConfig (omitType? :boolean) :ConfigurableConfig
+
   /** Reconfigures this object.
     * @param type the type of the new object, or undefined for none.
     * @param config the configuration to apply, or null to "reconfigure" into null.
