@@ -50,7 +50,7 @@
     "firebase": "^7.4.0",
     "firebase-admin": "^8.8.0",
     "gl-matrix": "^3.0.0",
-    "three": "^0.108.0",
+    "three": "^0.110.0",
     "ws": "^7.1.2"
   },
   "devDependencies": {
