@@ -96,3 +96,10 @@ export const interpTime = (interp :Interp, dt :number, t :number) :number => int
   * @param t the total time for the interpolation. If `t == 0`, `start+range` is returned. */
 export const interpRange = (interp :Interp, start :number, range :number, dt :number, t :number) =>
   start + range * ((t == 0) ? 1 : interp(dt/t))
+
+/** Returns an interpolator that "shakes" a value around `start`, going `cycles` times through a
+  * sine of `amp`. */
+export function shake (start :number, amp :number, cycles :number) :Interp {
+  const scale = Math.PI*2*cycles
+  return (t) => start+Math.sin(scale*t)*amp
+}
