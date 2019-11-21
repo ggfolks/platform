@@ -921,7 +921,7 @@ export class Root extends Element {
     canvas.restore()
   }
 
-  private get eventTarget () { return this.targetElem.current || this.contents }
+  private get eventTarget () :Element { return this.targetElem.current || this.contents }
 
   private maybeStartInteraction (event :MouseEvent|TouchEvent, pos :vec2, button :number) :boolean {
     const oiacts = this.interacts[button]
