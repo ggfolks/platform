@@ -1,12 +1,12 @@
 import {Vector3} from "three"
 import {Timestamp} from "../core/util"
 import {UUID0, uuidv1} from "../core/uuid"
-import {Encoder, Decoder, ValueType, setTextCodec, registerCustomCodec} from "./codec"
+import {MIN_CUSTOM_ID, Encoder, Decoder, ValueType, setTextCodec, registerCustomCodec} from "./codec"
 
 import {TextEncoder, TextDecoder} from "util"
 setTextCodec(() => new TextEncoder() as any, () => new TextDecoder() as any)
 
-registerCustomCodec<Vector3>(Vector3.prototype, (enc, vec) => {
+registerCustomCodec<Vector3>(MIN_CUSTOM_ID, Vector3.prototype, (enc, vec) => {
   enc.addValue(vec.x, "number")
   enc.addValue(vec.y, "number")
   enc.addValue(vec.z, "number")
@@ -39,6 +39,7 @@ test("codec", () => {
     [Timestamp.now(), "timestamp"],
     [{name: "bob", coords: new Vector3(1, 2, 3), time: Timestamp.now()}, "record"],
     [{ids: [UUID0, undefined, undefined, UUID0]}, "record"],
+    [{ids: [null, null, null, UUID0]}, "record"],
   ]
 
   for (const [v,t] of vts) enc.addValue(v, t)

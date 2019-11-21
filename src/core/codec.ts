@@ -3,8 +3,9 @@ import {UUID, uuidToString, uuidFromString} from "./uuid"
 import {Path} from "./path"
 import {Data, DataArray, DataMap, DataMapKey, DataSet, Record, isMap, isSet} from "./data"
 
-export type KeyType = "undefined" | "boolean" | "int8" | "int16" | "int32" | "size8" | "size16"
-                    | "size32" | "float32" | "float64" | "number" | "string" | "timestamp" | "uuid"
+export type KeyType = "undefined" | "null" | "boolean" | "int8" | "int16" | "int32"
+                    | "size8" | "size16" | "size32" | "float32" | "float64" | "number"
+                    | "string" | "timestamp" | "uuid"
 // TODO: support "text" value type which supported >64k of text?
 export type ValueType = KeyType | "data" | "record"
 
@@ -15,6 +16,7 @@ type DataEncoder<T> = (enc :Encoder, v:T) => void
 type DataDecoder<T> = (dec :Decoder) => T
 
 const addVoid    = (e :Encoder, v :void) => {}
+const addNull    = (e :Encoder, n :null) => {}
 const addBoolean = (e :Encoder, b :boolean) => { addInt8(e, b ? 1 : 0) }
 const addInt8    = (e :Encoder, s :number) => { const p = e.pos ; e.prepAdd(1).setInt8(p, s) }
 const addInt16   = (e :Encoder, s :number) => { const p = e.pos ; e.prepAdd(2).setInt16(p, s) }
@@ -101,6 +103,10 @@ function addDataIterable (enc :Encoder, iter :Iterable<Data>, size :number) {
   }
 }
 
+const addDataArray = (enc :Encoder, arr :DataArray) => addDataIterable(enc, arr, arr.length)
+
+const addDataSet = (enc :Encoder, set :DataSet) => addDataIterable(enc, set, set.size)
+
 function addDataMap (enc :Encoder, map :DataMap) {
   addSize32(enc, map.size)
   if (map.size > 0) {
@@ -137,6 +143,7 @@ function addValue (enc :Encoder, data :any, type :ValueType) {
 }
 
 const getVoid    = (dec :Decoder) => undefined
+const getNull    = (dec :Decoder) => null
 const getBoolean = (dec :Decoder) => dec.data.getUint8(dec.prepGet(1)) === 1
 const getInt8    = (dec :Decoder) => dec.data.getInt8(dec.prepGet(1))
 const getInt16   = (dec :Decoder) => dec.data.getInt16(dec.prepGet(2))
@@ -172,6 +179,8 @@ function getDataArray (dec :Decoder) {
   }
   return arr
 }
+
+const getDataSet = (dec :Decoder) => new Set(getDataArray(dec))
 
 function getDataMap (dec :Decoder) {
   const map :DataMap = new Map()
@@ -209,51 +218,64 @@ function getValue (dec :Decoder, type :ValueType) :any {
 const dataEncoders :Map<number,DataEncoder<any>> = new Map()
 const dataDecoders :Map<number,DataDecoder<any>> = new Map()
 
-function registerCodec<T> (encoder :DataEncoder<T>, decoder :DataDecoder<T>) :number {
-  const id = dataEncoders.size
+function registerCodec<T> (id :number, encoder :DataEncoder<T>, decoder :DataDecoder<T>) :number {
+  if (dataEncoders.has(id)) throw new Error(`Codec id already in use: ${id}`)
   dataEncoders.set(id, encoder)
   dataDecoders.set(id, decoder)
   return id
 }
 
-/** Registers a codec for a custom class. This must be called in the same order on the client and
-  * server during early initialization so that the same numeric id is assigned to the class. This
-  * allows the class to be stored in properties with type `data` or to be included in the POJOs used
-  * in `record` properties.
+/** The minimum id number usable by custom class codecs. */
+export const MIN_CUSTOM_ID = 64
+
+/** Registers a codec for a custom class. This allows the class to be stored in properties with type
+  * `data` or to be included in the POJOs used in `record` properties.
   *
-  * (TODO: perhaps negotiate an id the first time an instance is sent?)
+  * A globally unique numeric id must be provided to distinguish this custom class from all others.
+  * This id must be unique within an entire system and an error will be thrown if another type is
+  * already registered with this id. If encoded data is persisted, this id must also never change or
+  * the persisted data will become unreadable.
+  *
+  * This must be called on the client and server before any calls that might attempt to encode or
+  * decode data containing the custom class.
   *
   * @param proto the prototype for the class (i.e. `Vector3.prototype`).
+  * @param id the numeric id that represents this type in serialized data.
   * @param enc an encoder for instances of that class.
   * @param dec a decoder for instances of that class.
   */
-export function registerCustomCodec<T> (proto :Object, enc :DataEncoder<T>, dec :DataDecoder<T>) {
-  proto["__typeId"] = registerCodec(enc, dec)
+export function registerCustomCodec<T> (
+  id :number, proto :Object, enc :DataEncoder<T>, dec :DataDecoder<T>
+) {
+  if (id < MIN_CUSTOM_ID) throw new Error(`Custom codecs must have id >= ${MIN_CUSTOM_ID}`)
+  proto["__typeId"] = registerCodec(id, enc, dec)
 }
 
-// NOTE: the first 8 codecs must be added in an order that corresponds to dataTypeId below
-registerCodec<void>((e, v) => {}, d => undefined)
-registerCodec<boolean>(addBoolean, getBoolean)
-registerCodec<number>(addFloat64, getFloat64)
-registerCodec<string>(addString, getString)
-registerCodec<DataArray>((e, v) => addDataIterable(e, v, v.length), d => getDataArray(d))
-registerCodec<DataSet>((e, v) => addDataIterable(e, v, v.size), d => new Set(getDataArray(d)))
-registerCodec<DataMap>(addDataMap, getDataMap)
-registerCodec<Timestamp>(addTimestamp, getTimestamp)
-registerCodec<Record>(addRecord, getRecord)
-registerCodec<Data>(addData, getData)
+// note: these numeric ids will inevitably be persisted and thus must not change
+const UNDEF_ID  = 0 ; registerCodec<void>(UNDEF_ID, addVoid, getVoid)
+const BOOL_ID   = 1 ; registerCodec<boolean>(BOOL_ID, addBoolean, getBoolean)
+const NUMBER_ID = 2 ; registerCodec<number>(NUMBER_ID, addFloat64, getFloat64)
+const STRING_ID = 3 ; registerCodec<string>(STRING_ID, addString, getString)
+const ARRAY_ID  = 4 ; registerCodec<DataArray>(ARRAY_ID, addDataArray, getDataArray)
+const SET_ID    = 5 ; registerCodec<DataSet>(SET_ID, addDataSet, getDataSet)
+const MAP_ID    = 6 ; registerCodec<DataMap>(MAP_ID, addDataMap, getDataMap)
+const STAMP_ID  = 7 ; registerCodec<Timestamp>(STAMP_ID, addTimestamp, getTimestamp)
+const RECORD_ID = 8 ; registerCodec<Record>(RECORD_ID, addRecord, getRecord)
+const DATA_ID   = 9 ; registerCodec<Data>(DATA_ID, addData, getData)
+const NULL_ID   = 10 ; registerCodec<null>(NULL_ID, addNull, getNull)
 
 function dataTypeId (data :Data) :number {
-  if (data === undefined) return 0
-  else if (typeof data === "boolean") return 1
-  else if (typeof data === "number") return 2
-  else if (typeof data === "string") return 3
-  else if (Array.isArray(data)) return 4
-  else if (isSet(data)) return 5
-  else if (isMap(data)) return 6
-  else if (data instanceof Timestamp) return 7
+  if (data === undefined) return UNDEF_ID
+  else if (data === null) return NULL_ID
+  else if (typeof data === "boolean") return BOOL_ID
+  else if (typeof data === "number") return NUMBER_ID
+  else if (typeof data === "string") return STRING_ID
+  else if (Array.isArray(data)) return ARRAY_ID
+  else if (isSet(data)) return SET_ID
+  else if (isMap(data)) return MAP_ID
+  else if (data instanceof Timestamp) return STAMP_ID
   else if ("__typeId" in data) return data["__typeId"] as number
-  else return 8 // record
+  else return RECORD_ID
 }
 
 function requireEncoder<T> (typeId :number) :DataEncoder<T> {
@@ -274,7 +296,7 @@ function valuesTypeId (iter :Iterable<Data>) :number {
     if (id === 0) id = dataTypeId(elem)
     // if the array contains different types, use 'data'
     // which will prefix each element with a type marker
-    else if (dataTypeId(elem) !== id) return 9
+    else if (dataTypeId(elem) !== id) return DATA_ID
   }
   return id
 }
@@ -284,6 +306,7 @@ function valuesTypeId (iter :Iterable<Data>) :number {
 
 const valueCodecs :{[key :string]: [DataEncoder<any>, DataDecoder<any>]} = {
   undefined: [addVoid,      getVoid],
+  null     : [addNull,      getNull],
   boolean  : [addBoolean,   getBoolean],
   int8     : [addInt8,      getInt8],
   int16    : [addInt16,     getInt16],
