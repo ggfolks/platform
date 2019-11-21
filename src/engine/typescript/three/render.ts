@@ -69,6 +69,8 @@ export class ThreeRenderEngine implements RenderEngine {
   readonly scene = new Scene()
   readonly cameras :ThreeCamera[] = []
 
+  onAfterRender? :(scene :Scene, camera :CameraObject) => void
+
   get size () :Value<dim2> { return this._size }
 
   get percentLoaded () :Value<number> { return this._percentLoaded }
@@ -92,6 +94,8 @@ export class ThreeRenderEngine implements RenderEngine {
     // https://threejs.org/docs/index.html#examples/en/loaders/GLTFLoader
     this.renderer.gammaOutput = true
     this.renderer.gammaFactor = 2.2
+
+    this.renderer.autoClear = false
 
     this.renderer.setPixelRatio(window.devicePixelRatio)
     this.renderer.domElement.style.width = "100%"
@@ -316,7 +320,10 @@ export class ThreeRenderEngine implements RenderEngine {
       cameras = this.cameras
       scene = this.scene
     }
-    this.renderer.render(scene, cameras.length > 0 ? cameras[0].camera : defaultCamera)
+    const camera = cameras.length > 0 ? cameras[0].camera : defaultCamera
+    this.renderer.clear()
+    this.renderer.render(scene, camera)
+    if (this.onAfterRender) this.onAfterRender(scene, camera)
   }
 
   protected _getActivePage () :ThreePage|undefined {
