@@ -1,5 +1,5 @@
 import {dim2, rect} from "../core/math"
-import {Value} from "../core/react"
+import {Source} from "../core/react"
 import {Element} from "./element"
 import {Spec} from "./style"
 
@@ -8,7 +8,7 @@ type ImageSpec = {path :string, scaleFactor :number}
 /** Defines configuration for [[Image]] elements. */
 export interface ImageConfig extends Element.Config {
   type :"image"
-  image :Spec<Value<ImageSpec|string>>
+  image :Spec<Source<ImageSpec|string>>
   width? :number
   height? :number
 }
