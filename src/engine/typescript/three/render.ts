@@ -135,6 +135,10 @@ export class ThreeRenderEngine implements RenderEngine {
     this.scene.autoUpdate = false
   }
 
+  preload (url :string) :void {
+    loadGLTF(url).once(Noop) // subscribe to trigger loading
+  }
+
   setBounds (bounds :rect) :void {
     if (rect.eq(bounds, this._bounds)) return
     rect.copy(this._bounds, bounds)
@@ -983,6 +987,7 @@ class ThreeAnimation extends TypeScriptComponent implements Animation {
   private readonly _mixerSubject :Subject<AnimationMixer>
   private _mixer? :AnimationMixer
   private readonly _urlsByName = new Map<string, string>()
+  private _autoplayed = false
 
   get url () :string|undefined { return this.urls[0] }
   set url (url :string|undefined) {
@@ -1074,14 +1079,22 @@ class ThreeAnimation extends TypeScriptComponent implements Animation {
 
   init () {
     super.init()
-    this.getProperty<string>("playing").onValue(name => {
-      if (name) this.play(name)
-      else this.stop()
+    this.getProperty<string>("playing").onValue(nameOrUrl => {
+      if (nameOrUrl) {
+        Subject.join2(this._requireClip(nameOrUrl), this._mixerSubject).once(([clip, mixer]) => {
+          const action = mixer.stopAllAction().clipAction(clip)
+          action.clampWhenFinished = this._clampWhenFinished
+          action.timeScale = this.timeScale
+          action.setLoop(this._loopMode, this.repetitions).stop().play()
+        })
+      } else {
+        this._mixerSubject.once(mixer => mixer.stopAllAction())
+      }
     })
     this.getProperty<WrapMode>("wrapMode").onValue(mode => {
-      const name = this.playing
-      if (!name) return
-      const clip = this._requireClip(name)
+      const nameOrUrl = this.playing
+      if (!nameOrUrl) return
+      const clip = this._requireClip(nameOrUrl)
       Subject.join2(clip, this._mixerSubject).once(([clip, mixer]) => {
         const action = mixer.clipAction(clip)
         action.clampWhenFinished = this._clampWhenFinished
@@ -1091,27 +1104,14 @@ class ThreeAnimation extends TypeScriptComponent implements Animation {
     })
     for (const property of ["timeScale", "repetitions"]) {
       this.getProperty<number>(property).onValue(value => {
-        const name = this.playing
-        if (!name) return
-        const clip = this._requireClip(name)
+        const nameOrUrl = this.playing
+        if (!nameOrUrl) return
+        const clip = this._requireClip(nameOrUrl)
         Subject.join2(clip, this._mixerSubject).once(([clip, mixer]) => {
           mixer.clipAction(clip)[property] = value
         })
       })
     }
-  }
-
-  awake () {
-    if (this.playAutomatically && this._urls[0]) this.play()
-  }
-
-  play (nameOrUrl? :string) :void {
-    const clip = this._requireClip(nameOrUrl)
-    Subject.join2(clip, this._mixerSubject).once(([clip, mixer]) => {
-      const action = mixer.stopAllAction().clipAction(clip)
-      action.clampWhenFinished = this._clampWhenFinished
-      action.setLoop(this._loopMode, Infinity).stop().play()
-    })
   }
 
   private get _loopMode () :number {
@@ -1125,16 +1125,6 @@ class ThreeAnimation extends TypeScriptComponent implements Animation {
 
   private get _clampWhenFinished () :boolean {
     return this.wrapMode === "clampForever"
-  }
-
-  stop (nameOrUrl? :string) :void {
-    if (!nameOrUrl) this._mixerSubject.once(mixer => mixer.stopAllAction())
-    else {
-      const clip = this._requireClip(nameOrUrl)
-      Subject.join2(clip, this._mixerSubject).once(([clip, mixer]) => {
-        mixer.clipAction(clip).stop()
-      })
-    }
   }
 
   private _requireClip (nameOrUrl? :string) :Subject<AnimationClip> {
@@ -1157,6 +1147,10 @@ class ThreeAnimation extends TypeScriptComponent implements Animation {
     this._urlsByName.clear()
     for (const url of this._urls) this._urlsByName.set(getAnchor(url), url)
     this.urlsValue.update(this._urls.slice())
+    if (this.playAutomatically && this._urls.length > 0 && !this._autoplayed) {
+      this._autoplayed = true
+      this.playing = getAnchor(this._urls[0])
+    }
   }
 }
 registerConfigurableType("component", ["render"], "animation", ThreeAnimation)

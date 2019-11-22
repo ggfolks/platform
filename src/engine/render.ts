@@ -16,6 +16,9 @@ export interface RenderEngine extends Disposable {
   /** The percentage of resources loaded (0 to 1). */
   readonly percentLoaded :Value<number>
 
+  /** Preloads a model URL. */
+  preload (url :string) :void
+
   /** Sets the onscreen bounds of the renderer. */
   setBounds (bounds :rect) :void
 

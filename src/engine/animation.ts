@@ -28,14 +28,6 @@ export interface Animation extends Component {
 
   /** The number of repetitions of the animation. */
   repetitions: number
-  
-  /** Plays an animation
-    * @param [name] the name of the animation to play, if not the default. */
-  play (name? :string) :void
-
-  /** Stops an animation.
-    * @param [name] the name of the animation to stop, if not all animations. */
-  stop (name? :string) :void
 }
 
 /** Manages an animation state graph. */
