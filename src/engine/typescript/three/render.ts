@@ -323,7 +323,7 @@ export class ThreeRenderEngine implements RenderEngine {
       cameras = this.cameras
       scene = this.scene
     }
-    const camera = cameras.length > 0 ? cameras[0].camera : defaultCamera
+    const camera = cameras.length > 0 ? cameras[0].cameraObject : defaultCamera
     this.renderer.clear()
     this.renderer.render(scene, camera)
     if (this.onAfterRender) this.onAfterRender(scene, camera)
@@ -705,7 +705,7 @@ class ThreeCamera extends ThreeObjectComponent implements Camera {
   @property("number") cullingMask = ALL_LAYERS_MASK
   @property("number") eventMask = ALL_LAYERS_MASK
 
-  get camera () :CameraObject { return this.objectValue.current as CameraObject }
+  get cameraObject () :CameraObject { return this.objectValue.current as CameraObject }
 
   constructor (
     gameEngine :TypeScriptGameEngine,
@@ -747,7 +747,7 @@ class ThreeCamera extends ThreeObjectComponent implements Camera {
     Value
       .join2(this.getProperty<number>("aspect"), this.getProperty<number>("orthographicSize"))
       .onChange(([aspect, orthographicSize]) => {
-        const camera = this.camera
+        const camera = this.cameraObject
         if (camera instanceof PerspectiveCamera) {
           camera.aspect = aspect
         } else { // camera instanceof OrthographicCamera
@@ -760,22 +760,22 @@ class ThreeCamera extends ThreeObjectComponent implements Camera {
         camera.updateProjectionMatrix()
       })
     this.getProperty<number>("fieldOfView").onChange(fov => {
-      const camera = this.camera
+      const camera = this.cameraObject
       if (camera instanceof PerspectiveCamera) {
         camera.fov = fov
         camera.updateProjectionMatrix()
       }
     })
     this.getProperty<number>("nearClipPlane").onChange(nearClipPlane => {
-      this.camera.near = nearClipPlane
-      this.camera.updateProjectionMatrix()
+      this.cameraObject.near = nearClipPlane
+      this.cameraObject.updateProjectionMatrix()
     })
     this.getProperty<number>("farClipPlane").onChange(farClipPlane => {
-      this.camera.far = farClipPlane
-      this.camera.updateProjectionMatrix()
+      this.cameraObject.far = farClipPlane
+      this.cameraObject.updateProjectionMatrix()
     })
     this.getProperty<number>("cullingMask").onChange(() => {
-      this._updateObjectLayers(this.camera)
+      this._updateObjectLayers(this.cameraObject)
     })
   }
 
@@ -798,7 +798,7 @@ class ThreeCamera extends ThreeObjectComponent implements Camera {
     if (!target) target = Ray.create()
     raycaster.setFromCamera(
       tmpVector2.set(coords[0] * 2 - 1, coords[1] * 2 - 1),
-      this.camera,
+      this.cameraObject,
     )
     raycaster.ray.origin.toArray(target.origin)
     raycaster.ray.direction.toArray(target.direction)
@@ -815,7 +815,7 @@ class ThreeCamera extends ThreeObjectComponent implements Camera {
   worldToViewportPoint (coords :vec3, target? :vec3) :vec3 {
     if (!target) target = vec3.create()
     vec3.transformMat4(target, coords, this.transform.worldToLocalMatrix)
-    tmpVector3.fromArray(target).applyMatrix4(this.camera.projectionMatrix)
+    tmpVector3.fromArray(target).applyMatrix4(this.cameraObject.projectionMatrix)
     tmpVector3.toArray(target)
     target[0] = (target[0] + 1) * 0.5
     target[1] = (target[1] + 1) * 0.5
@@ -837,11 +837,11 @@ class ThreeCamera extends ThreeObjectComponent implements Camera {
 
   protected _updateObjectTransform (object :Object3D) {
     super._updateObjectTransform(object)
-    this.camera.matrixWorldInverse.fromArray(this.transform.worldToLocalMatrix)
+    this.cameraObject.matrixWorldInverse.fromArray(this.transform.worldToLocalMatrix)
   }
 
   protected _updateObjectLayers (object :Object3D) {
-    this.camera.layers.mask = this.cullingMask
+    object.layers.mask = this.cullingMask
   }
 
   protected _addToCameras (page :ThreePage|undefined) {
@@ -865,12 +865,16 @@ class ThreeLight extends ThreeObjectComponent implements Light {
   init () {
     super.init()
     this.getProperty<LightType>("lightType").onValue(lightType => {
-      const object = (lightType === "ambient") ? new AmbientLight() : new DirectionalLight()
-      object.layers.enableAll()
-      this.objectValue.update(object)
+      this.objectValue.update(lightType === "ambient" ? new AmbientLight() : new DirectionalLight())
       this._updateColor()
     })
     this.getProperty<Color>("color").onChange(() => this._updateColor())
+  }
+
+  protected _updateObjectLayers (object :Object3D) {
+    // lights apply to all layers; otherwise, we end up switching between shaders compiled for 0
+    // lights and N lights, and thus recompiling shaders every frame
+    object.layers.mask = ALL_LAYERS_MASK
   }
 
   private _updateColor () {
