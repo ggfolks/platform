@@ -160,12 +160,14 @@ export class Surface {
     return this
   }
 
-  /** Concatenates `xf` onto this surface's transform, accounting for the `origin`. */
-  concatenate (xf :mat2d, origin :vec2) :Surface {
+  /** Concatenates `xf` onto this surface's transform, accounting for the `origin` if supplied. */
+  concatenate (xf :mat2d, origin? :vec2) :Surface {
     mat2d.multiply(this.tx, this.tx, xf)
-    vec2.negate(origin, origin)
-    mat2d.translate(this.tx, this.tx, origin)
-    vec2.negate(origin, origin)
+    if (origin) {
+      vec2.negate(origin, origin)
+      mat2d.translate(this.tx, this.tx, origin)
+      vec2.negate(origin, origin)
+    }
     return this
   }
 
