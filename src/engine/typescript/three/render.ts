@@ -139,6 +139,14 @@ export class ThreeRenderEngine implements RenderEngine {
     loadGLTF(url).once(Noop) // subscribe to trigger loading
   }
 
+  noteLoading (url :string) :void {
+    DefaultLoadingManager.itemStart(url)
+  }
+
+  noteFinished (url :string) :void {
+    DefaultLoadingManager.itemEnd(url)
+  }
+
   setBounds (bounds :rect) :void {
     if (rect.eq(bounds, this._bounds)) return
     rect.copy(this._bounds, bounds)

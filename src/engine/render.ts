@@ -19,6 +19,15 @@ export interface RenderEngine extends Disposable {
   /** Preloads a model URL. */
   preload (url :string) :void
 
+  /** Notes that we started loading a resource externally.  The URL isn't actually resolved here;
+    * it's just used as an identifier.
+    * @param url the URL of the resource being loaded. */
+  noteLoading (url :string) :void
+
+  /** Notes that we finished loading a resource externally.
+    * @param url the URL of the resource that we finished loading. */
+  noteFinished (url :string) :void
+
   /** Sets the onscreen bounds of the renderer. */
   setBounds (bounds :rect) :void
 
