@@ -85,7 +85,7 @@ export abstract class Actor {
 }
 
 export class Sprite extends Actor {
-  tint = defaultTint
+  tint = Color.clone(defaultTint)
 
   constructor (readonly tile :Tile) { super() }
 
