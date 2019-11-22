@@ -1,4 +1,4 @@
-import {glMatrix, quat, vec2, vec3} from "gl-matrix"
+import {glMatrix, quat, vec2, vec3, vec4} from "gl-matrix"
 
 export * from "gl-matrix"
 
@@ -219,6 +219,13 @@ export class Plane extends Float32Array {
 
   /** Creates an invalid plane instance (zero normal). */
   static create () :Plane { return new Plane() }
+
+  /** Creates a new plane from components. */
+  static fromValues (x :number, y :number, z :number, w :number) :Plane {
+    return Plane.set(Plane.create(), x, y, z, w)
+  }
+
+  static set :(out :Plane, x :number, y :number, z :number, w :number) => Plane = vec4.set as any
 
   /** Sets a plane based on the plane normal and a point on the plane.
     * @param out the plane to hold the result.

@@ -364,6 +364,7 @@ abstract class ThreeMaterial extends TypeScriptConfigurable implements Material 
   @property("boolean") transparent = false
   @property("number", {min: 0, max: 1, wheelStep: 0.1}) alphaTest = 0
   @property("MaterialSide") side :MaterialSide = "front"
+  @property("number", {min: 0, max: 1, wheelStep: 0.1}) opacity = 1
 
   constructor (
     readonly gameEngine :TypeScriptGameEngine,
@@ -377,7 +378,7 @@ abstract class ThreeMaterial extends TypeScriptConfigurable implements Material 
 
   init () {
     super.init()
-    for (const property of ["transparent", "alphaTest"]) {
+    for (const property of ["transparent", "alphaTest", "opacity"]) {
       this.getProperty<any>(property).onValue(value => {
         this.object[property] = value
         this.object.needsUpdate = true

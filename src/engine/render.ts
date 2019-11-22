@@ -92,6 +92,9 @@ export interface Material extends Configurable {
 
   /** The side to render. */
   side :MaterialSide
+
+  /** The material opacity. */
+  opacity :number
 }
 
 /** Represents a camera attached to a game object. */
