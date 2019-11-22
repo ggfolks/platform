@@ -27,7 +27,7 @@ setBaseUrl(
   typeof location === "undefined" ? "http://localhost:8080" : (location.origin + location.pathname),
 )
 
-const ABSOLUTE_URL_PATTERN = /^(https?|file|blob):/
+const ABSOLUTE_URL_PATTERN = /^(https?|file|blob|data):/
 
 /** Given an URL that may be absolute or relative, returns an absolute URL relative to the base. */
 export function getAbsoluteUrl (maybeRelativeUrl :string) :string {
