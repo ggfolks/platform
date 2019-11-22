@@ -129,6 +129,21 @@ export abstract class Source<T> {
     })
   }
 
+  /** Returns a source which "switches" between successive underlying sources. The "latest" value
+    * emitted by `sources` will be the "live" source and values emitted by that source will be
+    * emitted by the switched source. When the live source changes, the values emitted by the old
+    * source are ignored and only values by the new live source are emitted. */
+  static switch<T> (sources :Source<Source<T>>) :Source<T> {
+    return Subject.deriveSubject(disp => {
+      let disconnect = NoopRemover
+      let unlisten = sources.onEmit(source => {
+        disconnect()
+        disconnect = source.onEmit(disp)
+      })
+      return () => { disconnect() ; unlisten() }
+    })
+  }
+
   /** Registers `fn` to be called with values emitted by this source. If the source has a current
     * value, `fn` will _not_ be called with the current value. */
   abstract onEmit (fn :ValueFn<T>) :Remover
