@@ -257,12 +257,11 @@ class UINode extends Node {
       else {
         root.setSize(dim2.fromValues(Math.round(ctx.screen.current[2]*0.9),
                                      Math.round(ctx.screen.current[3]*0.9)))
+        const {rootH, rootV, screenH, screenV} = this.config
         disposer.add(root.bindOrigin(
-          ctx.screen,
-          this.config.screenH || "center",
-          this.config.screenV || "center",
-          this.config.rootH || "center",
-          this.config.rootV || "center",
+          rootH || "center",
+          rootV || "center",
+          Root.rectAnchor(ctx.screen, screenH || "center", screenV || "center"),
         ))
       }
       ctx.host.addRoot(root)

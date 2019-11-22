@@ -657,19 +657,16 @@ export class Root extends Element {
     return addListener(this._gestureHandlers, handler)
   }
 
-  /** Binds the origin of this root by matching a point of this root (specified by `rootH` &
-    * `rootV`) to a point on the screen (specified by `screenH` & `screenV`), given a reactive view
-    * of the `screen` bounds.
+  /** Binds the specified anchor point on this root to `pos` by keeping the root origin updated such
+    * that the points always align.
     * @return a remover that can be used to cancel the binding. The binding will also be cleared
     * when the root is disposed. */
-  bindOrigin (screen :Value<rect>, screenH :Root.HAnchor, screenV :Root.VAnchor,
-              rootH :Root.HAnchor, rootV :Root.VAnchor) :Remover {
+  bindOrigin (rootH :Root.HAnchor, rootV :Root.VAnchor, pos :Value<vec2>) :Remover {
     const rsize = this.events.filter(c => c === "resized").
       fold(this.size(dim2.create()), (sz, c) => this.size(dim2.create()), dim2.eq)
-    const remover = Value.join2(screen, rsize).onValue(([ss, rs]) => {
-      const sh = Root.pos(screenH, 0, ss[2]), sv = Root.pos(screenV, 0, ss[3])
+    const remover = Value.join2(pos, rsize).onValue(([pos, rs]) => {
       const rh = Root.pos(rootH, 0, rs[0]), rv = Root.pos(rootV, 0, rs[1])
-      this.origin.updateIf(vec2.set(tmpv, Math.round(sh-rh)+ss[0], Math.round(sv-rv)+ss[1]))
+      this.origin.updateIf(vec2.set(tmpv, Math.round(pos[0]-rh), Math.round(pos[1]-rv)))
     })
     this.disposer.add(remover)
     return remover
@@ -1044,6 +1041,11 @@ export namespace Root {
     if (align === "left" || align === "top") return min
     else if (align == "right" || align === "bottom") return max
     else return min+(max-min)/2
+  }
+
+  export function rectAnchor (rect :Value<rect>, horiz :HAnchor, vert :VAnchor) :Value<vec2> {
+    const svec = vec2.create()
+    return rect.map(ss => vec2.set(svec, ss[0] + pos(horiz, 0, ss[2]), ss[1] + pos(vert, 0, ss[3])))
   }
 
   /** Events of interest emitted by roots. */
