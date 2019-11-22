@@ -17,6 +17,8 @@ function makeColorTex (glc :GLC) :Texture {
   return imageToTexture(glc, scaled, tcfg, createTexture(glc, tcfg))
 }
 
+const tmpmat = mat2d.create(), tmpdim = dim2.create()
+
 /** Provides a simple drawing API to a GPU accelerated render target. This can be either the main
   * frame buffer, or a frame buffer bound to a texture.
   *
@@ -261,15 +263,16 @@ export class Surface {
     const wx = dx * (width / 2) / length
     const wy = dy * (width / 2) / length
 
-    const xf = mat2d.fromRotation(mat2d.create(), Math.atan2(dy, dx))
-    mat2d.translate(xf, xf, vec2.fromValues(ax + wy, ay - wx))
+    const xf = mat2d.fromRotation(tmpmat, Math.atan2(dy, dx))
+    xf[4] = ax + wy
+    xf[5] = ay - wx
     mat2d.multiply(xf, this.tx, xf)
 
     const patTex = this.patternTex
     const tex = patTex == null ? this.colorTex : patTex
     const tint = patTex == null ?
       Color.combine(Color.copy(this.tempColor, this.fillColor), this.tint) : this.tint
-    this.batch.addTexQuad(tex, tint, xf, vec2zero, dim2.fromValues(length, width))
+    this.batch.addTexQuad(tex, tint, xf, vec2zero, dim2.set(tmpdim, length, width))
     return this
   }
 
