@@ -45,6 +45,8 @@ const tmpr = Ray.create()
 const tmpv = vec3.create()
 const tmpp = vec3.create()
 const tmpPlane = Plane.create()
+const tmpBoundingBox = new Box3()
+const nodeBoundingBox = new Box3()
 const worldMovement = vec3.create()
 const viewPosition = vec3.create()
 const viewMovement = vec3.create()
@@ -181,8 +183,7 @@ export class ThreeRenderEngine implements RenderEngine {
     raycaster.ray.origin.fromArray(origin)
     raycaster.ray.direction.fromArray(direction)
     raycasterResults.length = 0
-    const activePage = this._getActivePage()
-    raycaster.intersectObject(activePage ? activePage.scene : this.scene, true, raycasterResults)
+    raycaster.intersectObject(this._activeScene, true, raycasterResults)
     if (target) target.length = 0
     else target = []
     for (const result of raycasterResults) {
@@ -199,12 +200,27 @@ export class ThreeRenderEngine implements RenderEngine {
     return target
   }
 
+  overlapBounds (bounds :Bounds, layerMask = ALL_LAYERS_MASK, target? :Transform[]) :Transform[] {
+    if (target) target.length = 0
+    else target = []
+    const constTarget = target
+    tmpBoundingBox.min.fromArray(bounds.min)
+    tmpBoundingBox.max.fromArray(bounds.max)
+    this._activeScene.traverse(node => {
+      if (!node.userData.boundingBox) return
+      nodeBoundingBox.copy(node.userData.boundingBox).applyMatrix4(node.matrixWorld)
+      if (tmpBoundingBox.intersectsBox(nodeBoundingBox)) {
+        const transform = getTransform(node)
+        if (transform.gameObject.layerFlags & layerMask) constTarget.push(transform)
+      }
+    })
+    return target
+  }
+
   updateHovers () {
     this._hand.update()
     hovered.clear()
-    const activePage = this._getActivePage()
-    const cameras = activePage ? activePage.cameras : this.cameras
-    for (const camera of cameras) {
+    for (const camera of this._activeCameras) {
       for (const [identifier, pointer] of this._hand.pointers) {
         camera.screenPointToRay(vec2.set(coords, pointer.position[0], pointer.position[1]), tmpr)
 
@@ -325,7 +341,7 @@ export class ThreeRenderEngine implements RenderEngine {
 
   render () {
     this._frameCount++
-    const activePage = this._getActivePage()
+    const activePage = this._activePage
     let cameras :ThreeCamera[]
     let scene :Scene
     if (activePage) {
@@ -341,7 +357,17 @@ export class ThreeRenderEngine implements RenderEngine {
     if (this.onAfterRender) this.onAfterRender(scene, camera)
   }
 
-  protected _getActivePage () :ThreePage|undefined {
+  protected get _activeScene () :Scene {
+    const activePage = this._activePage
+    return activePage ? activePage.scene : this.scene
+  }
+
+  protected get _activeCameras () :ThreeCamera[] {
+    const activePage = this._activePage
+    return activePage ? activePage.cameras : this.cameras
+  }
+
+  protected get _activePage () :ThreePage|undefined {
     const activePage = this.gameEngine.activePage.current
     return (activePage === DEFAULT_PAGE)
       ? undefined
@@ -895,8 +921,6 @@ class ThreeLight extends ThreeObjectComponent implements Light {
   }
 }
 registerConfigurableType("component", ["render"], "light", ThreeLight)
-
-const tmpBoundingBox = new Box3()
 
 class ThreeModel extends ThreeObjectComponent implements Model {
   @property("url") url = ""

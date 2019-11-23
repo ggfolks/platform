@@ -48,6 +48,13 @@ export interface RenderEngine extends Disposable {
     target? :RaycastHit[],
   ) :RaycastHit[]
 
+  /** Finds all objects whose bounds intersect the ones provided.
+    * @param bounds the bounds to check against.
+    * @param [layerMask=ALL_LAYERS_MASK] the mask that determines which layers to include.
+    * @param [target] an array to populate; otherwise, a new one will be created.
+    * @return the array of overlapping objects. */
+  overlapBounds (bounds :Bounds, layerMask? :number, target? :Transform[]) :Transform[]
+
   /** Updates the hover states. */
   updateHovers () :void
 
