@@ -103,6 +103,8 @@ export class ThreeRenderEngine implements RenderEngine {
     this.renderer.domElement.style.width = "100%"
     this.renderer.domElement.style.height = "100%"
 
+    this.renderer.info.autoReset = false
+
     let currentStats :string[] = []
     this.stats = Value.deriveValue(
       refEquals,
@@ -352,6 +354,7 @@ export class ThreeRenderEngine implements RenderEngine {
       scene = this.scene
     }
     const camera = cameras.length > 0 ? cameras[0].cameraObject : defaultCamera
+    this.renderer.info.reset()
     this.renderer.clear()
     this.renderer.render(scene, camera)
     if (this.onAfterRender) this.onAfterRender(scene, camera)
