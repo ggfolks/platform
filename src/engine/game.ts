@@ -161,13 +161,18 @@ export interface GameEngine extends Disposable {
   loadSpace (url :string, layerMask? :number, cache? :boolean) :Promise<void>
 
   /** Creates a set of game objects on the current page.
-    * @param configs the map from name to config. */
-  createGameObjects (configs :SpaceConfig) :void
+    * @param configs the map from name to config.
+    * @param [onDefaultPage=false] if true, create the objects on the default page rather than
+    * the current one. */
+  createGameObjects (configs :SpaceConfig, onDefaultPage? :boolean) :void
 
   /** Creates and returns a new (empty) game object on the current page.
     * @param [name] the name of the object.
-    * @param [config] the configuration of the object's components. */
-  createGameObject (name? :string, config? :GameObjectConfig) :GameObject
+    * @param [config] the configuration of the object's components.
+    * @param [onDefaultPage=false] if true, create the objects on the default page rather than
+    * the current one.
+    * @return the created object. */
+  createGameObject (name? :string, config? :GameObjectConfig, onDefaultPage? :boolean) :GameObject
 
   /** Disposes of all game objects matching the given layers.
     *  @param [layerMask=ALL_LAYERS_MASK] the layer mask to use to filter objects. */

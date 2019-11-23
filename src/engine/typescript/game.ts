@@ -350,7 +350,7 @@ export class TypeScriptGameEngine implements GameEngine {
   }
 
   createPage (name? :string) :GameObject {
-    return this.createGameObject(name || "page", {page: {}})
+    return this.createGameObject(name || "page", {page: {}}, true)
   }
 
   createPrimitive (type :PrimitiveType, config? :GameObjectConfig) :GameObject {
@@ -365,15 +365,22 @@ export class TypeScriptGameEngine implements GameEngine {
   async loadSpace (url :string, layerMask? :number, cache? :boolean) :Promise<void> {
     this.disposeGameObjects(layerMask)
     const spaceConfig = await JavaScript.load(url, cache)
-    this.createGameObjects(JavaScript.parse(spaceConfig))
+    this.createGameObjects(JavaScript.parse(spaceConfig), true)
   }
 
-  createGameObjects (configs :SpaceConfig) :void {
-    for (const name in configs) this.createGameObject(name, configs[name])
+  createGameObjects (configs :SpaceConfig, onDefaultPage = false) :void {
+    for (const name in configs) this.createGameObject(name, configs[name], onDefaultPage)
   }
 
-  createGameObject (name? :string, config? :GameObjectConfig) :GameObject {
-    return new TypeScriptGameObject(this, getValue(name, "object"), config || {})
+  createGameObject (name? :string, config? :GameObjectConfig, onDefaultPage = false) :GameObject {
+    const gameObject = new TypeScriptGameObject(this, getValue(name, "object"), config || {})
+    if (!onDefaultPage) {
+      const activePage = this.activePage.current
+      if (activePage !== DEFAULT_PAGE) {
+        gameObject.transform.parent = this.gameObjects.require(activePage).transform
+      }
+    }
+    return gameObject
   }
 
   disposeGameObjects (layerMask :number = ALL_LAYERS_MASK) :void {

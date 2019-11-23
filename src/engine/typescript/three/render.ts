@@ -75,6 +75,11 @@ export class ThreeRenderEngine implements RenderEngine {
 
   get size () :Value<dim2> { return this._size }
 
+  get activeCameras () :ThreeCamera[] {
+    const activePage = this._activePage
+    return activePage ? activePage.cameras : this.cameras
+  }
+
   get percentLoaded () :Value<number> { return this._percentLoaded }
 
   constructor (readonly gameEngine :TypeScriptGameEngine) {
@@ -222,7 +227,7 @@ export class ThreeRenderEngine implements RenderEngine {
   updateHovers () {
     this._hand.update()
     hovered.clear()
-    for (const camera of this._activeCameras) {
+    for (const camera of this.activeCameras) {
       for (const [identifier, pointer] of this._hand.pointers) {
         camera.screenPointToRay(vec2.set(coords, pointer.position[0], pointer.position[1]), tmpr)
 
@@ -363,11 +368,6 @@ export class ThreeRenderEngine implements RenderEngine {
   protected get _activeScene () :Scene {
     const activePage = this._activePage
     return activePage ? activePage.scene : this.scene
-  }
-
-  protected get _activeCameras () :ThreeCamera[] {
-    const activePage = this._activePage
-    return activePage ? activePage.cameras : this.cameras
   }
 
   protected get _activePage () :ThreePage|undefined {

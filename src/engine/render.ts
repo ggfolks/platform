@@ -10,6 +10,9 @@ export interface RenderEngine extends Disposable {
   /** The HTML canvas. */
   readonly domElement :HTMLElement
 
+  /** The array of cameras currently active. */
+  readonly activeCameras :Camera[]
+
   /** The renderer stats. */
   readonly stats :Value<string[]>
 
