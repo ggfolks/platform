@@ -718,7 +718,10 @@ class ThreeMeshRenderer extends ThreeObjectComponent implements MeshRenderer {
             : Value.constant<TypeScriptMesh|null>(null),
           )
         .onValue((mesh :any) => {
-          this._mesh.geometry = (mesh && mesh._bufferGeometry) || emptyGeometry
+          const geometry = (mesh && mesh._bufferGeometry) || emptyGeometry
+          this._mesh.geometry = geometry
+          if (!geometry.boundingBox) geometry.computeBoundingBox()
+          this._mesh.userData.boundingBox = geometry.boundingBox
         }),
     )
   }
