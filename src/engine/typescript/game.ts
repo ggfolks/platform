@@ -368,18 +368,75 @@ export class TypeScriptGameEngine implements GameEngine {
     this.createGameObjects(JavaScript.parse(spaceConfig), true)
   }
 
-  createGameObjects (configs :SpaceConfig, onDefaultPage = false) :void {
-    for (const name in configs) this.createGameObject(name, configs[name], onDefaultPage)
+  createGameObjects (configs :SpaceConfig, onDefaultPage = false) :PMap<GameObject> {
+    // create the objects and map them by original name
+    const gameObjects :PMap<GameObject> = {}
+    for (const name in configs) {
+      gameObjects[name] = new TypeScriptGameObject(this, name)
+    }
+
+    // configure the objects with updated references
+    const replaceIds = (config :object) => {
+      const newConfig = {}
+      for (const key in config) {
+        const value = config[key]
+        if (typeof value === "string" && key.endsWith("Id")) {
+          const gameObject = gameObjects[value]
+          if (gameObject) newConfig[key] = gameObject.id
+          else log.warn("Missing game object for id.", "key", key, "value", value)
+
+        } else if (
+          typeof value === "object" &&
+          value !== null &&
+          Object.getPrototypeOf(value) === Object.prototype
+        ) {
+          newConfig[key] = replaceIds(value)
+
+        } else {
+          newConfig[key] = value
+        }
+      }
+      return newConfig
+    }
+    for (const name in configs) {
+      gameObjects[name].configure(replaceIds(configs[name]))
+    }
+
+    // put the objects on the proper page, if necessary
+    if (!onDefaultPage) {
+      const activePage = this.activePage.current
+      if (activePage !== DEFAULT_PAGE) {
+        const parent = this.gameObjects.require(activePage).transform
+        for (const name in configs) {
+          const config = configs[name]
+          if (!(config.transform && config.transform.parentId)) {
+            gameObjects[name].transform.parent = parent
+          }
+        }
+      }
+    }
+
+    // wake the objects up
+    for (const name in gameObjects) gameObjects[name].sendMessage("awake")
+
+    return gameObjects
   }
 
-  createGameObject (name? :string, config? :GameObjectConfig, onDefaultPage = false) :GameObject {
-    const gameObject = new TypeScriptGameObject(this, getValue(name, "object"), config || {})
-    if (!onDefaultPage) {
+  createGameObject (
+    name? :string,
+    config? :GameObjectConfig,
+    onDefaultPage = false,
+    wake = true,
+  ) :GameObject {
+    const gameObject = new TypeScriptGameObject(this, getValue(name, "object"))
+    if (config) gameObject.configure(config)
+    if (!(onDefaultPage || config && config.transform && config.transform.parentId)) {
       const activePage = this.activePage.current
       if (activePage !== DEFAULT_PAGE) {
         gameObject.transform.parent = this.gameObjects.require(activePage).transform
       }
     }
+    if (wake) gameObject.sendMessage("awake")
     return gameObject
   }
 
@@ -535,11 +592,7 @@ export class TypeScriptGameObject implements GameObject {
   get componentTypes () :Value<string[]> { return this._componentTypes }
   get components () :RMap<string, Component> { return this._components }
 
-  constructor (
-    public gameEngine :TypeScriptGameEngine,
-    name :string,
-    config :GameObjectConfig,
-  ) {
+  constructor (public gameEngine :TypeScriptGameEngine, name :string) {
     this.id = name
     for (
       let ii = 2;
@@ -549,9 +602,12 @@ export class TypeScriptGameObject implements GameObject {
     gameEngine._gameObjects.set(this.id, this)
     this.nameValue = Mutable.local(name)
     this.transform = this.addComponent("transform", {}, false)
+  }
+
+  configure (config :GameObjectConfig) {
     if (config.order === undefined) {
       this.orderValue.update(
-        gameEngine._getNextOrder(config.transform && config.transform.parentId, !!config.page),
+        this.gameEngine._getNextOrder(config.transform && config.transform.parentId, !!config.page),
       )
     }
     for (const key in config) {
@@ -563,8 +619,6 @@ export class TypeScriptGameObject implements GameObject {
       if (typeof value === "object") this.addComponent(key, value, false)
       else this[key] = value
     }
-    this.sendMessage("awake")
-
     this.activeInHierarchyValue.onChange(active => {
       this.sendMessage(active ? "onEnable" : "onDisable")
       for (let ii = 0; ii < this.transform.childCount; ii++) {

@@ -163,8 +163,9 @@ export interface GameEngine extends Disposable {
   /** Creates a set of game objects on the current page.
     * @param configs the map from name to config.
     * @param [onDefaultPage=false] if true, create the objects on the default page rather than
-    * the current one. */
-  createGameObjects (configs :SpaceConfig, onDefaultPage? :boolean) :void
+    * the current one.
+    * @return an object containing the created objects mapped by name. */
+  createGameObjects (configs :SpaceConfig, onDefaultPage? :boolean) :PMap<GameObjectConfig>
 
   /** Creates and returns a new (empty) game object on the current page.
     * @param [name] the name of the object.
