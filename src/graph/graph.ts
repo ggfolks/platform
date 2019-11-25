@@ -133,7 +133,7 @@ export class Graph implements Disposable {
     return `
       varying vec4 worldPosition;
       void main(void) {
-        vec4 modPosition = mod(worldPosition.xzxz, vec4(vec2(1.0), vec2(0.25)));
+        vec4 modPosition = mod(worldPosition.xzxz - vec4(0.5), vec4(vec2(1.0), vec2(0.25)));
         vec4 lowerSteps = step(vec4(vec2(0.02), vec2(0.005)), modPosition);
         vec4 upperSteps = vec4(1.0) - step(vec4(vec2(0.98), vec2(0.245)), modPosition);
         float outside = lowerSteps.x * lowerSteps.y * lowerSteps.z * lowerSteps.w *

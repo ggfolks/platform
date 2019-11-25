@@ -366,6 +366,9 @@ export interface Component extends Configurable {
 
   /** Optional function to call each frame we're pressing on the object. */
   readonly onPointerDrag? :(identifier :number, hover :Hover) => void
+
+  /** Optional function to call each time we wheel on an object. */
+  readonly onWheel? :(identifier :number, hover :Hover, delta :vec3) => void
 }
 
 /** Describes a hover point. */

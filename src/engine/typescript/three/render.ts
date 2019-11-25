@@ -19,6 +19,7 @@ import {Graph, GraphConfig} from "../../../graph/graph"
 import {PropertyMeta, setEnumMeta} from "../../../graph/meta"
 import {loadGLTF, loadGLTFAnimationClip} from "../../../scene3/entity"
 import {Hand, Pointer} from "../../../input/hand"
+import {wheelEvents} from "../../../input/react"
 import {ALL_LAYERS_MASK, DEFAULT_PAGE, ConfigurableConfig, Hover, Transform} from "../../game"
 import {Animation, WrapMode, WrapModes} from "../../animation"
 import {getConfigurableMeta, property} from "../../meta"
@@ -140,6 +141,16 @@ export class ThreeRenderEngine implements RenderEngine {
     this._disposer.add(gameEngine.ctx.screen.onValue(b => this.setBounds(b)))
 
     this._disposer.add(gameEngine.ctx.hand = this._hand = new Hand(this.renderer.domElement))
+
+    const delta = vec3.create()
+    this._disposer.add(wheelEvents.onEmit(event => {
+      vec3.set(delta, event.deltaX, event.deltaY, event.deltaZ)
+      for (const [objectComponent, hovers] of lastHovered) {
+        for (const [identifier, hover] of hovers) {
+          objectComponent.sendMessage("onWheel", identifier, hover, delta)
+        }
+      }
+    }))
 
     this.scene.autoUpdate = false
   }
