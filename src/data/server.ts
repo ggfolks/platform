@@ -321,7 +321,10 @@ export function channelHandlers (store :DataStore) :PMap<ChannelHandler<any>> {
               res.post(msg.index, msg.msg, auth.current)
               break
             default:
-              const name = obj.metas[msg.idx].name
+              const meta = obj.metas[msg.idx]
+              if (meta === undefined) throw new Error(log.format(
+                "Missing object meta", "obj", obj, "index", msg.idx))
+              const name = meta.name
               if (obj.canRead(name, auth.current) &&
                   obj.canWrite(name, auth.current)) obj.applySync(msg, false)
               else log.warn("Write rejected", "auth", auth, "obj", obj, "prop", name)

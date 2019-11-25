@@ -101,7 +101,9 @@ export function getObject (dec :Decoder, into :DObject) :DObject {
   while (true) {
     const idx = dec.getValue("size8")
     if (idx === 255) break
-    const meta = into.metas[idx], prop = into[meta.name]
+    const meta = into.metas[idx]
+    if (!meta) throw new Error(log.format("Missing object meta", "obj", into, "idx", idx))
+    const prop = into[meta.name]
     switch (meta.type) {
     case "value": (prop as DMutable<any>).update(dec.getValue(meta.vtype), true) ; break
     case "set": dec.syncSet(meta.etype, (prop as Set<any>)) ; break
