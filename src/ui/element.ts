@@ -1332,15 +1332,17 @@ export class Host implements Disposable {
 
 /** A host that simply appends canvases to an HTML element (which should be positioned). */
 export class HTMLHost extends Host {
-  private readonly _textOverlay :HTMLInputElement
+  private readonly _textOverlay? :HTMLInputElement
 
-  constructor (elem :HTMLElement) {
+  constructor (elem :HTMLElement, enableTextOverlay = true) {
     super(elem)
-    const text = this._textOverlay = document.createElement("input")
-    text.style.position = "absolute"
-    text.style.background = "none"
-    text.style.border = "none"
-    text.style.outline = "none"
+    if (enableTextOverlay) {
+      const text = this._textOverlay = document.createElement("input")
+      text.style.position = "absolute"
+      text.style.background = "none"
+      text.style.border = "none"
+      text.style.outline = "none"
+    }
 
     this.roots.onChange(ev => {
       if (ev.type === "added") {
@@ -1367,12 +1369,13 @@ export class HTMLHost extends Host {
 
   showTextOverlay () :HTMLInputElement|undefined {
     const text = this._textOverlay
+    if (!text) return
     this.elem.appendChild(text)
     return text
   }
 
   handleKeyEvent (event :KeyboardEvent) {
     // don't dispatch key events to the root while we have a text overlay
-    if (!this._textOverlay.parentNode) super.handleKeyEvent(event)
+    if (!(this._textOverlay && this._textOverlay.parentNode)) super.handleKeyEvent(event)
   }
 }
