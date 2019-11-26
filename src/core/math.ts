@@ -284,7 +284,7 @@ export class Euler extends Float32Array {
     return Euler.set(
       out,
       toDegree(Math.atan2(2 * (q0*q1 + q2*q3), 1 - 2 * (q1*q1 + q2*q2))),
-      toDegree(Math.asin(2 * (q0*q2 - q3*q1))),
+      toDegree(Math.asin(clamp(2 * (q0*q2 - q3*q1), -1, 1))),
       toDegree(Math.atan2(2 * (q0*q3 + q1*q2), 1 - 2 * (q2*q2 + q3*q3))),
     )
   }
