@@ -304,10 +304,11 @@ export abstract class Element implements Disposable {
       this.queryChildren(c => c.findTaggedChild(tag))
   }
 
-  dispose () {
-    this.applyToChildren(child => child.dispose())
+  dispose (rootDisposing = false) {
+    this.applyToChildren(child => child.dispose(rootDisposing))
     this.disposer.dispose()
     this.clearCursor(this)
+    if (!rootDisposing) this.root.elementDisposed(this)
   }
 
   toString () {
@@ -878,8 +879,12 @@ export class Root extends Element {
     this._clearElementsOver()
   }
 
+  elementDisposed (elem :Element) {
+    this._lastElementsOver.delete(elem)
+  }
+
   dispose () {
-    super.dispose()
+    super.dispose(true)
     this.events.emit("disposed")
   }
 
@@ -1119,6 +1124,11 @@ export class Control extends Element {
     const applied = super.applyToIntersecting(region, op)
     if (applied) this.contents.applyToIntersecting(region, op)
     return applied
+  }
+
+  dispose (rootDisposing = false) {
+    if (this.focused.current) this.blur()
+    super.dispose(rootDisposing)
   }
 
   protected get customStyleScope () { return Control.StyleScope }
