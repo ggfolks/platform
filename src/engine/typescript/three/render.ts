@@ -621,6 +621,59 @@ export abstract class ThreeObjectComponent extends TypeScriptComponent {
   }
 }
 
+class ThreeBounded extends ThreeObjectComponent {
+  readonly bounds :Bounds
+
+  private readonly _boundsTarget = Bounds.create()
+  protected _boundsValid = true
+
+  constructor (
+    gameEngine :TypeScriptGameEngine,
+    supertype :string,
+    type :string,
+    gameObject :TypeScriptGameObject,
+  ) {
+    super(gameEngine, supertype, type, gameObject)
+    const createReadOnlyProxy = (value :vec3) => new Proxy(value, {
+      set: (obj, prop, value) => {
+        throw new Error("Object is read-only")
+      },
+      get: (obj, prop) => {
+        this._validateBounds()
+        return obj[prop]
+      },
+    })
+    this.bounds = Bounds.create(
+      createReadOnlyProxy(this._boundsTarget.min),
+      createReadOnlyProxy(this._boundsTarget.max),
+    )
+  }
+
+  createConfig () :ConfigurableConfig {
+    const config = super.createConfig()
+    config.cache = {bounds: Bounds.clone(this.bounds)}
+    return config
+  }
+
+  protected _updateObjectTransform (object :Object3D) {
+    super._updateObjectTransform(object)
+    this._boundsValid = false
+  }
+
+  protected _validateBounds () {
+    if (this._boundsValid) return
+    this._boundsValid = true
+    const object = this.objectValue.current
+    if (!object) {
+      Bounds.zero(this._boundsTarget)
+      return
+    }
+    tmpBoundingBox.copy(object.userData.boundingBox).applyMatrix4(object.matrixWorld)
+    tmpBoundingBox.min.toArray(this._boundsTarget.min)
+    tmpBoundingBox.max.toArray(this._boundsTarget.max)
+  }
+}
+
 const TypeScriptCubePrototype = TypeScriptCube.prototype as any
 TypeScriptCubePrototype._bufferGeometry = new BoxBufferGeometry()
 
@@ -641,7 +694,7 @@ TypeScriptTorusPrototype._bufferGeometry = new TorusBufferGeometry(1, 0.4, 16, 1
 
 const emptyGeometry = new BufferGeometry()
 
-class ThreeMeshRenderer extends ThreeObjectComponent implements MeshRenderer {
+class ThreeMeshRenderer extends ThreeBounded implements MeshRenderer {
   private _mesh = new Mesh()
   private _materials :ThreeMaterial[]
 
@@ -733,6 +786,7 @@ class ThreeMeshRenderer extends ThreeObjectComponent implements MeshRenderer {
           this._mesh.geometry = geometry
           if (!geometry.boundingBox) geometry.computeBoundingBox()
           this._mesh.userData.boundingBox = geometry.boundingBox
+          this._boundsValid = false
         }),
     )
   }
@@ -939,35 +993,10 @@ class ThreeLight extends ThreeObjectComponent implements Light {
 }
 registerConfigurableType("component", ["render"], "light", ThreeLight)
 
-class ThreeModel extends ThreeObjectComponent implements Model {
+class ThreeModel extends ThreeBounded implements Model {
   @property("url") url = ""
-  readonly bounds :Bounds
 
-  private readonly _boundsTarget = Bounds.create()
-  private _boundsValid = true
   private _urlRemover :Remover = NoopRemover
-
-  constructor (
-    gameEngine :TypeScriptGameEngine,
-    supertype :string,
-    type :string,
-    gameObject :TypeScriptGameObject,
-  ) {
-    super(gameEngine, supertype, type, gameObject)
-    const createReadOnlyProxy = (value :vec3) => new Proxy(value, {
-      set: (obj, prop, value) => {
-        throw new Error("Object is read-only")
-      },
-      get: (obj, prop) => {
-        this._validateBounds()
-        return obj[prop]
-      },
-    })
-    this.bounds = Bounds.create(
-      createReadOnlyProxy(this._boundsTarget.min),
-      createReadOnlyProxy(this._boundsTarget.max),
-    )
-  }
 
   init () {
     super.init()
@@ -987,12 +1016,6 @@ class ThreeModel extends ThreeObjectComponent implements Model {
     }))
   }
 
-  createConfig () :ConfigurableConfig {
-    const config = super.createConfig()
-    config.cache = {bounds: Bounds.clone(this.bounds)}
-    return config
-  }
-
   dispose () {
     super.dispose()
     this._urlRemover()
@@ -1001,20 +1024,6 @@ class ThreeModel extends ThreeObjectComponent implements Model {
   protected _updateObjectTransform (object :Object3D) {
     super._updateObjectTransform(object)
     updateChildren(object)
-    this._boundsValid = false
-  }
-
-  protected _validateBounds () {
-    if (this._boundsValid) return
-    this._boundsValid = true
-    const object = this.objectValue.current
-    if (!object) {
-      Bounds.zero(this._boundsTarget)
-      return
-    }
-    tmpBoundingBox.copy(object.userData.boundingBox).applyMatrix4(object.matrixWorld)
-    tmpBoundingBox.min.toArray(this._boundsTarget.min)
-    tmpBoundingBox.max.toArray(this._boundsTarget.max)
   }
 }
 registerConfigurableType("component", ["render"], "model", ThreeModel)

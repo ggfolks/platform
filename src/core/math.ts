@@ -327,6 +327,25 @@ export class Bounds {
     return Bounds.create(vec3.clone(bounds.min), vec3.clone(bounds.max))
   }
 
+  /** Sets the bounds to an initial empty value. */
+  static empty (out :Bounds) :Bounds {
+    vec3.set(out.min, Infinity, Infinity, Infinity)
+    vec3.set(out.max, -Infinity, -Infinity, -Infinity)
+    return out
+  }
+
+  /** Computes the union of two sets of bounds. */
+  static union (out :Bounds, a :Bounds, b :Bounds) :Bounds {
+    vec3.min(out.min, a.min, b.min)
+    vec3.max(out.max, a.max, b.max)
+    return out
+  }
+
+  /** Gets the size of a set of bounds. */
+  static getSize (out :vec3, bounds :Bounds) :vec3 {
+    return vec3.subtract(out, bounds.max, bounds.min)
+  }
+
   /** Sets the bounds to zero. */
   static zero (out :Bounds) :Bounds {
     // @ts-ignore zero does exist on vec3

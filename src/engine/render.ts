@@ -98,6 +98,9 @@ export interface MeshRenderer extends Component, Hoverable {
 
   /** The configurations of all the materials. */
   materialConfigs :ConfigurableConfig[]
+
+  /** The bounds of the mesh. */
+  readonly bounds :Bounds
 }
 
 export type MaterialSide = "front" | "back" | "double"
