@@ -346,6 +346,12 @@ export class Bounds {
     return vec3.subtract(out, bounds.max, bounds.min)
   }
 
+  /** Gets the center of a set of bounds. */
+  static getCenter (out :vec3, bounds :Bounds) :vec3 {
+    vec3.add(out, bounds.min, bounds.max)
+    return vec3.scale(out, out, 0.5)
+  }
+
   /** Sets the bounds to zero. */
   static zero (out :Bounds) :Bounds {
     // @ts-ignore zero does exist on vec3
