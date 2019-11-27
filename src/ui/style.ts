@@ -525,18 +525,31 @@ export function makeBorder (ctx :StyleContext, config :BorderConfig) :Subject<De
 //
 // Styled text
 
+function computeBreaks (text :string) :[number, string][] {
+  const breakRE = /\s+/g, breaks :[number, string][] = []
+  let match :RegExpExecArray | null
+  while ((match = breakRE.exec(text)) != null) breaks.push([match.index, match[0]])
+  breaks.push([text.length, ""])
+  return breaks
+}
+
+export type Wrap = {width :number, start :number, end :number}
+
 /** A span of text in a particular style, all rendered in a single line. */
 export class Span {
   readonly size = dim2.create()
+  readonly text :string
 
   constructor (
-    readonly text :string,
+    text :string,
     readonly font :FontConfig,
     readonly fill? :Paint,
     readonly stroke? :Paint,
     readonly shadow? :Shadow
   ) {
     if (!fill && !stroke) console.warn(`Span with neither fill nor stroke? [text=${text}]`)
+    if (typeof text !== "string") throw new Error(`Invalid text ${text}`)
+    this.text = text.replace(/\r\n|\r/g, "\n") // normalize newlines in the text
     const canvas = requireScratch2D()
     this.prepCanvas(canvas)
     const metrics = canvas.measureText(this.text)
@@ -544,11 +557,20 @@ export class Span {
     this.resetCanvas(canvas)
   }
 
-  render (canvas :CanvasRenderingContext2D, x :number, y :number) {
+  render (canvas :CanvasRenderingContext2D, x :number, y :number, wraps? :Wrap[]) {
     this.prepCanvas(canvas)
     const {fill, stroke, text} = this
-    fill && canvas.fillText(text, x, y)
-    stroke && canvas.strokeText(text, x, y)
+    if (wraps) {
+      for (const wrap of wraps) {
+        const wtext = text.substring(wrap.start, wrap.end)
+        fill && canvas.fillText(wtext, x, y)
+        stroke && canvas.strokeText(wtext, x, y)
+        y += this.size[1]
+      }
+    } else {
+      fill && canvas.fillText(text, x, y)
+      stroke && canvas.strokeText(text, x, y)
+    }
     this.resetCanvas(canvas)
   }
 
@@ -587,6 +609,61 @@ export class Span {
     const maxA = Math.round(canvas.measureText(this.text.substring(0, maxO)).width)
     this.resetCanvas(canvas)
     return (maxA-advance < advance-minA) ? maxO : minO
+  }
+
+  computeWrap (width :number) :Wrap[] {
+    const canvas = requireScratch2D()
+    this.prepCanvas(canvas)
+
+    try {
+      const text = this.text, breaks = computeBreaks(text), wraps :Wrap[] = []
+      let startc = 0, bcount = 0, lastwid = 0
+      for (let bb = 0, bc = breaks.length; bb < bc; bb += 1) {
+        const [bstart, bws] = breaks[bb]
+        const linewid = canvas.measureText(text.substring(startc, bstart)).width
+        if (linewid <= width) {
+          if (bws.includes("\n")) {
+            wraps.push({width: linewid, start: startc, end: bstart})
+            startc = bstart + bws.length
+            lastwid = 0
+            bcount = 0
+          } else {
+            lastwid = linewid
+            bcount += 1
+          }
+
+        } else if (bcount > 0) {
+          bb -= 1
+          const [lbstart, lbws] = breaks[bb]
+          wraps.push({width: lastwid, start: startc, end: lbstart})
+          startc = lbstart + lbws.length
+          lastwid = 0
+          bcount = 0
+
+        } else {
+          const emwidth = canvas.measureText("m").width
+          let hardlen = Math.floor(width/emwidth)
+          let hardwidth = canvas.measureText(text.substring(startc, startc+hardlen)).width
+          while (hardwidth < width) {
+            const nlen = hardlen+1
+            const nwid = canvas.measureText(text.substring(startc, startc+nlen)).width
+            if (nwid <= width) {
+              hardlen = nlen
+              hardwidth = nwid
+            } else break
+          }
+          wraps.push({width: hardwidth, start: startc, end: startc+hardlen})
+          startc = startc+hardlen
+          bb -= 1
+        }
+      }
+
+      wraps.push({width: lastwid, start: startc, end: text.length})
+      return wraps
+
+    } finally {
+      this.resetCanvas(canvas)
+    }
   }
 
   syncStyle (css :CSSStyleDeclaration) {

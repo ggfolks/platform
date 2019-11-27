@@ -3,7 +3,7 @@ import {refEquals} from "../core/data"
 import {Noop, NoopRemover, Remover, PMap, getValue} from "../core/util"
 import {Mutable, Subject, Value} from "../core/react"
 import {Control, Element, PointerInteraction} from "./element"
-import {Spec, FontConfig, Paint, PaintConfig, ShadowConfig, Span, EmptySpan} from "./style"
+import {Spec, FontConfig, Paint, PaintConfig, ShadowConfig, Span, EmptySpan, Wrap} from "./style"
 import {Model, Action, NoopAction} from "./model"
 import {CtrlMask, MetaMask, Bindings} from "./keymap"
 import {CursorConfig, Cursor} from "./cursor"
@@ -25,6 +25,7 @@ export interface LabelStyle {
 /** Defines configuration for [[Label]]. */
 export interface AbstractLabelConfig extends Element.Config {
   style :PMap<LabelStyle>
+  wrapText? :boolean
 }
 
 /** Base class for elements that display styled text. */
@@ -34,6 +35,8 @@ export abstract class AbstractLabel extends Element {
   readonly span = this.observe(EmptySpan)
   readonly selFill = this.observe<Paint|undefined>(undefined)
   readonly text :Value<string>
+  private wrappedWidth = 0
+  private wraps? :Wrap[]
   private selOff = 0
   private selWid = 0
   // sneaky toggle that allows `text` element to disable rendering of its internal label when it is
@@ -58,10 +61,28 @@ export abstract class AbstractLabel extends Element {
   protected abstract resolveText (ctx :Element.Context, config :AbstractLabelConfig) :Value<string>
 
   protected computePreferredSize (hintX :number, hintY :number, into :dim2) {
-    dim2.copy(into, this.span.current.size)
+    if (this.config.wrapText) {
+      this.wrappedWidth = hintX
+      this.wraps = this.span.current.computeWrap(hintX)
+      let width = 0, height = 0
+      for (const wrap of this.wraps) {
+        width = Math.max(wrap.width, width)
+        height += this.span.current.size[1]
+      }
+      dim2.set(into, width, height)
+    } else {
+      dim2.copy(into, this.span.current.size)
+    }
   }
 
   protected relayout () {
+    // if our width changed between preferred size computation and layout, we have to rewrap
+    // TODO: reuse wraps if width shrunk but wraps still fit, also maybe reuse wraps if width
+    // didn't grow "much"?
+    if (this.config.wrapText && this.wrappedWidth !== this.width) {
+      this.wraps = this.span.current.computeWrap(this.wrappedWidth = this.width)
+    }
+
     // clamp our x offset so we don't have empty space on the right (TODO: or left?)
     const width = this.width, span = this.span.current, swidth = span.size[0]
     if (swidth > width && this.xoffset.current + swidth < width) this.xoffset.update(width-swidth)
@@ -91,7 +112,7 @@ export abstract class AbstractLabel extends Element {
       canvas.fillRect(rx + selOff, y, selWid, height)
     }
     // render our label
-    span.render(canvas, rx, y)
+    span.render(canvas, rx, y, this.wraps)
     if (needClip) canvas.restore()
   }
 }
