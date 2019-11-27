@@ -255,7 +255,7 @@ export abstract class VGroup extends Group {
     let y = top
     for (const elem of this.contents) {
       if (!elem.visible.current) continue
-      const psize = elem.preferredSize(width, height) // will be cached
+      const psize = elem.cachedPreferredSize()
       const c = axisConstraints(elem)
       const ewidth = computeOffSize(offPolicy, psize[0], m.maxWidth, width)
       const eheight = computeSize(c, psize[1], m.totalWeight, stretchHeight)
@@ -310,7 +310,7 @@ export abstract class HGroup extends Group {
     let x = left
     for (const elem of this.contents) {
       if (!elem.visible.current) continue
-      const psize = elem.preferredSize(width, height) // will be cached
+      const psize = elem.cachedPreferredSize()
       const c = axisConstraints(elem)
       const ewidth = computeSize(c, psize[0], m.totalWeight, stretchWidth)
       const ecwidth = (c.stretch && stretchRemain < ewidth) ? stretchRemain : ewidth

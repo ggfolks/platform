@@ -65,6 +65,7 @@ export function requireAncestor<P> (
   * and rendering. */
 export abstract class Element implements Disposable {
   protected readonly _psize :dim2 = dim2.fromValues(-1, -1)
+  protected readonly _psizeHint :dim2 = dim2.fromValues(0, 0)
   protected readonly _valid = Mutable.local(false)
   protected readonly _styleScope? :Element.StyleScope
   protected readonly disposer = new Disposer()
@@ -155,16 +156,21 @@ export abstract class Element implements Disposable {
   }
 
   preferredSize (hintX :number, hintY :number) :dim2 {
-    let psize = this._psize
-    if (psize[0] < 0) {
+    let psize = this._psize, psizeHint = this._psizeHint
+    if (psize[0] < 0 || psizeHint[0] !== hintX || psizeHint[1] !== hintY) {
       // if we are computing our preferred size outside the normal validation cycle, it is not safe
-      // to save it (because something could change that triggers an invalidation but snice we're
+      // to save it (because something could change that triggers an invalidation but since we're
       // already invalid, we won't know to clear this cached preferred size)
-      if (this.parent && !this.parent.validating) psize = tmps
+      const ephemeral = this.parent && !this.root.validating
+      if (ephemeral) psize = tmps
       this.computePreferredSize(hintX, hintY, psize)
+      if (!ephemeral) dim2.set(psizeHint, hintX, hintY)
     }
     return psize
   }
+
+  /** Returns the most recently computed preferred size. Caller beware. */
+  cachedPreferredSize () :dim2 { return this._psize }
 
   setBounds (bounds :rect) :boolean {
     if (rect.eq(this.bounds, bounds)) return false
