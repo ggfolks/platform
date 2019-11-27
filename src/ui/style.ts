@@ -535,6 +535,10 @@ function computeBreaks (text :string) :[number, string][] {
 
 export type Wrap = {width :number, start :number, end :number}
 
+const userAgent = navigator ? navigator.userAgent : ""
+const isChrome = userAgent.includes("Chrome/")
+const isSafari = !isChrome && userAgent.includes("Safari/")
+
 /** A span of text in a particular style, all rendered in a single line. */
 export class Span {
   private wrappedWidth = 0
@@ -561,6 +565,10 @@ export class Span {
   }
 
   render (canvas :CanvasRenderingContext2D, x :number, y :number) {
+    // HACK: every browser renders 'textBaseline = top' in its own special snowflake way; Firefox
+    // appears to be correct, Chrome is a little wonky, Safari is a lot wonky
+    if (isSafari) y -= Math.round(this.size[1] * 0.15)
+    else if (isChrome) y -= Math.round(this.size[1] * 0.07)
     this.prepCanvas(canvas)
     const {fill, stroke, text} = this
     if (this.wraps) {
