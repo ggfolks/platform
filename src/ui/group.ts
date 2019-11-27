@@ -295,7 +295,7 @@ export abstract class HGroup extends Group {
 
   protected computePreferredSize (hintX :number, hintY :number, into :dim2) {
     const gap = this.config.gap || 0
-    const m = computeMetrics(this, hintX, hintY, gap, true)
+    const m = computeMetrics(this, hintX, hintY, gap, false)
     dim2.set(into, m.prefWidth + m.gaps(gap), m.maxHeight)
   }
 
@@ -304,7 +304,7 @@ export abstract class HGroup extends Group {
     const gap = this.config.gap || 0
     const bounds = this.bounds
     const left = bounds[0], top = bounds[1], width = bounds[2], height = bounds[3]
-    const m = computeMetrics(this, width, height, gap, true)
+    const m = computeMetrics(this, width, height, gap, false)
     const stretchWidth = Math.max(0, width - m.gaps(gap) - m.fixWidth)
     let stretchRemain = stretchWidth
     let x = left
