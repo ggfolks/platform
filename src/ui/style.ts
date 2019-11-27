@@ -537,6 +537,9 @@ export type Wrap = {width :number, start :number, end :number}
 
 /** A span of text in a particular style, all rendered in a single line. */
 export class Span {
+  private wrappedWidth = 0
+  private wraps? :Wrap[]
+
   readonly size = dim2.create()
   readonly text :string
 
@@ -557,11 +560,11 @@ export class Span {
     this.resetCanvas(canvas)
   }
 
-  render (canvas :CanvasRenderingContext2D, x :number, y :number, wraps? :Wrap[]) {
+  render (canvas :CanvasRenderingContext2D, x :number, y :number) {
     this.prepCanvas(canvas)
     const {fill, stroke, text} = this
-    if (wraps) {
-      for (const wrap of wraps) {
+    if (this.wraps) {
+      for (const wrap of this.wraps) {
         const wtext = text.substring(wrap.start, wrap.end)
         fill && canvas.fillText(wtext, x, y)
         stroke && canvas.strokeText(wtext, x, y)
@@ -611,16 +614,28 @@ export class Span {
     return (maxA-advance < advance-minA) ? maxO : minO
   }
 
-  computeWrap (width :number) :Wrap[] {
+  updateWraps (width :number, size? :dim2) {
     const canvas = requireScratch2D()
     this.prepCanvas(canvas)
+
+    let {wraps, wrappedWidth} = this
+    if (wraps) {
+      const maxwid = wraps.reduce((mw, wr) => Math.max(mw, wr.width), 0)
+      if (width <= wrappedWidth && maxwid <= width) {
+        if (size) {
+          size[0] = maxwid
+          size[1] = this.size[1] * wraps.length
+        }
+        return
+      }
+    }
 
     try {
       const text = this.text, breaks = computeBreaks(text), wraps :Wrap[] = []
       let startc = 0, bcount = 0, lastwid = 0
       for (let bb = 0, bc = breaks.length; bb < bc; bb += 1) {
         const [bstart, bws] = breaks[bb]
-        const linewid = canvas.measureText(text.substring(startc, bstart)).width
+        const linewid = Math.ceil(canvas.measureText(text.substring(startc, bstart)).width)
         if (linewid <= width) {
           if (bws.includes("\n")) {
             wraps.push({width: linewid, start: startc, end: bstart})
@@ -643,23 +658,28 @@ export class Span {
         } else {
           const emwidth = canvas.measureText("m").width
           let hardlen = Math.floor(width/emwidth)
-          let hardwidth = canvas.measureText(text.substring(startc, startc+hardlen)).width
-          while (hardwidth < width) {
+          let hardwid = Math.ceil(canvas.measureText(text.substring(startc, startc+hardlen)).width)
+          while (hardwid < width) {
             const nlen = hardlen+1
-            const nwid = canvas.measureText(text.substring(startc, startc+nlen)).width
+            const nwid = Math.ceil(canvas.measureText(text.substring(startc, startc+nlen)).width)
             if (nwid <= width) {
               hardlen = nlen
-              hardwidth = nwid
+              hardwid = nwid
             } else break
           }
-          wraps.push({width: hardwidth, start: startc, end: startc+hardlen})
+          wraps.push({width: hardwid, start: startc, end: startc+hardlen})
           startc = startc+hardlen
           bb -= 1
         }
       }
 
       wraps.push({width: lastwid, start: startc, end: text.length})
-      return wraps
+      this.wrappedWidth = width
+      this.wraps = wraps
+      if (size) {
+        size[0] = wraps.reduce((mw, wr) => Math.max(mw, wr.width), 0)
+        size[1] = this.size[1] * wraps.length
+      }
 
     } finally {
       this.resetCanvas(canvas)
