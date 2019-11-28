@@ -555,8 +555,8 @@ export class Span {
     readonly shadow? :Shadow
   ) {
     if (!fill && !stroke) console.warn(`Span with neither fill nor stroke? [text=${text}]`)
-    if (typeof text !== "string") throw new Error(`Invalid text ${text}`)
-    this.text = text.replace(/\r\n|\r/g, "\n") // normalize newlines in the text
+    if (text === undefined) throw new Error(`Span created with undefined text`)
+    this.text = text.toString().replace(/\r\n|\r/g, "\n") // normalize newlines in the text
     const canvas = requireScratch2D()
     this.prepCanvas(canvas)
     const metrics = canvas.measureText(this.text)
