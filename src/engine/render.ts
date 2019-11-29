@@ -84,8 +84,15 @@ export interface RaycastHit {
   triangleIndex? :number
 }
 
+/** Parent interface for components with world bounds. */
+export interface Bounded extends Component {
+
+  /** The bounds of the object. */
+  readonly bounds :Bounds
+}
+
 /** Renders the mesh specified by the `meshFilter`. */
-export interface MeshRenderer extends Component, Hoverable {
+export interface MeshRenderer extends Bounded, Hoverable {
 
   /** The first material assigned to the renderer. */
   material :Material
@@ -98,9 +105,6 @@ export interface MeshRenderer extends Component, Hoverable {
 
   /** The configurations of all the materials. */
   materialConfigs :ConfigurableConfig[]
-
-  /** The bounds of the mesh. */
-  readonly bounds :Bounds
 }
 
 export type MaterialSide = "front" | "back" | "double"
@@ -196,11 +200,8 @@ export interface Light extends Component {
 }
 
 /** Represents a (GLTF) model loaded from a URL. */
-export interface Model extends Component, Hoverable {
+export interface Model extends Bounded, Hoverable {
 
   /** The URL of the model to load. */
   url? :string
-
-  /** The bounds of the model. */
-  readonly bounds :Bounds
 }

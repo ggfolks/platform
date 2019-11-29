@@ -24,8 +24,8 @@ import {ALL_LAYERS_MASK, DEFAULT_PAGE, ConfigurableConfig, Hover, Transform} fro
 import {Animation, WrapMode, WrapModes} from "../../animation"
 import {getConfigurableMeta, property} from "../../meta"
 import {
-  Camera, Light, LightType, LightTypes, Material, MaterialSide, MaterialSides, MeshRenderer,
-  Model, RaycastHit, RenderEngine,
+  Bounded, Camera, Light, LightType, LightTypes, Material, MaterialSide, MaterialSides,
+  MeshRenderer, Model, RaycastHit, RenderEngine,
 } from "../../render"
 import {JavaScript} from "../../util"
 import {
@@ -621,7 +621,7 @@ export abstract class ThreeObjectComponent extends TypeScriptComponent {
   }
 }
 
-class ThreeBounded extends ThreeObjectComponent {
+class ThreeBounded extends ThreeObjectComponent implements Bounded {
   readonly bounds :Bounds
 
   private readonly _boundsTarget = Bounds.create()
