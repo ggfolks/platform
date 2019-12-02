@@ -542,8 +542,11 @@ export interface Graph extends Component {
   * (or power-of-two fractions thereof: 1/2, 1/4, etc.) and cardinal directions. */
 export interface Tile extends Component {
 
-  /** The size of the tile. */
-  size :vec3
+  /** The minima of the tile bounds. */
+  min :vec3
+
+  /** The maxima of the tile bounds. */
+  max :vec3
 
   /** Whether or not characters can walk on the tile. */
   walkable :boolean

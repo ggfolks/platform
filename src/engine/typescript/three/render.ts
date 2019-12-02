@@ -1036,10 +1036,11 @@ class ThreeTile extends TypeScriptTile {
           if (!url) return
           loadGLTF(url).onValue(gltf => {
             // use model to initialize size if not already set
-            if (!vec3.equals(this.size, vec3zero)) return
+            if (!(vec3.equals(this.min, vec3zero) && vec3.equals(this.max, vec3zero))) return
             maybeAddBoundingBox(gltf.scene)
-            const size = gltf.scene.userData.boundingBox.getSize(new Vector3())
-            vec3.set(this.size, roundSize(size.x), roundSize(size.y), roundSize(size.z))
+            const box = gltf.scene.userData.boundingBox
+            box.min.toArray(this.min)
+            box.max.toArray(this.max)
           })
         }),
     )
@@ -1053,12 +1054,6 @@ function maybeAddBoundingBox (scene :Object3D) {
     userData.boundingBox = new Box3()
     userData.boundingBox.expandByObject(scene)
   }
-}
-
-function roundSize (size :number) :number {
-  if (size >= 1) return Math.round(size)
-  if (size === 0) return 1
-  return 2 ** Math.max(-2, Math.round(Math.log(size) / Math.log(2)))
 }
 
 setEnumMeta("WrapMode", WrapModes)

@@ -1404,7 +1404,8 @@ export class TypeScriptGraph extends TypeScriptComponent implements Graph {
 registerConfigurableType("component", ["engine"], "graph", TypeScriptGraph)
 
 export class TypeScriptTile extends TypeScriptComponent implements Tile {
-  @property("vec3") size = vec3.create()
+  @property("vec3") min = vec3.create()
+  @property("vec3") max = vec3.create()
   @property("boolean") walkable = false
 }
 registerConfigurableType("component", ["engine"], "tile", TypeScriptTile)

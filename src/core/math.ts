@@ -1,4 +1,4 @@
-import {glMatrix, quat, vec2, vec3, vec4} from "gl-matrix"
+import {glMatrix, mat4, quat, vec2, vec3, vec4} from "gl-matrix"
 
 export * from "gl-matrix"
 
@@ -312,6 +312,8 @@ export class Ray {
   }
 }
 
+const tmpv = vec3.create()
+
 /** An axis-aligned bounding box. */
 export class Bounds {
 
@@ -371,5 +373,19 @@ export class Bounds {
       a.max[2] < b.min[2] ||
       a.min[2] > b.max[2]
     )
+  }
+
+  /** Transforms a set of bounds by a 4x4 matrix. */
+  static transformMat4 (out :Bounds, a :Bounds, m :mat4) :Bounds {
+    const minX = a.min[0], minY = a.min[1], minZ = a.min[2]
+    const maxX = a.max[0], maxY = a.max[1], maxZ = a.max[2]
+    Bounds.empty(out)
+    for (let ii = 0; ii < 8; ii++) {
+      vec3.set(tmpv, ii & 1 ? maxX : minX, ii & 2 ? maxY : minY, ii & 4 ? maxZ : minZ)
+      vec3.transformMat4(tmpv, tmpv, m)
+      vec3.min(out.min, out.min, tmpv)
+      vec3.max(out.max, out.max, tmpv)
+    }
+    return out
   }
 }
