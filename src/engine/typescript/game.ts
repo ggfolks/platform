@@ -22,7 +22,7 @@ import {
   ALL_LAYERS_MASK, DEFAULT_LAYER_FLAG, ALL_HIDE_FLAGS_MASK, DEFAULT_PAGE, Component,
   ComponentConstructor, Cone, Configurable, ConfigurableConfig, CoordinateFrame, Coroutine, Cube,
   Cylinder, GameContext, GameEngine, GameObject, GameObjectConfig, Graph, Mesh, MeshFilter, Page,
-  PrimitiveType, Quad, SpaceConfig, Sphere, Time, Torus, Transform,
+  PrimitiveType, Quad, SpaceConfig, Sphere, Tile, Time, Torus, Transform,
 } from "../game"
 import {getConfigurableMeta, property} from "../meta"
 import {PhysicsEngine} from "../physics"
@@ -1402,3 +1402,9 @@ export class TypeScriptGraph extends TypeScriptComponent implements Graph {
   }
 }
 registerConfigurableType("component", ["engine"], "graph", TypeScriptGraph)
+
+export class TypeScriptTile extends TypeScriptComponent implements Tile {
+  @property("vec3") size = vec3.create()
+  @property("boolean") walkable = false
+}
+registerConfigurableType("component", ["engine"], "tile", TypeScriptTile)

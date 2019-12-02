@@ -11,7 +11,7 @@ import {getAbsoluteUrl} from "../../../core/assets"
 import {Clock} from "../../../core/clock"
 import {Color} from "../../../core/color"
 import {refEquals} from "../../../core/data"
-import {Bounds, Plane, Ray, dim2, rect, vec2, vec3} from "../../../core/math"
+import {Bounds, Plane, Ray, dim2, rect, vec2, vec3, vec3zero} from "../../../core/math"
 import {Mutable, Subject, Value} from "../../../core/react"
 import {MutableMap, RMap} from "../../../core/rcollect"
 import {Disposer, Noop, NoopRemover, Remover} from "../../../core/util"
@@ -31,7 +31,7 @@ import {JavaScript} from "../../util"
 import {
   TypeScriptComponent, TypeScriptCone, TypeScriptConfigurable, TypeScriptCube, TypeScriptCylinder,
   TypeScriptGameEngine, TypeScriptGameObject, TypeScriptMesh, TypeScriptMeshFilter, TypeScriptPage,
-  TypeScriptQuad, TypeScriptSphere, TypeScriptTorus, registerConfigurableType,
+  TypeScriptQuad, TypeScriptSphere, TypeScriptTile, TypeScriptTorus, registerConfigurableType,
 } from "../game"
 
 setEnumMeta("LightType", LightTypes)
@@ -1005,11 +1005,7 @@ class ThreeModel extends ThreeBounded implements Model {
       this.objectValue.update(undefined)
       if (!url) return
       this._urlRemover = loadGLTF(url).onValue(gltf => {
-        const userData = gltf.scene.userData
-        if (!userData.boundingBox) {
-          userData.boundingBox = new Box3()
-          userData.boundingBox.expandByObject(gltf.scene)
-        }
+        maybeAddBoundingBox(gltf.scene)
         this.objectValue.update(SkeletonUtils.clone(gltf.scene) as Object3D)
         this._boundsValid = false
       })
@@ -1027,6 +1023,43 @@ class ThreeModel extends ThreeBounded implements Model {
   }
 }
 registerConfigurableType("component", ["render"], "model", ThreeModel)
+
+class ThreeTile extends TypeScriptTile {
+
+  init () {
+    super.init()
+    const component = this.gameObject.components.getValue("model") as Value<ThreeModel|undefined>
+    this._disposer.add(
+      component
+        .switchMap(model => model ? model.getProperty<string>("url") : Value.blank)
+        .onValue(url => {
+          if (!url) return
+          loadGLTF(url).onValue(gltf => {
+            // use model to initialize size if not already set
+            if (!vec3.equals(this.size, vec3zero)) return
+            maybeAddBoundingBox(gltf.scene)
+            const size = gltf.scene.userData.boundingBox.getSize(new Vector3())
+            vec3.set(this.size, roundSize(size.x), roundSize(size.y), roundSize(size.z))
+          })
+        }),
+    )
+  }
+}
+registerConfigurableType("component", ["render"], "tile", ThreeTile)
+
+function maybeAddBoundingBox (scene :Object3D) {
+  const userData = scene.userData
+  if (!userData.boundingBox) {
+    userData.boundingBox = new Box3()
+    userData.boundingBox.expandByObject(scene)
+  }
+}
+
+function roundSize (size :number) :number {
+  if (size >= 1) return Math.round(size)
+  if (size === 0) return 1
+  return 2 ** Math.max(-2, Math.round(Math.log(size) / Math.log(2)))
+}
 
 setEnumMeta("WrapMode", WrapModes)
 
@@ -1113,7 +1146,7 @@ class ThreeAnimation extends TypeScriptComponent implements Animation {
     // automatically add the URLs of any model loaded
     this._disposer.add(
       component
-        .switchMap(model => model ? model.getProperty<string>("url") : Value.constant(""))
+        .switchMap(model => model ? model.getProperty<string>("url") : Value.blank)
         .onValue(url => {
           this.playing = ""
           if (this._modelUrlsCount > 0) {

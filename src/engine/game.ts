@@ -537,3 +537,14 @@ export interface Graph extends Component {
   /** The graph configuration. */
   graphConfig :GraphConfig
 }
+
+/** Contains metadata for tiles, which are models that we expect to place at integer coordinates
+  * (or power-of-two fractions thereof: 1/2, 1/4, etc.) and cardinal directions. */
+export interface Tile extends Component {
+
+  /** The size of the tile. */
+  size :vec3
+
+  /** Whether or not characters can walk on the tile. */
+  walkable :boolean
+}
