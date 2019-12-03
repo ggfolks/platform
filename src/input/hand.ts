@@ -6,7 +6,7 @@ import {pointerEvents} from "./react"
 import {Touchpad} from "./touchpad"
 
 /** The ID we use for the mouse pointer, which should never be a touch identifier. */
-const MOUSE_ID = -999
+export const MOUSE_ID = -999
 
 const position = vec2.create()
 const movement = vec2.create()
