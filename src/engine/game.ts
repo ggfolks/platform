@@ -88,6 +88,9 @@ export const ALL_LAYERS_MASK = ~0
 /** A mask that matches all hide flags. */
 export const ALL_HIDE_FLAGS_MASK = ~0
 
+/** A mask that matches no hide flags. */
+export const NO_HIDE_FLAGS_MASK = 0
+
 /** Top-level interface to game engine. */
 export interface GameEngine extends Disposable {
 
