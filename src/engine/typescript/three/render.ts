@@ -497,13 +497,17 @@ class ThreeShaderMaterial extends ThreeMaterial {
   private readonly _vertexShaderGraph :Graph
   private readonly _fragmentShaderGraph :Graph
 
-  get vertexShaderGraphConfig () :GraphConfig { return this._vertexShaderGraph.config }
+  @property("GraphConfig", {editable: false}) get vertexShaderGraphConfig () :GraphConfig {
+    return this._vertexShaderGraph.config
+  }
   set vertexShaderGraphConfig (config :GraphConfig) {
     this._vertexShaderGraph.reconfigure(config)
     this.object.vertexShader = this._vertexShaderGraph.createVertexShader()
   }
 
-  get fragmentShaderGraphConfig () :GraphConfig { return this._fragmentShaderGraph.config }
+  @property("GraphConfig", {editable: false}) get fragmentShaderGraphConfig () :GraphConfig {
+    return this._fragmentShaderGraph.config
+  }
   set fragmentShaderGraphConfig (config :GraphConfig) {
     this._fragmentShaderGraph.reconfigure(config)
     this.object.fragmentShader = this._fragmentShaderGraph.createFragmentShader()
