@@ -1004,10 +1004,9 @@ class ThreeModel extends ThreeBounded implements Model {
 
   init () {
     super.init()
-    this.getProperty<string>("url").onChange(url => {
+    this.getProperty<string>("url").onValue(url => {
       this._urlRemover()
       this.objectValue.update(undefined)
-      if (!url) return
       this._urlRemover = loadGLTFWithBoundingBox(url).onValue(gltf => {
         this.objectValue.update(SkeletonUtils.clone(gltf.scene) as Object3D)
         this._boundsValid = false
@@ -1071,7 +1070,6 @@ class ThreeTile extends TypeScriptTile {
       component
         .switchMap(model => model ? model.getProperty<string>("url") : Value.blank)
         .onValue(url => {
-          if (!url) return
           loadGLTFWithBoundingBox(url).onValue(gltf => {
             // use model to initialize size if not already set
             if (!(vec3.equals(this.min, vec3zero) && vec3.equals(this.max, vec3zero))) return
@@ -1085,8 +1083,16 @@ class ThreeTile extends TypeScriptTile {
 }
 registerConfigurableType("component", ["render"], "tile", ThreeTile)
 
+const PlaceholderGLTF = Subject.constant<GLTF>({
+  scene: new Mesh(
+    new BoxBufferGeometry().translate(0, 0.5, 0),
+    new MeshBasicMaterial({color: 0xFF0000}),
+  ),
+  animations: [],
+})
+
 function loadGLTFWithBoundingBox(url :string) :Subject<GLTF> {
-  return loadGLTF(url).map(gltf => {
+  return (url ? loadGLTF(url) : PlaceholderGLTF).map(gltf => {
     const userData = gltf.scene.userData
     if (!userData.boundingBox) {
       userData.boundingBox = new Box3()

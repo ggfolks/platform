@@ -203,7 +203,7 @@ export interface Light extends Component {
 export interface Model extends Bounded, Hoverable {
 
   /** The URL of the model to load. */
-  url? :string
+  url :string
 }
 
 /** Represents a set of models fused together. */
