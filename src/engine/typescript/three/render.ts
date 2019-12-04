@@ -1045,10 +1045,11 @@ class ThreeFusedModels extends ThreeBounded implements FusedModels {
           scene.position.fromArray(position)
           scene.quaternion.fromArray(rotation)
           scene.scale.fromArray(scale)
-          scene.updateMatrix()
-          boundingBox.union(scene.userData.boundingBox.clone().applyMatrix4(scene.matrix))
+          tmpBoundingBox.copy(scene.userData.boundingBox)
+          boundingBox.union(tmpBoundingBox.applyMatrix4(scene.matrix))
           this._boundsValid = false
           group.add(scene)
+          scene.updateMatrixWorld(true)
         })
       })
     })

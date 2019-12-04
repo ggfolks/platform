@@ -496,6 +496,9 @@ function getBinaryPrecision (position :vec3) :number {
   return -1
 }
 
+/** A flag indicating that the model can be walked upon. */
+export const WALKABLE_FLAG = (1 << 0)
+
 /** Helper class to encode multiple model URLs/transforms into a compact merged format. */
 export class FusedEncoder {
   private readonly _encoder = new Encoder()
@@ -539,7 +542,10 @@ export class FusedEncoder {
   }
 }
 
-/** Helper function to decode multiple model URLs/transforms from merged format. */
+/** Helper function to decode multiple model URLs/transforms from merged format.
+  * @param source the encoded fused model set.
+  * @param op the operation to apply to each model in the set.  Note that the vectors/quat passed
+  * will be reused, so be sure to clone them if you need to retain the values. */
 export function decodeFused (
   source :Uint8Array,
   op :(url :string, position :vec3, rotation :quat, scale :vec3, flags :number) => void,
