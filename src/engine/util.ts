@@ -1,6 +1,7 @@
 import {getAbsoluteUrl} from "../core/assets"
+import {Decoder, Encoder} from "../core/codec"
 import {Color} from "../core/color"
-import {Bounds, quat, vec3, vec3unitY} from "../core/math"
+import {Bounds, quat, quatIdentity, vec3, vec3one, vec3unitY} from "../core/math"
 import {Interp, Easing} from "../core/interp"
 import {PMap, toFloat32String} from "../core/util"
 import {Time, Transform} from "./game"
@@ -466,5 +467,120 @@ export abstract class JavaScript {
       default:
         throw new Error(`Don't know how to clone "${value}" ("${typeof value}")`)
     }
+  }
+}
+
+const CardinalRotations = [
+  quatIdentity,
+  quat.fromEuler(quat.create(), 0, 90, 0),
+  quat.fromEuler(quat.create(), 0, 180, 0),
+  quat.fromEuler(quat.create(), 0, 270, 0),
+]
+
+function getCardinalRotation (rotation :quat) :number {
+  for (let ii = 0; ii < CardinalRotations.length; ii++) {
+    if (quat.equals(rotation, CardinalRotations[ii])) return ii
+  }
+  return -1
+}
+
+function getBinaryPrecision (position :vec3) :number {
+  for (let ii = 0; ii < 3; ii++) {
+    vec3.copy(tmpv, position)
+    const factor = 2 ** ii
+    vec3.scale(tmpv, tmpv, factor)
+    vec3.round(tmpv, tmpv)
+    vec3.scale(tmpv, tmpv, 1 / factor)
+    if (vec3.equals(tmpv, position)) return ii
+  }
+  return -1
+}
+
+/** Helper class to encode multiple model URLs/transforms into a compact merged format. */
+export class FusedEncoder {
+  private readonly _encoder = new Encoder()
+  private readonly _urls = new Map<string, number>()
+  private _lastCode = 0
+
+  add (url :string|undefined, position :vec3, rotation :quat, scale :vec3, flags :number) {
+    if (url === undefined) {
+      this._encoder.addValue(0, "varSize")
+    } else {
+      const code = this._urls.get(url)
+      if (code !== undefined) {
+        this._encoder.addValue(code, "varSize")
+      } else {
+        this._urls.set(url, ++this._lastCode)
+        this._encoder.addValue(this._lastCode, "varSize")
+        this._encoder.addValue(url, "string")
+      }
+    }
+    const precision = getBinaryPrecision(position)
+    const cardinal = getCardinalRotation(rotation)
+    if (precision === -1 || cardinal === -1 || !vec3.equals(scale, vec3one)) {
+      this._encoder.addValue(flags << 2 | 3, "varSize")
+      this._addFloatTriplet(position)
+      this._addFloatTriplet(rotation)
+      this._addFloatTriplet(scale)
+      return
+    }
+    this._encoder.addValue(flags << 4 | cardinal << 2 | precision, "varSize")
+    const factor = 2 ** precision
+    this._encoder.addValue(Math.round(position[0] * factor), "varInt")
+    this._encoder.addValue(Math.round(position[1] * factor), "varInt")
+    this._encoder.addValue(Math.round(position[2] * factor), "varInt")
+  }
+
+  finish () :Uint8Array {
+    return this._encoder.finish()
+  }
+
+  private _addFloatTriplet (array :Float32Array) {
+    this._encoder.addValue(array[0], "float32")
+    this._encoder.addValue(array[1], "float32")
+    this._encoder.addValue(array[2], "float32")
+  }
+}
+
+/** Helper function to decode multiple model URLs/transforms from merged format. */
+export function decodeFused (
+  source :Uint8Array,
+  op :(url :string|undefined, position :vec3, rotation :quat, scale :vec3, flags :number) => void,
+) {
+  const decoder = new Decoder(source)
+  const urls = new Map<number, string>()
+  const position = vec3.create()
+  const rotation = quat.create()
+  const scale = vec3.create()
+  const readTriplet = (out :Float32Array) => {
+    out[0] = decoder.getValue("float32")
+    out[1] = decoder.getValue("float32")
+    out[2] = decoder.getValue("float32")
+  }
+  while (decoder.pos < source.byteLength) {
+    let url :string|undefined
+    const code = decoder.getValue("varSize")
+    if (code !== 0) {
+      url = urls.get(code)
+      if (url === undefined) urls.set(code, url = decoder.getValue("string"))
+    }
+    const bits = decoder.getValue("varSize")
+    const precision = bits & 3
+    if (precision === 3) {
+      const flags = bits >> 2
+      readTriplet(position)
+      readTriplet(rotation)
+      quat.calculateW(rotation, rotation)
+      readTriplet(scale)
+      op(url, position, rotation, scale, flags)
+      continue
+    }
+    const cardinal = (bits >> 2) & 3
+    const flags = bits >> 4
+    position[0] = decoder.getValue("varInt")
+    position[1] = decoder.getValue("varInt")
+    position[2] = decoder.getValue("varInt")
+    vec3.scale(position, position, 2 ** -precision)
+    op(url, position, CardinalRotations[cardinal], vec3one, flags)
   }
 }

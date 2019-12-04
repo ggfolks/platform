@@ -34,6 +34,8 @@ test("codec", () => {
     [-123.435, "float64"],
     [Number.MAX_VALUE, "float64"],
     [Number.MIN_VALUE, "float64"],
+    [872342, "varSize"],
+    [-1213321, "varInt"],
     ["The quick brown fox jumped over the lazy dog.", "string"],
     ["I ♥︎ math.", "string"],
     ["€∞☛✔︎", "string"],

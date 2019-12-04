@@ -4,8 +4,8 @@ import {Path} from "./path"
 import {Data, DataArray, DataMap, DataMapKey, DataSet, Record, isMap, isSet} from "./data"
 
 export type KeyType = "undefined" | "null" | "boolean" | "int8" | "int16" | "int32"
-                    | "size8" | "size16" | "size32" | "float32" | "float64" | "number"
-                    | "string" | "timestamp" | "uuid"
+                    | "size8" | "size16" | "size32" | "float32" | "float64" | "varSize"
+                    | "varInt" | "number" | "string" | "timestamp" | "uuid"
 // TODO: support "text" value type which supported >64k of text?
 export type ValueType = KeyType | "data" | "record"
 
@@ -26,6 +26,20 @@ const addSize16  = (e :Encoder, s :number) => { const p = e.pos ; e.prepAdd(2).s
 const addSize32  = (e :Encoder, s :number) => { const p = e.pos ; e.prepAdd(4).setUint32(p, s) }
 const addFloat32 = (e :Encoder, v :number) => { const p = e.pos ; e.prepAdd(4).setFloat32(p, v) }
 const addFloat64 = (e :Encoder, v :number) => { const p = e.pos ; e.prepAdd(8).setFloat64(p, v) }
+const addVarSize = (e :Encoder, v :number) => {
+  while (true) {
+    let byte = v & 0x7F
+    v >>= 7
+    if (v === 0) {
+      addSize8(e, byte)
+      return
+    }
+    addSize8(e, byte | 0x80)
+  }
+}
+const addVarInt = (e :Encoder, v :number) => {
+  addVarSize(e, v < 0 ? (-v << 1) - 1 : (v << 1))
+}
 
 function addString (enc :Encoder, text :string) {
   if (text.length === 0) {
@@ -159,6 +173,20 @@ const getSize16  = (dec :Decoder) => dec.data.getUint16(dec.prepGet(2))
 const getSize32  = (dec :Decoder) => dec.data.getUint32(dec.prepGet(4))
 const getFloat32 = (dec :Decoder) => dec.data.getFloat32(dec.prepGet(4))
 const getFloat64 = (dec :Decoder) => dec.data.getFloat64(dec.prepGet(8))
+const getVarSize = (dec :Decoder) => {
+  let size = 0
+  let shift = 0
+  while (true) {
+    const byte = getSize8(dec)
+    size |= (byte & 0x7F) << shift
+    if (!(byte & 0x80)) return size
+    shift += 7
+  }
+}
+const getVarInt = (dec :Decoder) => {
+  const size = getVarSize(dec)
+  return (size & 1) ? -((size + 1) >> 1) : (size >> 1)
+}
 
 function getString (dec :Decoder) {
   const bytes = getSize16(dec)
@@ -333,6 +361,8 @@ const valueCodecs :{[key :string]: [DataEncoder<any>, DataDecoder<any>]} = {
   float32  : [addFloat32,   getFloat32],
   float64  : [addFloat64,   getFloat64],
   number   : [addFloat64,   getFloat64],
+  varSize  : [addVarSize,   getVarSize],
+  varInt   : [addVarInt,    getVarInt],
   string   : [addString,    getString],
   timestamp: [addTimestamp, getTimestamp],
   uuid     : [addUUID,      getUUID],
