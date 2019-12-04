@@ -1041,14 +1041,16 @@ class ThreeFusedModels extends ThreeBounded implements FusedModels {
         scale = vec3.clone(scale)
         loadGLTFWithBoundingBox(url).onValue(gltf => {
           const scene = SkeletonUtils.clone(gltf.scene) as Object3D
+          scene.matrixAutoUpdate = false
           scene.position.fromArray(position)
           scene.quaternion.fromArray(rotation)
           scene.scale.fromArray(scale)
+          scene.updateMatrix()
           tmpBoundingBox.copy(scene.userData.boundingBox)
           boundingBox.union(tmpBoundingBox.applyMatrix4(scene.matrix))
           this._boundsValid = false
           group.add(scene)
-          scene.updateMatrixWorld(true)
+          scene.updateMatrixWorld()
         })
       })
     })
