@@ -94,3 +94,7 @@ export function makeBaseCoder (alphabet :string) :Coder {
 /** An encoder/decoder created for base62 strings, using the 'standard' alphabet. */
 export const Base62 = makeBaseCoder(
   '0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ')
+
+/** An encoder/decoder for base64 strings. */
+export const Base64 = makeBaseCoder(
+  "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/")

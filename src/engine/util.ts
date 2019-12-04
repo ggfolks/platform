@@ -1,4 +1,5 @@
 import {getAbsoluteUrl} from "../core/assets"
+import {Base64} from "../core/basex"
 import {Decoder, Encoder} from "../core/codec"
 import {Color} from "../core/color"
 import {Bounds, quat, quatIdentity, vec3, vec3one, vec3unitY} from "../core/math"
@@ -322,6 +323,9 @@ const constructorStringifiers = new Map<Function, (value :any, indent :number) =
       string += JavaScript.stringify(value, indent)
     }
     return string + "]"
+  }],
+  [Uint8Array, (value, indent) => {
+    return `Base64.decode("${Base64.encode(value)}")`
   }]
 ])
 
@@ -347,7 +351,8 @@ const constructorCloners = new Map<Function, (value :any) => any>([
     const array :any[] = []
     for (const value of values) array.push(JavaScript.clone(value))
     return array
-  }]
+  }],
+  [Uint8Array, value => value], // treat Uint8Arrays as immutable for performance
 ])
 
 interface TypedArrayConstructor<T> {
@@ -368,6 +373,7 @@ const urlCache = new Map<string, Promise<any>>()
 const globalObject = (typeof window === "undefined") ? global : window
 globalObject["Color"] = Color
 globalObject["Bounds"] = Bounds
+globalObject["Base64"] = Base64
 
 /** Utility class to assist with converting JS objects to strings and vice-versa; equivalent to
   * the `JSON` class. */
