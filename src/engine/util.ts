@@ -500,20 +500,17 @@ function getBinaryPrecision (position :vec3) :number {
 export class FusedEncoder {
   private readonly _encoder = new Encoder()
   private readonly _urls = new Map<string, number>()
-  private _lastCode = 0
+  private _nextCode = 0
 
-  add (url :string|undefined, position :vec3, rotation :quat, scale :vec3, flags :number) {
-    if (url === undefined) {
-      this._encoder.addValue(0, "varSize")
+  add (url :string, position :vec3, rotation :quat, scale :vec3, flags :number) {
+    const code = this._urls.get(url)
+    if (code !== undefined) {
+      this._encoder.addValue(code, "varSize")
     } else {
-      const code = this._urls.get(url)
-      if (code !== undefined) {
-        this._encoder.addValue(code, "varSize")
-      } else {
-        this._urls.set(url, ++this._lastCode)
-        this._encoder.addValue(this._lastCode, "varSize")
-        this._encoder.addValue(url, "string")
-      }
+      const code = this._nextCode++
+      this._urls.set(url, code)
+      this._encoder.addValue(code, "varSize")
+      this._encoder.addValue(url, "string")
     }
     const precision = getBinaryPrecision(position)
     const cardinal = getCardinalRotation(rotation)
@@ -545,7 +542,7 @@ export class FusedEncoder {
 /** Helper function to decode multiple model URLs/transforms from merged format. */
 export function decodeFused (
   source :Uint8Array,
-  op :(url :string|undefined, position :vec3, rotation :quat, scale :vec3, flags :number) => void,
+  op :(url :string, position :vec3, rotation :quat, scale :vec3, flags :number) => void,
 ) {
   const decoder = new Decoder(source)
   const urls = new Map<number, string>()
@@ -558,12 +555,9 @@ export function decodeFused (
     out[2] = decoder.getValue("float32")
   }
   while (decoder.pos < source.byteLength) {
-    let url :string|undefined
     const code = decoder.getValue("varSize")
-    if (code !== 0) {
-      url = urls.get(code)
-      if (url === undefined) urls.set(code, url = decoder.getValue("string"))
-    }
+    let url = urls.get(code)
+    if (url === undefined) urls.set(code, url = decoder.getValue("string") as string)
     const bits = decoder.getValue("varSize")
     const precision = bits & 3
     if (precision === 3) {

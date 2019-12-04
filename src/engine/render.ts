@@ -205,3 +205,10 @@ export interface Model extends Bounded, Hoverable {
   /** The URL of the model to load. */
   url? :string
 }
+
+/** Represents a set of models fused together. */
+export interface FusedModels extends Bounded, Hoverable {
+
+  /** The encoded representation of the models. */
+  encoded :Uint8Array
+}

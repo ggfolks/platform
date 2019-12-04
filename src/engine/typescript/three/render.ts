@@ -1,8 +1,8 @@
 import {
   AnimationClip, AnimationMixer, AmbientLight, BackSide, Box3, BoxBufferGeometry, BufferGeometry,
   ConeBufferGeometry, CylinderBufferGeometry, DefaultLoadingManager, DirectionalLight, DoubleSide,
-  FileLoader, FrontSide, Intersection, Light as LightObject, LoopOnce, LoopRepeat, LoopPingPong,
-  Material as MaterialObject, Mesh, MeshBasicMaterial, MeshStandardMaterial, Object3D,
+  FileLoader, FrontSide, Group, Intersection, Light as LightObject, LoopOnce, LoopRepeat,
+  LoopPingPong, Material as MaterialObject, Mesh, MeshBasicMaterial, MeshStandardMaterial, Object3D,
   OrthographicCamera, PerspectiveCamera, PlaneBufferGeometry, Raycaster, Scene, ShaderMaterial,
   SphereBufferGeometry, TorusBufferGeometry, Vector2, Vector3, WebGLRenderer,
 } from "three"
@@ -11,23 +11,23 @@ import {getAbsoluteUrl} from "../../../core/assets"
 import {Clock} from "../../../core/clock"
 import {Color} from "../../../core/color"
 import {refEquals} from "../../../core/data"
-import {Bounds, Plane, Ray, dim2, rect, vec2, vec3, vec3zero} from "../../../core/math"
+import {Bounds, Plane, Ray, dim2, quat, rect, vec2, vec3, vec3zero} from "../../../core/math"
 import {Mutable, Subject, Value} from "../../../core/react"
 import {MutableMap, RMap} from "../../../core/rcollect"
 import {Disposer, Noop, NoopRemover, Remover} from "../../../core/util"
 import {Graph, GraphConfig} from "../../../graph/graph"
 import {PropertyMeta, setEnumMeta} from "../../../graph/meta"
-import {loadGLTF, loadGLTFAnimationClip} from "../../../scene3/entity"
+import {GLTF, loadGLTF, loadGLTFAnimationClip} from "../../../scene3/entity"
 import {Hand, Pointer} from "../../../input/hand"
 import {wheelEvents} from "../../../input/react"
 import {ALL_LAYERS_MASK, DEFAULT_PAGE, ConfigurableConfig, Hover, Transform} from "../../game"
 import {Animation, WrapMode, WrapModes} from "../../animation"
 import {getConfigurableMeta, property} from "../../meta"
 import {
-  Bounded, Camera, Light, LightType, LightTypes, Material, MaterialSide, MaterialSides,
+  Bounded, Camera, FusedModels, Light, LightType, LightTypes, Material, MaterialSide, MaterialSides,
   MeshRenderer, Model, RaycastHit, RenderEngine,
 } from "../../render"
-import {JavaScript} from "../../util"
+import {JavaScript, decodeFused} from "../../util"
 import {
   TypeScriptComponent, TypeScriptCone, TypeScriptConfigurable, TypeScriptCube, TypeScriptCylinder,
   TypeScriptGameEngine, TypeScriptGameObject, TypeScriptMesh, TypeScriptMeshFilter, TypeScriptPage,
@@ -1004,16 +1004,15 @@ class ThreeModel extends ThreeBounded implements Model {
 
   init () {
     super.init()
-    this._disposer.add(this.getProperty<string>("url").onChange(url => {
+    this.getProperty<string>("url").onChange(url => {
       this._urlRemover()
       this.objectValue.update(undefined)
       if (!url) return
-      this._urlRemover = loadGLTF(url).onValue(gltf => {
-        maybeAddBoundingBox(gltf.scene)
+      this._urlRemover = loadGLTFWithBoundingBox(url).onValue(gltf => {
         this.objectValue.update(SkeletonUtils.clone(gltf.scene) as Object3D)
         this._boundsValid = false
       })
-    }))
+    })
   }
 
   dispose () {
@@ -1028,6 +1027,40 @@ class ThreeModel extends ThreeBounded implements Model {
 }
 registerConfigurableType("component", ["render"], "model", ThreeModel)
 
+class ThreeFusedModels extends ThreeBounded implements FusedModels {
+  @property("Uint8Array", {editable: false}) encoded = new Uint8Array(0)
+
+  init () {
+    super.init()
+    this.getProperty<Uint8Array>("encoded").onChange(encoded => {
+      const group = new Group()
+      const boundingBox = group.userData.boundingBox = new Box3()
+      this.objectValue.update(group)
+      decodeFused(encoded, (url, position, rotation, scale, flags) => {
+        position = vec3.clone(position)
+        rotation = quat.clone(rotation)
+        scale = vec3.clone(scale)
+        loadGLTFWithBoundingBox(url).onValue(gltf => {
+          const scene = SkeletonUtils.clone(gltf.scene) as Object3D
+          scene.position.fromArray(position)
+          scene.quaternion.fromArray(rotation)
+          scene.scale.fromArray(scale)
+          scene.updateMatrix()
+          boundingBox.union(scene.userData.boundingBox.clone().applyMatrix4(scene.matrix))
+          this._boundsValid = false
+          group.add(scene)
+        })
+      })
+    })
+  }
+
+  protected _updateObjectTransform (object :Object3D) {
+    super._updateObjectTransform(object)
+    updateChildren(object)
+  }
+}
+registerConfigurableType("component", undefined, "fusedModels", ThreeFusedModels)
+
 class ThreeTile extends TypeScriptTile {
 
   init () {
@@ -1038,10 +1071,9 @@ class ThreeTile extends TypeScriptTile {
         .switchMap(model => model ? model.getProperty<string>("url") : Value.blank)
         .onValue(url => {
           if (!url) return
-          loadGLTF(url).onValue(gltf => {
+          loadGLTFWithBoundingBox(url).onValue(gltf => {
             // use model to initialize size if not already set
             if (!(vec3.equals(this.min, vec3zero) && vec3.equals(this.max, vec3zero))) return
-            maybeAddBoundingBox(gltf.scene)
             const box = gltf.scene.userData.boundingBox
             box.min.toArray(this.min)
             box.max.toArray(this.max)
@@ -1052,12 +1084,15 @@ class ThreeTile extends TypeScriptTile {
 }
 registerConfigurableType("component", ["render"], "tile", ThreeTile)
 
-function maybeAddBoundingBox (scene :Object3D) {
-  const userData = scene.userData
-  if (!userData.boundingBox) {
-    userData.boundingBox = new Box3()
-    userData.boundingBox.expandByObject(scene)
-  }
+function loadGLTFWithBoundingBox(url :string) :Subject<GLTF> {
+  return loadGLTF(url).map(gltf => {
+    const userData = gltf.scene.userData
+    if (!userData.boundingBox) {
+      userData.boundingBox = new Box3()
+      userData.boundingBox.expandByObject(gltf.scene)
+    }
+    return gltf
+  })
 }
 
 setEnumMeta("WrapMode", WrapModes)

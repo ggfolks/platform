@@ -463,7 +463,8 @@ export function createObject3D (objectConfig: Object3DConfig) :Subject<Object3D>
   }
 }
 
-interface GLTF {
+/** The contents of a loaded GLTF. */
+export interface GLTF {
   scene :Object3D
   animations :AnimationClip[]
 }
@@ -473,6 +474,9 @@ const dormantGLTFs :Map<string, Promise<GLTF>> = new Map()
 const errorGeom = new BoxBufferGeometry()
 const errorMat = new MeshBasicMaterial({color: 0xFF0000})
 
+/** Loads a GLTF from the provided URL.
+  * @param url the URL of the GLTF to load.
+  * @return a Subject that will resolve to the loaded model. */
 export function loadGLTF (url :string) :Subject<GLTF> {
   url = getAbsoluteUrl(url)
   let gltf = activeGLTFs.get(url)
