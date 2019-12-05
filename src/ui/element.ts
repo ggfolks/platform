@@ -311,6 +311,7 @@ export abstract class Element implements Disposable {
   }
 
   dispose (rootDisposing = false) {
+    if (!rootDisposing) this.dirty()
     this.applyToChildren(child => child.dispose(rootDisposing))
     this.disposer.dispose()
     this.clearCursor(this)
