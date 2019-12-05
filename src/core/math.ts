@@ -331,6 +331,13 @@ export class Bounds {
     return Bounds.create(vec3.clone(bounds.min), vec3.clone(bounds.max))
   }
 
+  /** Copies the provided bounds. */
+  static copy (out :Bounds, a :Bounds) :Bounds {
+    vec3.copy(out.min, a.min)
+    vec3.copy(out.max, a.max)
+    return out
+  }
+
   /** Sets the bounds to an initial empty value. */
   static empty (out :Bounds) :Bounds {
     vec3.set(out.min, Infinity, Infinity, Infinity)

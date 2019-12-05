@@ -1035,7 +1035,7 @@ class ThreeFusedModels extends ThreeBounded implements FusedModels {
       const group = new Group()
       const boundingBox = group.userData.boundingBox = new Box3()
       this.objectValue.update(group)
-      decodeFused(encoded, (url, position, rotation, scale, flags) => {
+      decodeFused(encoded, (url, bounds, position, rotation, scale, flags) => {
         position = vec3.clone(position)
         rotation = quat.clone(rotation)
         scale = vec3.clone(scale)
@@ -1046,7 +1046,8 @@ class ThreeFusedModels extends ThreeBounded implements FusedModels {
           scene.quaternion.fromArray(rotation)
           scene.scale.fromArray(scale)
           scene.updateMatrix()
-          tmpBoundingBox.copy(scene.userData.boundingBox)
+          tmpBoundingBox.min.fromArray(bounds.min)
+          tmpBoundingBox.max.fromArray(bounds.max)
           boundingBox.union(tmpBoundingBox.applyMatrix4(scene.matrix))
           this._boundsValid = false
           group.add(scene)

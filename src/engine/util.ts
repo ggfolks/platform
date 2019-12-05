@@ -508,18 +508,27 @@ export const WALKABLE_FLAG = (1 << 0)
 /** Helper class to encode multiple model URLs/transforms into a compact merged format. */
 export class FusedEncoder {
   private readonly _encoder = new Encoder()
-  private readonly _urls = new Map<string, number>()
+  private readonly _urlCodes = new Map<string, number>()
   private _nextCode = 0
 
-  add (url :string, position :vec3, rotation :quat, scale :vec3, flags :number) {
-    const code = this._urls.get(url)
+  /** Adds an entry to the fused set.
+    * @param url the URL of the model.
+    * @param bounds the model/tile's (local) bounds.
+    * @param position the model's relative position.
+    * @param rotation the model's relative rotation.
+    * @param scale the model's relative scale.
+    * @param flags the model's flags. */
+  add (url :string, bounds :Bounds, position :vec3, rotation :quat, scale :vec3, flags :number) {
+    const code = this._urlCodes.get(url)
     if (code !== undefined) {
       this._encoder.addValue(code, "varSize")
     } else {
       const code = this._nextCode++
-      this._urls.set(url, code)
+      this._urlCodes.set(url, code)
       this._encoder.addValue(code, "varSize")
       this._encoder.addValue(url, "string")
+      this._addFloatTriplet(bounds.min)
+      this._addFloatTriplet(bounds.max)
     }
     const precision = getBinaryPrecision(position)
     const cardinal = getCardinalRotation(rotation)
@@ -537,6 +546,7 @@ export class FusedEncoder {
     this._encoder.addValue(Math.round(position[2] * factor), "varInt")
   }
 
+  /** Returns the encoded array of bytes. */
   finish () :Uint8Array {
     return this._encoder.finish()
   }
@@ -550,14 +560,21 @@ export class FusedEncoder {
 
 /** Helper function to decode multiple model URLs/transforms from merged format.
   * @param source the encoded fused model set.
-  * @param op the operation to apply to each model in the set.  Note that the vectors/quat passed
+  * @param op the operation to apply to each model in the set.  Note that the objects passed
   * will be reused, so be sure to clone them if you need to retain the values. */
 export function decodeFused (
   source :Uint8Array,
-  op :(url :string, position :vec3, rotation :quat, scale :vec3, flags :number) => void,
+  op :(
+    url :string,
+    bounds :Bounds,
+    position :vec3,
+    rotation :quat,
+    scale :vec3,
+    flags :number,
+  ) => void,
 ) {
   const decoder = new Decoder(source)
-  const urls = new Map<number, string>()
+  const urlMappings = new Map<number, [string, Bounds]>()
   const position = vec3.create()
   const rotation = quat.create()
   const scale = vec3.create()
@@ -568,8 +585,15 @@ export function decodeFused (
   }
   while (decoder.pos < source.byteLength) {
     const code = decoder.getValue("varSize")
-    let url = urls.get(code)
-    if (url === undefined) urls.set(code, url = decoder.getValue("string") as string)
+    let mapping = urlMappings.get(code)
+    if (mapping === undefined) {
+      const newUrl = decoder.getValue("string") as string
+      const newBounds = Bounds.create()
+      readTriplet(newBounds.min)
+      readTriplet(newBounds.max)
+      urlMappings.set(code, mapping = [newUrl, newBounds])
+    }
+    const [url, bounds] = mapping
     const bits = decoder.getValue("varSize")
     const precision = bits & 3
     if (precision === 3) {
@@ -578,7 +602,7 @@ export function decodeFused (
       readTriplet(rotation)
       quat.calculateW(rotation, rotation)
       readTriplet(scale)
-      op(url, position, rotation, scale, flags)
+      op(url, bounds, position, rotation, scale, flags)
       continue
     }
     const cardinal = (bits >> 2) & 3
@@ -587,6 +611,6 @@ export function decodeFused (
     position[1] = decoder.getValue("varInt")
     position[2] = decoder.getValue("varInt")
     vec3.scale(position, position, 2 ** -precision)
-    op(url, position, CardinalRotations[cardinal], vec3one, flags)
+    op(url, bounds, position, CardinalRotations[cardinal], vec3one, flags)
   }
 }
