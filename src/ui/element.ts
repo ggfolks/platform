@@ -181,7 +181,7 @@ export abstract class Element implements Disposable {
   }
 
   invalidate (dirty :boolean = true) {
-    if (this._valid.current) {
+    if (this._valid.current && this.visible.current) {
       this._valid.update(false)
       this._psize[0] = -1 // force psize recompute
       this.parent && this.parent.invalidate(false)
