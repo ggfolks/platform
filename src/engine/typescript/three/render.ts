@@ -11,7 +11,7 @@ import {getAbsoluteUrl} from "../../../core/assets"
 import {Clock} from "../../../core/clock"
 import {Color} from "../../../core/color"
 import {refEquals} from "../../../core/data"
-import {Bounds, Plane, Ray, dim2, quat, rect, vec2, vec3, vec3zero} from "../../../core/math"
+import {Bounds, Plane, Ray, dim2, quat, rect, vec2, vec3} from "../../../core/math"
 import {Mutable, Subject, Value} from "../../../core/react"
 import {MutableMap, RMap} from "../../../core/rcollect"
 import {Disposer, Noop, NoopRemover, Remover} from "../../../core/util"
@@ -1065,20 +1065,32 @@ class ThreeFusedModels extends ThreeBounded implements FusedModels {
 registerConfigurableType("component", undefined, "fusedModels", ThreeFusedModels)
 
 class ThreeTile extends TypeScriptTile {
+  @property("boolean", {editable: false}) configured = false
 
   init () {
     super.init()
+    let autoConfiguring = false
+    Value
+      .join(this.getProperty<vec3>("min"), this.getProperty<vec3>("max"))
+      .onChange(([min, max]) => {
+        if (!autoConfiguring) this.configured = true
+      })
     const component = this.gameObject.components.getValue("model") as Value<ThreeModel|undefined>
     this._disposer.add(
       component
         .switchMap(model => model ? model.getProperty<string>("url") : Value.blank)
         .onValue(url => {
+          if (this.configured) return
           loadGLTFWithBoundingBox(url).onValue(gltf => {
             // use model to initialize size if not already set
-            if (!(vec3.equals(this.min, vec3zero) && vec3.equals(this.max, vec3zero))) return
             const box = gltf.scene.userData.boundingBox
-            box.min.toArray(this.min)
-            box.max.toArray(this.max)
+            autoConfiguring = true
+            try {
+              box.min.toArray(this.min)
+              box.max.toArray(this.max)
+            } finally {
+              autoConfiguring = false
+            }
           })
         }),
     )
