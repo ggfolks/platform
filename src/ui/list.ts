@@ -153,6 +153,7 @@ export namespace List {
         }
         contents.push(elem)
       }
+      // TODO: if the list did not change at all, avoid invalidation?
       list.invalidate()
     })
   }
