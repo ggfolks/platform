@@ -1077,11 +1077,13 @@ class ThreeTile extends TypeScriptTile {
           if (this.configured) return
           loadGLTFWithBoundingBox(url).onValue(gltf => {
             // use model to initialize size if not already set
-            const box = gltf.scene.userData.boundingBox
+            gltf.scene.userData.boundingBox.getSize(tmpVector3)
             autoConfiguring = true
             try {
-              box.min.toArray(this.min)
-              box.max.toArray(this.max)
+              const sizeX = getRoundedSize(tmpVector3.x)
+              const sizeZ = getRoundedSize(tmpVector3.z)
+              vec3.set(this.min, -sizeX / 2, 0, -sizeZ / 2)
+              vec3.set(this.max, sizeX / 2, 1, sizeZ / 2)
             } finally {
               autoConfiguring = false
             }
@@ -1091,6 +1093,14 @@ class ThreeTile extends TypeScriptTile {
   }
 }
 registerConfigurableType("component", ["render"], "tile", ThreeTile)
+
+function getRoundedSize (size :number) :number {
+  return size === 0
+    ? 1
+    : size >= 1
+    ? Math.round(size)
+    : 2 ** Math.max(-2, Math.round(Math.log(size) / Math.log(2)))
+}
 
 const PlaceholderGLTF = Subject.constant<GLTF>({
   scene: new Mesh(
