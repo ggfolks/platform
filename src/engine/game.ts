@@ -91,6 +91,13 @@ export const ALL_HIDE_FLAGS_MASK = ~0
 /** A mask that matches no hide flags. */
 export const NO_HIDE_FLAGS_MASK = 0
 
+/** Interface for objects that are updated on clock tick. */
+export interface Updatable {
+
+  /** Updates the object for the current frame. */
+  update (clock :Clock) :void
+}
+
 /** Top-level interface to game engine. */
 export interface GameEngine extends Disposable {
 
@@ -197,6 +204,12 @@ export interface GameEngine extends Disposable {
     * @param tag the tag desired.
     * @return the game object, or undefined if not found. */
   findWithTag (tag :string) :GameObject|undefined
+
+  /** Adds an object to update every frame. */
+  addUpdatable (updatable :Updatable) :void
+
+  /** Removes an object to update every frame. */
+  removeUpdatable (updatable :Updatable) :void
 
   /** Updates the game state. */
   update (clock :Clock) :void

@@ -22,7 +22,7 @@ import {
   ALL_LAYERS_MASK, DEFAULT_LAYER_FLAG, ALL_HIDE_FLAGS_MASK, DEFAULT_PAGE, Component,
   ComponentConstructor, Cone, Configurable, ConfigurableConfig, CoordinateFrame, Coroutine, Cube,
   Cylinder, GameContext, GameEngine, GameObject, GameObjectConfig, Graph, Mesh, MeshFilter, Page,
-  PrimitiveType, Quad, SpaceConfig, Sphere, Tile, Time, Torus, Transform,
+  PrimitiveType, Quad, SpaceConfig, Sphere, Tile, Time, Torus, Transform, Updatable,
 } from "../game"
 import {getConfigurableMeta, property} from "../meta"
 import {PhysicsEngine} from "../physics"
@@ -237,7 +237,6 @@ function getPropertyValueName (property :string) :string {
   return property + "Value"
 }
 
-interface Updatable { update (clock :Clock) :void }
 interface Wakeable { awake () :void }
 
 /** An implementation of the GameEngine interface in TypeScript. */
@@ -475,6 +474,14 @@ export class TypeScriptGameEngine implements GameEngine {
       }
     }
     return undefined
+  }
+
+  addUpdatable (updatable :Updatable) :void {
+    this.updatables.add(updatable)
+  }
+
+  removeUpdatable (updatable :Updatable) :void {
+    this.updatables.delete(updatable)
   }
 
   update (clock :Clock) :void {
@@ -869,11 +876,11 @@ export class TypeScriptComponent extends TypeScriptConfigurable implements Compo
     this._disposer.add(gameObject.activeInHierarchyValue.onValue(active => {
       const updatable = this as any
       if (active) {
-        if (updatable.update) gameEngine.updatables.add(updatable)
-        for (const coroutine of this._coroutines) gameEngine.updatables.add(coroutine)
+        if (updatable.update) gameEngine.addUpdatable(updatable)
+        for (const coroutine of this._coroutines) gameEngine.addUpdatable(coroutine)
       } else {
-        if (updatable.update) gameEngine.updatables.delete(updatable)
-        for (const coroutine of this._coroutines) gameEngine.updatables.delete(coroutine)
+        if (updatable.update) gameEngine.removeUpdatable(updatable)
+        for (const coroutine of this._coroutines) gameEngine.removeUpdatable(coroutine)
       }
     }))
   }
@@ -930,17 +937,17 @@ export class TypeScriptComponent extends TypeScriptConfigurable implements Compo
     this.gameObject._componentRemoved(this)
     for (const coroutine of this._coroutines) coroutine.dispose()
     const updatable = this as any
-    if (updatable.update) this.gameObject.gameEngine.updatables.delete(updatable)
+    if (updatable.update) this.gameObject.gameEngine.removeUpdatable(updatable)
   }
 
   _addCoroutine (coroutine :TypeScriptCoroutine) {
     this._coroutines.push(coroutine)
-    if (this.gameObject.activeInHierarchy) this.gameObject.gameEngine.updatables.add(coroutine)
+    if (this.gameObject.activeInHierarchy) this.gameObject.gameEngine.addUpdatable(coroutine)
   }
 
   _removeCoroutine (coroutine :TypeScriptCoroutine) {
     this._coroutines.splice(this._coroutines.indexOf(coroutine), 1)
-    if (this.gameObject.activeInHierarchy) this.gameObject.gameEngine.updatables.delete(coroutine)
+    if (this.gameObject.activeInHierarchy) this.gameObject.gameEngine.removeUpdatable(coroutine)
   }
 }
 
