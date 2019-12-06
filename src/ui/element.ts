@@ -101,7 +101,10 @@ export abstract class Element implements Disposable {
     // if spec is given as a path with missing model elements, always return false
     this.visible = ctx.model.resolveOr(config.visible, config.visible ? Value.false : Value.true)
     // avoid setting up a listener in the common case of always visible
-    if (this.visible !== Value.true) this.invalidateOnChange(this.visible)
+    if (this.visible !== Value.true) this.disposer.add(
+      // force invalidation when we _become_ visible, even though we will ignore any subsequent
+      // invalidation while we _are_ invisible
+      this.visible.onEmit(v => this.invalidate(true, true)))
   }
 
   get x () :number { return this.bounds[0] }
@@ -180,8 +183,8 @@ export abstract class Element implements Disposable {
     return true
   }
 
-  invalidate (dirty :boolean = true) {
-    if (this._valid.current && this.visible.current) {
+  invalidate (dirty :boolean = true, isVisible = this.visible.current) {
+    if (this._valid.current && isVisible) {
       this._valid.update(false)
       this._psize[0] = -1 // force psize recompute
       this.parent && this.parent.invalidate(false)
