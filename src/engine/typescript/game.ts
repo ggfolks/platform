@@ -250,6 +250,7 @@ export class TypeScriptGameEngine implements GameEngine {
   readonly activePage = Mutable.local<string>(DEFAULT_PAGE)
   readonly dirtyTransforms = new Set<TypeScriptTransform>()
   readonly updatables = new Set<Updatable>()
+  readonly tagged = new Map<string, Set<GameObject>>()
 
   _renderEngine? :RenderEngine
   _physicsEngine? :PhysicsEngine
@@ -456,6 +457,26 @@ export class TypeScriptGameEngine implements GameEngine {
     return config
   }
 
+  findGameObjectsWithTag (tag :string, target :GameObject[] = []) :GameObject[] {
+    const tagged = this.tagged.get(tag)
+    if (tagged) {
+      for (const object of tagged) {
+        if (object.activeInHierarchy) target.push(object)
+      }
+    }
+    return target
+  }
+
+  findWithTag (tag :string) :GameObject|undefined {
+    const tagged = this.tagged.get(tag)
+    if (tagged) {
+      for (const object of tagged) {
+        if (object.activeInHierarchy) return object
+      }
+    }
+    return undefined
+  }
+
   update (clock :Clock) :void {
     Time.deltaTime = clock.dt
     this._validateDirtyTransforms() // need this for camera transform used in hover computation
@@ -550,6 +571,7 @@ type MessageHandler = (...args :any[]) => void
 
 export class TypeScriptGameObject implements GameObject {
   readonly id :string
+  readonly tagValue = Mutable.local("")
   readonly layerFlagsValue = Mutable.local(DEFAULT_LAYER_FLAG)
   readonly hideFlagsValue = Mutable.local(0)
   readonly nameValue :Mutable<string>
@@ -562,6 +584,9 @@ export class TypeScriptGameObject implements GameObject {
   private readonly _componentTypes = Mutable.local<string[]>([])
   private readonly _components = MutableMap.local<string, Component>()
   private readonly _messageHandlers = new Map<string, MessageHandler[]>()
+
+  get tag () :string { return this.tagValue.current }
+  set tag (tag :string) { this.tagValue.update(tag) }
 
   get layerFlags () :number { return this.layerFlagsValue.current }
   set layerFlags (flags :number) { this.layerFlagsValue.update(flags) }
@@ -602,6 +627,20 @@ export class TypeScriptGameObject implements GameObject {
     gameEngine._gameObjects.set(this.id, this)
     this.nameValue = Mutable.local(name)
     this.transform = this.addComponent("transform", {}, false)
+    this.tagValue.onChange((newTag, oldTag) => {
+      if (oldTag) {
+        const tagged = this.gameEngine.tagged.get(oldTag)
+        if (tagged) {
+          tagged.delete(this)
+          if (tagged.size === 0) this.gameEngine.tagged.delete(oldTag)
+        }
+      }
+      if (newTag) {
+        let tagged = this.gameEngine.tagged.get(newTag)
+        if (!tagged) this.gameEngine.tagged.set(newTag, tagged = new Set())
+        tagged.add(this)
+      }
+    })
   }
 
   configure (config :GameObjectConfig) {
@@ -724,6 +763,7 @@ export class TypeScriptGameObject implements GameObject {
   getProperty<T> (name :string, overrideDefault? :any) :Value<T>|Mutable<T> {
     switch (name) {
       case "id": return Value.constant(this.id) as unknown as Value<T>
+      case "tag": return this.tagValue as unknown as Value<T>
       case "layerFlags": return this.layerFlagsValue as unknown as Value<T>
       case "hideFlags": return this.hideFlagsValue as unknown as Value<T>
       case "name": return this.nameValue as unknown as Value<T>
@@ -735,6 +775,7 @@ export class TypeScriptGameObject implements GameObject {
 
   createConfig (hideMask = ALL_HIDE_FLAGS_MASK) :GameObjectConfig {
     const config :GameObjectConfig = {}
+    if (this.tag !== "") config.tag = this.tag
     if (this.layerFlags !== DEFAULT_LAYER_FLAG) config.layerFlags = this.layerFlags
     if (this.hideFlags !== 0) config.hideFlags = this.hideFlags
     if (this.name !== this.id) config.name = this.name
@@ -748,6 +789,7 @@ export class TypeScriptGameObject implements GameObject {
 
   dispose () {
     this.activeSelf = false
+    this.tag = ""
     this.gameEngine._gameObjects.delete(this.id)
     for (const key in this) {
       const value = this[key]

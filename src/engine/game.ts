@@ -187,6 +187,17 @@ export interface GameEngine extends Disposable {
     * @param [hideMask=ALL_HIDE_FLAGS_MASK] the hide mask to use to filter objects out. */
   createConfig (layerMask? :number, hideMask? :number) :SpaceConfig
 
+  /** Finds all active game game objects with the specified tag and returns them.
+    * @param tag the tag desired.
+    * @param [target] an optional array to populate.  If not provided, a new array will be created.
+    * @return the array of game objects with the tag. */
+  findGameObjectsWithTag (tag :string, target? :GameObject[]) :GameObject[]
+
+  /** Finds a single active game object with the specified tag and returns it.
+    * @param tag the tag desired.
+    * @return the game object, or undefined if not found. */
+  findWithTag (tag :string) :GameObject|undefined
+
   /** Updates the game state. */
   update (clock :Clock) :void
 }
@@ -202,6 +213,9 @@ export interface GameObject extends Disposable {
 
   /** The game object's unique id. */
   readonly id :string
+
+  /** The game object's tag, if any. */
+  tag :string
 
   /** The game object's layer flags. */
   layerFlags :number

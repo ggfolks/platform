@@ -15,7 +15,14 @@ export function modMask (event :KeyboardEvent) :number {
   return mask
 }
 
-const codeReplacements = {Delete: "Del", Escape: "Esc", Equal: "=", Minus: "-"}
+const codeReplacements = {
+  Delete: "Del",
+  Escape: "Esc",
+  Equal: "=",
+  Minus: "-",
+  PageUp: "PgUp",
+  PageDown: "PgDn",
+}
 
 type Binding = [number, string]
 
