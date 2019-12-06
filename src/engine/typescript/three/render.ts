@@ -653,12 +653,6 @@ class ThreeBounded extends ThreeObjectComponent implements Bounded {
     )
   }
 
-  createConfig () :ConfigurableConfig {
-    const config = super.createConfig()
-    config.cache = {bounds: Bounds.clone(this.bounds)}
-    return config
-  }
-
   protected _updateObjectTransform (object :Object3D) {
     super._updateObjectTransform(object)
     this._boundsValid = false

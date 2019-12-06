@@ -352,6 +352,13 @@ export class Bounds {
     return out
   }
 
+  /** Computes the intersection of two sets of bounds. */
+  static intersection (out :Bounds, a :Bounds, b :Bounds) :Bounds {
+    vec3.max(out.min, a.min, b.min)
+    vec3.min(out.max, a.max, b.max)
+    return out
+  }
+
   /** Gets the size of a set of bounds. */
   static getSize (out :vec3, bounds :Bounds) :vec3 {
     return vec3.subtract(out, bounds.max, bounds.min)
@@ -374,13 +381,25 @@ export class Bounds {
 
   /** Tests two sets of bounds for intersection. */
   static intersect (a :Bounds, b :Bounds) :boolean {
-    return !(
-      a.max[0] < b.min[0] ||
-      a.min[0] > b.max[0] ||
-      a.max[1] < b.min[1] ||
-      a.min[1] > b.max[1] ||
-      a.max[2] < b.min[2] ||
-      a.min[2] > b.max[2]
+    return (
+      a.max[0] >= b.min[0] &&
+      a.min[0] <= b.max[0] &&
+      a.max[1] >= b.min[1] &&
+      a.min[1] <= b.max[1] &&
+      a.max[2] >= b.min[2] &&
+      a.min[2] <= b.max[2]
+    )
+  }
+
+  /** Checks whether one set of bounds entirely contains another. */
+  static contains (a :Bounds, b :Bounds) :boolean {
+    return (
+      b.min[0] >= a.min[0] &&
+      b.max[0] <= a.max[0] &&
+      b.min[1] >= a.min[1] &&
+      b.max[1] <= a.max[1] &&
+      b.min[2] >= a.min[2] &&
+      b.max[2] <= a.max[2]
     )
   }
 
