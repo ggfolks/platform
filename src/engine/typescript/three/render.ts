@@ -2,9 +2,9 @@ import {
   AnimationClip, AnimationMixer, AmbientLight, BackSide, Box3, BoxBufferGeometry, BufferGeometry,
   ConeBufferGeometry, CylinderBufferGeometry, DefaultLoadingManager, DirectionalLight, DoubleSide,
   FileLoader, FrontSide, Group, Intersection, Light as LightObject, LoopOnce, LoopRepeat,
-  LoopPingPong, Material as MaterialObject, Mesh, MeshBasicMaterial, MeshStandardMaterial, Object3D,
-  OrthographicCamera, PerspectiveCamera, PlaneBufferGeometry, Raycaster, Scene, ShaderMaterial,
-  SphereBufferGeometry, TorusBufferGeometry, Vector2, Vector3, WebGLRenderer,
+  LoopPingPong, Material as MaterialObject, Matrix4, Mesh, MeshBasicMaterial, MeshStandardMaterial,
+  Object3D, OrthographicCamera, PerspectiveCamera, PlaneBufferGeometry, Raycaster, Scene,
+  ShaderMaterial, SphereBufferGeometry, TorusBufferGeometry, Vector2, Vector3, WebGLRenderer,
 } from "three"
 import {SkeletonUtils} from "three/examples/jsm/utils/SkeletonUtils"
 import {getAbsoluteUrl} from "../../../core/assets"
@@ -1029,25 +1029,43 @@ class ThreeFusedModels extends ThreeBounded implements FusedModels {
       const group = new Group()
       const boundingBox = group.userData.boundingBox = new Box3()
       this.objectValue.update(group)
-      decodeFused(encoded, (url, bounds, position, rotation, scale, flags) => {
-        position = vec3.clone(position)
-        rotation = quat.clone(rotation)
-        scale = vec3.clone(scale)
-        loadGLTFWithBoundingBox(url).onValue(gltf => {
-          const scene = SkeletonUtils.clone(gltf.scene) as Object3D
-          scene.matrixAutoUpdate = false
-          scene.position.fromArray(position)
-          scene.quaternion.fromArray(rotation)
-          scene.scale.fromArray(scale)
-          scene.updateMatrix()
-          tmpBoundingBox.min.fromArray(bounds.min)
-          tmpBoundingBox.max.fromArray(bounds.max)
-          boundingBox.union(tmpBoundingBox.applyMatrix4(scene.matrix))
-          this._boundsValid = false
-          group.add(scene)
-          scene.updateMatrixWorld()
+      const decode = (encoded :Uint8Array, group :Group, parentMatrix :Matrix4) => {
+        decodeFused(encoded, {
+          visitTile: (url, bounds, position, rotation, scale, flags) => {
+            position = vec3.clone(position)
+            rotation = quat.clone(rotation)
+            scale = vec3.clone(scale)
+            loadGLTFWithBoundingBox(url).onValue(gltf => {
+              const scene = SkeletonUtils.clone(gltf.scene) as Object3D
+              scene.matrixAutoUpdate = false
+              scene.position.fromArray(position)
+              scene.quaternion.fromArray(rotation)
+              scene.scale.fromArray(scale)
+              scene.updateMatrix()
+              tmpBoundingBox.min.fromArray(bounds.min)
+              tmpBoundingBox.max.fromArray(bounds.max)
+              const fullMatrix = new Matrix4().multiplyMatrices(parentMatrix, scene.matrix)
+              boundingBox.union(tmpBoundingBox.applyMatrix4(fullMatrix))
+              this._boundsValid = false
+              group.add(scene)
+              scene.updateMatrixWorld()
+            })
+          },
+          visitFusedTiles: (source, position, rotation, scale) => {
+            const childGroup = new Group()
+            childGroup.matrixAutoUpdate = false
+            childGroup.position.fromArray(position)
+            childGroup.quaternion.fromArray(rotation)
+            childGroup.scale.fromArray(scale)
+            childGroup.updateMatrix()
+            group.add(childGroup)
+            childGroup.updateMatrixWorld()
+            const fullMatrix = new Matrix4().multiplyMatrices(parentMatrix, childGroup.matrix)
+            decode(source, childGroup, fullMatrix)
+          }
         })
-      })
+      }
+      decode(encoded, group, new Matrix4())
     })
   }
 

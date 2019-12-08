@@ -1,6 +1,6 @@
 import {getAbsoluteUrl} from "../core/assets"
 import {Base64} from "../core/basex"
-import {Decoder, Encoder} from "../core/codec"
+import {Decoder, Encoder, addSize8, getSize8} from "../core/codec"
 import {Color} from "../core/color"
 import {Bounds, quat, quatIdentity, vec3, vec3one, vec3unitY} from "../core/math"
 import {Interp, Easing} from "../core/interp"
@@ -509,7 +509,7 @@ export const WALKABLE_FLAG = (1 << 0)
 export class FusedEncoder {
   private readonly _encoder = new Encoder()
   private readonly _urlCodes = new Map<string, number>()
-  private _nextCode = 0
+  private _nextCode = 1
 
   /** Adds an entry to the fused set.
     * @param url the URL of the model.
@@ -518,14 +518,21 @@ export class FusedEncoder {
     * @param rotation the model's relative rotation.
     * @param scale the model's relative scale.
     * @param flags the model's flags. */
-  add (url :string, bounds :Bounds, position :vec3, rotation :quat, scale :vec3, flags :number) {
+  addTile (
+    url :string,
+    bounds :Bounds,
+    position :vec3,
+    rotation :quat,
+    scale :vec3,
+    flags :number,
+  ) {
     const code = this._urlCodes.get(url)
     if (code !== undefined) {
-      this._encoder.addValue(code, "varSize")
+      this._encoder.addValue(code, "varInt")
     } else {
       const code = this._nextCode++
       this._urlCodes.set(url, code)
-      this._encoder.addValue(code, "varSize")
+      this._encoder.addValue(code, "varInt")
       this._encoder.addValue(url, "string")
       this._addFloatTriplet(bounds.min)
       this._addFloatTriplet(bounds.max)
@@ -546,6 +553,14 @@ export class FusedEncoder {
     this._encoder.addValue(Math.round(position[2] * factor), "varInt")
   }
 
+  addFusedTiles (source :Uint8Array, position :vec3, rotation :quat, scale :vec3) {
+    this._encoder.addValue(-source.length, "varInt")
+    for (let ii = 0; ii < source.length; ii++) addSize8(this._encoder, source[ii])
+    this._addFloatTriplet(position)
+    this._addFloatTriplet(rotation)
+    this._addFloatTriplet(scale)
+  }
+
   /** Returns the encoded array of bytes. */
   finish () :Uint8Array {
     return this._encoder.finish()
@@ -558,21 +573,37 @@ export class FusedEncoder {
   }
 }
 
-/** Helper function to decode multiple model URLs/transforms from merged format.
-  * @param source the encoded fused model set.
-  * @param op the operation to apply to each model in the set.  Note that the objects passed
-  * will be reused, so be sure to clone them if you need to retain the values. */
-export function decodeFused (
-  source :Uint8Array,
-  op :(
+/** Interface for visitors of fused tile sets. */
+interface FusedVisitor {
+
+  /** Visits a single tile.
+    * @param url the URL of the tile model.
+    * @param bounds the local bounds of the tile.
+    * @param position the relative position of the tile.
+    * @param rotation the relative rotation of the tile.
+    * @param scale the relative scale of the tile.
+    * @param flags the flags associated with the tile. */
+  visitTile (
     url :string,
     bounds :Bounds,
     position :vec3,
     rotation :quat,
     scale :vec3,
     flags :number,
-  ) => void,
-) {
+  ) :void
+
+  /** Visites a fused set of tiles.
+    * @param source the source array to decode.
+    * @param position the relative position of the tile set.
+    * @param rotation the relative rotation of the tile set.
+    * @param scale the relative scale of the tile set. */
+  visitFusedTiles (source :Uint8Array, position :vec3, rotation :quat, scale :vec3) :void
+}
+
+/** Helper function to decode multiple model URLs/transforms from merged format.
+  * @param source the encoded fused model set.
+  * @param visitor the visitor to receive the contents. */
+export function decodeFused (source :Uint8Array, visitor :FusedVisitor) {
   const decoder = new Decoder(source)
   const urlMappings = new Map<number, [string, Bounds]>()
   const position = vec3.create()
@@ -584,7 +615,17 @@ export function decodeFused (
     out[2] = decoder.getValue("float32")
   }
   while (decoder.pos < source.byteLength) {
-    const code = decoder.getValue("varSize")
+    const code = decoder.getValue("varInt")
+    if (code <= 0) {
+      const source = new Uint8Array(-code)
+      for (let ii = 0; ii < source.length; ii++) source[ii] = getSize8(decoder)
+      readTriplet(position)
+      readTriplet(rotation)
+      quat.calculateW(rotation, rotation)
+      readTriplet(scale)
+      visitor.visitFusedTiles(source, position, rotation, scale)
+      continue
+    }
     let mapping = urlMappings.get(code)
     if (mapping === undefined) {
       const newUrl = decoder.getValue("string") as string
@@ -602,7 +643,7 @@ export function decodeFused (
       readTriplet(rotation)
       quat.calculateW(rotation, rotation)
       readTriplet(scale)
-      op(url, bounds, position, rotation, scale, flags)
+      visitor.visitTile(url, bounds, position, rotation, scale, flags)
       continue
     }
     const cardinal = (bits >> 2) & 3
@@ -611,6 +652,6 @@ export function decodeFused (
     position[1] = decoder.getValue("varInt")
     position[2] = decoder.getValue("varInt")
     vec3.scale(position, position, 2 ** -precision)
-    op(url, bounds, position, CardinalRotations[cardinal], vec3one, flags)
+    visitor.visitTile(url, bounds, position, CardinalRotations[cardinal], vec3one, flags)
   }
 }

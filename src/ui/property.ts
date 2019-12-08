@@ -112,7 +112,7 @@ export namespace Property {
     },
     vec3: (model, editable) => {
       const rawValue = model.resolve<Mutable<vec3>>("value")
-      const maxDecimals = 3
+      const maxDecimals = 2
       let currentValue = truncateVec3(rawValue.current, maxDecimals)
       const truncatedValue = Mutable.deriveMutable(
         dispatch => rawValue.onChange((value :vec3, oldValue :vec3) => {
