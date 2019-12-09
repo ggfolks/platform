@@ -524,6 +524,7 @@ export interface NumberTextConfig extends AbstractTextConfig {
   type :"numberText"
   min? :number
   max? :number
+  wrap? :boolean
   maxDecimals? :number
   wheelStep? :number
   number :Spec<Mutable<number>>
@@ -551,7 +552,7 @@ export class NumberText extends AbstractText {
 
   handleWheel (event :WheelEvent, pos :vec2) :boolean {
     const wheelStep = getValue(this.config.wheelStep, 1)
-    this.number.update(this._clamp(this.number.current - wheelStep * Math.sign(event.deltaY)))
+    this.number.update(this._clampOrWrap(this.number.current - wheelStep * Math.sign(event.deltaY)))
     return true
   }
 
@@ -568,9 +569,17 @@ export class NumberText extends AbstractText {
     )
   }
 
-  private _clamp (value :number) :number {
-    if (this.config.min !== undefined) value = Math.max(this.config.min, value)
-    if (this.config.max !== undefined) value = Math.min(this.config.max, value)
+  private _clampOrWrap (value :number) :number {
+    if (this.config.wrap) {
+      if (this.config.min !== undefined && this.config.max !== undefined) {
+        const span = this.config.max - this.config.min
+        while (value < this.config.min) value += span
+        while (value > this.config.max) value -= span
+      }
+    } else {
+      if (this.config.min !== undefined) value = Math.max(this.config.min, value)
+      if (this.config.max !== undefined) value = Math.min(this.config.max, value)
+    }
     return value
   }
 }

@@ -268,6 +268,11 @@ export class Euler extends Float32Array {
   /** Creates a new set of Euler angles set to zero. */
   static create () :Euler { return new Euler() }
 
+  /** Clones the provided Euler angles. */
+  static clone (e :Euler) :Euler {
+    return Euler.fromValues(e[0], e[1], e[2])
+  }
+
   /** Creates a new set of Euler angles from components. */
   static fromValues (x :number, y :number, z :number) :Euler {
     return Euler.set(Euler.create(), x, y, z)

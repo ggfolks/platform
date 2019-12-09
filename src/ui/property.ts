@@ -3,9 +3,9 @@ import {Color as ThreeColor, Euler as ThreeEuler, Math as M, Vector3} from "thre
 import {Color} from "../core/color"
 import {refEquals} from "../core/data"
 import {Euler, quat, vec3} from "../core/math"
-import {Mutable, Value} from "../core/react"
+import {ChangeFn, Mutable, Value} from "../core/react"
 import {RMap} from "../core/rcollect"
-import {PMap, filteredIterable, toLimitedString} from "../core/util"
+import {Noop, PMap, filteredIterable, toLimitedString} from "../core/util"
 import {NumberConstraints, PropertyMeta, SelectConstraints, getEnumMeta} from "../graph/meta"
 import {Element} from "./element"
 import {AxisConfig, VGroup} from "./group"
@@ -130,84 +130,79 @@ export namespace Property {
         },
         refEquals,
       )
+      const createElementConfig = (index :number) => ({
+        type: "numberText",
+        constraints: {stretch: true},
+        maxDecimals,
+        wheelStep: 0.1,
+        number: truncatedValue.bimap(v => v[index], (v, value) => {
+          const newVector = vec3.clone(v)
+          newVector[index] = value
+          return newVector
+        }),
+        contents: NumberBox,
+      })
       return createRowConfig(model, {
         type: "row",
         constraints: {stretch: true},
         contents: [
-          {
-            type: "numberText",
-            constraints: {stretch: true},
-            maxDecimals,
-            wheelStep: 0.1,
-            number: truncatedValue.bimap(v => v[0], (v, x) => vec3.fromValues(x, v[1], v[2])),
-            contents: NumberBox,
-          },
-          {
-            type: "numberText",
-            constraints: {stretch: true},
-            maxDecimals,
-            wheelStep: 0.1,
-            number: truncatedValue.bimap(v => v[1], (v, y) => vec3.fromValues(v[0], y, v[2])),
-            contents: NumberBox,
-          },
-          {
-            type: "numberText",
-            constraints: {stretch: true},
-            maxDecimals,
-            wheelStep: 0.1,
-            number: truncatedValue.bimap(v => v[2], (v, z) => vec3.fromValues(v[0], v[1], z)),
-            contents: NumberBox,
-          },
+          createElementConfig(0),
+          createElementConfig(1),
+          createElementConfig(2),
         ],
       })
     },
     quat: (model, editable) => {
       const rawValue = model.resolve<Mutable<quat>>("value")
+      let quatValue = quat.clone(rawValue.current)
       let currentValue = truncateEuler(rawValue.current)
+      let changeFn :ChangeFn<Euler> = Noop
       const truncatedValue = Mutable.deriveMutable(
-        dispatch => rawValue.onChange((value :quat, oldValue :quat) => {
-          const truncated = truncateEuler(value)
-          if (!Euler.equals(currentValue, truncated)) {
-            const oldValue = currentValue
-            dispatch(currentValue = truncated, oldValue)
+        dispatch => {
+          changeFn = dispatch
+          const rawValueRemover = rawValue.onChange((value :quat, oldValue :quat) => {
+            if (!quat.equals(value, quatValue)) {
+              const oldValue = currentValue
+              quat.copy(quatValue, value)
+              changeFn(currentValue = truncateEuler(value), oldValue)
+            }
+          })
+          return () => {
+            rawValueRemover()
+            changeFn = Noop
           }
-        }),
+        },
         () => currentValue,
         (newValue :Euler) => {
-          if (!Euler.equals(currentValue, newValue)) {
-            rawValue.update(quat.fromEuler(quat.create(), newValue[0], newValue[1], newValue[2]))
-          }
+          const oldValue = currentValue
+          changeFn(currentValue = newValue, oldValue)
+          const newQuatValue = quat.fromEuler(quat.create(), newValue[0], newValue[1], newValue[2])
+          if (!quat.equals(quatValue, newQuatValue)) rawValue.update(quatValue = newQuatValue)
         },
         refEquals,
       )
+      const createElementConfig = (index :number) => ({
+        type: "numberText",
+        constraints: {stretch: true},
+        number: truncatedValue.bimap(e => e[index], (e, value) => {
+          const newEuler = Euler.clone(e)
+          newEuler[index] = value
+          return newEuler
+        }),
+        contents: NumberBox,
+        min: -180,
+        max: 180,
+        wrap: true,
+        maxDecimals: 0,
+        wheelStep: 10,
+      })
       return createRowConfig(model, {
         type: "row",
         constraints: {stretch: true},
         contents: [
-          {
-            type: "numberText",
-            constraints: {stretch: true},
-            number: truncatedValue.bimap(e => e[0], (e, x) => Euler.fromValues(x, e[1], e[2])),
-            contents: NumberBox,
-            maxDecimals: 0,
-            wheelStep: 10,
-          },
-          {
-            type: "numberText",
-            constraints: {stretch: true},
-            number: truncatedValue.bimap(e => e[1], (e, y) => Euler.fromValues(e[0], y, e[2])),
-            contents: NumberBox,
-            maxDecimals: 0,
-            wheelStep: 10,
-          },
-          {
-            type: "numberText",
-            constraints: {stretch: true},
-            number: truncatedValue.bimap(e => e[2], (e, z) => Euler.fromValues(e[0], e[1], z)),
-            contents: NumberBox,
-            maxDecimals: 0,
-            wheelStep: 10,
-          },
+          createElementConfig(0),
+          createElementConfig(1),
+          createElementConfig(2),
         ],
       })
     },
