@@ -141,13 +141,21 @@ export namespace Drag {
     /** Checks whether this element is selected. */
     get selected () :boolean { return false }
 
-    /** Selects this element. */
-    select (event :MouseEvent|TouchEvent) :void {}
+    /** Selects this element.
+      * @return true if the element responds to selection, false if not. */
+    select (event :MouseEvent|TouchEvent) :boolean {
+      return false
+    }
 
     handlePointerDown (event :MouseEvent|TouchEvent, pos :vec2, into :PointerInteraction[]) {
       this.contents.handlePointerDown(event, pos, into)
+      if (into.length > 0) return
 
-      this.select(event)
+      if (this.select(event)) {
+        // if our list element responds to selection, it acts (at least somewhat) as a control and
+        // should clear focus from any other focused control
+        this.root.clearFocus()
+      }
       const owner = this.dragOwner
       if (!owner || !owner.canStartDrag) {
         into.push({move: () => false, release: Noop, cancel: Noop})

@@ -269,7 +269,7 @@ export class TreeViewNode extends Drag.Elem {
     return false
   }
 
-  select (event :MouseEvent|TouchEvent) :void {
+  select (event :MouseEvent|TouchEvent) :boolean {
     if (event.ctrlKey) {
       if (this._selectedKeys.has(this.key.current)) this._selectedKeys.delete(this.key.current)
       else this._selectedKeys.add(this.key.current)
@@ -296,6 +296,7 @@ export class TreeViewNode extends Drag.Elem {
       this._selectedKeys.clear()
       this._selectedKeys.add(this.key.current)
     }
+    return true
   }
 
   protected get customStyleScope () { return TreeViewNodeStyleScope }

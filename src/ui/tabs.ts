@@ -110,7 +110,10 @@ export class Tab extends Drag.Elem {
     return this.key && this._activeKey && this._activeKey.current === this.key.current
   }
 
-  select () :void { this._activeKey.update(this.key.current) }
+  select () :boolean {
+    this._activeKey.update(this.key.current)
+    return true
+  }
 
   protected get customStyleScope () { return TabStyleScope }
 
