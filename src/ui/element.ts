@@ -185,7 +185,9 @@ export abstract class Element implements Disposable {
     }
     this.dirty()
     rect.copy(this.bounds, bounds)
-    this.invalidate()
+    // no need to dirty here because we already dirtied our old bounds and
+    // we won't know our new render bounds until validation has run again
+    this.invalidate(false)
     return true
   }
 
