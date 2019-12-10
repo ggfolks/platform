@@ -1332,6 +1332,9 @@ export class Host implements Disposable {
       event.preventDefault()
       event.cancelBubble = true
     }
+    if (event.type === "keyup" && (event.ctrlKey || event.altKey || event.metaKey)) {
+      currentEditNumber++
+    }
   }
 
   handleWheelEvent (event :WheelEvent) {
