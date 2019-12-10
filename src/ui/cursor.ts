@@ -23,7 +23,8 @@ export class Cursor extends Element {
   constructor (ctx :Element.Context, parent :Element, readonly config :CursorConfig) {
     super(ctx, parent, config)
     this.styles = ctx.elem.resolveStyles(this, config.style)
-    this.fill.observe(this.styles.resolve(s => s.fill, s => ctx.style.resolvePaint(s), DefaultPaint))
+    this.fill.observe(this.styles.resolve(
+      s => s.fill, s => ctx.style.resolvePaint(s), DefaultPaint))
   }
 
   get lineWidth () :number { return this.styles.current.width || 1 }
