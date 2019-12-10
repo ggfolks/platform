@@ -102,9 +102,10 @@ export abstract class Element implements Disposable {
     this.visible = ctx.model.resolveOr(config.visible, config.visible ? Value.false : Value.true)
     // avoid setting up a listener in the common case of always visible
     if (this.visible !== Value.true) this.disposer.add(
-      // force invalidation when we _become_ visible, even though we will ignore any subsequent
-      // invalidation while we _are_ invisible
-      this.visible.onEmit(v => this.invalidate(true, true)))
+      // force invalidation when our visibility changes because we need to ensure that we dirty
+      // when we become invisible (even though we don't dirty when we are visible) and that we
+      // invalidate our parent when we become visible (even though we won't be valid at that time)
+      this.visible.onEmit(() => this.invalidate(true, true)))
   }
 
   get x () :number { return this.bounds[0] }
@@ -188,8 +189,8 @@ export abstract class Element implements Disposable {
     return true
   }
 
-  invalidate (dirty :boolean = true, isVisible = this.visible.current) {
-    if (this._valid.current && isVisible) {
+  invalidate (dirty :boolean = true, force? :boolean) {
+    if (force || (this._valid.current && this.visible.current)) {
       this._valid.update(false)
       this._psize[0] = -1 // force psize recompute
       this.parent && this.parent.invalidate(false)
