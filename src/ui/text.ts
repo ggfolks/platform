@@ -385,15 +385,11 @@ export abstract class AbstractText extends Control {
     const binding = textBindings.getBinding(event)
     const action = textBindings.model.resolveActionOpt<TextAction>(binding)
     const isCtrlOrMeta = event.ctrlKey || event.metaKey
-    if (action) {
-      action(this.textState, typed)
-    } else if (isPrintable && !isCtrlOrMeta) {
-      textActions.insert(this.textState, typed)
-    } else if (event.code === "Enter" && !isCtrlOrMeta) {
-      this.onEnter()
-    } else {
-      return false
-    }
+    if (action) action(this.textState, typed)
+    else if (isPrintable && !isCtrlOrMeta) textActions.insert(this.textState, typed)
+    else if (event.code === "Enter" && !isCtrlOrMeta) this.onEnter()
+    else if (event.code === "Escape") this.onEscape()
+    else return false
     if (binding !== 'copy') this.label.selection.update([0, 0])
     this.jiggle.update(!this.jiggle.current)
     return true
@@ -436,6 +432,7 @@ export abstract class AbstractText extends Control {
     input.addEventListener("input", onInput)
     const onPress = (event :KeyboardEvent) => {
       if (event.key === "Enter") this.onEnter()
+      else if (event.key === "Escape") this.onEscape()
       // TODO: move focus on Tab/Shift-Tab when we support that (may need to do that in keydown)
     }
     input.addEventListener("keypress", onPress)
@@ -477,7 +474,14 @@ export abstract class AbstractText extends Control {
 
   protected get inputValid () :boolean { return true }
 
-  protected onEnter () { this._onEnter() }
+  protected onEnter () {
+    this._onEnter()
+    this.blur()
+  }
+
+  protected onEscape () {
+    this.blur()
+  }
 
   // note: we hackily recompute the cursor position and label offset in recomputeBounds because we
   // know that is run after our children are revalidated; we need the label to be updated with its
