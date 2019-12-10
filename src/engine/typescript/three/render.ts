@@ -1023,15 +1023,20 @@ registerConfigurableType("component", ["render"], "model", ThreeModel)
 class ThreeFusedModels extends ThreeBounded implements FusedModels {
   @property("Uint8Array", {editable: false}) encoded = new Uint8Array(0)
 
+  private _loadingEncoded? :Uint8Array
+
   init () {
     super.init()
-    this.getProperty<Uint8Array>("encoded").onChange(encoded => {
-      const group = new Group()
-      const boundingBox = group.userData.boundingBox = new Box3()
-      this.objectValue.update(group)
+    this.getProperty<Uint8Array>("encoded").onChange(topEncoded => {
+      this._loadingEncoded = topEncoded
+      this.objectValue.update(undefined)
+      const topGroup = new Group()
+      const boundingBox = topGroup.userData.boundingBox = new Box3()
+      let remaining = 0
       const decode = (encoded :Uint8Array, group :Group, parentMatrix :Matrix4) => {
         decodeFused(encoded, {
           visitTile: (url, bounds, position, rotation, scale, flags) => {
+            remaining++
             position = vec3.clone(position)
             rotation = quat.clone(rotation)
             scale = vec3.clone(scale)
@@ -1049,6 +1054,9 @@ class ThreeFusedModels extends ThreeBounded implements FusedModels {
               this._boundsValid = false
               group.add(scene)
               scene.updateMatrixWorld()
+              if (--remaining === 0 && this._loadingEncoded === topEncoded) {
+                this.objectValue.update(topGroup)
+              }
             })
           },
           visitFusedTiles: (source, position, rotation, scale) => {
@@ -1065,7 +1073,7 @@ class ThreeFusedModels extends ThreeBounded implements FusedModels {
           }
         })
       }
-      decode(encoded, group, new Matrix4())
+      decode(topEncoded, topGroup, new Matrix4())
     })
   }
 
