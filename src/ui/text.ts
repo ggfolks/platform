@@ -497,6 +497,10 @@ export abstract class AbstractText extends Control {
     // finally position the cursor based on our calculations
     const cx = lx + this.label.xoffset.current + cadvance
     this.cursor.setBounds(rect.set(tmpr, cx, ly, this.cursor.lineWidth, lh))
+    // because we're resizing the cursor after it has been validated during this validation cycle,
+    // we need to revalidate it here so that it can recompute its render bounds and dirty itself
+    // properly before the render that will happen after this validation cycle completes
+    this.cursor.validate()
   }
 
   protected rerender (canvas :CanvasRenderingContext2D, region :rect) {
