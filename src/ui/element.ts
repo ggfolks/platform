@@ -1337,8 +1337,20 @@ export class Host implements Disposable {
     }
   }
 
+  private _wheelTimeout? :number
+  private _wheelDirection? :number
+
   handleWheelEvent (event :WheelEvent) {
+    // we increment the edit number when we switch wheel directions or 0.5 seconds elapses
+    // after the last wheel event
+    const direction = Math.sign(event.deltaY)
+    if (this._wheelTimeout !== undefined) {
+      window.clearTimeout(this._wheelTimeout)
+      if (this._wheelDirection !== direction) currentEditNumber++
+    }
     this.dispatchEvent(event, r => r.dispatchWheelEvent(this, event))
+    this._wheelTimeout = window.setTimeout(() => currentEditNumber++, 500)
+    this._wheelDirection = direction
   }
   handleTouchEvent (event :TouchEvent) {
     this.dispatchEvent(event, r => r.dispatchTouchEvent(this, event))
