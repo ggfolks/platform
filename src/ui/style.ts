@@ -623,6 +623,8 @@ export class Span {
   }
 
   updateWraps (width :number, size? :dim2) {
+    if (width < 0) throw new Error(`Cannot wrap to negative width ${width}`)
+
     const canvas = requireScratch2D()
     this.prepCanvas(canvas)
 
