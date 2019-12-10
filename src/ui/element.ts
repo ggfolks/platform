@@ -177,6 +177,11 @@ export abstract class Element implements Disposable {
 
   setBounds (bounds :rect) :boolean {
     if (rect.eq(this.bounds, bounds)) return false
+    if (bounds[2] < 0 || bounds[3] < 0) {
+      log.warn("Rejecting invalid bounds", "elem", this, "bounds", bounds)
+      console.trace("Stack trace")
+      return false
+    }
     this.dirty()
     rect.copy(this.bounds, bounds)
     this.invalidate()
