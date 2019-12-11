@@ -410,7 +410,7 @@ const errorAnimation = new AnimationClip("error", 0, [])
  * represent the clip name.
  */
 export function loadGLTFAnimationClip (url :string) :Subject<AnimationClip> {
-  const idx = url.indexOf('#')
+  const idx = url.indexOf("#")
   return loadGLTF(url.substring(0, idx)).map(gltf => {
     const clip = AnimationClip.findByName(gltf.animations, url.substring(idx + 1))
     if (clip) return clip

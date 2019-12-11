@@ -1108,7 +1108,7 @@ setEnumMeta("WrapMode", WrapModes)
 
 class ThreeAnimation extends TypeScriptComponent implements Animation {
   @property("boolean") playAutomatically = true
-  @property("select", {options: [""]}) playing = ""
+  @property("select", {options: [""], transient: true}) playing = ""
   @property("WrapMode") wrapMode :WrapMode = "loop"
   @property("number", {min: 0, wheelStep: 0.1}) timeScale = 1
   @property("number", {min: 0}) repetitions = Infinity
@@ -1142,7 +1142,7 @@ class ThreeAnimation extends TypeScriptComponent implements Animation {
         if (property === "playing") {
           const options = urls.map(getAnchor)
           options.unshift("")
-          map.set(property, {type: "select", constraints: {options}})
+          map.set(property, {type: "select", constraints: {options, transient: true}})
         }
         else map.set(property, meta)
       }
