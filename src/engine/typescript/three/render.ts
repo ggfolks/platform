@@ -747,7 +747,6 @@ class ThreeMeshRenderer extends ThreeBounded implements MeshRenderer {
   ) {
     super(gameEngine, supertype, type, gameObject)
 
-    this.objectValue.update(this._mesh)
     this._materials = new Proxy(
       [gameEngine.reconfigureConfigurable(
         "material",
@@ -780,10 +779,15 @@ class ThreeMeshRenderer extends ThreeBounded implements MeshRenderer {
             : Value.constant<TypeScriptMesh|null>(null),
           )
         .onValue((mesh :any) => {
+          if (!(mesh && mesh._bufferGeometry)) {
+            this.objectValue.update(undefined)
+            return
+          }
           const geometry = (mesh && mesh._bufferGeometry) || emptyGeometry
           this._mesh.geometry = geometry
           if (!geometry.boundingBox) geometry.computeBoundingBox()
           this._mesh.userData.boundingBox = geometry.boundingBox
+          this.objectValue.update(this._mesh)
           this._boundsValid = false
         }),
     )
