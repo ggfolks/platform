@@ -3,7 +3,7 @@ import {Record} from "../core/data"
 import {makeConfig} from "../core/config"
 import {ImageResolver, StyleContext, StyleDefs} from "./style"
 import {Model, MissingModelElem, MissingConfig} from "./model"
-import {Control, Element, ErrorViz, Root} from "./element"
+import {Control, Element, ErrorViz, Styler, Root} from "./element"
 
 import {BoxCatalog} from "./box"
 import {ButtonCatalog} from "./button"
@@ -77,7 +77,7 @@ class StyleResolver {
 const catalog = [
   BoxCatalog, ButtonCatalog, Control.Catalog, CursorCatalog, Dropdown.Catalog, GraphCatalog,
   GroupCatalog, ImageCatalog, List.Catalog, Menu.Catalog, Property.Catalog, ScrollCatalog,
-  TabCatalog, TextCatalog, TreeCatalog,
+  Styler.Catalog, TabCatalog, TextCatalog, TreeCatalog,
 ].reduce(Object.assign, {})
 
 export class UI {

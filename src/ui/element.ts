@@ -1200,6 +1200,37 @@ export namespace Control {
   }
 }
 
+/** A wrapper that sets the style state for its children based on a dynamic value. */
+export class Styler extends Container {
+  private readonly _state :Value<string>
+  private readonly _stylerScope :Element.StyleScope
+  protected readonly contents :Element
+
+  constructor (ctx :Element.Context, parent :Element|undefined, readonly config :Styler.Config) {
+    super(ctx, parent, config)
+    this._state = ctx.model.resolveAs(config.state, "state")
+    this._stylerScope = {id: config.scopeId, states: config.states}
+    this.contents = ctx.elem.create(ctx, this, config.contents)
+    this.invalidateOnChange(this._state)
+  }
+
+  get state () { return this._state }
+  get styleScope () :Element.StyleScope { return this._stylerScope }
+}
+
+export namespace Styler {
+  export interface Config extends Element.Config {
+    scopeId :string
+    states :string[]
+    state :Spec<Value<string>>
+    contents :Element.Config
+  }
+
+  export const Catalog :Element.Catalog = {
+    "styler": (ctx, parent, cfg) => new Styler(ctx, parent, cfg as Config),
+  }
+}
+
 /** Manages a collection of [[Root]]s: handles dispatching input and frame events, validating and
   * rendering. Client responsibilities:
   * - [[bind]] to the canvas element in which the roots are rendered
