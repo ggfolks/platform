@@ -17,6 +17,8 @@ registerCustomCodec<Vector3>(MIN_CUSTOM_ID, Vector3.prototype, (enc, vec) => {
   dec.getValue("number"),
   dec.getValue("number")))
 
+const bytes = Uint8Array.from([0xCA, 0xFE, 0xBA, 0xBE])
+
 test("codec", () => {
   const enc = new Encoder()
   const vts :[any, ValueType][] = [
@@ -43,7 +45,7 @@ test("codec", () => {
     [Timestamp.now(), "timestamp"],
     [{name: "bob", coords: new Vector3(1, 2, 3), time: Timestamp.now()}, "record"],
     [{ids: [UUID0, undefined, undefined, UUID0]}, "record"],
-    [{ids: [null, null, null, UUID0], data: vec2.fromValues(1, 5)}, "record"],
+    [{ids: [null, null, null, UUID0], data: vec2.fromValues(1, 5), bytes}, "record"],
     [{ids: [undefined, undefined, undefined, "bang!"]}, "record"],
   ]
 

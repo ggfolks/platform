@@ -64,7 +64,7 @@ function addString (enc :Encoder, text :string) {
     addSize16(enc, encoded.length)
     const tpos = enc.pos
     enc.prepAdd(encoded.length)
-    new Uint8Array(enc.buffer, tpos).set(encoded)
+    enc.bytes.set(encoded, tpos)
     return
   }
 
@@ -126,6 +126,14 @@ function addFloatArray (enc :Encoder, arr :Float32Array) {
   const length = arr.length
   addSize32(enc, length)
   for (let ii = 0; ii < length; ii += 1) addFloat32(enc, arr[ii])
+}
+
+function addByteArray (enc :Encoder, arr :Uint8Array) {
+  const length = arr.length
+  addSize32(enc, length)
+  const tpos = enc.pos
+  enc.prepAdd(length)
+  enc.bytes.set(arr, tpos)
 }
 
 const addDataSet = (enc :Encoder, set :DataSet) => addDataIterable(enc, set, set.size)
@@ -224,6 +232,12 @@ function getFloatArray (dec :Decoder) {
   return arr
 }
 
+function getByteArray (dec :Decoder) {
+  const size = getSize32(dec)
+  const pos = dec.prepGet(size)
+  return new Uint8Array(dec.source.buffer, pos, size)
+}
+
 const getDataSet = (dec :Decoder) => new Set(getDataArray(dec))
 
 function getDataMap (dec :Decoder) {
@@ -308,6 +322,7 @@ const RECORD_ID = 8 ; registerCodec<Record>(RECORD_ID, addRecord, getRecord)
 const DATA_ID   = 9 ; registerCodec<Data>(DATA_ID, addData, getData)
 const NULL_ID   = 10 ; registerCodec<null>(NULL_ID, addNull, getNull)
 const FLOATV_ID = 11 ; registerCodec<Float32Array>(FLOATV_ID, addFloatArray, getFloatArray)
+const BYTEV_ID  = 12 ; registerCodec<Uint8Array>(BYTEV_ID, addByteArray, getByteArray)
 
 function dataTypeId (data :Data) :number {
   if (data === undefined) return UNDEF_ID
@@ -320,6 +335,7 @@ function dataTypeId (data :Data) :number {
   else if (isMap(data)) return MAP_ID
   else if (data instanceof Timestamp) return STAMP_ID
   else if (data instanceof Float32Array) return FLOATV_ID
+  else if (data instanceof Uint8Array) return BYTEV_ID
   else if ("__typeId" in data) return data["__typeId"] as number
   else return RECORD_ID
 }
@@ -403,10 +419,12 @@ export class Encoder {
     if (npos >= capacity) {
       let ncapacity = capacity + EncoderExpandSize
       while (ncapacity <= npos) ncapacity += EncoderExpandSize
+      // TODO: if/when ArrayBuffer.transfer is widely available, use it
       const nbuffer = new ArrayBuffer(ncapacity)
-      new Uint8Array(nbuffer).set(new Uint8Array(this.buffer), 0)
+      const nbytes = new Uint8Array(nbuffer)
+      nbytes.set(this.bytes)
       this.buffer = nbuffer
-      this.bytes = new Uint8Array(nbuffer)
+      this.bytes = nbytes
       this.data = new DataView(nbuffer)
     }
     this.pos = npos

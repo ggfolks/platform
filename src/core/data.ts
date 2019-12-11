@@ -7,7 +7,7 @@ export interface DataMap extends Map<DataMapKey,Data> {}
 export interface Record { [key :string] :Data }
 
 export type Data = void | boolean | number | string | Timestamp
-                 | DataArray | Float32Array | DataSet | DataMap | Record
+                 | DataArray | Float32Array | Uint8Array | DataSet | DataMap | Record
 
 export function isSet (value :Data) :boolean {
   return (value instanceof Set) || (
