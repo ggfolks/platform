@@ -818,12 +818,13 @@ type TypedArray = Int8Array | Uint8Array | Uint8ClampedArray | Int16Array | Uint
   * lot of garbage. */
 export abstract class Buffer<T> extends ReadableSource<T> implements Prop<T> {
   protected _listeners :ValueFn<T>[] = []
+  private static readonly defaultUpdater :(o :any, n :any) => any = (o, n) => n
 
   /** Creates a buffer containing `init`.
     * @param updater an optional updating function that merges a new value into the old value and
     * returns the value that should be placed back into the buffer. */
   static create<T> (init :T, updater? :(o :T, n :T) => T) :Buffer<T> {
-    return new ValueBuffer(init, updater)
+    return new ValueBuffer(init, updater || Buffer.defaultUpdater)
   }
 
   /** Creates a buffer wrapping `init`, a typed array. The buffer will always contain this array,
@@ -913,12 +914,10 @@ export abstract class Buffer<T> extends ReadableSource<T> implements Prop<T> {
 
 class ValueBuffer<T> extends Buffer<T> {
 
-  constructor (public current :T, private readonly updater? :(o :T, n :T) => T) { super() }
+  constructor (public current :T, private readonly updater :(o :T, n :T) => T) { super() }
 
   update (newValue :T) {
-    const updater = this.updater
-    const updated = this.current = updater ? updater(this.current, newValue) : newValue
-    dispatchValue(this._listeners, updated)
+    dispatchValue(this._listeners, this.current = this.updater(this.current, newValue))
   }
 }
 
