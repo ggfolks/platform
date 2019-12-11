@@ -31,7 +31,7 @@ import {JavaScript, decodeFused} from "../../util"
 import {
   TypeScriptComponent, TypeScriptCone, TypeScriptConfigurable, TypeScriptCube, TypeScriptCylinder,
   TypeScriptGameEngine, TypeScriptGameObject, TypeScriptMesh, TypeScriptMeshFilter, TypeScriptPage,
-  TypeScriptQuad, TypeScriptSphere, TypeScriptTile, TypeScriptTorus, registerConfigurableType,
+  TypeScriptQuad, TypeScriptSphere, TypeScriptTorus, registerConfigurableType,
 } from "../game"
 
 setEnumMeta("LightType", LightTypes)
@@ -1083,50 +1083,6 @@ class ThreeFusedModels extends ThreeBounded implements FusedModels {
   }
 }
 registerConfigurableType("component", undefined, "fusedModels", ThreeFusedModels)
-
-class ThreeTile extends TypeScriptTile {
-  @property("boolean", {editable: false}) configured = false
-
-  init () {
-    super.init()
-    let autoConfiguring = false
-    Value
-      .join(this.getProperty<vec3>("min"), this.getProperty<vec3>("max"))
-      .onChange(([min, max]) => {
-        if (!autoConfiguring) this.configured = true
-      })
-    const component = this.gameObject.components.getValue("model") as Value<ThreeModel|undefined>
-    this._disposer.add(
-      component
-        .switchMap(model => model ? model.getProperty<string>("url") : Value.blank)
-        .onValue(url => {
-          if (this.configured) return
-          loadGLTFWithBoundingBox(url).onValue(gltf => {
-            // use model to initialize size if not already set
-            gltf.scene.userData.boundingBox.getSize(tmpVector3)
-            autoConfiguring = true
-            try {
-              const sizeX = getRoundedSize(tmpVector3.x)
-              const sizeZ = getRoundedSize(tmpVector3.z)
-              vec3.set(this.min, -sizeX / 2, 0, -sizeZ / 2)
-              vec3.set(this.max, sizeX / 2, 1, sizeZ / 2)
-            } finally {
-              autoConfiguring = false
-            }
-          })
-        }),
-    )
-  }
-}
-registerConfigurableType("component", ["render"], "tile", ThreeTile)
-
-function getRoundedSize (size :number) :number {
-  return size === 0
-    ? 1
-    : size >= 1
-    ? Math.round(size)
-    : 2 ** Math.max(-2, Math.round(Math.log(size) / Math.log(2)))
-}
 
 const PlaceholderGLTF = Subject.constant<GLTF>({
   scene: new Mesh(
