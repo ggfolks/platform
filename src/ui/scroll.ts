@@ -58,7 +58,7 @@ abstract class TransformedContainer extends Control {
       release: iact.release,
       cancel: iact.cancel,
     })))
-    this.startScroll(event, pos, into)
+    this.maybeStartScroll(event, pos, into)
   }
   handleWheel (event :WheelEvent, pos :vec2) {
     const transformedPos = this._transformPos(pos)
@@ -94,7 +94,11 @@ abstract class TransformedContainer extends Control {
     // we don't want to inherit the bounds of our children because we hide/transform them
   }
 
-  protected startScroll (event :MouseEvent|TouchEvent, pos :vec2, into :PointerInteraction[]) {}
+  protected abstract maybeStartScroll (
+    event :MouseEvent|TouchEvent,
+    pos :vec2,
+    into :PointerInteraction[],
+  ) :void
 
   protected get maxX () { return this.contents.width * this.scale - this.width }
   protected get maxY () { return this.contents.height * this.scale - this.height }
@@ -175,7 +179,7 @@ export class Panner extends TransformedContainer {
     return true
   }
 
-  protected startScroll (event :MouseEvent|TouchEvent, pos :vec2, into :PointerInteraction[]) {
+  protected maybeStartScroll (event :MouseEvent|TouchEvent, pos :vec2, into :PointerInteraction[]) {
     const clearCursor = () => this.clearCursor(this)
     const basePos = vec2.clone(pos), baseOffset = vec2.clone(this.offset)
     const ClaimDist = 5
@@ -280,22 +284,107 @@ class InertialAnim extends Anim {
   }
 }
 
+export interface ScrollBarConfig extends Control.Config {
+  type :"scrollBar"
+  alwaysVisible? :boolean
+  handle :Element.Config
+}
+
+const ScrollBarStyleScope = {id: "scrollBar", states: Control.States}
+
+export class ScrollBar extends Control {
+  active = false
+
+  private readonly _handle :Element
+
+  constructor (ctx :Element.Context, parent :Element, readonly config :ScrollBarConfig) {
+    super(ctx, parent, config)
+    this._handle = ctx.elem.create(ctx, this, config.handle)
+  }
+
+  protected get customStyleScope () { return ScrollBarStyleScope }
+
+  applyToChildren (op :Element.Op) {
+    super.applyToChildren(op)
+    op(this._handle)
+  }
+  queryChildren<R> (query :Element.Query<R>) {
+    return super.queryChildren(query) || query(this._handle)
+  }
+
+  applyToContaining (canvas :CanvasRenderingContext2D, pos :vec2, op :Element.Op) {
+    const applied = super.applyToContaining(canvas, pos, op)
+    if (applied) this._handle.applyToContaining(canvas, pos, op)
+    return applied
+  }
+
+  handlePointerDown (event :MouseEvent|TouchEvent, pos :vec2, into :PointerInteraction[]) {
+    const scroller = this.requireParent as Scroller
+    scroller.handleScrollBarPointerDown(
+      event,
+      pos,
+      into,
+      !rect.contains(this._handle.hitBounds, pos),
+    )
+  }
+
+  protected relayout () {
+    super.relayout()
+
+    const scroller = this.requireParent as Scroller
+    const hbounds = rect.clone(this.bounds)
+    if (scroller.horiz) {
+      hbounds[0] += scroller.handleOffset
+      hbounds[2] = scroller.handleSize
+    } else {
+      hbounds[1] += scroller.handleOffset
+      hbounds[3] = scroller.handleSize
+    }
+    this._handle.setBounds(hbounds)
+  }
+
+  protected rerender (canvas :CanvasRenderingContext2D, region :rect) {
+    super.rerender(canvas, region)
+    this._handle.render(canvas, region)
+  }
+}
+
 export interface ScrollerConfig extends Control.Config {
   type :"scroller"
   orient :"horiz"|"vert"
+  stretchContents? :boolean
+  bar? :ScrollBarConfig
   noInertial? :boolean
 }
 
 export class Scroller extends TransformedContainer {
   private unanim = NoopRemover
 
+  private readonly _bar? :ScrollBar
+
   constructor (ctx :Element.Context, parent :Element, readonly config :ScrollerConfig) {
     super(ctx, parent, config)
     this.invalidateOnChange(this._offset)
+    if (config.bar) {
+      this.disposer.add(this._bar = ctx.elem.create(ctx, this, config.bar) as ScrollBar)
+    }
   }
 
   get axisOffset () { return this.offset[this.horiz ? 0 : 1] }
   get maxAxis () { return this.horiz ? this.maxX : this.maxY }
+  get horiz () :boolean { return this.config.orient === "horiz" }
+
+  get handleSize () {
+    const idx = this.horiz ? 2 : 3
+    const selfSize = this.bounds[idx]
+    return Math.round(selfSize * selfSize / Math.max(selfSize, this.contents.bounds[idx]))
+  }
+
+  get handleOffset () {
+    const idx = this.horiz ? 2 : 3
+    const selfSize = this.bounds[idx]
+    return Math.round(selfSize * this.axisOffset / Math.max(selfSize, this.contents.bounds[idx]))
+  }
 
   /** Scrolls to the specified offset from the top/left-most scroll position. */
   scrollTo (offset :number, animate = true) {
@@ -309,6 +398,64 @@ export class Scroller extends TransformedContainer {
   /** Scrolls to the bottom/right-most scroll position. */
   scrollToEnd (animate = true) { this.scrollTo(this.maxAxis, animate) }
 
+  applyToChildren (op :Element.Op) {
+    super.applyToChildren(op)
+    if (this._bar && this._bar.active) op(this._bar)
+  }
+  queryChildren<R> (query :Element.Query<R>) {
+    let result = super.queryChildren(query)
+    if (!result && this._bar && this._bar.active) result = query(this._bar)
+    return result
+  }
+
+  applyToContaining (canvas :CanvasRenderingContext2D, pos :vec2, op :(element :Element) => void) {
+    const contains = super.applyToContaining(canvas, pos, op)
+    if (contains && this._bar && this._bar.active) this._bar.applyToContaining(canvas, pos, op)
+    return contains
+  }
+  applyToIntersecting (region :rect, op :(element :Element) => void) {
+    const intersects = super.applyToIntersecting(region, op)
+    if (intersects && this._bar && this._bar.active) this._bar.applyToIntersecting(region, op)
+    return intersects
+  }
+
+  handlePointerDown (event :MouseEvent|TouchEvent, pos :vec2, into :PointerInteraction[]) {
+    if (this._bar && this._bar.active) {
+      const olength = into.length
+      this._bar.maybeHandlePointerDown(event, pos, into)
+      if (into.length > olength) return
+    }
+    super.handlePointerDown(event, pos, into)
+  }
+
+  handleScrollBarPointerDown (
+    event :MouseEvent|TouchEvent,
+    pos :vec2,
+    into :PointerInteraction[],
+    jump :boolean,
+  ) {
+    const [posIdx, sizeIdx] = this.horiz ? [0, 2] : [1, 3]
+    if (jump) {
+      const selfSize = this.bounds[sizeIdx]
+      const contentsSize = this.contents.bounds[sizeIdx]
+      this._updateAxisOffset(Math.round(pos[posIdx] * contentsSize / selfSize - selfSize / 2))
+    }
+    const clearCursor = () => this.clearCursor(this)
+    let lastPos = pos[posIdx]
+    into.push({
+      move: (event, pos) => {
+        this.setCursor(this, "all-scroll")
+        const sizeScale = this.contents.bounds[sizeIdx] / this.bounds[sizeIdx]
+        const currentPos = pos[posIdx]
+        this._updateAxisOffset(Math.round(this.axisOffset + (currentPos - lastPos) * sizeScale))
+        lastPos = currentPos
+        return true
+      },
+      release: clearCursor,
+      cancel: clearCursor,
+    })
+  }
+
   handleWheel (event :WheelEvent, pos :vec2) {
     const transformedPos = this._transformPos(pos)
     if (!this.contents.maybeHandleWheel(event, transformedPos)) {
@@ -317,6 +464,36 @@ export class Scroller extends TransformedContainer {
       this._updateOffset(vec2.add(tmpv, this.offset, deltav))
     }
     return true
+  }
+
+  protected relayout () {
+    const size = this.contents.preferredSize(this.width, this.height)
+    const bounds = rect.fromValues(this.x, this.y, size[0], size[1])
+    const [posIdx, sizeIdx, offPosIdx, offSizeIdx] = this.horiz ? [0, 2, 1, 3] : [1, 3, 0, 2]
+    let maxOffSize = this.bounds[offSizeIdx]
+    if (this._bar) {
+      if (size[posIdx] > this.bounds[sizeIdx] || this._bar.config.alwaysVisible) {
+        const bsize = this._bar.preferredSize(this.width, this.height)
+        maxOffSize -= bsize[offPosIdx]
+        const bbounds = rect.clone(this.bounds)
+        bbounds[offPosIdx] += maxOffSize
+        bbounds[offSizeIdx] = bsize[offPosIdx]
+        this._bar.setBounds(bbounds)
+        this._bar.active = true
+        this._bar.invalidate()
+
+      } else this._bar.active = false
+    }
+    if (this.config.stretchContents) {
+      bounds[sizeIdx] = Math.max(this.bounds[sizeIdx], bounds[sizeIdx])
+      bounds[offSizeIdx] = maxOffSize
+    }
+    this.contents.setBounds(bounds)
+  }
+
+  protected rerender (canvas :CanvasRenderingContext2D, region :rect) {
+    super.rerender(canvas, region)
+    if (this._bar && this._bar.active) this._bar.render(canvas, region)
   }
 
   protected setAnim (anim :Anim|undefined) {
@@ -330,9 +507,8 @@ export class Scroller extends TransformedContainer {
     }
   }
 
-  protected get horiz () :boolean { return this.config.orient === "horiz" }
-
-  protected startScroll (event :MouseEvent|TouchEvent, pos :vec2, into :PointerInteraction[]) {
+  protected maybeStartScroll (event :MouseEvent|TouchEvent, pos :vec2, into :PointerInteraction[]) {
+    if (this._bar) return
     const clearCursor = () => this.clearCursor(this)
     const oidx = this.horiz ? 0 : 1, basePos = pos[oidx], baseOffset = this.offset[oidx]
     this.unanim()
@@ -366,4 +542,5 @@ export class Scroller extends TransformedContainer {
 export const ScrollCatalog :Element.Catalog = {
   "panner": (ctx, parent, cfg) => new Panner(ctx, parent, cfg as PannerConfig),
   "scroller": (ctx, parent, cfg) => new Scroller(ctx, parent, cfg as ScrollerConfig),
+  "scrollBar": (ctx, parent, cfg) => new ScrollBar(ctx, parent, cfg as ScrollBarConfig),
 }
