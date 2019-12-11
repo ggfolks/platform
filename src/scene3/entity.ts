@@ -525,7 +525,7 @@ function processMaterial (material :Material|Material[]) {
     if (material instanceof MeshStandardMaterial &&
         material.map &&
         material.map.format === RGBAFormat) {
-      material.alphaTest = 0.9
+      material.alphaTest = 0.25
       material.transparent = false
     }
     // note that this material may be shared by multiple instances
