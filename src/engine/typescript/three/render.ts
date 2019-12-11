@@ -967,26 +967,27 @@ registerConfigurableType("component", ["render"], "camera", ThreeCamera)
 class ThreeLight extends ThreeObjectComponent implements Light {
   @property("LightType") lightType :LightType = "ambient"
   @property("Color") color = Color.fromRGB(1, 1, 1)
+  @property("number", {min: 0, wheelStep: 0.1}) intensity = 1
 
   get lightObject () :LightObject { return this.objectValue.current as LightObject }
 
   init () {
     super.init()
+    const updateColor = () => this.lightObject.color.fromArray(this.color, 1)
+    const updateIntensity = () => this.lightObject.intensity = this.intensity
     this.getProperty<LightType>("lightType").onValue(lightType => {
       this.objectValue.update(lightType === "ambient" ? new AmbientLight() : new DirectionalLight())
-      this._updateColor()
+      updateColor()
+      updateIntensity()
     })
-    this.getProperty<Color>("color").onChange(() => this._updateColor())
+    this.getProperty("color").onChange(updateColor)
+    this.getProperty("intensity").onChange(updateIntensity)
   }
 
   protected _updateObjectLayers (object :Object3D) {
     // lights apply to all layers; otherwise, we end up switching between shaders compiled for 0
     // lights and N lights, and thus recompiling shaders every frame
     object.layers.mask = ALL_LAYERS_MASK
-  }
-
-  private _updateColor () {
-    this.lightObject.color.fromArray(this.color, 1)
   }
 }
 registerConfigurableType("component", ["render"], "light", ThreeLight)

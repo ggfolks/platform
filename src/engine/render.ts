@@ -197,6 +197,9 @@ export interface Light extends Component {
 
   /** The light color. */
   color :Color
+
+  /** The light intensity. */
+  intensity :number
 }
 
 /** Represents a (GLTF) model loaded from a URL. */
