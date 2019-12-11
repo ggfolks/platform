@@ -1,7 +1,7 @@
 import {rect, dim2, vec2} from "../core/math"
 import {Mutable} from "../core/react"
 import {PMap} from "../core/util"
-import {Element} from "./element"
+import {Container, Element} from "./element"
 import {BackgroundConfig, BorderConfig, Decoration, Spec, Insets} from "./style"
 
 const tmpr = rect.create()
@@ -50,12 +50,12 @@ export interface BoxConfig extends Element.Config {
 }
 
 /** Displays a single child with an optional background, padding, margin, and alignment. */
-export class Box extends Element {
+export class Box extends Container {
   private readonly styles :Element.Styles<BoxStyle>
-  private background = this.observe(Decoration.Noop)
-  private border = this.observe(Decoration.Noop)
-  readonly contents :Element
+  private readonly background = this.observe(Decoration.Noop)
+  private readonly border = this.observe(Decoration.Noop)
   private readonly _hovered = Mutable.local(false)
+  readonly contents :Element
 
   constructor (ctx :Element.Context, parent :Element, readonly config :BoxConfig) {
     super(ctx, parent, config)
@@ -77,14 +77,6 @@ export class Box extends Element {
       if (hovered && style.cursor) this.setCursor(this, style.cursor)
       else this.clearCursor(this)
     }))
-  }
-
-  applyToChildren (op :Element.Op) { op(this.contents) }
-  queryChildren<R> (query :Element.Query<R>) { return query(this.contents) }
-  applyToContaining (canvas :CanvasRenderingContext2D, pos :vec2, op :Element.Op) {
-    const applied = super.applyToContaining(canvas, pos, op)
-    if (applied) this.contents.applyToContaining(canvas, pos, op)
-    return applied
   }
 
   handleMouseEnter (pos :vec2) { this._hovered.update(true) }
@@ -146,7 +138,7 @@ export class Box extends Element {
     // TODO: should the border render over the contents?
     this.border.current.render(canvas, bsize)
     canvas.translate(-inbounds[0], -inbounds[1])
-    this.contents.render(canvas, region)
+    super.rerender(canvas, region)
     if (alpha !== undefined) canvas.globalAlpha = 1
   }
 }

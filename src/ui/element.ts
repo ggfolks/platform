@@ -524,6 +524,35 @@ export class ErrorViz extends Element {
   }
 }
 
+/** A base class for elements that contain a single element. */
+export abstract class Container extends Element {
+
+  protected abstract get contents () :Element
+
+  applyToChildren (op :Element.Op) { op(this.contents) }
+  queryChildren<R> (query :Element.Query<R>) { return query(this.contents) }
+
+  applyToContaining (canvas :CanvasRenderingContext2D, pos :vec2, op :Element.Op) {
+    const applied = super.applyToContaining(canvas, pos, op)
+    if (applied) this.contents.applyToContaining(canvas, pos, op)
+    return applied
+  }
+  applyToIntersecting (region :rect, op :Element.Op) {
+    const applied = super.applyToIntersecting(region, op)
+    if (applied) this.contents.applyToIntersecting(region, op)
+    return applied
+  }
+
+  protected computePreferredSize (hintX :number, hintY :number, into :dim2) {
+    dim2.copy(into, this.contents.preferredSize(hintX, hintY))
+  }
+
+  protected relayout () { this.contents.setBounds(this.bounds) }
+  protected rerender (canvas :CanvasRenderingContext2D, region :rect) {
+    this.contents.render(canvas, region)
+  }
+}
+
 /** Encapsulates a mouse or touch interaction. An interaction can be started by an element when a
   * button or touch is pressed over it, or by a gesture handler. Multiple interactions may be
   * started by the same press/touch and based on subsequent input one of the interactions can claim
@@ -564,7 +593,7 @@ export function getCurrentEditNumber () {
 }
 
 /** The top-level of the UI hierarchy. Manages the canvas into which the UI is rendered. */
-export class Root extends Element {
+export class Root extends Container {
   private readonly interacts :Array<PointerInteraction[]|undefined> = []
   private readonly _clock = new Emitter<Clock>()
   private readonly _scale :Scale
@@ -765,9 +794,6 @@ export class Root extends Element {
     return changed
   }
 
-  applyToChildren (op :Element.Op) { op(this.contents) }
-  queryChildren<R> (query :Element.Query<R>) { return query(this.contents) }
-
   dirty (region :rect = this.renderBounds, fromChild? :Element) {
     if (this._rendering) log.warn(
       "Ignoring request to dirty during render", "region", region, "child", fromChild)
@@ -913,12 +939,8 @@ export class Root extends Element {
     return coords
   }
 
-  protected computePreferredSize (hintX :number, hintY :number, into :dim2) {
-    dim2.copy(into, this.contents.preferredSize(hintX, hintY))
-  }
-
   protected relayout () {
-    this.contents.setBounds(this.bounds)
+    super.relayout()
     const canvas = this.canvasElem, toPixel = this._scale
     const scaledWidth = Math.ceil(toPixel.scaled(this.width))
     const scaledHeight = Math.ceil(toPixel.scaled(this.height))
@@ -944,7 +966,7 @@ export class Root extends Element {
     canvas.rect(region[0], region[1], region[2], region[3])
     canvas.clip()
     this._rendering = true
-    this.contents.render(canvas, region)
+    super.rerender(canvas, region)
     this._rendering = false
     canvas.restore()
   }
@@ -1091,7 +1113,7 @@ function bothEitherOrTrue (a :Value<boolean>|undefined, b :Value<boolean>|undefi
   * composite elements, combining one or more "visualization" elements. For example, a `Button`
   * combines a `Box` with an `Icon` and/or `Label` (and a `Group` if both an icon and label are
   * used) to visualize the button, and `Button` handles interactions. */
-export class Control extends Element {
+export class Control extends Container {
   private readonly _updateState = () => this._state.update(this.computeState)
   protected readonly _state = Mutable.local(Control.States[0])
   protected readonly enabled :Value<boolean>
@@ -1130,20 +1152,6 @@ export class Control extends Element {
 
   handleFocus (focused :boolean) { this.focused.update(focused) }
 
-  applyToChildren (op :Element.Op) { op(this.contents) }
-  queryChildren<R> (query :Element.Query<R>) { return query(this.contents) }
-
-  applyToContaining (canvas :CanvasRenderingContext2D, pos :vec2, op :Element.Op) {
-    const applied = super.applyToContaining(canvas, pos, op)
-    if (applied) this.contents.applyToContaining(canvas, pos, op)
-    return applied
-  }
-  applyToIntersecting (region :rect, op :Element.Op) {
-    const applied = super.applyToIntersecting(region, op)
-    if (applied) this.contents.applyToIntersecting(region, op)
-    return applied
-  }
-
   dispose (rootDisposing = false) {
     if (this.focused.current) this.blur()
     super.dispose(rootDisposing)
@@ -1174,15 +1182,6 @@ export class Control extends Element {
     * action from its config. The control will use this to bind its enabled state to the action's
     * enabled state if it is bound to a command. */
   protected actionSpec (config :Control.Config) :Spec<Action>|undefined { return undefined }
-
-  protected computePreferredSize (hintX :number, hintY :number, into :dim2) {
-    dim2.copy(into, this.contents.preferredSize(hintX, hintY))
-  }
-
-  protected relayout () { this.contents.setBounds(this.bounds) }
-  protected rerender (canvas :CanvasRenderingContext2D, region :rect) {
-    this.contents.render(canvas, region)
-  }
 }
 
 export namespace Control {
