@@ -1111,8 +1111,8 @@ function loadGLTFWithBoundingBox(url :string) :Subject<GLTF> {
 setEnumMeta("WrapMode", WrapModes)
 
 class ThreeAnimation extends TypeScriptComponent implements Animation {
-  @property("boolean") playAutomatically = true
-  @property("select", {options: [""], transient: true}) playing = ""
+  @property("select") playAutomatically = ""
+  @property("select") playing = ""
   @property("WrapMode") wrapMode :WrapMode = "loop"
   @property("number", {min: 0, wheelStep: 0.1}) timeScale = 1
   @property("number", {min: 0}) repetitions = Infinity
@@ -1125,7 +1125,6 @@ class ThreeAnimation extends TypeScriptComponent implements Animation {
   private readonly _mixerSubject :Subject<AnimationMixer>
   private _mixer? :AnimationMixer
   private readonly _urlsByName = new Map<string, string>()
-  private _autoplayed = false
 
   get url () :string|undefined { return this.urls[0] }
   set url (url :string|undefined) {
@@ -1142,11 +1141,12 @@ class ThreeAnimation extends TypeScriptComponent implements Animation {
   get propertiesMeta () :RMap<string, PropertyMeta> {
     return RMap.fromValue(this.urlsValue, urls => {
       const map = MutableMap.local<string, PropertyMeta>()
+      const options = urls.map(getAnchor)
+      options.unshift("")
       for (const [property, meta] of getConfigurableMeta(Object.getPrototypeOf(this)).properties) {
-        if (property === "playing") {
-          const options = urls.map(getAnchor)
-          options.unshift("")
-          map.set(property, {type: "select", constraints: {options, transient: true}})
+        const playing = (property === "playing")
+        if (playing || property === "playAutomatically") {
+          map.set(property, {type: "select", constraints: {options, transient: playing}})
         }
         else map.set(property, meta)
       }
@@ -1250,6 +1250,11 @@ class ThreeAnimation extends TypeScriptComponent implements Animation {
         })
       })
     }
+    Value
+      .join2(this.getProperty<string>("playAutomatically"), this.urlsValue)
+      .onChange(([playAutomatically]) => {
+        if (this._urlsByName.has(playAutomatically)) this.playing = playAutomatically
+      })
   }
 
   private get _loopMode () :number {
@@ -1285,10 +1290,6 @@ class ThreeAnimation extends TypeScriptComponent implements Animation {
     this._urlsByName.clear()
     for (const url of this._urls) this._urlsByName.set(getAnchor(url), url)
     this.urlsValue.update(this._urls.slice())
-    if (this.playAutomatically && this._urls.length > 0 && !this._autoplayed) {
-      this._autoplayed = true
-      this.playing = getAnchor(this._urls[0])
-    }
   }
 }
 registerConfigurableType("component", ["render"], "animation", ThreeAnimation)

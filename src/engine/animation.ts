@@ -14,8 +14,8 @@ export interface Animation extends Component {
   /** The URLs of the animations to load. */
   urls :string[]
 
-  /** Whether or not to play the animation automatically on startup. */
-  playAutomatically :boolean
+  /** The name of the animation to play on startup, or the empty string for none. */
+  playAutomatically :string
 
   /** The name of the animation currently playing, or the empty string for none. */
   playing :string
