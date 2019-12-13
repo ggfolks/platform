@@ -309,7 +309,9 @@ export class TypeScriptGameEngine implements GameEngine {
     })
     this._defaultRootsActive.onChange(active => {
       for (const rootId of this._defaultRootIds.current) {
-        this.gameObjects.require(rootId)._updateActiveInHierarchy()
+        // make sure the object exists; it may be deleted in an enable/disable handler
+        const gameObject = this.gameObjects.get(rootId)
+        if (gameObject) gameObject._updateActiveInHierarchy()
       }
     })
   }
@@ -384,7 +386,7 @@ export class TypeScriptGameEngine implements GameEngine {
         if (typeof value === "string" && key.endsWith("Id")) {
           const gameObject = gameObjects[value]
           if (gameObject) newConfig[key] = gameObject.id
-          else log.warn("Missing game object for id.", "key", key, "value", value)
+          else newConfig[key] = value
 
         } else if (
           typeof value === "object" &&

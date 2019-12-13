@@ -562,12 +562,20 @@ export abstract class ThreeObjectComponent extends TypeScriptComponent {
     }))
   }
 
+  awake () {
+    this._updatePage()
+  }
+
   onTransformChanged () {
     const object = this.objectValue.current
     if (object) this._updateObjectTransform(object)
   }
 
   onTransformParentChanged () {
+    this._updatePage()
+  }
+
+  protected _updatePage () {
     const page = this.getComponentInParent<ThreePage>("page")
     if (this._page === page) return
     this._removeFromPage(this._page, this.objectValue.current)
