@@ -335,17 +335,6 @@ export class Stream<T> extends Source<T> {
     const onEmit = this._onEmit
     return new Stream(lner => onEmit(value => pred(value) && lner(value)))
   }
-
-  /** Returns a reactive [[Subject]] that is initialized with the next value emitted by this stream
-    * and then changed by each subsequent value emitted by this stream. See note in [[fold]]
-    * regarding liveness. */
-  toSubject () :Subject<T> { return Subject.deriveSubject(this._onEmit) }
-
-  /** Returns a reactive [[Value]] which starts with value `start` and is updated by values emitted
-    * by this stream whenever they arrive. See note in [[fold]] regarding liveness.
-    * @param eq used to check whether successive values from this stream have actually changed.
-    * [[Value]]s emit notifications only when values change. */
-  toValue (start :T, eq :Eq<T> = refEquals) :Value<T> { return Value.from(this, start, eq) }
 }
 
 /* A stream which can have values emitted on it by external callers. */
@@ -433,6 +422,12 @@ export class Subject<T> extends Source<T> {
       return () => { remover() ; checkEmpty() }
     }
     return new Subject(onValue)
+  }
+
+  /** Returns a [[Subject]] that is initialized with the current value if available, or the next
+    * value emitted by `source` and then changed by each subsequent emitted value. */
+  static from<T> (source :Source<T>) :Subject<T> {
+    return Subject.deriveSubject(d => source.onValue(d))
   }
 
   /** Joins `sources` into a single subject which contains the underlying sources combined into a

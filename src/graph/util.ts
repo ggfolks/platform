@@ -130,7 +130,7 @@ class ClockNode extends Node {
   protected _createOutput (name :string) {
     const field :(clock :Clock) => number =
       (name === "time" || name === "elapsed") ? clock => clock[name] : clock => clock.dt
-    return this.graph.clock.map(field).toValue(0, refEquals)
+    return Value.from(this.graph.clock.map(field), 0, refEquals)
   }
 }
 

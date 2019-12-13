@@ -140,7 +140,7 @@ test("basic subject", () => {
   testSubject(rm.toSubject(), v => rm.update(v))
 
   const em = new Emitter<string>()
-  testSubject(em.toSubject(), v => em.emit(v))
+  testSubject(Subject.from(em), v => em.emit(v))
 })
 
 // regression test for bug where once() on constant subject choked
