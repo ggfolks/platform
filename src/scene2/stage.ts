@@ -87,7 +87,10 @@ export abstract class Actor {
 export class Sprite extends Actor {
   tint = Color.clone(defaultTint)
 
-  constructor (readonly tile :Tile) { super() }
+  constructor (readonly tile :Tile) {
+    super()
+    if (tile === undefined) throw new Error(`Sprite created with undefined tile`)
+  }
 
   readSize (into :dim2 = tmpsize) :dim2 {
     dim2.copy(into, this.tile.size)
