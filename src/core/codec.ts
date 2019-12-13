@@ -10,268 +10,10 @@ export type KeyType = "undefined" | "null" | "boolean" | "int8" | "int16" | "int
 export type ValueType = KeyType | "data" | "record"
 
 //
-// Encoder/decoder functions
+// Extensible tagged encoder/decoders
 
 type DataEncoder<T> = (enc :Encoder, v:T) => void
 type DataDecoder<T> = (dec :Decoder) => T
-
-const addVoid    = (e :Encoder, v :void) => {}
-const addNull    = (e :Encoder, n :null) => {}
-const addBoolean = (e :Encoder, b :boolean) => { addInt8(e, b ? 1 : 0) }
-const addInt8    = (e :Encoder, s :number) => { const p = e.pos ; e.prepAdd(1).setInt8(p, s) }
-const addInt16   = (e :Encoder, s :number) => { const p = e.pos ; e.prepAdd(2).setInt16(p, s) }
-const addInt32   = (e :Encoder, s :number) => { const p = e.pos ; e.prepAdd(4).setInt32(p, s) }
-export const addSize8 = (e :Encoder, s :number) => {
-  const p = e.pos
-  e.prepAdd(1).setUint8(p, s)
-}
-const addSize16  = (e :Encoder, s :number) => { const p = e.pos ; e.prepAdd(2).setUint16(p, s) }
-const addSize32  = (e :Encoder, s :number) => { const p = e.pos ; e.prepAdd(4).setUint32(p, s) }
-const addFloat32 = (e :Encoder, v :number) => { const p = e.pos ; e.prepAdd(4).setFloat32(p, v) }
-const addFloat64 = (e :Encoder, v :number) => { const p = e.pos ; e.prepAdd(8).setFloat64(p, v) }
-const addVarSize = (e :Encoder, v :number) => {
-  while (true) {
-    let byte = v & 0x7F
-    v >>= 7
-    if (v === 0) {
-      addSize8(e, byte)
-      return
-    }
-    addSize8(e, byte | 0x80)
-  }
-}
-const addVarInt = (e :Encoder, v :number) => {
-  addVarSize(e, v < 0 ? (-v << 1) - 1 : (v << 1))
-}
-
-function addString (enc :Encoder, text :string) {
-  if (text.length === 0) {
-    addSize16(enc, 0)
-    return
-  }
-
-  // if the string is too long before encoding, it will definitely be too long after
-  if (text.length > 65535) throw new Error(
-    `String length cannot exceed 64k when converted to UTF-8 (length: ${text.length})`)
-
-  const {pos, encoder} = enc
-  // if we don't have encodeInto then we have to encode the string into a separate byte buffer and
-  // copy that byte buffer into our encoding buffer...
-  if (!encoder.encodeInto) {
-    const encoded = encoder.encode(text)
-    if (encoded.length > 65535) throw new Error(
-      `String length cannot exceed 64k when converted to UTF-8 (bytes: ${encoded.length})`)
-    addSize16(enc, encoded.length)
-    const tpos = enc.pos
-    enc.prepAdd(encoded.length)
-    enc.bytes.set(encoded, tpos)
-    return
-  }
-
-  // if we do have encodeInto then we have to deal with the vagaries of not knowing how many UTF-8
-  // bytes we're going to get after encoding the string; we do this in stages to avoid blowing up
-  // our encoding buffer any time we write a string of non-trivial size
-  const tryEncodeInto = (size :number) => {
-    const tpos = enc.pos
-    enc.prepAdd(size)
-    const result = enc.encoder.encodeInto(text, new Uint8Array(enc.buffer, tpos))
-    if (result.read !== text.length || !result.written) {
-      enc.pos = tpos
-      return false
-    }
-    enc.data.setUint16(pos, result.written)
-    enc.pos = tpos + result.written
-    return true
-  }
-  // leave space for the length
-  enc.prepAdd(2)
-  // try encoding with just a bit of extra space for >8-bit characters
-  if (!tryEncodeInto(Math.ceil(text.length*1.25))) {
-    // try again with two bytes per byte
-    if (!tryEncodeInto(Math.ceil(text.length*2))) {
-      // in theory 3 bytes per byte is guaranteed to succeed
-      if (!tryEncodeInto(Math.ceil(text.length*3))) throw new Error(
-        `Unable to encode string to UTF-8? (length: ${text.length})`)
-    }
-  }
-}
-
-function addTimestamp (enc :Encoder, stamp :Timestamp) {
-  addFloat64(enc, stamp.millis)
-}
-
-function addUUID (enc :Encoder, uuid :UUID) {
-  const p = enc.pos
-  enc.prepAdd(16)
-  try {
-    uuidFromString(uuid, enc.bytes, p)
-  } catch (error) {
-    log.warn(`${enc.eid}: Unable to add UUID at ${p} (cap ${enc.buffer.byteLength})`, error)
-  }
-}
-
-function addDataIterable (enc :Encoder, iter :Iterable<Data>, size :number) {
-  addSize32(enc, size)
-  if (size > 0) {
-    const typeId = valuesTypeId(iter)
-    const encoder = requireEncoder(typeId)
-    addSize16(enc, typeId)
-    for (const elem of iter) encoder(enc, elem)
-  }
-}
-
-const addDataArray = (enc :Encoder, arr :DataArray) => addDataIterable(enc, arr, arr.length)
-
-function addFloatArray (enc :Encoder, arr :Float32Array) {
-  const length = arr.length
-  addSize32(enc, length)
-  for (let ii = 0; ii < length; ii += 1) addFloat32(enc, arr[ii])
-}
-
-function addByteArray (enc :Encoder, arr :Uint8Array) {
-  const length = arr.length
-  addSize32(enc, length)
-  const tpos = enc.pos
-  enc.prepAdd(length)
-  enc.bytes.set(arr, tpos)
-}
-
-const addDataSet = (enc :Encoder, set :DataSet) => addDataIterable(enc, set, set.size)
-
-function addDataMap (enc :Encoder, map :DataMap) {
-  addSize32(enc, map.size)
-  if (map.size > 0) {
-    const ktypeId = valuesTypeId(map.keys()), kencoder = requireEncoder(ktypeId)
-    const vtypeId = valuesTypeId(map.values()), vencoder = requireEncoder(vtypeId)
-    addSize16(enc, ktypeId)
-    addSize16(enc, vtypeId)
-    for (const [key, val] of map) {
-      kencoder(enc, key)
-      vencoder(enc, val)
-    }
-  }
-}
-
-function addData (enc :Encoder, data :Data) {
-  const typeId = dataTypeId(data)
-  addSize16(enc, typeId)
-  requireEncoder(typeId)(enc, data)
-}
-
-function addRecord (enc :Encoder, rec :Record) {
-  const props = Object.getOwnPropertyNames(rec)
-  addSize16(enc, props.length)
-  for (const prop of props) {
-    addString(enc, prop)
-    addData(enc, rec[prop])
-  }
-}
-
-function addValue (enc :Encoder, data :any, type :ValueType) {
-  const encoder = valueCodecs[type][0]
-  if (encoder) encoder(enc, data)
-  else throw new Error(`Unknown value type '${type}'`)
-}
-
-const getVoid    = (dec :Decoder) => undefined
-const getNull    = (dec :Decoder) => null
-const getBoolean = (dec :Decoder) => dec.data.getUint8(dec.prepGet(1)) === 1
-const getInt8    = (dec :Decoder) => dec.data.getInt8(dec.prepGet(1))
-const getInt16   = (dec :Decoder) => dec.data.getInt16(dec.prepGet(2))
-const getInt32   = (dec :Decoder) => dec.data.getInt32(dec.prepGet(4))
-export const getSize8   = (dec :Decoder) => dec.data.getUint8(dec.prepGet(1))
-const getSize16  = (dec :Decoder) => dec.data.getUint16(dec.prepGet(2))
-const getSize32  = (dec :Decoder) => dec.data.getUint32(dec.prepGet(4))
-const getFloat32 = (dec :Decoder) => dec.data.getFloat32(dec.prepGet(4))
-const getFloat64 = (dec :Decoder) => dec.data.getFloat64(dec.prepGet(8))
-const getVarSize = (dec :Decoder) => {
-  let size = 0
-  let shift = 0
-  while (true) {
-    const byte = getSize8(dec)
-    size |= (byte & 0x7F) << shift
-    if (!(byte & 0x80)) return size
-    shift += 7
-  }
-}
-const getVarInt = (dec :Decoder) => {
-  const size = getVarSize(dec)
-  return (size & 1) ? -((size + 1) >> 1) : (size >> 1)
-}
-
-function getString (dec :Decoder) {
-  const bytes = getSize16(dec)
-  if (bytes === 0) return ""
-  const offset = dec.prepGet(bytes)
-  return dec.decoder.decode(dec.source.subarray(offset, offset+bytes))
-}
-
-function getTimestamp (dec :Decoder) {
-  return new Timestamp(getFloat64(dec))
-}
-
-function getUUID (dec :Decoder) {
-  const offset = dec.prepGet(16)
-  return uuidToString(dec.source.subarray(offset, offset+16))
-}
-
-function getDataArray (dec :Decoder) {
-  const arr :DataArray = []
-  const size = getSize32(dec)
-  if (size > 0) {
-    const decoder = requireDecoder<Data>(getSize16(dec))
-    for (let ii = 0; ii < size; ii += 1) arr.push(decoder(dec))
-  }
-  return arr
-}
-
-function getFloatArray (dec :Decoder) {
-  const size = getSize32(dec)
-  const arr = new Float32Array(size)
-  for (let ii = 0; ii < size; ii += 1) arr[ii] = getFloat32(dec)
-  return arr
-}
-
-function getByteArray (dec :Decoder) {
-  const size = getSize32(dec)
-  const pos = dec.prepGet(size)
-  return new Uint8Array(dec.source.buffer, pos, size)
-}
-
-const getDataSet = (dec :Decoder) => new Set(getDataArray(dec))
-
-function getDataMap (dec :Decoder) {
-  const map :DataMap = new Map()
-  const size = getSize32(dec)
-  if (size > 0) {
-    const kdecoder = requireDecoder<DataMapKey>(getSize16(dec))
-    const vdecoder = requireDecoder<Data>(getSize16(dec))
-    for (let ii = 0; ii < size; ii += 1) map.set(kdecoder(dec), vdecoder(dec))
-  }
-  return map
-}
-
-function getData (dec :Decoder) {
-  const typeId = getSize16(dec)
-  const decoder = dataDecoders.get(typeId)
-  if (decoder) return decoder(dec)
-  throw new Error(`Unknown data type id '${typeId}'`)
-}
-
-function getRecord (dec :Decoder) {
-  const rec :Record = {}, props = getSize16(dec)
-  for (let ii = 0; ii < props; ii += 1) rec[getString(dec)] = getData(dec)
-  return rec
-}
-
-function getValue (dec :Decoder, type :ValueType) :any {
-  const decoder = valueCodecs[type][1]
-  if (decoder) return decoder(dec)
-  new Error(`Unknown value type '${type}'`)
-}
-
-//
-// Extensible tagged encoder/decoders
 
 const dataEncoders :Map<number,DataEncoder<any>> = new Map()
 const dataDecoders :Map<number,DataDecoder<any>> = new Map()
@@ -308,6 +50,59 @@ export function registerCustomCodec<T> (
   if (id < MIN_CUSTOM_ID) throw new Error(`Custom codecs must have id >= ${MIN_CUSTOM_ID}`)
   proto["__typeId"] = registerCodec(id, enc, dec)
 }
+
+//
+// Encoder/decoder functions
+
+const addVoid    = (e :Encoder, v :void) => {}
+const addNull    = (e :Encoder, n :null) => {}
+const addBoolean = (e :Encoder, b :boolean) => { e.addInt8(b ? 1 : 0) }
+const addInt8    = (e :Encoder, s :number) => { e.addInt8(s) }
+const addInt16   = (e :Encoder, s :number) => { e.addInt16(s) }
+const addInt32   = (e :Encoder, s :number) => { e.addInt32(s) }
+const addSize8   = (e :Encoder, s :number) => { e.addSize8(s) }
+const addSize16  = (e :Encoder, s :number) => { e.addSize16(s) }
+const addSize32  = (e :Encoder, s :number) => { e.addSize32(s) }
+const addFloat32 = (e :Encoder, v :number) => { e.addFloat32(v) }
+const addFloat64 = (e :Encoder, v :number) => { e.addFloat64(v) }
+const addVarSize = (e :Encoder, v :number) => { e.addVarSize(v) }
+const addVarInt  = (e :Encoder, v :number) => { e.addVarInt(v) }
+const addString  = (e :Encoder, s :string) => { e.addString(s) }
+const addUUID    = (e :Encoder, u :UUID) => { e.addUUID(u) }
+const addData    = (e :Encoder, d :Data) => { e.addData(d) }
+const addRecord  = (e :Encoder, r :Record) => { e.addRecord(r) }
+
+const addTimestamp = (e :Encoder, s :Timestamp) => e.addFloat64(s.millis)
+const addFloatArray = (e :Encoder, f :Float32Array) => { e.addFloatArray(f) }
+const addByteArray = (e :Encoder, b :Uint8Array) => { e.addByteArray(b) }
+const addDataArray = (enc :Encoder, arr :DataArray) => enc.addDataIterable(arr, arr.length)
+const addDataSet = (enc :Encoder, set :DataSet) => enc.addDataIterable(set, set.size)
+const addDataMap = (enc :Encoder, map :DataMap) => enc.addDataMap(map)
+
+const getVoid    = (dec :Decoder) => undefined
+const getNull    = (dec :Decoder) => null
+const getBoolean = (dec :Decoder) => dec.getSize8() === 1
+const getInt8    = (dec :Decoder) => dec.getInt8()
+const getInt16   = (dec :Decoder) => dec.getInt16()
+const getInt32   = (dec :Decoder) => dec.getInt32()
+const getSize8   = (dec :Decoder) => dec.getSize8()
+const getSize16  = (dec :Decoder) => dec.getSize16()
+const getSize32  = (dec :Decoder) => dec.getSize32()
+const getFloat32 = (dec :Decoder) => dec.getFloat32()
+const getFloat64 = (dec :Decoder) => dec.getFloat64()
+const getVarSize = (dec :Decoder) => dec.getVarSize()
+const getVarInt = (dec :Decoder) => dec.getVarInt()
+const getString = (dec :Decoder) => dec.getString()
+const getUUID = (dec :Decoder) => dec.getUUID()
+const getData = (dec :Decoder) => dec.getData()
+const getRecord = (dec :Decoder) => dec.getRecord()
+
+const getTimestamp = (dec :Decoder) => new Timestamp(getFloat64(dec))
+const getFloatArray = (dec :Decoder) => dec.getFloatArray()
+const getByteArray = (dec :Decoder) => dec.getByteArray()
+const getDataArray = (dec :Decoder) => dec.getDataArray()
+const getDataSet = (dec :Decoder) => new Set(dec.getDataArray())
+const getDataMap = (dec :Decoder) => dec.getDataMap()
 
 // note: these numeric ids will inevitably be persisted and thus must not change
 const UNDEF_ID  = 0 ; registerCodec<void>(UNDEF_ID, addVoid, getVoid)
@@ -403,7 +198,7 @@ const EncoderExpandSize = 256
 let eid = 0
 
 export class Encoder {
-  readonly encoder = mkTextEncoder()
+  private encoder? :TextEncoder
   buffer = new ArrayBuffer(DefaultEncoderSize)
   data = new DataView(this.buffer)
   bytes = new Uint8Array(this.buffer)
@@ -431,23 +226,120 @@ export class Encoder {
     return this.data
   }
 
-  addValue (data :any, type :ValueType) { addValue(this, data, type) }
+  addInt8 (s :number) { const p = this.pos ; this.prepAdd(1).setInt8(p, s) }
+  addInt16 (s :number) { const p = this.pos ; this.prepAdd(2).setInt16(p, s) }
+  addInt32 (s :number) { const p = this.pos ; this.prepAdd(4).setInt32(p, s) }
+  addSize8 (s :number) { const p = this.pos ; this.prepAdd(1).setUint8(p, s) }
+  addSize16 (s :number) { const p = this.pos ; this.prepAdd(2).setUint16(p, s) }
+  addSize32 (s :number) { const p = this.pos ; this.prepAdd(4).setUint32(p, s) }
+  addFloat32(v :number) { const p = this.pos ; this.prepAdd(4).setFloat32(p, v) }
+  addFloat64 (v :number) { const p = this.pos ; this.prepAdd(8).setFloat64(p, v) }
+
+  addVarSize (v :number) {
+    while (true) {
+      let byte = v & 0x7F
+      v >>= 7
+      if (v === 0) {
+        this.addSize8(byte)
+        return
+      }
+      this.addSize8(byte | 0x80)
+    }
+  }
+  addVarInt (v :number) { this.addVarSize(v < 0 ? (-v << 1) - 1 : (v << 1)) }
+
+  addString (text :string) {
+    if (text.length === 0) {
+      this.addSize16(0)
+      return
+    }
+
+    // if the string is too long before encoding, it will definitely be too long after
+    if (text.length > 65535) throw new Error(
+      `String length cannot exceed 64k when converted to UTF-8 (length: ${text.length})`)
+
+    const pos = this.pos, encoder = this.encoder || (this.encoder = mkTextEncoder())
+
+    // if we don't have encodeInto then we have to encode the string into a separate byte buffer and
+    // copy that byte buffer into our encoding buffer...
+    if (!encoder.encodeInto) {
+      const encoded = encoder.encode(text)
+      if (encoded.length > 65535) throw new Error(
+        `String length cannot exceed 64k when converted to UTF-8 (bytes: ${encoded.length})`)
+      this.addSize16(encoded.length)
+      const tpos = this.pos
+      this.prepAdd(encoded.length)
+      this.bytes.set(encoded, tpos)
+      return
+    }
+
+    // if we do have encodeInto then we have to deal with the vagaries of not knowing how many UTF-8
+    // bytes we're going to get after encoding the string; we do this in stages to avoid blowing up
+    // our encoding buffer any time we write a string of non-trivial size
+    const tryEncodeInto = (size :number) => {
+      const tpos = this.pos
+      this.prepAdd(size)
+      const result = encoder.encodeInto(text, new Uint8Array(this.buffer, tpos))
+      if (result.read !== text.length || !result.written) {
+        this.pos = tpos
+        return false
+      }
+      this.data.setUint16(pos, result.written)
+      this.pos = tpos + result.written
+      return true
+    }
+    // leave space for the length
+    this.prepAdd(2)
+    // try encoding with just a bit of extra space for >8-bit characters
+    if (!tryEncodeInto(Math.ceil(text.length*1.25))) {
+      // try again with two bytes per byte
+      if (!tryEncodeInto(Math.ceil(text.length*2))) {
+        // in theory 3 bytes per byte is guaranteed to succeed
+        if (!tryEncodeInto(Math.ceil(text.length*3))) throw new Error(
+          `Unable to encode string to UTF-8? (length: ${text.length})`)
+      }
+    }
+  }
+
+  addUUID (uuid :UUID) {
+    const p = this.pos
+    this.prepAdd(16)
+    try {
+      uuidFromString(uuid, this.bytes, p)
+    } catch (error) {
+      log.warn(`${this.eid}: Unable to add UUID at ${p} (cap ${this.buffer.byteLength})`, error)
+    }
+  }
 
   addArray (data :any[], etype :ValueType) {
-    addSize32(this, data.length)
-    for (const elem of data) addValue(this, elem, etype)
+    this.addSize32(data.length)
+    for (const elem of data) this.addValue(elem, etype)
+  }
+
+  addFloatArray (arr :Float32Array) {
+    const length = arr.length
+    this.addSize32(length)
+    for (let ii = 0; ii < length; ii += 1) this.addFloat32(arr[ii])
+  }
+
+  addByteArray (arr :Uint8Array) {
+    const length = arr.length
+    this.addSize32(length)
+    const tpos = this.pos
+    this.prepAdd(length)
+    this.bytes.set(arr, tpos)
   }
 
   addSet (set :ReadonlySet<any>, etype :KeyType) {
-    addSize32(this, set.size)
-    for (const elem of set) addValue(this, elem, etype)
+    this.addSize32(set.size)
+    for (const elem of set) this.addValue(elem, etype)
   }
 
   addMap (map :ReadonlyMap<any, any>, ktype :KeyType, vtype :ValueType) {
-    addSize32(this, map.size)
+    this.addSize32(map.size)
     for (const [key, value] of map.entries()) {
-      addValue(this, key, ktype)
-      addValue(this, value, vtype)
+      this.addValue(key, ktype)
+      this.addValue(value, vtype)
     }
   }
 
@@ -457,6 +349,51 @@ export class Encoder {
     for (let ii = 0, ll = path.length; ii < ll; ii += 1) {
       this.addValue(path[ii], ii % 2 == 0 ? "string" : "uuid")
     }
+  }
+
+  addData (data :Data) {
+    const typeId = dataTypeId(data)
+    this.addSize16(typeId)
+    requireEncoder(typeId)(this, data)
+  }
+
+  addDataIterable (iter :Iterable<Data>, size :number) {
+    this.addSize32(size)
+    if (size > 0) {
+      const typeId = valuesTypeId(iter)
+      const encoder = requireEncoder(typeId)
+      this.addSize16(typeId)
+      for (const elem of iter) encoder(this, elem)
+    }
+  }
+
+  addDataMap (map :DataMap) {
+    this.addSize32(map.size)
+    if (map.size > 0) {
+      const ktypeId = valuesTypeId(map.keys()), kencoder = requireEncoder(ktypeId)
+      const vtypeId = valuesTypeId(map.values()), vencoder = requireEncoder(vtypeId)
+      this.addSize16(ktypeId)
+      this.addSize16(vtypeId)
+      for (const [key, val] of map) {
+        kencoder(this, key)
+        vencoder(this, val)
+      }
+    }
+  }
+
+  addRecord (rec :Record) {
+    const props = Object.getOwnPropertyNames(rec)
+    this.addSize16(props.length)
+    for (const prop of props) {
+      this.addString(prop)
+      this.addData(rec[prop])
+    }
+  }
+
+  addValue (data :any, type :ValueType) {
+    const encoder = valueCodecs[type][0]
+    if (encoder) encoder(this, data)
+    else throw new Error(`Unknown value type '${type}'`)
   }
 
   finish () :Uint8Array {
@@ -481,7 +418,7 @@ export interface SyncMap<K,V> extends Map<K,V>{
 }
 
 export class Decoder {
-  readonly decoder = mkTextDecoder()
+  private decoder? :TextDecoder
   readonly data :DataView
   pos = 0
 
@@ -495,41 +432,130 @@ export class Decoder {
     return pos
   }
 
-  getValue (type :ValueType) :any { return getValue(this, type) }
+  getBoolean() { return this.data.getUint8(this.prepGet(1)) === 1 }
+  getInt8 () { return this.data.getInt8(this.prepGet(1)) }
+  getInt16 () { return this.data.getInt16(this.prepGet(2)) }
+  getInt32 () { return this.data.getInt32(this.prepGet(4)) }
+  getSize8 () { return this.data.getUint8(this.prepGet(1)) }
+  getSize16 () { return this.data.getUint16(this.prepGet(2)) }
+  getSize32 () { return this.data.getUint32(this.prepGet(4)) }
+  getFloat32 () { return this.data.getFloat32(this.prepGet(4)) }
+  getFloat64 () { return this.data.getFloat64(this.prepGet(8)) }
+
+  getVarSize () {
+    let size = 0
+    let shift = 0
+    while (true) {
+      const byte = this.getSize8()
+      size |= (byte & 0x7F) << shift
+      if (!(byte & 0x80)) return size
+      shift += 7
+    }
+  }
+  getVarInt () {
+    const size = this.getVarSize()
+    return (size & 1) ? -((size + 1) >> 1) : (size >> 1)
+  }
+
+  getString () {
+    const bytes = this.getSize16()
+    if (bytes === 0) return ""
+    const offset = this.prepGet(bytes)
+    const decoder = this.decoder || (this.decoder = mkTextDecoder())
+    return decoder.decode(this.source.subarray(offset, offset+bytes))
+  }
+
+  getUUID () {
+    const offset = this.prepGet(16)
+    return uuidToString(this.source.subarray(offset, offset+16))
+  }
+
+  getFloatArray () {
+    const size = this.getSize32()
+    const arr = new Float32Array(size)
+    for (let ii = 0; ii < size; ii += 1) arr[ii] = this.getFloat32()
+    return arr
+  }
+
+  getByteArray () {
+    const size = this.getSize32()
+    const pos = this.prepGet(size)
+    return new Uint8Array(this.source.buffer, pos, size)
+  }
+
+  getData () {
+    const typeId = this.getSize16()
+    const decoder = dataDecoders.get(typeId)
+    if (decoder) return decoder(this)
+    throw new Error(`Unknown data type id '${typeId}'`)
+  }
+
+  getRecord () {
+    const rec :Record = {}, props = this.getSize16()
+    for (let ii = 0; ii < props; ii += 1) rec[this.getString()] = this.getData()
+    return rec
+  }
+
+  getValue (type :ValueType) :any {
+    const decoder = valueCodecs[type][1]
+    if (decoder) return decoder(this)
+    new Error(`Unknown value type '${type}'`)
+  }
 
   getArray<E> (etype :ValueType) :E[] {
-    const data :E[] = [], len = getSize32(this)
-    for (let ii = 0; ii < len; ii += 1) data[ii] = getValue(this, etype)
+    const data :E[] = [], len = this.getSize32()
+    for (let ii = 0; ii < len; ii += 1) data[ii] = this.getValue(etype)
     return data
   }
 
+  getDataArray () {
+    const arr :DataArray = []
+    const size = this.getSize32()
+    if (size > 0) {
+      const decoder = requireDecoder<Data>(this.getSize16())
+      for (let ii = 0; ii < size; ii += 1) arr.push(decoder(this))
+    }
+    return arr
+  }
+
   getSet<E> (etype :KeyType, into :Set<E>) :Set<E> {
-    const size = getSize32(this)
-    for (let ii = 0; ii < size; ii += 1) into.add(getValue(this, etype))
+    const size = this.getSize32()
+    for (let ii = 0; ii < size; ii += 1) into.add(this.getValue(etype))
     return into
   }
 
   syncSet<E> (etype :KeyType, into :SyncSet<E>) {
-    const size = getSize32(this)
+    const size = this.getSize32()
     const tmp = new Set<E>()
-    for (let ii = 0; ii < size; ii += 1) tmp.add(getValue(this, etype))
+    for (let ii = 0; ii < size; ii += 1) tmp.add(this.getValue(etype))
     for (const elem of into) if (!tmp.has(elem)) into.delete(elem, true)
     for (const elem of tmp) into.add(elem, true)
     return into
   }
 
   getMap<K,V> (ktype :KeyType, vtype :ValueType, into :Map<K,V>) :Map<K,V> {
-    const size = getSize32(this)
-    for (let ii = 0; ii < size; ii += 1) into.set(getValue(this, ktype), getValue(this, vtype))
+    const size = this.getSize32()
+    for (let ii = 0; ii < size; ii += 1) into.set(this.getValue(ktype), this.getValue(vtype))
     return into
   }
 
+  getDataMap () {
+    const map :DataMap = new Map()
+    const size = this.getSize32()
+    if (size > 0) {
+      const kdecoder = requireDecoder<DataMapKey>(this.getSize16())
+      const vdecoder = requireDecoder<Data>(this.getSize16())
+      for (let ii = 0; ii < size; ii += 1) map.set(kdecoder(this), vdecoder(this))
+    }
+    return map
+  }
+
   syncMap<K,V> (ktype :KeyType, vtype :ValueType, into :SyncMap<K,V>) {
-    const size = getSize32(this)
+    const size = this.getSize32()
     const keys = [], vals :V[] = []
     for (let ii = 0; ii < size; ii += 1) {
-      keys.push(getValue(this, ktype))
-      vals.push(getValue(this, vtype))
+      keys.push(this.getValue(ktype))
+      vals.push(this.getValue(vtype))
     }
     for (const key of into.keys()) if (!keys.includes(key)) into.delete(key, true)
     for (let ii = 0; ii < size; ii += 1) into.set(keys[ii], vals[ii], true)

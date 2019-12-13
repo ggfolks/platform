@@ -1,6 +1,6 @@
 import {getAbsoluteUrl} from "../core/assets"
 import {Base64} from "../core/basex"
-import {Decoder, Encoder, addSize8, getSize8} from "../core/codec"
+import {Decoder, Encoder} from "../core/codec"
 import {Color} from "../core/color"
 import {Bounds, quat, quatIdentity, vec3, vec3one, vec3unitY} from "../core/math"
 import {Interp, Easing} from "../core/interp"
@@ -555,7 +555,7 @@ export class FusedEncoder {
 
   addFusedTiles (source :Uint8Array, position :vec3, rotation :quat, scale :vec3) {
     this._encoder.addValue(-source.length, "varInt")
-    for (let ii = 0; ii < source.length; ii++) addSize8(this._encoder, source[ii])
+    for (let ii = 0; ii < source.length; ii++) this._encoder.addSize8(source[ii])
     this._addFloatTriplet(position)
     this._addFloatTriplet(rotation)
     this._addFloatTriplet(scale)
@@ -618,7 +618,7 @@ export function decodeFused (source :Uint8Array, visitor :FusedVisitor) {
     const code = decoder.getValue("varInt")
     if (code <= 0) {
       const source = new Uint8Array(-code)
-      for (let ii = 0; ii < source.length; ii++) source[ii] = getSize8(decoder)
+      for (let ii = 0; ii < source.length; ii++) source[ii] = decoder.getSize8()
       readTriplet(position)
       readTriplet(rotation)
       quat.calculateW(rotation, rotation)
