@@ -21,8 +21,9 @@ import {DefaultStyles, DefaultTheme} from "../../ui/theme"
 import {
   ALL_LAYERS_MASK, DEFAULT_LAYER_FLAG, ALL_HIDE_FLAGS_MASK, DEFAULT_PAGE, Component,
   ComponentConstructor, Cone, Configurable, ConfigurableConfig, CoordinateFrame, Coroutine, Cube,
-  Cylinder, GameContext, GameEngine, GameObject, GameObjectConfig, Graph, Mesh, MeshFilter, Page,
-  PrimitiveType, Quad, SpaceConfig, Sphere, Tile, Time, Torus, Transform, Updatable,
+  Cylinder, DefaultTileBounds, GameContext, GameEngine, GameObject, GameObjectConfig, Graph, Mesh,
+  MeshFilter, Page, PrimitiveType, Quad, SpaceConfig, Sphere, Tile, Time, Torus, Transform,
+  Updatable,
 } from "../game"
 import {getConfigurableMeta, property} from "../meta"
 import {PhysicsEngine} from "../physics"
@@ -1453,8 +1454,8 @@ export class TypeScriptGraph extends TypeScriptComponent implements Graph {
 registerConfigurableType("component", ["engine"], "graph", TypeScriptGraph)
 
 export class TypeScriptTile extends TypeScriptComponent implements Tile {
-  @property("vec3") min = vec3.fromValues(-0.5, 0, -0.5)
-  @property("vec3") max = vec3.fromValues(0.5, 1, 0.5)
+  @property("vec3") min = vec3.clone(DefaultTileBounds.min)
+  @property("vec3") max = vec3.clone(DefaultTileBounds.max)
   @property("boolean") walkable = false
 }
 registerConfigurableType("component", ["engine"], "tile", TypeScriptTile)

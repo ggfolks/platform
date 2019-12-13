@@ -1,5 +1,5 @@
 import {Clock} from "../core/clock"
-import {mat4, quat, vec3} from "../core/math"
+import {Bounds, mat4, quat, vec3} from "../core/math"
 import {Mutable, Value} from "../core/react"
 import {RMap} from "../core/rcollect"
 import {Disposable, PMap} from "../core/util"
@@ -567,6 +567,12 @@ export interface Graph extends Component {
   /** The graph configuration. */
   graphConfig :GraphConfig
 }
+
+/** The default bounds for tiles. */
+export const DefaultTileBounds = Bounds.create(
+  vec3.fromValues(-0.5, 0, -0.5),
+  vec3.fromValues(0.5, 1, 0.5),
+)
 
 /** Contains metadata for tiles, which are models that we expect to place at integer coordinates
   * (or power-of-two fractions thereof: 1/2, 1/4, etc.) and cardinal directions. */
