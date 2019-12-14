@@ -14,7 +14,7 @@ import {refEquals} from "../../../core/data"
 import {Bounds, Plane, Ray, dim2, quat, rect, vec2, vec3} from "../../../core/math"
 import {Mutable, Subject, Value} from "../../../core/react"
 import {MutableMap, RMap} from "../../../core/rcollect"
-import {Disposer, Noop, NoopRemover, Remover} from "../../../core/util"
+import {Disposer, Noop, NoopRemover, Remover, getValue} from "../../../core/util"
 import {Graph, GraphConfig} from "../../../graph/graph"
 import {PropertyMeta, setEnumMeta} from "../../../graph/meta"
 import {GLTF, loadGLTF, loadGLTFAnimationClip} from "../../../scene3/entity"
@@ -1006,6 +1006,7 @@ registerConfigurableType("component", ["render"], "light", ThreeLight)
 
 class ThreeModel extends ThreeBounded implements Model {
   @property("url") url = ""
+  @property("number", {min: 0, wheelStep: 0.01}) opacity = 1
 
   private _urlRemover :Remover = NoopRemover
 
@@ -1019,6 +1020,9 @@ class ThreeModel extends ThreeBounded implements Model {
         this._boundsValid = false
       })
     })
+    Value
+      .join2(this.objectValue, this.getProperty<number>("opacity"))
+      .onValue(([object, opacity]) => updateOpacity(object, opacity))
   }
 
   dispose () {
@@ -1035,6 +1039,7 @@ registerConfigurableType("component", ["render"], "model", ThreeModel)
 
 class ThreeFusedModels extends ThreeBounded implements FusedModels {
   @property("Uint8Array", {editable: false}) encoded = new Uint8Array(0)
+  @property("number", {min: 0, wheelStep: 0.01}) opacity = 1
 
   private _loadingEncoded? :Uint8Array
 
@@ -1064,11 +1069,11 @@ class ThreeFusedModels extends ThreeBounded implements FusedModels {
               tmpBoundingBox.max.fromArray(bounds.max)
               const fullMatrix = new Matrix4().multiplyMatrices(parentMatrix, scene.matrix)
               boundingBox.union(tmpBoundingBox.applyMatrix4(fullMatrix))
-              this._boundsValid = false
               group.add(scene)
               scene.updateMatrixWorld()
               if (--remaining === 0 && this._loadingEncoded === topEncoded) {
                 this.objectValue.update(topGroup)
+                this._boundsValid = false
               }
             })
           },
@@ -1088,6 +1093,9 @@ class ThreeFusedModels extends ThreeBounded implements FusedModels {
       }
       decode(topEncoded, topGroup, new Matrix4())
     })
+    Value
+      .join2(this.objectValue, this.getProperty<number>("opacity"))
+      .onValue(([object, opacity]) => updateOpacity(object, opacity))
   }
 
   protected _updateObjectTransform (object :Object3D) {
@@ -1096,6 +1104,31 @@ class ThreeFusedModels extends ThreeBounded implements FusedModels {
   }
 }
 registerConfigurableType("component", undefined, "fusedModels", ThreeFusedModels)
+
+function updateOpacity (object :Object3D|undefined, opacity :number) {
+  if (!object) return
+  const currentOpacity = getValue(object.userData.opacity, 1)
+  if (currentOpacity === opacity) return
+  const cloned = object.userData.opacity !== undefined
+  const modifyMaterial = (material :MaterialObject) => {
+    if (!cloned) {
+      material = material.clone()
+      material.transparent = true
+    }
+    material.opacity = opacity
+    return material
+  }
+  object.traverse(node => {
+    if (node instanceof Mesh) {
+      if (Array.isArray(node.material)) {
+        for (let ii = 0; ii < node.material.length; ii++) {
+          node.material[ii] = modifyMaterial(node.material[ii])
+        }
+      } else node.material = modifyMaterial(node.material)
+    }
+  })
+  object.userData.opacity = opacity
+}
 
 const PlaceholderGLTF = Subject.constant<GLTF>({
   scene: new Mesh(
