@@ -76,6 +76,7 @@ export type ObjMsg = {type :ObjType.OBJ, obj :DObject}
 export function addObject (enc :Encoder, rcpt :Auth, obj :DObject) {
   for (const meta of obj.metas) {
     if (!obj.canRead(meta.name, rcpt)) continue
+    if (DebugLog) log.debug("Adding obj prop", "name", meta.name, "type", meta.type)
     const prop = obj[meta.name]
     switch (meta.type) {
     case "value":
@@ -104,6 +105,7 @@ export function getObject (dec :Decoder, into :DObject) :DObject {
     const meta = into.metas[idx]
     if (!meta) throw new Error(log.format("Missing object meta", "obj", into, "idx", idx))
     const prop = into[meta.name]
+    if (DebugLog) log.debug("Reading obj prop", "name", meta.name, "type", meta.type)
     switch (meta.type) {
     case "value": (prop as DMutable<any>).update(dec.getValue(meta.vtype), true) ; break
     case "set": dec.syncSet(meta.etype, (prop as Set<any>)) ; break

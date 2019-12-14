@@ -62,8 +62,8 @@ export function tableForView (
 export function getPropMetas (proto :Function|Object) :PropMeta[] {
   const atarget = proto as any
   if (atarget.hasOwnProperty("__props__")) return atarget["__props__"]
-  const pprops = atarget["__props__"]
-  return atarget["__props__"] = (pprops ? pprops.slice() : [])
+  const parentProps = atarget["__props__"]
+  return atarget["__props__"] = (parentProps ? parentProps.slice() : [])
 }
 
 export function dobject (ctor :Function) {

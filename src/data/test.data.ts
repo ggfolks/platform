@@ -35,6 +35,14 @@ export class SubBObject extends BaseObject {
 }
 
 @dobject
+export class SubSubAObject extends SubAObject {
+  static uuid = "4kK0BPBd6GiWZ6eGn0rdLN"
+
+  @dvalue("number")
+  subsuba = this.value(0)
+}
+
+@dobject
 export class RootObject extends DObject {
 
   canSubscribe (auth :Auth) { return true }
@@ -74,6 +82,14 @@ test("metas", () => {
     type: "value", name: "base", index: 0, vtype: "string", persist: false})
   expect(bmetas[1]).toEqual({
     type: "value", name: "subb", index: 1, vtype: "boolean", persist: false})
+
+  const aametas = getPropMetas(SubSubAObject.prototype)
+  expect(aametas[0]).toEqual({
+    type: "value", name: "base", index: 0, vtype: "string", persist: false})
+  expect(aametas[1]).toEqual({
+    type: "value", name: "suba", index: 1, vtype: "number", persist: false})
+  expect(aametas[2]).toEqual({
+    type: "value", name: "subsuba", index: 2, vtype: "number", persist: false})
 })
 
 test("hierarchy", () => {
