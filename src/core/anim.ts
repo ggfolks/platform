@@ -134,18 +134,44 @@ export class Anim {
 }
 
 export class Animator {
+  private readonly batches :Animation[][] = []
   private active :Animation[] = []
+  private nextBatchId = 1
+  private currentBatchId = 0
 
+  /** The current number of animations running. */
   readonly anims :Value<number> = Mutable.local(0)
+
+  /** Emits an event when the animator transitions from >0 running animations to 0. */
   readonly clear :Stream<Animator> = new Emitter()
 
-  // TODO: batches or phases or barriers or something
+  /** Emits an event when a particular animation batch is finished. */
+  readonly finished :Stream<number> = new Emitter()
+
+  /** Adds an animation to be played either immediately if there is no active batch, or when the
+    * currently accumulating batch is started.
+    * @return a thunk that can be invoked to cancel the animation and remove it from the animator
+    * (whether or not it has already started). */
   add (anim :Animation) :Remover {
-    return addListener(this.active, anim)
+    const batch = this.batches.length > 0 ? this.batches[0] : this.active
+    return addListener(batch, anim)
   }
 
+  /** Starts accumulating new animations to a postponed batch. The batch will not start until all
+    * currently executing animations are completed and any previously accumulated batches are also
+    * run to completion.
+    * @return an id for the batch which will be emitted by `finished` when all the animations in
+    * this batch have completed (or been canceled). */
+  addBarrier () :number {
+    const batches = this.batches
+    if (batches.length > 0 && batches[batches.length-1].length === 0) return this.nextBatchId-1
+    batches.push([])
+    return this.nextBatchId++
+  }
+
+  /** Updates the animator every frame. This must be called to drive the animation process. */
   update (dt :number) {
-    const anims = this.active
+    const anims = this.active, batches = this.batches
     const count = anims.length
     if (count > 0) {
       // TODO: handle removals in the middle of update()
@@ -158,7 +184,13 @@ export class Animator {
         }
       }
       (this.anims as Mutable<number>).update(anims.length)
-      if (anims.length === 0) (this.clear as Emitter<Animator>).emit(this)
+      if (anims.length > 0) return
+      else (this.finished as Emitter<number>).emit(this.currentBatchId)
+    }
+    if (batches.length === 0) (this.clear as Emitter<Animator>).emit(this)
+    else {
+      this.active = batches.shift()!
+      this.currentBatchId += 1
     }
   }
 }
