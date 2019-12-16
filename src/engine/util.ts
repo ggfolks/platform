@@ -314,7 +314,7 @@ const constructorStringifiers = new Map<Function, (value :any, indent :number) =
       string += ": " + JavaScript.stringify(value[key], nextIndent)
     }
     if (!first) string += "\n" + " ".repeat(indent)
-    return string + (indent === 0 ? "})" : "}")
+    return string + (indent === 0 ? "})\n" : "}")
   }],
   [Array, (values, indent) => {
     let string = "["
