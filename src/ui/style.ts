@@ -669,7 +669,7 @@ export class Span {
 
         } else {
           const emwidth = canvas.measureText("m").width
-          let hardlen = Math.floor(width/emwidth)
+          let hardlen = Math.max(Math.floor(width/emwidth), 1)
           let hardwid = Math.ceil(canvas.measureText(text.substring(startc, startc+hardlen)).width)
           while (hardwid < width) {
             const nlen = hardlen+1
