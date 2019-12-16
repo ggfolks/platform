@@ -17,7 +17,7 @@ const defaultTint = Color.fromRGB(1, 1, 1)
 interface Parent {
   trans :Transform
   stage :Stage|undefined
-  layerChanged (actor :Actor, layer :number) :void
+  layerChanged (actor :Actor) :void
   removeActor (actor :Actor, dispose :boolean) :void
 }
 
@@ -51,7 +51,7 @@ export abstract class Actor {
   get layer () :number { return this._layer }
   set layer (d :number) {
     this._layer = d
-    if (this.parent) this.parent.layerChanged(this, d)
+    if (this.parent) this.parent.layerChanged(this)
   }
 
   mouseToPos (into :vec2, ev :MouseEvent) :vec2 {
@@ -152,9 +152,11 @@ export class Group extends Actor implements Parent {
     }
   }
 
-  layerChanged (actor :Actor, layer :number) {
+  layerChanged (actor :Actor) {
     const idx = this.actors.indexOf(actor)
     if (idx < 0) log.warn("Unknown actor changed layer?", "group", this, "actor", actor)
+    this.actors.splice(idx, 1)
+    insertSorted(this.actors, actor, (a, b) => a.layer - b.layer)
   }
 
   update (dt :number) {
