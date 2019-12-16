@@ -1089,8 +1089,8 @@ export namespace Root {
   }
 
   export function rectAnchor (rect :Value<rect>, horiz :HAnchor, vert :VAnchor) :Value<vec2> {
-    const svec = vec2.create()
-    return rect.map(ss => vec2.set(svec, ss[0] + pos(horiz, 0, ss[2]), ss[1] + pos(vert, 0, ss[3])))
+    return rect.map(ss => vec2.fromValues(
+      ss[0] + pos(horiz, 0, ss[2]), ss[1] + pos(vert, 0, ss[3])), vec2.equals)
   }
 
   /** Events of interest emitted by roots. */
