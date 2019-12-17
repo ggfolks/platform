@@ -905,7 +905,16 @@ export class Root extends Container {
   dispatchWheelEvent (host :Host, event :WheelEvent) {
     const pos = host.mouseToRoot(this, event, tmpv)
     if (rect.contains(this.hitBounds, pos)) event.cancelBubble = true
-    this.eventTarget.maybeHandleWheel(event, pos)
+    if (this.eventTarget.maybeHandleWheel(event, pos) && !this._hasInteracts()) {
+      this._updateElementsOver(pos)
+    }
+  }
+
+  private _hasInteracts () :boolean {
+    for (const interact of this.interacts) {
+      if (interact) return true
+    }
+    return false
   }
 
   wasAdded (host :Host) {
