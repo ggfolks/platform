@@ -845,40 +845,66 @@ class ThreeCamera extends ThreeObjectComponent implements Camera {
 
   init () {
     super.init()
+    const updateOrthographicViewOffset = (camera :OrthographicCamera) => {
+      const lensShift = this.lensShift
+      const aspect = this.aspect
+      if (vec2.equals(lensShift, vec2zero)) camera.clearViewOffset()
+      else camera.setViewOffset(aspect, 1, lensShift[0], -lensShift[1], aspect, 1)
+      camera.updateProjectionMatrix()
+    }
+    const updatePerspectiveViewOffset = (camera :PerspectiveCamera) => {
+      const lensShift = this.lensShift
+      const aspect = this.aspect
+      if (vec2.equals(lensShift, vec2zero)) {
+        camera.clearViewOffset()
+        camera.aspect = aspect
+      } else camera.setViewOffset(aspect, 1, lensShift[0], -lensShift[1], aspect, 1)
+      camera.updateProjectionMatrix()
+    }
     this.getProperty<boolean>("orthographic").onValue(orthographic => {
       if (orthographic) {
         const orthoWidth = this.orthographicSize * this.aspect
-        this.objectValue.update(new OrthographicCamera(
+        const camera = new OrthographicCamera(
           -orthoWidth,
           orthoWidth,
           this.orthographicSize,
           -this.orthographicSize,
           this.nearClipPlane,
           this.farClipPlane,
-        ))
+        )
+        updateOrthographicViewOffset(camera)
+        this.objectValue.update(camera)
+
       } else {
-        this.objectValue.update(new PerspectiveCamera(
+        const camera = new PerspectiveCamera(
           this.fieldOfView,
           this.aspect,
           this.nearClipPlane,
           this.farClipPlane,
-        ))
+        )
+        updatePerspectiveViewOffset(camera)
+        this.objectValue.update(camera)
       }
     })
     Value
-      .join2(this.getProperty<number>("aspect"), this.getProperty<number>("orthographicSize"))
-      .onChange(([aspect, orthographicSize]) => {
+      .join3(
+        this.getProperty<number>("aspect"),
+        this.getProperty<number>("orthographicSize"),
+        this.getProperty<vec2>("lensShift"),
+      )
+      .onChange(([aspect, orthographicSize, lensShift]) => {
         const camera = this.cameraObject
         if (camera instanceof PerspectiveCamera) {
-          camera.aspect = aspect
+          updatePerspectiveViewOffset(camera)
+
         } else { // camera instanceof OrthographicCamera
           const orthoWidth = orthographicSize * aspect
           camera.left = -orthoWidth
           camera.right = orthoWidth
           camera.bottom = -orthographicSize
           camera.top = orthographicSize
+          updateOrthographicViewOffset(camera)
         }
-        camera.updateProjectionMatrix()
       })
     this.getProperty<number>("fieldOfView").onChange(fov => {
       const camera = this.cameraObject
@@ -897,18 +923,6 @@ class ThreeCamera extends ThreeObjectComponent implements Camera {
     })
     this.getProperty<number>("cullingMask").onChange(() => {
       this._updateObjectLayers(this.cameraObject)
-    })
-    this.getProperty<vec2>("lensShift").onChange(lensShift => {
-      if (vec2.equals(lensShift, vec2zero)) this.cameraObject.clearViewOffset()
-      else this.cameraObject.setViewOffset(
-        this.aspect,
-        1,
-        lensShift[0],
-        -lensShift[1],
-        this.aspect,
-        1,
-      )
-      this.cameraObject.updateProjectionMatrix()
     })
   }
 
