@@ -436,9 +436,10 @@ export class Scroller extends TransformedContainer {
   ) {
     const [posIdx, sizeIdx] = this.horiz ? [0, 2] : [1, 3]
     if (jump) {
+      const relativePos = pos[posIdx] - this.bounds[posIdx]
       const selfSize = this.bounds[sizeIdx]
       const contentsSize = this.contents.bounds[sizeIdx]
-      this._updateAxisOffset(Math.round(pos[posIdx] * contentsSize / selfSize - selfSize / 2))
+      this._updateAxisOffset(Math.round(relativePos * contentsSize / selfSize - selfSize / 2))
     }
     const clearCursor = () => this.clearCursor(this)
     let lastPos = pos[posIdx]
