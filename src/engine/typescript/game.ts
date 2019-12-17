@@ -2,7 +2,7 @@ import {loadImage} from "../../core/assets"
 import {Clock} from "../../core/clock"
 import {Color} from "../../core/color"
 import {refEquals} from "../../core/data"
-import {mat4, quat, vec3, vec4, rect} from "../../core/math"
+import {mat4, quat, vec2, vec3, vec4, rect} from "../../core/math"
 import {ChangeFn, Mutable, Value} from "../../core/react"
 import {MutableMap, RMap} from "../../core/rcollect"
 import {Disposer, NoopRemover, PMap, getValue, log} from "../../core/util"
@@ -11,7 +11,9 @@ import {CategoryNode, NodeTypeRegistry} from "../../graph/node"
 import {registerLogicNodes} from "../../graph/logic"
 import {registerMathNodes} from "../../graph/math"
 import {PropertyMeta} from "../../graph/meta"
-import {createColorFn, createQuatFn, createVec3Fn, registerMatrixNodes} from "../../graph/matrix"
+import {
+  createColorFn, createQuatFn, createVec2Fn, createVec3Fn, registerMatrixNodes,
+} from "../../graph/matrix"
 import {registerSignalNodes} from "../../graph/signal"
 import {SubgraphRegistry, registerUtilNodes} from "../../graph/util"
 import {registerInputNodes} from "../../input/node"
@@ -73,6 +75,7 @@ interface ProxyType<T> {
 }
 
 const ProxyTypes :PMap<ProxyType<any>> = {
+  vec2: {create: createVec2Fn, copy: vec2.copy},
   vec3: {create: createVec3Fn, copy: vec3.copy},
   quat: {create: createQuatFn, copy: quat.copy},
   Color: {create: createColorFn, copy: Color.copy},

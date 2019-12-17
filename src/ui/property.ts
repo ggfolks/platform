@@ -2,7 +2,7 @@ import {Color as ThreeColor, Euler as ThreeEuler, Math as M, Vector3} from "thre
 
 import {Color} from "../core/color"
 import {refEquals} from "../core/data"
-import {Euler, quat, vec3} from "../core/math"
+import {Euler, quat, vec2, vec3} from "../core/math"
 import {ChangeFn, Mutable, Value} from "../core/react"
 import {RMap} from "../core/rcollect"
 import {Noop, PMap, filteredIterable, toLimitedString} from "../core/util"
@@ -110,48 +110,8 @@ export namespace Property {
         },
       })
     },
-    vec3: (model, editable) => {
-      const rawValue = model.resolve<Mutable<vec3>>("value")
-      const maxDecimals = 2
-      let currentValue = truncateVec3(rawValue.current, maxDecimals)
-      const truncatedValue = Mutable.deriveMutable(
-        dispatch => rawValue.onChange((value :vec3, oldValue :vec3) => {
-          const truncated = truncateVec3(value, maxDecimals)
-          if (!vec3.equals(currentValue, truncated)) {
-            const oldValue = currentValue
-            dispatch(currentValue = truncated, oldValue)
-          }
-        }),
-        () => currentValue,
-        (newValue :vec3) => {
-          if (!vec3.equals(currentValue, newValue)) {
-            rawValue.update(newValue)
-          }
-        },
-        refEquals,
-      )
-      const createElementConfig = (index :number) => ({
-        type: "numberText",
-        constraints: {stretch: true},
-        maxDecimals,
-        wheelStep: 0.1,
-        number: truncatedValue.bimap(v => v[index], (v, value) => {
-          const newVector = vec3.clone(v)
-          newVector[index] = value
-          return newVector
-        }),
-        contents: NumberBox,
-      })
-      return createRowConfig(model, {
-        type: "row",
-        constraints: {stretch: true},
-        contents: [
-          createElementConfig(0),
-          createElementConfig(1),
-          createElementConfig(2),
-        ],
-      })
-    },
+    vec2: createVecConfigCreator(vec2, 2),
+    vec3: createVecConfigCreator(vec3, 3),
     quat: (model, editable) => {
       const rawValue = model.resolve<Mutable<quat>>("value")
       let quatValue = quat.clone(rawValue.current)
@@ -332,6 +292,61 @@ export namespace Property {
     },
   }
 
+  interface vec<T> {
+    create () :T
+    scale (out :T, a :T, b :number) :T
+    round (out :T, a :T) :T
+    clone (a :T) :T
+    equals (a :T, b :T) :boolean
+  }
+
+  function createVecConfigCreator<T> (type :vec<T>, length :number) :ConfigCreator {
+    const maxDecimals = 2
+    const truncateVec = (vector :T) => {
+      const result = type.create()
+      const scale = 10 ** maxDecimals
+      return type.scale(result, type.round(result, type.scale(result, vector, scale)), 1.0 / scale)
+    }
+    return (model, editable) => {
+      const rawValue = model.resolve<Mutable<T>>("value")
+      let currentValue = truncateVec(rawValue.current)
+      const truncatedValue = Mutable.deriveMutable(
+        dispatch => rawValue.onChange((value :T, oldValue :T) => {
+          const truncated = truncateVec(value)
+          if (!type.equals(currentValue, truncated)) {
+            const oldValue = currentValue
+            dispatch(currentValue = truncated, oldValue)
+          }
+        }),
+        () => currentValue,
+        (newValue :T) => {
+          if (!type.equals(currentValue, newValue)) rawValue.update(newValue)
+        },
+        refEquals,
+      )
+      const contents :Element.Config[] = []
+      for (let ii = 0; ii < length; ii++) {
+        contents.push({
+          type: "numberText",
+          constraints: {stretch: true},
+          maxDecimals,
+          wheelStep: 0.1,
+          number: truncatedValue.bimap(v => v[ii], (v, value) => {
+            const newVector = type.clone(v)
+            newVector[ii] = value
+            return newVector
+          }),
+          contents: NumberBox,
+        })
+      }
+      return createRowConfig(model, {
+        type: "row",
+        constraints: {stretch: true},
+        contents,
+      })
+    }
+  }
+
   /** Sets the element config creator to use for editing properties of the specified type. */
   export function setConfigCreator (type :string, creator :ConfigCreator) {
     configCreators[type] = creator
@@ -376,12 +391,6 @@ export namespace Property {
     })
     if (inputListener) input.addEventListener("input", () => inputListener(input))
     input.click()
-  }
-
-  function truncateVec3 (vector :vec3, maxDecimals :number) :vec3 {
-    const result = vec3.create()
-    const scale = 10 ** maxDecimals
-    return vec3.scale(result, vec3.round(result, vec3.scale(result, vector, scale)), 1.0 / scale)
   }
 
   function truncateEuler (rotation :quat) :Euler {

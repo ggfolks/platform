@@ -11,7 +11,7 @@ import {getAbsoluteUrl} from "../../../core/assets"
 import {Clock} from "../../../core/clock"
 import {Color} from "../../../core/color"
 import {refEquals} from "../../../core/data"
-import {Bounds, Plane, Ray, dim2, quat, rect, vec2, vec3} from "../../../core/math"
+import {Bounds, Plane, Ray, dim2, quat, rect, vec2, vec2zero, vec3} from "../../../core/math"
 import {Mutable, Subject, Value} from "../../../core/react"
 import {MutableMap, RMap} from "../../../core/rcollect"
 import {Disposer, Noop, NoopRemover, Remover, getValue} from "../../../core/util"
@@ -822,6 +822,7 @@ class ThreeCamera extends ThreeObjectComponent implements Camera {
   @property("number", {min: 0, wheelStep: 0.1}) orthographicSize = 10
   @property("number", {min: 0, wheelStep: 0.1}) nearClipPlane = 0.1
   @property("number", {min: 0, wheelStep: 0.1}) farClipPlane = 2000
+  @property("vec2") lensShift = vec2.create()
   @property("number") cullingMask = ALL_LAYERS_MASK
   @property("number") eventMask = ALL_LAYERS_MASK
 
@@ -896,6 +897,18 @@ class ThreeCamera extends ThreeObjectComponent implements Camera {
     })
     this.getProperty<number>("cullingMask").onChange(() => {
       this._updateObjectLayers(this.cameraObject)
+    })
+    this.getProperty<vec2>("lensShift").onChange(lensShift => {
+      if (vec2.equals(lensShift, vec2zero)) this.cameraObject.clearViewOffset()
+      else this.cameraObject.setViewOffset(
+        this.aspect,
+        1,
+        lensShift[0],
+        -lensShift[1],
+        this.aspect,
+        1,
+      )
+      this.cameraObject.updateProjectionMatrix()
     })
   }
 

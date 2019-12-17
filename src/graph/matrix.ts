@@ -1,5 +1,5 @@
 import {Color} from "../core/color"
-import {quat, vec3} from "../core/math"
+import {quat, vec2, vec3} from "../core/math"
 import {Value} from "../core/react"
 import {getValue} from "../core/util"
 import {Graph} from "./graph"
@@ -30,6 +30,14 @@ class Vec3FromValues extends Node {
       )
       .map(createVec3Fn((out, [x, y, z]) => vec3.set(out, x, y, z)))
   }
+}
+
+/** Creates a function that alternates between two output vectors, so as to avoid creating new
+  * vector objects every time the function is called.
+  * @param populate the function to populate the vector.
+  * @return the wrapped function. */
+export function createVec2Fn (populate :(out :vec2, arg? :any) => vec2) :(arg? :any) => vec2 {
+  return createDoubleBufferedFn(vec2.create, populate, vec2.exactEquals)
 }
 
 /** Creates a function that alternates between two output vectors, so as to avoid creating new

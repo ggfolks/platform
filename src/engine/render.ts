@@ -147,6 +147,9 @@ export interface Camera extends Component, Hoverable {
   /** The distance to the far clip plane. */
   farClipPlane :number
 
+  /** The amount to shift the view window in X/Y. */
+  lensShift :vec2
+
   /** The mask that determines which layers to render. */
   cullingMask :number
 
