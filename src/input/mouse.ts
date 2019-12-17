@@ -8,6 +8,7 @@ export class Mouse implements Disposable {
 
   private _disposer = new Disposer()
   private _buttonStates :Map<number, Mutable<boolean>> = new Map()
+  private _rawButtonStates :Map<number, Mutable<boolean>> = new Map()
   private _movement = Mutable.local(vec2.create())
   private _doubleClicked :Emitter<void> = new Emitter()
   private _lastScreen? :vec2
@@ -37,11 +38,13 @@ export class Mouse implements Disposable {
 
   constructor (private readonly _canvas :HTMLElement) {
     this._disposer.add(mouseEvents("mousedown").onEmit(event => {
+      this._getRawButtonState(event.button).update(true)
       if (!event.cancelBubble && this.canvasContains(event)) {
         this._getButtonState(event.button).update(true)
       }
     }))
     this._disposer.add(mouseEvents("mouseup").onEmit(event => {
+      this._getRawButtonState(event.button).update(false)
       this._getButtonState(event.button).update(false)
     }))
     this._disposer.add(mouseEvents("dblclick").onEmit(event => {
@@ -81,6 +84,13 @@ export class Mouse implements Disposable {
     return this._getButtonState(button)
   }
 
+  /** Returns the "raw" state value corresponding to the given mouse button.  Unlike the normal
+    * button states, which are only set when the button is pressed on the canvas, the raw states
+    * are set when the button is pressed anywhere on the page. */
+  getRawButtonState (button :number) :Value<boolean> {
+    return this._getRawButtonState(button)
+  }
+
   /** Updates the mouse state.  Should be called once per frame. */
   update () {
     if (!vec2.exactEquals(this._accumulatedMovement, this._movement.current)) {
@@ -96,9 +106,13 @@ export class Mouse implements Disposable {
 
   private _getButtonState (button :number) {
     let state = this._buttonStates.get(button)
-    if (!state) {
-      this._buttonStates.set(button, state = Mutable.local<boolean>(false))
-    }
+    if (!state) this._buttonStates.set(button, state = Mutable.local<boolean>(false))
+    return state
+  }
+
+  private _getRawButtonState (button :number) {
+    let state = this._rawButtonStates.get(button)
+    if (!state) this._rawButtonStates.set(button, state = Mutable.local<boolean>(false))
     return state
   }
 }
