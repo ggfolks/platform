@@ -113,7 +113,11 @@ export class Toggle extends Control {
     into.push({
       move: (event, pos) => false,
       release: () => {
-        if (rect.contains(this.hitBounds, pos)) this.onClick()
+        if (rect.contains(this.hitBounds, pos)) {
+          this.onClick()
+          // make sure the checked contents' hit bounds are up-to-date for hover update
+          if (this.checkedContents) this.checkedContents.validate()
+        }
       },
       cancel: () => {}
     })
