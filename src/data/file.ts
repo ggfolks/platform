@@ -106,15 +106,23 @@ function applyData (obj :DObject, data :Record) {
 const pathToDir = (root :string, path :Path) => P.join(root, ...path)
 const pathToFile = (root :string, path :Path, file :string) => P.join(pathToDir(root, path), file)
 
-const readData = (file :string) => fs.promises.readFile(file).then(buffer => {
-  const dec = new Decoder(buffer)
-  return dec.getValue("record")
-}, err => err.code === "ENOENT" ? {} : Promise.reject(err))
+const readData = async (file :string) => {
+  try {
+    const buffer = await fs.promises.readFile(file)
+    const dec = new Decoder(buffer)
+    return dec.getValue("record")
+  } catch (err) {
+    if (err.code === "ENOENT") return {}
+    else throw err
+  }
+}
 
-const writeData = (file :string, data :Record) => {
+const writeData = async (file :string, data :Record) => {
   const enc = new Encoder()
   enc.addValue(data, "record")
-  return fs.promises.writeFile(file, enc.finish())
+  const newFile = `${file}.new`
+  await fs.promises.writeFile(newFile, enc.finish())
+  return fs.promises.rename(newFile, file)
 }
 
 class Syncer {
@@ -179,16 +187,17 @@ export class FileDataStore extends AbstractDataStore {
 
   async resolveData (res :Resolved, resolver? :Resolver) {
     const file = pathToFile(this.rootDir, res.object.path, "data.bin")
+    let data = {}
     try {
-      const data = await readData(file)
-      const syncer = new Syncer(file, data)
-      this.syncers.set(res.object.path, syncer)
-      if (resolver) resolver(res.object)
-      else applyData(res.object, data)
-      res.resolvedData()
+      data = await readData(file)
     } catch (err) {
       log.warn("Failed to resolve data", "file", file, err)
     }
+    const syncer = new Syncer(file, data)
+    this.syncers.set(res.object.path, syncer)
+    if (resolver) resolver(res.object)
+    else applyData(res.object, data)
+    res.resolvedData()
   }
 
   persistSync (obj :DObject, msg :SyncMsg) {
