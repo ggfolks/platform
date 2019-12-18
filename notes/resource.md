@@ -99,7 +99,7 @@ At any time, a _snapshot_ of the dev workspace can be created and a staging or t
 game can be updated to use that new snapshot. In this way, releases can be tested prior to
 shipping. Finally a test snapshot can be promoted to production by configuring the production
 servers to use a vetted snapshot. This process will be automated by virtue of creating named
-"builds" and providing a UI for configuring which snapshot is associated with each channel. The
+"builds" and providing a UI for configuring which snapshot is associated with each build. The
 runtime resource management code will detect a change to the snapshot associated with the build and
 will instruct the game to update itself in whatever way is desired for that build (be that
 rebooting, or hot reloading, or some other policy).
