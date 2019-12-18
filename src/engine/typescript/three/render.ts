@@ -1,17 +1,18 @@
 import {
-  AnimationClip, AnimationMixer, AmbientLight, BackSide, Box3, BoxBufferGeometry, BufferGeometry,
-  ConeBufferGeometry, CylinderBufferGeometry, DefaultLoadingManager, DirectionalLight, DoubleSide,
-  FileLoader, FrontSide, Group, Intersection, Light as LightObject, LoopOnce, LoopRepeat,
-  LoopPingPong, Material as MaterialObject, Matrix4, Mesh, MeshBasicMaterial, MeshStandardMaterial,
-  Object3D, OrthographicCamera, PerspectiveCamera, PlaneBufferGeometry, Raycaster, Scene,
-  ShaderMaterial, SphereBufferGeometry, TorusBufferGeometry, Vector2, Vector3, WebGLRenderer,
+  AnimationClip, AnimationMixer, AmbientLight, BackSide, Box3, BoxBufferGeometry, BufferAttribute,
+  BufferGeometry, ConeBufferGeometry, CylinderBufferGeometry, DefaultLoadingManager,
+  DirectionalLight, DoubleSide, FileLoader, FrontSide, Group, Intersection, Light as LightObject,
+  LoopOnce, LoopRepeat, LoopPingPong, Material as MaterialObject, Matrix3, Matrix4, Mesh,
+  MeshBasicMaterial, MeshStandardMaterial, Object3D, OrthographicCamera, PerspectiveCamera,
+  PlaneBufferGeometry, Quaternion, Raycaster, Scene, ShaderMaterial, SphereBufferGeometry, Texture,
+  TorusBufferGeometry, Vector2, Vector3, WebGLRenderer,
 } from "three"
 import {SkeletonUtils} from "three/examples/jsm/utils/SkeletonUtils"
 import {getAbsoluteUrl} from "../../../core/assets"
 import {Clock} from "../../../core/clock"
 import {Color} from "../../../core/color"
 import {refEquals} from "../../../core/data"
-import {Bounds, Plane, Ray, dim2, quat, rect, vec2, vec2zero, vec3} from "../../../core/math"
+import {Bounds, Plane, Ray, dim2, rect, vec2, vec2zero, vec3} from "../../../core/math"
 import {Mutable, Subject, Value} from "../../../core/react"
 import {MutableMap, RMap} from "../../../core/rcollect"
 import {Disposer, Noop, NoopRemover, Remover, getValue} from "../../../core/util"
@@ -1073,52 +1074,49 @@ class ThreeFusedModels extends ThreeBounded implements FusedModels {
   init () {
     super.init()
     this.getProperty<Uint8Array>("encoded").onChange(topEncoded => {
-      this._loadingEncoded = topEncoded
-      this.objectValue.update(undefined)
-      const topGroup = new Group()
-      const boundingBox = topGroup.userData.boundingBox = new Box3()
-      let remaining = 0
-      const decode = (encoded :Uint8Array, group :Group, parentMatrix :Matrix4) => {
+      const mergedMeshes = new MergedMeshes()
+      const positionVector = new Vector3()
+      const rotationQuaternion = new Quaternion()
+      const scaleVector = new Vector3()
+      const decode = (encoded :Uint8Array, parentMatrix :Matrix4) => {
         decodeFused(encoded, {
           visitTile: (url, bounds, position, rotation, scale, flags) => {
-            remaining++
-            position = vec3.clone(position)
-            rotation = quat.clone(rotation)
-            scale = vec3.clone(scale)
-            loadGLTFWithBoundingBox(url).onValue(gltf => {
-              const scene = SkeletonUtils.clone(gltf.scene) as Object3D
-              scene.matrixAutoUpdate = false
-              scene.position.fromArray(position)
-              scene.quaternion.fromArray(rotation)
-              scene.scale.fromArray(scale)
-              scene.updateMatrix()
-              tmpBoundingBox.min.fromArray(bounds.min)
-              tmpBoundingBox.max.fromArray(bounds.max)
-              const fullMatrix = new Matrix4().multiplyMatrices(parentMatrix, scene.matrix)
-              boundingBox.union(tmpBoundingBox.applyMatrix4(fullMatrix))
-              group.add(scene)
-              scene.updateMatrixWorld()
-              if (--remaining === 0 && this._loadingEncoded === topEncoded) {
-                this.objectValue.update(topGroup)
-                this._boundsValid = false
-              }
-            })
+            mergedMeshes.add(
+              url,
+              new Matrix4()
+                .compose(
+                  positionVector.fromArray(position),
+                  rotationQuaternion.fromArray(rotation),
+                  scaleVector.fromArray(scale),
+                )
+                .premultiply(parentMatrix),
+              bounds,
+            )
           },
           visitFusedTiles: (source, position, rotation, scale) => {
-            const childGroup = new Group()
-            childGroup.matrixAutoUpdate = false
-            childGroup.position.fromArray(position)
-            childGroup.quaternion.fromArray(rotation)
-            childGroup.scale.fromArray(scale)
-            childGroup.updateMatrix()
-            group.add(childGroup)
-            childGroup.updateMatrixWorld()
-            const fullMatrix = new Matrix4().multiplyMatrices(parentMatrix, childGroup.matrix)
-            decode(source, childGroup, fullMatrix)
+            decode(
+              source,
+              new Matrix4()
+                .compose(
+                  positionVector.fromArray(position),
+                  rotationQuaternion.fromArray(rotation),
+                  scaleVector.fromArray(scale),
+                )
+                .premultiply(parentMatrix),
+            )
           }
         })
       }
-      decode(topEncoded, topGroup, new Matrix4())
+      decode(topEncoded, new Matrix4())
+
+      this.objectValue.update(undefined)
+      this._loadingEncoded = topEncoded
+      mergedMeshes.build(group => {
+        if (this._loadingEncoded === topEncoded) {
+          this.objectValue.update(group)
+          this._boundsValid = false
+        }
+      })
     })
     Value
       .join2(this.objectValue, this.getProperty<number>("opacity"))
@@ -1368,4 +1366,198 @@ function updateChildren (object :Object3D) {
 
 function getAnchor (url :string) {
   return url.substring(url.lastIndexOf("#") + 1)
+}
+
+/** Handles the merging of a group of models into combined meshes. */
+class MergedMeshes {
+  private readonly _models = new Map<string, {matrices :Matrix4[], bounds? :Bounds}>()
+
+  /** Adds a model instance to the merged group. */
+  add (url :string, matrix :Matrix4, bounds? :Bounds) {
+    let model = this._models.get(url)
+    if (!model) this._models.set(url, model = {matrices: [], bounds})
+    model.matrices.push(matrix)
+  }
+
+  build (onFinish :(group :Group) => void) {
+    // wait until we have all of the required models
+    Subject
+      .join(...Array.from(this._models.keys(), loadGLTFWithBoundingBox))
+      .once(gltfs => {
+        const applyToModels = (op :(gltf :GLTF, matrices :Matrix4[], bounds? :Bounds) => void) => {
+          let ii = 0
+          for (const {matrices, bounds} of this._models.values()) op(gltfs[ii++], matrices, bounds)
+        }
+
+        // compute the combined bounds
+        const group = new Group()
+        const boundingBox = group.userData.boundingBox = new Box3()
+        const gltfBoundingBox = new Box3()
+        applyToModels((gltf, matrices, bounds) => {
+          for (const matrix of matrices) {
+            if (bounds) {
+              gltfBoundingBox.min.fromArray(bounds.min)
+              gltfBoundingBox.max.fromArray(bounds.max)
+            } else gltfBoundingBox.copy(gltf.scene.userData.boundingBox)
+            boundingBox.union(gltfBoundingBox.applyMatrix4(matrix))
+          }
+        })
+
+        type MeshPartOp = (
+          material :MaterialObject,
+          mesh :Mesh,
+          start :number,
+          count :number,
+          matrices :Matrix4[],
+        ) => void
+        const applyToMeshParts = (op :MeshPartOp) => {
+          applyToModels((gltf, matrices) => {
+            gltf.scene.traverse(node => {
+              if (!(
+                node instanceof Mesh &&
+                node.geometry instanceof BufferGeometry &&
+                node.geometry.index
+              )) return
+              if (Array.isArray(node.material)) {
+                for (const group of node.geometry.groups) {
+                  const material = node.material[group.materialIndex || 0]
+                  op(material, node, group.start, group.count, matrices)
+                }
+              } else op(node.material, node, 0, node.geometry.index.count, matrices)
+            })
+          })
+        }
+
+        // find out how many meshes and vertices we're going to need
+        interface Stats {
+          material :MaterialObject
+          vertices :number
+          indices :number
+          color :boolean
+          geometry? :BufferGeometry
+        }
+        const stats = new Map<Texture|undefined, Stats>()
+        applyToMeshParts((material, mesh, start, count, matrices) => {
+          const texture = material["map"] as Texture|undefined
+          let textureStats = stats.get(texture)
+          if (!textureStats) {
+            stats.set(texture, textureStats = {material, vertices: 0, indices: 0, color: false})
+          }
+          const geometry = mesh.geometry as BufferGeometry
+          textureStats.vertices += geometry.getAttribute("position").count * matrices.length
+          textureStats.indices += count * matrices.length
+          textureStats.color = textureStats.color || !!geometry.getAttribute("color")
+        })
+
+        // create and add the meshes
+        for (const [texture, textureStats] of stats) {
+          const geometry = textureStats.geometry = new BufferGeometry()
+          const mesh = new Mesh(geometry, textureStats.material)
+          group.add(mesh)
+          const vertices = textureStats.vertices
+          const IndexArrayType = vertices < 65536 ? Uint16Array : Uint32Array
+          geometry.setIndex(new BufferAttribute(new IndexArrayType(textureStats.indices), 1))
+          geometry.setAttribute("position", new BufferAttribute(new Float32Array(vertices * 3), 3))
+          geometry.setAttribute("normal", new BufferAttribute(new Float32Array(vertices * 3), 3))
+          if (texture) {
+            geometry.setAttribute("uv", new BufferAttribute(new Float32Array(vertices * 2), 2))
+          }
+          if (textureStats.color) {
+            geometry.setAttribute("color", new BufferAttribute(new Float32Array(vertices * 3), 3))
+          }
+          // restart the counts for population
+          textureStats.indices = 0
+          textureStats.vertices = 0
+        }
+
+        // populate the meshes
+        const partMatrix = new Matrix4()
+        const m = partMatrix.elements
+        const normalMatrix = new Matrix3()
+        const n = normalMatrix.elements
+        applyToMeshParts((material, mesh, start, count, matrices) => {
+          const textureStats = stats.get(material["map"] as Texture|undefined)!
+          const destGeometry = textureStats.geometry!
+          const srcGeometry = mesh.geometry as BufferGeometry
+          const srcPositionAttribute = srcGeometry.getAttribute("position")
+          const vertices = srcPositionAttribute.count
+          const destPosition = destGeometry.getAttribute("position").array as Float32Array
+          const srcPosition = srcPositionAttribute.array as Float32Array
+          const destNormal = destGeometry.getAttribute("normal").array as Float32Array
+          const srcNormalAttribute = srcGeometry.getAttribute("normal")
+          const srcNormal = srcNormalAttribute && srcNormalAttribute.array as Float32Array
+          const destColorAttribute = destGeometry.getAttribute("color")
+          const destColor = destColorAttribute && destColorAttribute.array as Float32Array
+          const srcColorAttribute = srcGeometry.getAttribute("color")
+          const srcColor = srcColorAttribute && srcColorAttribute.array as Float32Array
+          const destUVAttribute = destGeometry.getAttribute("uv")
+          const destUV = destUVAttribute && destUVAttribute.array as Float32Array
+          const srcUVAttribute = srcGeometry.getAttribute("uv")
+          const srcUV = srcUVAttribute && srcUVAttribute.array as Float32Array
+          const destIndices = destGeometry.index.array as Uint16Array|Uint32Array
+          const srcIndices = srcGeometry.index.array
+          for (const matrix of matrices) {
+            partMatrix.multiplyMatrices(matrix, mesh.matrixWorld)
+
+            // transfer positions with transform
+            const offset = textureStats.vertices
+            for (let srcIdx = 0, srcEnd = vertices * 3, destIdx = offset * 3; srcIdx < srcEnd; ) {
+              const sx = srcPosition[srcIdx++]
+              const sy = srcPosition[srcIdx++]
+              const sz = srcPosition[srcIdx++]
+              destPosition[destIdx++] = m[0]*sx + m[4]*sy + m[8]*sz + m[12]
+              destPosition[destIdx++] = m[1]*sx + m[5]*sy + m[9]*sz + m[13]
+              destPosition[destIdx++] = m[2]*sx + m[6]*sy + m[10]*sz + m[14]
+            }
+
+            // transfer normals
+            if (srcNormal) {
+              normalMatrix.getNormalMatrix(partMatrix)
+              for (let srcIdx = 0, srcEnd = vertices * 3, destIdx = offset * 3; srcIdx < srcEnd; ) {
+                const sx = srcNormal[srcIdx++]
+                const sy = srcNormal[srcIdx++]
+                const sz = srcNormal[srcIdx++]
+                destNormal[destIdx++] = n[0]*sx + n[3]*sy + n[6]*sz
+                destNormal[destIdx++] = n[1]*sx + n[4]*sy + n[7]*sz
+                destNormal[destIdx++] = n[2]*sx + n[5]*sy + n[8]*sz
+              }
+            }
+
+            // transfer colors
+            if (destColor) {
+              if (srcColor) {
+                if (srcColorAttribute.itemSize === 3) destColor.set(srcColor, offset * 3)
+                else if (srcColorAttribute.itemSize === 4) {
+                  for (
+                    let srcIdx = 0, srcEnd = vertices * 4, destIdx = offset * 3;
+                    srcIdx < srcEnd;
+                  ) {
+                    destColor[destIdx++] = srcColor[srcIdx++]
+                    destColor[destIdx++] = srcColor[srcIdx++]
+                    destColor[destIdx++] = srcColor[srcIdx++]
+                    srcIdx++ // skip unused alpha component
+                  }
+                }
+              } else destColor.fill(1, offset * 3, (offset + vertices) * 3)
+            }
+
+            // transfer uvs
+            if (destUV && srcUV) destUV.set(srcUV, offset * 2)
+
+            // transfer indices with offset
+            for (
+              let srcIdx = start, srcEnd = start + count, destIdx = textureStats.indices;
+              srcIdx < srcEnd;
+            ) {
+              destIndices[destIdx++] = srcIndices[srcIdx++] + offset
+            }
+            textureStats.vertices += vertices
+            textureStats.indices += count
+          }
+        })
+
+        // notify the listener
+        onFinish(group)
+      })
+  }
 }
