@@ -248,9 +248,15 @@ export interface GameObject extends Disposable {
   /**  True if this object and all of its ancestors are active. */
   activeInHierarchy :boolean
 
+  /** Whether or not this object is static for purposes of merging. */
+  isStatic :boolean
+
   /** The game object's transform component. */
   readonly transform :Transform
 
+  /** The metadata for the object's viewable/editable properties. */
+  readonly propertiesMeta :RMap<string, PropertyMeta>
+  
   /** The types of the components of the object in sorted order. */
   readonly componentTypes :Value<string[]>
 

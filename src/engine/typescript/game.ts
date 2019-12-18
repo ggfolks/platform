@@ -582,6 +582,9 @@ function reorderId (ids :Mutable<string[]>, id :string, getOrder: (id :string) =
 
 type MessageHandler = (...args :any[]) => void
 
+const GameObjectPropertiesMeta = MutableMap.local<string, PropertyMeta>()
+GameObjectPropertiesMeta.set("isStatic", {type: "boolean", constraints: {}})
+
 export class TypeScriptGameObject implements GameObject {
   readonly id :string
   readonly tagValue = Mutable.local("")
@@ -591,6 +594,7 @@ export class TypeScriptGameObject implements GameObject {
   readonly orderValue = Mutable.local(0)
   readonly activeSelfValue = Mutable.local(false)
   readonly activeInHierarchyValue = Mutable.local(false)
+  readonly isStaticValue = Mutable.local(false)
   readonly transform :Transform
   readonly page? :Page
 
@@ -626,6 +630,11 @@ export class TypeScriptGameObject implements GameObject {
     if (this.transform.parent) this.transform.parent.gameObject.activeInHierarchy = true
     else this.gameEngine.activePage.update(this.page ? this.id : DEFAULT_PAGE)
   }
+
+  get isStatic () :boolean { return this.isStaticValue.current }
+  set isStatic (isStatic :boolean) { this.isStaticValue.update(isStatic) }
+
+  get propertiesMeta () :RMap<string, PropertyMeta> { return GameObjectPropertiesMeta }
 
   get componentTypes () :Value<string[]> { return this._componentTypes }
   get components () :RMap<string, Component> { return this._components }
@@ -782,6 +791,7 @@ export class TypeScriptGameObject implements GameObject {
       case "name": return this.nameValue as unknown as Value<T>
       case "order": return this.orderValue as unknown as Value<T>
       case "activeSelf": return this.activeSelfValue as unknown as Value<T>
+      case "isStatic": return this.isStaticValue as unknown as Value<T>
       default: return this.components.getValue(name) as unknown as Value<T>
     }
   }
@@ -793,6 +803,7 @@ export class TypeScriptGameObject implements GameObject {
     if (this.hideFlags !== 0) config.hideFlags = this.hideFlags
     if (this.name !== this.id) config.name = this.name
     if (this.order !== 0) config.order = this.order
+    if (this.isStatic) config.isStatic = true
     for (const type of this._componentTypes.current) {
       const component = this._components.require(type)
       if (!(component.hideFlags & hideMask)) config[type] = component.createConfig()
