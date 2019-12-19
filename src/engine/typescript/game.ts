@@ -370,8 +370,18 @@ export class TypeScriptGameEngine implements GameEngine {
 
   async loadSpace (url :string, layerMask? :number, cache? :boolean) :Promise<void> {
     this.disposeGameObjects(layerMask)
-    const spaceConfig = await JavaScript.load(url, cache)
-    this.createGameObjects(JavaScript.parse(spaceConfig), true)
+
+    // we use a modified URL to track loading; JavaScript.load will track the loaded file itself,
+    // but we don't want to report finished until we've created the game objects (which will likely
+    // start loading other resources when configured)
+    const loadingUrl = "gameObjects:" + url
+    this.renderEngine.noteLoading(loadingUrl)
+    try {
+      const spaceConfig = await JavaScript.load(url, cache)
+      this.createGameObjects(JavaScript.parse(spaceConfig), true)
+    } finally {
+      this.renderEngine.noteFinished(loadingUrl)
+    }
   }
 
   createGameObjects (configs :SpaceConfig, onDefaultPage = false) :PMap<GameObject> {
