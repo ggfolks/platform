@@ -4,8 +4,8 @@ import {
   DirectionalLight, DoubleSide, FileLoader, FrontSide, Group, Intersection, Light as LightObject,
   LoopOnce, LoopRepeat, LoopPingPong, Material as MaterialObject, Matrix3, Matrix4, Mesh,
   MeshBasicMaterial, MeshStandardMaterial, Object3D, OrthographicCamera, PerspectiveCamera,
-  PlaneBufferGeometry, Quaternion, Raycaster, Scene, ShaderMaterial, Sphere, SphereBufferGeometry,
-  Texture, TorusBufferGeometry, Vector2, Vector3, WebGLRenderer,
+  PlaneBufferGeometry, Quaternion, Ray as RayObject, Raycaster, Scene, ShaderMaterial, Sphere,
+  SphereBufferGeometry, Texture, TorusBufferGeometry, Vector2, Vector3, WebGLRenderer,
 } from "three"
 import {SkeletonUtils} from "three/examples/jsm/utils/SkeletonUtils"
 import {getAbsoluteUrl} from "../../../core/assets"
@@ -1386,13 +1386,18 @@ function getAnchor (url :string) {
 class MergedMeshes {
   private readonly _models = new Map<string, {matrices :Matrix4[], bounds? :Bounds}>()
 
-  /** Adds a model instance to the merged group. */
+  /** Adds a model instance to the merged group.
+    * @param url the URL of the model to add.
+    * @param matrix the transform matrix of the model relative to the merged group.
+    * @param [bounds] the tile bounds of the model, if any. */
   add (url :string, matrix :Matrix4, bounds? :Bounds) {
     let model = this._models.get(url)
     if (!model) this._models.set(url, model = {matrices: [], bounds})
     model.matrices.push(matrix)
   }
 
+  /** Builds the merged group.
+    * @param onFinish a callback to receive the created group when loaded and built. */
   build (onFinish :(group :Group) => void) {
     // wait until we have all of the required models
     Subject
@@ -1448,11 +1453,10 @@ class MergedMeshes {
 
         // find out how many meshes and vertices we're going to need
         interface Stats {
-          material :MaterialObject
           vertices :number
           indices :number
           color :boolean
-          geometry :BufferGeometry
+          mesh :OctreeMesh
         }
         const stats = new Map<Texture|undefined, Stats>()
         applyToMeshParts((material, mesh, start, count, matrices) => {
@@ -1460,11 +1464,10 @@ class MergedMeshes {
           let textureStats = stats.get(texture)
           if (!textureStats) {
             stats.set(texture, textureStats = {
-              material,
               vertices: 0,
               indices: 0,
               color: false,
-              geometry: new BufferGeometry(),
+              mesh: new OctreeMesh(new BufferGeometry(), material, geomBoundingBox),
             })
           }
           const geometry = mesh.geometry as BufferGeometry
@@ -1475,10 +1478,9 @@ class MergedMeshes {
 
         // create and add the meshes
         for (const [texture, textureStats] of stats) {
-          const geometry = textureStats.geometry
+          const geometry = textureStats.mesh.geometry as BufferGeometry
           geometry.boundingBox = new Box3()
-          const mesh = new Mesh(geometry, textureStats.material)
-          group.add(mesh)
+          group.add(textureStats.mesh)
           const vertices = textureStats.vertices
           const IndexArrayType = vertices < 65536 ? Uint16Array : Uint32Array
           geometry.setIndex(new BufferAttribute(new IndexArrayType(textureStats.indices), 1))
@@ -1502,7 +1504,7 @@ class MergedMeshes {
         const n = normalMatrix.elements
         applyToMeshParts((material, mesh, start, count, matrices) => {
           const textureStats = stats.get(material["map"] as Texture|undefined)!
-          const destGeometry = textureStats.geometry!
+          const destGeometry = textureStats.mesh.geometry as BufferGeometry
           const srcGeometry = mesh.geometry as BufferGeometry
           const srcPositionAttribute = srcGeometry.getAttribute("position")
           const vertices = srcPositionAttribute.count
@@ -1525,6 +1527,7 @@ class MergedMeshes {
             partMatrix.multiplyMatrices(matrix, mesh.matrixWorld)
             tmpBoundingBox.copy(srcGeometry.boundingBox).applyMatrix4(partMatrix)
             destGeometry.boundingBox.union(tmpBoundingBox)
+            textureStats.mesh.addToOctree(mesh, partMatrix.clone(), tmpBoundingBox.clone())
 
             // transfer positions with transform
             const offset = textureStats.vertices
@@ -1585,12 +1588,151 @@ class MergedMeshes {
 
         // compute bounding spheres from boxes
         for (const textureStats of stats.values()) {
-          textureStats.geometry.boundingSphere =
-            textureStats.geometry.boundingBox.getBoundingSphere(new Sphere())
+          textureStats.mesh.geometry.boundingSphere =
+            textureStats.mesh.geometry.boundingBox.getBoundingSphere(new Sphere())
         }
 
         // notify the listener
         onFinish(group)
       })
+  }
+}
+
+const tmpSphere = new Sphere()
+const inverseMatrix = new Matrix4()
+const tmpRay = new RayObject()
+const nodeBounds = new Box3()
+
+const MAX_DEPTH = 8
+
+let currentOctreeVisit = 0
+
+/** A mesh that uses an internal octree to accelerate raycasting. */
+class OctreeMesh extends Mesh {
+  private readonly _root = new OctreeNode()
+  private readonly _boundingBoxSize :number
+
+  constructor (
+    geometry :BufferGeometry,
+    material :MaterialObject,
+    private readonly _boundingBox :Box3,
+  ) {
+    super(geometry, material)
+    this._boundingBoxSize = getBoundingBoxSize(_boundingBox)
+  }
+
+  addToOctree (mesh :Mesh, matrix :Matrix4, boundingBox :Box3) {
+    const occupant = new OctreeOccupant(mesh, matrix, boundingBox)
+    const boxSize = getBoundingBoxSize(boundingBox)
+    const depth = (boxSize === 0)
+      ? 0
+      : Math.min(MAX_DEPTH, -Math.round(Math.log(boxSize / this._boundingBoxSize) / Math.log(2)))
+    nodeBounds.copy(this._boundingBox)
+    this._root.insert(occupant, depth)
+  }
+
+  raycast (raycaster :Raycaster, intersects :Intersection[]) {
+    // first check against sphere in world space (as Three.js does)
+    tmpSphere.copy(this.geometry.boundingSphere).applyMatrix4(this.matrixWorld)
+    if (!raycaster.ray.intersectsSphere(tmpSphere)) return
+
+    // store the original ray and transform into local space
+    tmpRay.copy(raycaster.ray)
+    inverseMatrix.getInverse(this.matrixWorld)
+    raycaster.ray.applyMatrix4(inverseMatrix)
+
+    // intersect against octree, then restore original ray
+    currentOctreeVisit++
+    nodeBounds.copy(this._boundingBox)
+    const previousIntersects = intersects.length
+    this._root.raycast(raycaster, intersects)
+    raycaster.ray.copy(tmpRay)
+
+    // transform any intersections to world space
+    for (let ii = previousIntersects; ii < intersects.length; ii++) {
+      const intersect = intersects[ii]
+      intersect.point.applyMatrix4(this.matrixWorld)
+      intersect.distance = intersect.point.distanceTo(raycaster.ray.origin)
+      intersect.object = this
+    }
+  }
+}
+
+function getBoundingBoxSize (box :Box3) {
+  return Math.max(box.max.x - box.min.x, box.max.y - box.min.y, box.max.z - box.min.z)
+}
+
+class OctreeOccupant {
+  lastVisit? :number
+
+  constructor (readonly mesh :Mesh, readonly matrix :Matrix4, readonly boundingBox :Box3) {}
+}
+
+class OctreeNode {
+  occupants? :OctreeOccupant[]
+  children? :OctreeNode[]
+
+  insert (occupant :OctreeOccupant, depth :number) {
+    if (depth === 0) {
+      if (!this.occupants) this.occupants = []
+      this.occupants.push(occupant)
+      return
+    }
+    const minX = nodeBounds.min.x, minY = nodeBounds.min.y, minZ = nodeBounds.min.z
+    const halfSizeX = (nodeBounds.max.x - minX) * 0.5
+    const halfSizeY = (nodeBounds.max.y - minY) * 0.5
+    const halfSizeZ = (nodeBounds.max.z - minZ) * 0.5
+    for (let ii = 0; ii < 8; ii++) {
+      const offsetX = (ii & 1) ? halfSizeX : 0
+      const offsetY = (ii & 2) ? halfSizeY : 0
+      const offsetZ = (ii & 4) ? halfSizeZ : 0
+      nodeBounds.min.set(minX + offsetX, minY + offsetY, minZ + offsetZ)
+      nodeBounds.max.set(
+        nodeBounds.min.x + halfSizeX,
+        nodeBounds.min.y + halfSizeY,
+        nodeBounds.min.z + halfSizeZ,
+      )
+      if (occupant.boundingBox.intersectsBox(nodeBounds)) {
+        if (!this.children) this.children = []
+        let child = this.children[ii]
+        if (!child) this.children[ii] = child = new OctreeNode()
+        child.insert(occupant, depth - 1)
+      }
+    }
+  }
+
+  raycast (raycaster :Raycaster, intersects :Intersection[]) {
+    if (this.occupants) {
+      for (const occupant of this.occupants) {
+        if (occupant.lastVisit === currentOctreeVisit) continue
+        occupant.lastVisit = currentOctreeVisit
+        const previousMatrixWorld = occupant.mesh.matrixWorld
+        occupant.mesh.matrixWorld = occupant.matrix
+        try {
+          occupant.mesh.raycast(raycaster, intersects)
+        } finally {
+          occupant.mesh.matrixWorld = previousMatrixWorld
+        }
+      }
+    }
+    if (!this.children) return
+    const minX = nodeBounds.min.x, minY = nodeBounds.min.y, minZ = nodeBounds.min.z
+    const halfSizeX = (nodeBounds.max.x - minX) * 0.5
+    const halfSizeY = (nodeBounds.max.y - minY) * 0.5
+    const halfSizeZ = (nodeBounds.max.z - minZ) * 0.5
+    for (let ii = 0; ii < 8; ii++) {
+      const child = this.children[ii]
+      if (!child) continue
+      const offsetX = (ii & 1) ? halfSizeX : 0
+      const offsetY = (ii & 2) ? halfSizeY : 0
+      const offsetZ = (ii & 4) ? halfSizeZ : 0
+      nodeBounds.min.set(minX + offsetX, minY + offsetY, minZ + offsetZ)
+      nodeBounds.max.set(
+        nodeBounds.min.x + halfSizeX,
+        nodeBounds.min.y + halfSizeY,
+        nodeBounds.min.z + halfSizeZ,
+      )
+      if (raycaster.ray.intersectsBox(nodeBounds)) child.raycast(raycaster, intersects)
+    }
   }
 }
