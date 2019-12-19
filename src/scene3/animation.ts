@@ -1,5 +1,6 @@
 import {AnimationMixer, Event} from "three"
 
+import {ResourceLoader} from "../core/assets"
 import {Emitter, Mutable, Value} from "../core/react"
 import {Disposable, Disposer, PMap, getValue} from "../core/util"
 import {loadGLTFAnimationClip} from "./entity"
@@ -53,6 +54,7 @@ export class AnimationController implements Disposable {
   constructor (
     private readonly _mixer :AnimationMixer,
     private readonly _conditions :Map<string, Value<boolean>>,
+    readonly loader :ResourceLoader,
     readonly config :AnimationControllerConfig,
   ) {
     this._enterState("default")
@@ -70,7 +72,7 @@ export class AnimationController implements Disposable {
     const transitioning = new Emitter<void>()
     if (config.url) {
       if (config.finishBeforeTransition) interruptPriority.update(config.interruptPriority || 0)
-      this._disposer.add(loadGLTFAnimationClip(config.url).once(clip => {
+      this._disposer.add(loadGLTFAnimationClip(this.loader, config.url).once(clip => {
         const action = this._mixer.clipAction(clip)
         action.clampWhenFinished = getValue(config.clampWhenFinished, false)
         action.repetitions = getValue(config.repetitions, Infinity)

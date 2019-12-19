@@ -3,18 +3,8 @@ import {dim2, rect} from "../core/math"
 import {dataEquals} from "../core/data"
 import {Color} from "../core/color"
 import {Subject} from "../core/react"
+import {ResourceLoader} from "../core/assets"
 import {makeRoundRectPath, strokeLinePath, strokeRoundRectSide} from "./util"
-
-/** Handles the resolution of images needed by style components. */
-export interface ImageResolver {
-
-  /** Resolves the image at `path`, eventually providing an HTML image or an error. Note that the
-    * `path` is treated as opaque. An app will provide an image resolver that handles paths of a
-    * particular sort (could be full URLs, could be paths relative to some root URL, could be
-    * something totally different) and will then make reference to those paths in its style
-    * definitions. */
-  resolve (path :string) :Subject<HTMLImageElement|Error>
-}
 
 const SpecPrefix = "$"
 
@@ -46,7 +36,7 @@ export interface StyleDefs {
 /** Provides style definitions for use when resolving styles, and other needed context. */
 export class StyleContext {
 
-  constructor (readonly styles :StyleDefs, readonly image :ImageResolver) {}
+  constructor (readonly styles :StyleDefs, readonly loader :ResourceLoader) {}
 
   resolveColor (spec :Spec<ColorConfig>) :string {
     if (typeof spec !== "string" || !spec.startsWith(SpecPrefix)) return makeCSSColor(spec)
@@ -215,7 +205,7 @@ export function makePaint (ctx :StyleContext, config :PaintConfig) :Subject<Pain
   case   "color": return Subject.constant(new ColorPaint(ctx.resolveColor(config.color)))
   case  "linear":
   case  "radial": return Subject.constant(new GradientPaint(ctx, config))
-  case "pattern": return ctx.image.resolve(config.image).map(img => {
+  case "pattern": return ctx.loader.getImage(config.image).map(img => {
       if (img instanceof HTMLImageElement) return new PatternPaint(img, config)
       // TODO: return error pattern
       else return new ColorPaint("#FF0000")

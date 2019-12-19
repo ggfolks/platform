@@ -1,4 +1,3 @@
-import {getAbsoluteUrl} from "../core/assets"
 import {Base64} from "../core/basex"
 import {Decoder, Encoder} from "../core/codec"
 import {Color} from "../core/color"
@@ -367,8 +366,6 @@ function cloneTypedArray (constructor :TypedArrayConstructor<any>, value :any) {
   return array
 }
 
-const urlCache = new Map<string, Promise<any>>()
-
 // make sure the types we use are in global scope
 const globalObject = (typeof window === "undefined") ? global : window
 globalObject["Color"] = Color
@@ -404,53 +401,6 @@ export abstract class JavaScript {
       default:
         throw new Error(`Don't know how to stringify "${value}" ("${typeof value}")`)
     }
-  }
-
-  /** Loads a JavaScript value from the provided URL, optionally caching it for future use.
-    * @param url the url to fetch.
-    * @param [cache=true] whether or not to cache the contents.
-    * @return a promise that will resolve to the value read. */
-  static load (url :string, cache = true) :Promise<any> {
-    if (!cache) return JavaScript.loadUncached(url)
-    url = getAbsoluteUrl(url)
-    let cached = urlCache.get(url)
-    if (!cached) urlCache.set(url, cached = JavaScript.loadUncached(url))
-    return cached
-  }
-
-  /** Loads a JavaScript value from the provided URL without caching it.
-    * @param url the url to fetch.
-    * @return a promise that will resolve to the value read. */
-  static async loadUncached (url :string) :Promise<any> {
-    url = getAbsoluteUrl(url)
-    if (typeof fetch === "undefined") {
-      const response = await new Promise<any>(resolve => require("http").get(url, resolve))
-      if (response.statusCode !== 200) {
-        response.resume() // consume response data
-        throw new Error(response.statusMessage)
-      }
-      response.setEncoding("utf8")
-      const contents = await new Promise<string>((resolve, reject) => {
-        let data = ""
-        response.on("data", (chunk :string) => data += chunk)
-        response.on("end", () => resolve(data))
-      })
-      return JavaScript.parse(contents)
-
-    } else {
-      const response = await fetch(url)
-      if (!response.ok) throw new Error(response.statusText)
-      const contents = await response.text()
-      return JavaScript.parse(contents)
-    }
-  }
-
-  /** Parses a JavaScript value and returns the result.  Currently this just evaluates the string,
-    * but in the future we may want to use a safer method.
-    * @param js the JavaScript string to parse.
-    * @return the parsed value. */
-  static parse (js :string) :any {
-    return eval(js)
   }
 
   /** Clones a value of the types supported for parsing and stringification.

@@ -1,4 +1,4 @@
-import {loadImage} from "../../core/assets"
+import {ResourceLoader} from "../../core/assets"
 import {Clock} from "../../core/clock"
 import {Color} from "../../core/color"
 import {refEquals} from "../../core/data"
@@ -277,7 +277,7 @@ export class TypeScriptGameEngine implements GameEngine {
 
   get gameObjects () :RMap<string, GameObject> { return this._gameObjects }
 
-  constructor (readonly root :HTMLElement, screen :Value<rect>) {
+  constructor (readonly root :HTMLElement, screen :Value<rect>, readonly loader :ResourceLoader) {
     this.ctx = {
       types: new NodeTypeRegistry(
         registerLogicNodes,
@@ -289,11 +289,11 @@ export class TypeScriptGameEngine implements GameEngine {
         registerUINodes,
         registerEngineNodes,
       ),
+      loader,
       subgraphs: new SubgraphRegistry(registerEngineSubgraphs),
       host: this._disposer.add(new HTMLHost(root)),
       theme: DefaultTheme,
       styles: DefaultStyles,
-      image: {resolve: loadImage},
       screen,
     }
     this.rootIds = this.activePage.switchMap(
@@ -368,20 +368,9 @@ export class TypeScriptGameEngine implements GameEngine {
     return this.createGameObject(type, mergedConfig)
   }
 
-  async loadSpace (url :string, layerMask? :number, cache? :boolean) :Promise<void> {
+  setSpace (config :SpaceConfig, layerMask? :number) {
     this.disposeGameObjects(layerMask)
-
-    // we use a modified URL to track loading; JavaScript.load will track the loaded file itself,
-    // but we don't want to report finished until we've created the game objects (which will likely
-    // start loading other resources when configured)
-    const loadingUrl = "gameObjects:" + url
-    this.renderEngine.noteLoading(loadingUrl)
-    try {
-      const spaceConfig = await JavaScript.load(url, cache)
-      this.createGameObjects(JavaScript.parse(spaceConfig), true)
-    } finally {
-      this.renderEngine.noteFinished(loadingUrl)
-    }
+    this.createGameObjects(config, true)
   }
 
   createGameObjects (configs :SpaceConfig, onDefaultPage = false) :PMap<GameObject> {

@@ -1,3 +1,4 @@
+import {ResourceLoader} from "../core/assets"
 import {Clock} from "../core/clock"
 import {Bounds, mat4, quat, vec3} from "../core/math"
 import {Mutable, Value} from "../core/react"
@@ -110,6 +111,9 @@ export interface GameEngine extends Disposable {
   /** The active physics engine. */
   readonly physicsEngine :PhysicsEngine
 
+  /** Used to load resources from some source (network or filesystem). */
+  readonly loader :ResourceLoader
+
   /** The keys of the pages in sorted order. */
   readonly pages :Value<string[]>
 
@@ -161,14 +165,12 @@ export interface GameEngine extends Disposable {
     * @param [config] additional configuration to merge in. */
   createPrimitive (type :PrimitiveType, config? :GameObjectConfig) :GameObject
 
-  /** Loads the space at the specified URL, replacing all current game objects.
-    * @param url the url of the space to load.
+  /** Sets the current space, replacing all current game objects.
+    * @param path the path to the space configuration resource.
     * @param [layerMask=ALL_LAYERS_MASK] the layer mask to use to determine which objects to
     * replace.
-    * @param [cache=true] whether or not to load the space through the cache.
-    * @return a promise that will resolve when the space is loaded.  Note that this doesn't mean
-    * all resources (models, etc.) referenced by the space have loaded. */
-  loadSpace (url :string, layerMask? :number, cache? :boolean) :Promise<void>
+    * @param [cache=true] whether or not to load the space through the cache. */
+  setSpace (config :SpaceConfig, layerMask? :number) :void
 
   /** Creates a set of game objects on the current page.
     * @param configs the map from name to config.
@@ -256,7 +258,7 @@ export interface GameObject extends Disposable {
 
   /** The metadata for the object's viewable/editable properties. */
   readonly propertiesMeta :RMap<string, PropertyMeta>
-  
+
   /** The types of the components of the object in sorted order. */
   readonly componentTypes :Value<string[]>
 

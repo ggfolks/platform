@@ -1,7 +1,8 @@
 import {PMap, log} from "../core/util"
 import {Record} from "../core/data"
 import {makeConfig} from "../core/config"
-import {ImageResolver, StyleContext, StyleDefs} from "./style"
+import {ResourceLoader} from "../core/assets"
+import {StyleContext, StyleDefs} from "./style"
 import {Model, MissingModelElem, MissingConfig} from "./model"
 import {Control, Element, ErrorViz, Styler, Root} from "./element"
 
@@ -91,8 +92,8 @@ export class UI {
     }
   }
 
-  constructor (private theme :Theme, defs :StyleDefs, image :ImageResolver) {
-    this.style = new StyleContext(defs, image)
+  constructor (private theme :Theme, defs :StyleDefs, loader :ResourceLoader) {
+    this.style = new StyleContext(defs, loader)
   }
 
   createRoot (config :Root.Config, model :Model) :Root {

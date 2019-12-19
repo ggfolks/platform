@@ -7,7 +7,7 @@ import {
 import {GLTFLoader} from "three/examples/jsm/loaders/GLTFLoader"
 import {SkeletonUtils} from "three/examples/jsm/utils/SkeletonUtils"
 
-import {getAbsoluteUrl} from "../core/assets"
+import {ResourceLoader} from "../core/assets"
 import {Clock} from "../core/clock"
 import {Subject} from "../core/react"
 import {RMap} from "../core/rcollect"
@@ -137,6 +137,7 @@ export class SceneSystem extends System {
   private _pressedObjects :Map<number, Object3D> = new Map()
 
   constructor (domain :Domain,
+               readonly loader :ResourceLoader,
                readonly trans :TransformComponent,
                readonly obj :Component<Object3D>,
                readonly hovers? :Component<HoverMap>,
@@ -319,7 +320,7 @@ export class SceneSystem extends System {
     this.scene.add(obj)
     this._updateObject(id, obj)
     obj.updateMatrixWorld()
-    createObject3D(cfg).onValue(obj => {
+    createObject3D(this.loader, cfg).onValue(obj => {
       if (cfg.onLoad) obj = cfg.onLoad(obj) || obj
       // if this is the initial, default Object3D, it won't actually be in the scene;
       // otherwise, we're replacing the model with another
@@ -409,21 +410,21 @@ const errorAnimation = new AnimationClip("error", 0, [])
  * Loads a GLTF animation clip identified by an anchored URL, where the anchor tag is taken to
  * represent the clip name.
  */
-export function loadGLTFAnimationClip (url :string) :Subject<AnimationClip> {
-  const idx = url.indexOf("#")
-  return loadGLTF(url.substring(0, idx)).map(gltf => {
-    const clip = AnimationClip.findByName(gltf.animations, url.substring(idx + 1))
+export function loadGLTFAnimationClip (loader :ResourceLoader, path :string) :Subject<AnimationClip> {
+  const idx = path.indexOf("#")
+  return loadGLTF(loader, path.substring(0, idx)).map(gltf => {
+    const clip = AnimationClip.findByName(gltf.animations, path.substring(idx + 1))
     if (clip) return clip
-    log.warn("Missing requested animation", "url", url)
+    log.warn("Missing requested animation", "path", path)
     return errorAnimation
   })
 }
 
-export function createObject3D (objectConfig: Object3DConfig) :Subject<Object3D> {
+export function createObject3D (loader :ResourceLoader, objectConfig: Object3DConfig) :Subject<Object3D> {
   switch (objectConfig.type) {
     case "gltf":
       const gltfConfig = objectConfig as GLTFConfig
-      return loadGLTF(gltfConfig.url).map(gltf => SkeletonUtils.clone(gltf.scene) as Object3D)
+      return loadGLTF(loader, gltfConfig.url).map(gltf => SkeletonUtils.clone(gltf.scene) as Object3D)
 
     case "json":
       const jsonConfig = objectConfig as JsonConfig
@@ -477,18 +478,18 @@ const errorMat = new MeshBasicMaterial({color: 0xFF0000})
 /** Loads a GLTF from the provided URL.
   * @param url the URL of the GLTF to load.
   * @return a Subject that will resolve to the loaded model. */
-export function loadGLTF (url :string) :Subject<GLTF> {
-  url = getAbsoluteUrl(url)
-  let gltf = activeGLTFs.get(url)
+export function loadGLTF (loader :ResourceLoader, path :string) :Subject<GLTF> {
+  let gltf = activeGLTFs.get(path)
   if (!gltf) {
     let active = false
     gltf = Subject.deriveSubject(dispatch => {
       active = true
-      activeGLTFs.set(url, gltf!)
-      let savedGLTF = dormantGLTFs.get(url)
+      activeGLTFs.set(path, gltf!)
+      let savedGLTF = dormantGLTFs.get(path)
       if (savedGLTF) {
-        dormantGLTFs.delete(url)
+        dormantGLTFs.delete(path)
       } else {
+        const url = loader.getUrl(path)
         savedGLTF = new Promise(resolve => new GLTFLoader().load(
           url,
           gltf => {
@@ -511,8 +512,8 @@ export function loadGLTF (url :string) :Subject<GLTF> {
       })
       return () => {
         active = false
-        activeGLTFs.delete(url)
-        dormantGLTFs.set(url, savedGLTF!)
+        activeGLTFs.delete(path)
+        dormantGLTFs.set(path, savedGLTF!)
       }
     })
   }

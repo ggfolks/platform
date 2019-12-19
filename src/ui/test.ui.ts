@@ -1,4 +1,4 @@
-import {Subject} from "../core/react"
+import {FetchResourceLoader} from "../core/assets"
 import {StyleDefs} from "./style"
 import {UI, Theme} from "./ui"
 
@@ -46,12 +46,8 @@ const theme :Theme = {
   }
 }
 
-const noopResolver = {
-  resolve: (path :string) => Subject.constant(new Error("unsupported"))
-}
-
 test("style resolution", () => {
-  const ui = new UI(theme, styles, noopResolver)
+  const ui = new UI(theme, styles, new FetchResourceLoader("unused"))
 
   const lstyles = {stroke: "$lightGray", disabled: {font: "$italic"}}
   const scope = {id: "button", states: ["normal", "disabled", "pressed"]}

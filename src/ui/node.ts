@@ -15,7 +15,7 @@ import {Host, Root, getCurrentEditNumber} from "./element"
 import {Action, Command, Model, ModelData, ModelKey, ElementsModel, mapModel} from "./model"
 import {Property} from "./property"
 import {Theme, UI} from "./ui"
-import {ImageResolver, StyleDefs} from "./style"
+import {StyleDefs} from "./style"
 
 export type InputValue = InputEdge<any> | InputEdges<any>
 
@@ -24,7 +24,6 @@ export interface UINodeContext extends NodeContext {
   host :Host
   theme :Theme
   styles :StyleDefs
-  image :ImageResolver
   screen :Value<rect>
 }
 

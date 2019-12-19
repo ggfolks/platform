@@ -144,7 +144,7 @@ class AnimationActionNode extends EntityComponentNode<Component<AnimationMixer>>
     if (!this._action) {
       this._action = Subject.join2(
         component.getValue(this._entityId),
-        loadGLTFAnimationClip(this.config.url)
+        loadGLTFAnimationClip(this.graph.ctx.loader, this.config.url)
       ).map(([mixer, clip]) => mixer.clipAction(clip))
     }
     return this._action
@@ -200,6 +200,7 @@ class AnimationControllerNode extends EntityComponentNode<Component<AnimationMix
       this._disposer.add(this._animationController = new AnimationController(
         mixer,
         conditions,
+        this.graph.ctx.loader,
         this.config.config,
       ))
       this._output.update(this._animationController.state)

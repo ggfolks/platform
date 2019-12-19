@@ -1,14 +1,14 @@
 import {
   AnimationClip, AnimationMixer, AmbientLight, BackSide, Box3, BoxBufferGeometry, BufferAttribute,
   BufferGeometry, ConeBufferGeometry, CylinderBufferGeometry, DefaultLoadingManager,
-  DirectionalLight, DoubleSide, FileLoader, FrontSide, Group, Intersection, Light as LightObject,
+  DirectionalLight, DoubleSide, FrontSide, Group, Intersection, Light as LightObject,
   LoopOnce, LoopRepeat, LoopPingPong, Material as MaterialObject, Matrix3, Matrix4, Mesh,
   MeshBasicMaterial, MeshStandardMaterial, Object3D, OrthographicCamera, PerspectiveCamera,
   PlaneBufferGeometry, Quaternion, Ray as RayObject, Raycaster, Scene, ShaderMaterial, Sphere,
   SphereBufferGeometry, Texture, TorusBufferGeometry, Vector2, Vector3, WebGLRenderer,
 } from "three"
 import {SkeletonUtils} from "three/examples/jsm/utils/SkeletonUtils"
-import {getAbsoluteUrl} from "../../../core/assets"
+import {ResourceLoader} from "../../../core/assets"
 import {Clock} from "../../../core/clock"
 import {Color} from "../../../core/color"
 import {refEquals} from "../../../core/data"
@@ -28,7 +28,7 @@ import {
   Bounded, Camera, FusedModels, Light, LightType, LightTypes, Material, MaterialSide, MaterialSides,
   MeshRenderer, Model, RaycastHit, RenderEngine,
 } from "../../render"
-import {JavaScript, decodeFused} from "../../util"
+import {decodeFused} from "../../util"
 import {
   TypeScriptComponent, TypeScriptCone, TypeScriptConfigurable, TypeScriptCube, TypeScriptCylinder,
   TypeScriptGameEngine, TypeScriptGameObject, TypeScriptMesh, TypeScriptMeshFilter, TypeScriptPage,
@@ -86,15 +86,6 @@ export class ThreeRenderEngine implements RenderEngine {
 
   constructor (readonly gameEngine :TypeScriptGameEngine) {
     gameEngine._renderEngine = this
-
-    // replace loadUncached with a version that uses LoadingManager
-    JavaScript.loadUncached = async function (url :string) :Promise<any> {
-      const contents :string|ArrayBuffer = await new Promise((resolve, reject) => {
-        const loader = new FileLoader()
-        loader.load(getAbsoluteUrl(url), resolve, Noop, reject)
-      })
-      return JavaScript.parse(contents as string)
-    }
 
     this._disposer.add(this.renderer)
     this._disposer.add(this.scene)
@@ -157,7 +148,7 @@ export class ThreeRenderEngine implements RenderEngine {
   }
 
   preload (url :string) :void {
-    loadGLTF(url).once(Noop) // subscribe to trigger loading
+    loadGLTF(this.gameEngine.loader, url).once(Noop) // subscribe to trigger loading
   }
 
   noteLoading (url :string) :void {
@@ -1055,7 +1046,7 @@ class ThreeModel extends ThreeBounded implements Model {
     this.getProperty<string>("url").onValue(url => {
       this._urlRemover()
       this.objectValue.update(undefined)
-      this._urlRemover = loadGLTFWithBoundingBox(url).onValue(gltf => {
+      this._urlRemover = loadGLTFWithBoundingBox(this.gameEngine.loader, url).onValue(gltf => {
         this.objectValue.update(SkeletonUtils.clone(gltf.scene) as Object3D)
         this._boundsValid = false
       })
@@ -1086,7 +1077,7 @@ class ThreeFusedModels extends ThreeBounded implements FusedModels {
   init () {
     super.init()
     this.getProperty<Uint8Array>("encoded").onChange(topEncoded => {
-      const mergedMeshes = new MergedMeshes()
+      const mergedMeshes = new MergedMeshes(this.gameEngine)
       const positionVector = new Vector3()
       const rotationQuaternion = new Quaternion()
       const scaleVector = new Vector3()
@@ -1175,8 +1166,8 @@ const PlaceholderGLTF = Subject.constant<GLTF>({
   animations: [],
 })
 
-function loadGLTFWithBoundingBox(url :string) :Subject<GLTF> {
-  return (url ? loadGLTF(url) : PlaceholderGLTF).map(gltf => {
+function loadGLTFWithBoundingBox (loader :ResourceLoader, url :string) :Subject<GLTF> {
+  return (url ? loadGLTF(loader, url) : PlaceholderGLTF).map(gltf => {
     const userData = gltf.scene.userData
     if (userData.boundingBox) return gltf
     const sceneBoundingBox = userData.boundingBox = new Box3()
@@ -1287,7 +1278,7 @@ class ThreeAnimation extends TypeScriptComponent implements Animation {
             this._updateUrls()
           }
           if (!url) return
-          loadGLTF(url).onValue(gltf => {
+          loadGLTF(this.gameEngine.loader, url).onValue(gltf => {
             this._modelUrlsStart = this._urls.length
             for (const clip of gltf.animations) {
               const fullUrl = url + "#" + clip.name
@@ -1361,7 +1352,7 @@ class ThreeAnimation extends TypeScriptComponent implements Animation {
       const urlForName = this._urlsByName.get(nameOrUrl)
       if (urlForName) nameOrUrl = urlForName
     }
-    return loadGLTFAnimationClip(nameOrUrl)
+    return loadGLTFAnimationClip(this.gameEngine.loader, nameOrUrl)
   }
 
   update (clock :Clock) {
@@ -1391,6 +1382,8 @@ function getAnchor (url :string) {
 class MergedMeshes {
   private readonly _models = new Map<string, {matrices :Matrix4[], bounds? :Bounds}>()
 
+  constructor (readonly gameEngine :TypeScriptGameEngine) {}
+
   /** Adds a model instance to the merged group.
     * @param url the URL of the model to add.
     * @param matrix the transform matrix of the model relative to the merged group.
@@ -1406,7 +1399,8 @@ class MergedMeshes {
   build (onFinish :(group :Group) => void) {
     // wait until we have all of the required models
     Subject
-      .join(...Array.from(this._models.keys(), loadGLTFWithBoundingBox))
+      .join(...Array.from(this._models.keys(),
+                          path => loadGLTFWithBoundingBox(this.gameEngine.loader, path)))
       .once(gltfs => {
         const applyToModels = (op :(gltf :GLTF, matrices :Matrix4[], bounds? :Bounds) => void) => {
           let ii = 0

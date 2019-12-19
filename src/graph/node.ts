@@ -1,3 +1,4 @@
+import {ResourceLoader} from "../core/assets"
 import {refEquals} from "../core/data"
 import {ChangeFn, Mutable, Value, addListener, dispatchChange} from "../core/react"
 import {MutableMap, RMap} from "../core/rcollect"
@@ -33,6 +34,7 @@ export type OutputEdge<T> = undefined
 /** Base interface for node contexts. */
 export interface NodeContext {
   types :NodeTypeRegistry
+  loader :ResourceLoader
   subgraphs :SubgraphRegistry
   subgraph? :Subgraph
   // this allows NodeContext to contain "extra" stuff that TypeScript will ignore
