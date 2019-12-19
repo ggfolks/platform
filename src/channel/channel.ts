@@ -264,7 +264,10 @@ class ChannelImpl<M> implements Channel<M> {
     try {
       const msg = this.codec.decode(dec)
       if (DebugLog) log.debug("recvMsg", "channel", this, "msg", msg)
-      this.messages.emit(msg)
+      try { this.messages.emit(msg) }
+      catch (error) {
+        log.warn("Failed to dispatch message", "channel", this, "msg", msg, error)
+      }
     } catch (error) {
       log.warn("Failed to decode message", "channel", this, "size", dec.source.length, error)
     }

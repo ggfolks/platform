@@ -524,13 +524,18 @@ export class Decoder {
     return into
   }
 
-  syncSet<E> (etype :KeyType, into :SyncSet<E>) {
+  syncSet<E> (etype :KeyType, into :SyncSet<E>, errors :Error[]) {
     const size = this.getSize32()
     const tmp = new Set<E>()
     for (let ii = 0; ii < size; ii += 1) tmp.add(this.getValue(etype))
-    for (const elem of into) if (!tmp.has(elem)) into.delete(elem, true)
-    for (const elem of tmp) into.add(elem, true)
-    return into
+    for (const elem of into) if (!tmp.has(elem)) {
+      try { into.delete(elem, true) }
+      catch (err) { errors.push(err) }
+    }
+    for (const elem of tmp) {
+      try { into.add(elem, true) }
+      catch (err) { errors.push(err) }
+    }
   }
 
   getMap<K,V> (ktype :KeyType, vtype :ValueType, into :Map<K,V>) :Map<K,V> {
@@ -550,16 +555,21 @@ export class Decoder {
     return map
   }
 
-  syncMap<K,V> (ktype :KeyType, vtype :ValueType, into :SyncMap<K,V>) {
+  syncMap<K,V> (ktype :KeyType, vtype :ValueType, into :SyncMap<K,V>, errors :Error[]) {
     const size = this.getSize32()
     const keys = [], vals :V[] = []
     for (let ii = 0; ii < size; ii += 1) {
       keys.push(this.getValue(ktype))
       vals.push(this.getValue(vtype))
     }
-    for (const key of into.keys()) if (!keys.includes(key)) into.delete(key, true)
-    for (let ii = 0; ii < size; ii += 1) into.set(keys[ii], vals[ii], true)
-    return into
+    for (const key of into.keys()) if (!keys.includes(key)) {
+      try { into.delete(key, true) }
+      catch (err) { errors.push(err) }
+    }
+    for (let ii = 0; ii < size; ii += 1) {
+      try { into.set(keys[ii], vals[ii], true) }
+      catch (err) { errors.push(err) }
+    }
   }
 
   getPath () :Path {

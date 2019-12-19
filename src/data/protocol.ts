@@ -99,6 +99,7 @@ export function addObject (enc :Encoder, rcpt :Auth, obj :DObject) {
 }
 
 export function getObject (dec :Decoder, into :DObject) :DObject {
+  const errors :Error[] = []
   while (true) {
     const idx = dec.getValue("size8")
     if (idx === 255) break
@@ -107,13 +108,23 @@ export function getObject (dec :Decoder, into :DObject) :DObject {
     const prop = into[meta.name]
     if (DebugLog) log.debug("Reading obj prop", "name", meta.name, "type", meta.type)
     switch (meta.type) {
-    case "value": (prop as DMutable<any>).update(dec.getValue(meta.vtype), true) ; break
-    case "set": dec.syncSet(meta.etype, (prop as Set<any>)) ; break
-    case "map": dec.syncMap(meta.ktype, meta.vtype, (prop as Map<any, any>)) ; break
+    case "value":
+      const nvalue = dec.getValue(meta.vtype)
+      try { (prop as DMutable<any>).update(nvalue, true) }
+      catch (err) { errors.push(err) }
+      break
+    case "set":
+      dec.syncSet(meta.etype, (prop as Set<any>), errors)
+      break
+    case "map":
+      dec.syncMap(meta.ktype, meta.vtype, (prop as Map<any, any>), errors)
+      break
     case "collection": break // TODO: anything?
     case "queue": break // TODO: anything?
     }
   }
+  // these are just application errors, not decoding errors, so log them and move on
+  for (const err of errors) log.warn("Notify failure during object receive", "obj", into, err)
   return into
 }
 

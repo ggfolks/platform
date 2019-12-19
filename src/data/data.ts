@@ -1,4 +1,4 @@
-import {Remover} from "../core/util"
+import {Remover, log} from "../core/util"
 import {UUID, UUID0} from "../core/uuid"
 import {Path} from "../core/path"
 import {Data, Record, dataEquals, refEquals} from "../core/data"
@@ -246,13 +246,17 @@ export abstract class DObject {
   noteWrite (msg :SyncMsg) { this.source.sendSync(msg) }
 
   applySync (msg :SyncMsg, fromSync :boolean) {
-    const prop = this[this.metas[msg.idx].name]
-    switch (msg.type) {
-    case ObjType.VALSET: (prop as DMutable<any>).update(msg.value, fromSync) ; break
-    case ObjType.SETADD: (prop as DMutableSet<any>).add(msg.elem, fromSync) ; break
-    case ObjType.SETDEL: (prop as DMutableSet<any>).delete(msg.elem, fromSync) ; break
-    case ObjType.MAPSET: (prop as DMutableMap<any,any>).set(msg.key, msg.value, fromSync) ; break
-    case ObjType.MAPDEL: (prop as DMutableMap<any,any>).delete(msg.key, fromSync) ; break
+    const meta = this.metas[msg.idx], prop = this[meta.name]
+    try {
+      switch (msg.type) {
+      case ObjType.VALSET: (prop as DMutable<any>).update(msg.value, fromSync) ; break
+      case ObjType.SETADD: (prop as DMutableSet<any>).add(msg.elem, fromSync) ; break
+      case ObjType.SETDEL: (prop as DMutableSet<any>).delete(msg.elem, fromSync) ; break
+      case ObjType.MAPSET: (prop as DMutableMap<any,any>).set(msg.key, msg.value, fromSync) ; break
+      case ObjType.MAPDEL: (prop as DMutableMap<any,any>).delete(msg.key, fromSync) ; break
+      }
+    } catch (err) {
+      log.warn("Change notify failed", "obj", this, "prop", meta.name, "msg", msg, err)
     }
   }
 
