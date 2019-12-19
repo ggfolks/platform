@@ -430,6 +430,11 @@ export class Subject<T> extends Source<T> {
     return Subject.deriveSubject(d => source.onValue(d))
   }
 
+  /** Returns a [[Subject]] that is emits values from `source` that pass the predicate `p`. */
+  static filtered<T> (source :Source<T>, p :(v:T) => boolean) :Subject<T> {
+    return Subject.deriveSubject(d => source.onValue(v => p(v) && d(v)))
+  }
+
   /** Joins `sources` into a single subject which contains the underlying sources combined into a
     * single array. This subject will initially complete once all of the underlying sources have
     * initially completed. Then, when any of the underlying sources changes, this subject will
