@@ -528,33 +528,33 @@ export class FusedEncoder {
   ) {
     const code = this._urlCodes.get(url)
     if (code !== undefined) {
-      this._encoder.addValue(code, "varInt")
+      this._encoder.addVarInt(code)
     } else {
       const code = this._nextCode++
       this._urlCodes.set(url, code)
-      this._encoder.addValue(code, "varInt")
-      this._encoder.addValue(url, "string")
+      this._encoder.addVarInt(code)
+      this._encoder.addString(url)
       this._addFloatTriplet(bounds.min)
       this._addFloatTriplet(bounds.max)
     }
     const precision = getBinaryPrecision(position)
     const cardinal = getCardinalRotation(rotation)
     if (precision === -1 || cardinal === -1 || !vec3.equals(scale, vec3one)) {
-      this._encoder.addValue(flags << 2 | 3, "varSize")
+      this._encoder.addVarSize(flags << 2 | 3)
       this._addFloatTriplet(position)
       this._addFloatTriplet(rotation)
       this._addFloatTriplet(scale)
       return
     }
-    this._encoder.addValue(flags << 4 | cardinal << 2 | precision, "varSize")
+    this._encoder.addVarSize(flags << 4 | cardinal << 2 | precision)
     const factor = 2 ** precision
-    this._encoder.addValue(Math.round(position[0] * factor), "varInt")
-    this._encoder.addValue(Math.round(position[1] * factor), "varInt")
-    this._encoder.addValue(Math.round(position[2] * factor), "varInt")
+    this._encoder.addVarInt(Math.round(position[0] * factor))
+    this._encoder.addVarInt(Math.round(position[1] * factor))
+    this._encoder.addVarInt(Math.round(position[2] * factor))
   }
 
   addFusedTiles (source :Uint8Array, position :vec3, rotation :quat, scale :vec3) {
-    this._encoder.addValue(-source.length, "varInt")
+    this._encoder.addVarInt(-source.length)
     for (let ii = 0; ii < source.length; ii++) this._encoder.addSize8(source[ii])
     this._addFloatTriplet(position)
     this._addFloatTriplet(rotation)
@@ -567,9 +567,9 @@ export class FusedEncoder {
   }
 
   private _addFloatTriplet (array :Float32Array) {
-    this._encoder.addValue(array[0], "float32")
-    this._encoder.addValue(array[1], "float32")
-    this._encoder.addValue(array[2], "float32")
+    this._encoder.addFloat32(array[0])
+    this._encoder.addFloat32(array[1])
+    this._encoder.addFloat32(array[2])
   }
 }
 
@@ -610,12 +610,12 @@ export function decodeFused (source :Uint8Array, visitor :FusedVisitor) {
   const rotation = quat.create()
   const scale = vec3.create()
   const readTriplet = (out :Float32Array) => {
-    out[0] = decoder.getValue("float32")
-    out[1] = decoder.getValue("float32")
-    out[2] = decoder.getValue("float32")
+    out[0] = decoder.getFloat32()
+    out[1] = decoder.getFloat32()
+    out[2] = decoder.getFloat32()
   }
   while (decoder.pos < source.byteLength) {
-    const code = decoder.getValue("varInt")
+    const code = decoder.getVarInt()
     if (code <= 0) {
       const source = new Uint8Array(-code)
       for (let ii = 0; ii < source.length; ii++) source[ii] = decoder.getSize8()
@@ -628,14 +628,14 @@ export function decodeFused (source :Uint8Array, visitor :FusedVisitor) {
     }
     let mapping = urlMappings.get(code)
     if (mapping === undefined) {
-      const newUrl = decoder.getValue("string") as string
+      const newUrl = decoder.getString()
       const newBounds = Bounds.create()
       readTriplet(newBounds.min)
       readTriplet(newBounds.max)
       urlMappings.set(code, mapping = [newUrl, newBounds])
     }
     const [url, bounds] = mapping
-    const bits = decoder.getValue("varSize")
+    const bits = decoder.getVarSize()
     const precision = bits & 3
     if (precision === 3) {
       const flags = bits >> 2
@@ -648,9 +648,9 @@ export function decodeFused (source :Uint8Array, visitor :FusedVisitor) {
     }
     const cardinal = (bits >> 2) & 3
     const flags = bits >> 4
-    position[0] = decoder.getValue("varInt")
-    position[1] = decoder.getValue("varInt")
-    position[2] = decoder.getValue("varInt")
+    position[0] = decoder.getVarInt()
+    position[1] = decoder.getVarInt()
+    position[2] = decoder.getVarInt()
     vec3.scale(position, position, 2 ** -precision)
     visitor.visitTile(url, bounds, position, CardinalRotations[cardinal], vec3one, flags)
   }
