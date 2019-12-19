@@ -4,8 +4,8 @@ import {
   DirectionalLight, DoubleSide, FileLoader, FrontSide, Group, Intersection, Light as LightObject,
   LoopOnce, LoopRepeat, LoopPingPong, Material as MaterialObject, Matrix3, Matrix4, Mesh,
   MeshBasicMaterial, MeshStandardMaterial, Object3D, OrthographicCamera, PerspectiveCamera,
-  PlaneBufferGeometry, Quaternion, Raycaster, Scene, ShaderMaterial, SphereBufferGeometry, Texture,
-  TorusBufferGeometry, Vector2, Vector3, WebGLRenderer,
+  PlaneBufferGeometry, Quaternion, Raycaster, Scene, ShaderMaterial, Sphere, SphereBufferGeometry,
+  Texture, TorusBufferGeometry, Vector2, Vector3, WebGLRenderer,
 } from "three"
 import {SkeletonUtils} from "three/examples/jsm/utils/SkeletonUtils"
 import {getAbsoluteUrl} from "../../../core/assets"
@@ -1173,10 +1173,17 @@ const PlaceholderGLTF = Subject.constant<GLTF>({
 function loadGLTFWithBoundingBox(url :string) :Subject<GLTF> {
   return (url ? loadGLTF(url) : PlaceholderGLTF).map(gltf => {
     const userData = gltf.scene.userData
-    if (!userData.boundingBox) {
-      userData.boundingBox = new Box3()
-      userData.boundingBox.expandByObject(gltf.scene)
-    }
+    if (userData.boundingBox) return gltf
+    const sceneBoundingBox = userData.boundingBox = new Box3()
+    const meshBoundingBox = new Box3()
+    gltf.scene.traverse(node => {
+      node.updateWorldMatrix(false, false)
+      if (!(node instanceof Mesh)) return
+      node.geometry.computeBoundingBox()
+      node.geometry.boundingSphere = node.geometry.boundingBox.getBoundingSphere(new Sphere())
+      meshBoundingBox.copy(node.geometry.boundingBox).applyMatrix4(node.matrixWorld)
+      sceneBoundingBox.union(meshBoundingBox)
+    })
     return gltf
   })
 }
@@ -1396,17 +1403,21 @@ class MergedMeshes {
           for (const {matrices, bounds} of this._models.values()) op(gltfs[ii++], matrices, bounds)
         }
 
-        // compute the combined bounds
+        // compute the combined bounds (both tile bounds, which we store in the group for snapping,
+        // and geometry bounds, which we use for rendering and raycasting)
         const group = new Group()
-        const boundingBox = group.userData.boundingBox = new Box3()
-        const gltfBoundingBox = new Box3()
+        const tileBoundingBox = group.userData.boundingBox = new Box3()
+        const geomBoundingBox = new Box3()
+        const tmpBoundingBox = new Box3()
         applyToModels((gltf, matrices, bounds) => {
           for (const matrix of matrices) {
+            tmpBoundingBox.copy(gltf.scene.userData.boundingBox)
+            geomBoundingBox.union(tmpBoundingBox.applyMatrix4(matrix))
             if (bounds) {
-              gltfBoundingBox.min.fromArray(bounds.min)
-              gltfBoundingBox.max.fromArray(bounds.max)
-            } else gltfBoundingBox.copy(gltf.scene.userData.boundingBox)
-            boundingBox.union(gltfBoundingBox.applyMatrix4(matrix))
+              tmpBoundingBox.min.fromArray(bounds.min)
+              tmpBoundingBox.max.fromArray(bounds.max)
+              tileBoundingBox.union(tmpBoundingBox.applyMatrix4(matrix))
+            } else tileBoundingBox.union(tmpBoundingBox)
           }
         })
 
@@ -1441,14 +1452,20 @@ class MergedMeshes {
           vertices :number
           indices :number
           color :boolean
-          geometry? :BufferGeometry
+          geometry :BufferGeometry
         }
         const stats = new Map<Texture|undefined, Stats>()
         applyToMeshParts((material, mesh, start, count, matrices) => {
           const texture = material["map"] as Texture|undefined
           let textureStats = stats.get(texture)
           if (!textureStats) {
-            stats.set(texture, textureStats = {material, vertices: 0, indices: 0, color: false})
+            stats.set(texture, textureStats = {
+              material,
+              vertices: 0,
+              indices: 0,
+              color: false,
+              geometry: new BufferGeometry(),
+            })
           }
           const geometry = mesh.geometry as BufferGeometry
           textureStats.vertices += geometry.getAttribute("position").count * matrices.length
@@ -1458,7 +1475,8 @@ class MergedMeshes {
 
         // create and add the meshes
         for (const [texture, textureStats] of stats) {
-          const geometry = textureStats.geometry = new BufferGeometry()
+          const geometry = textureStats.geometry
+          geometry.boundingBox = new Box3()
           const mesh = new Mesh(geometry, textureStats.material)
           group.add(mesh)
           const vertices = textureStats.vertices
@@ -1505,6 +1523,8 @@ class MergedMeshes {
           const srcIndices = srcGeometry.index.array
           for (const matrix of matrices) {
             partMatrix.multiplyMatrices(matrix, mesh.matrixWorld)
+            tmpBoundingBox.copy(srcGeometry.boundingBox).applyMatrix4(partMatrix)
+            destGeometry.boundingBox.union(tmpBoundingBox)
 
             // transfer positions with transform
             const offset = textureStats.vertices
@@ -1562,6 +1582,12 @@ class MergedMeshes {
             textureStats.indices += count
           }
         })
+
+        // compute bounding spheres from boxes
+        for (const textureStats of stats.values()) {
+          textureStats.geometry.boundingSphere =
+            textureStats.geometry.boundingBox.getBoundingSphere(new Sphere())
+        }
 
         // notify the listener
         onFinish(group)
