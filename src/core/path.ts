@@ -65,9 +65,11 @@ export class PathMap<T> {
   /** Looks and returns the mapping for `path`, or `undefined` if no mapping exists. */
   get (path :Path) :T|undefined { return this.root.get(checkPath(path), 0) }
 
-  /** Sets the mapping for `path` to `value`. */
-  set (path :Path, value :T) {
+  /** Sets the mapping for `path` to `value`.
+    * @return `value` for handy call chaining. */
+  set (path :Path, value :T) :T {
     if (this.root.set(checkPath(path), 0, value)) this._size += 1
+    return value
   }
 
   /** Returns the number of mappings in this map. */

@@ -152,8 +152,7 @@ export abstract class DataStore {
 
     const otype = findObjectType(this.rtype, path)
     const metas = getPropMetas(otype.prototype)
-    const nres = new Resolved(this, path, otype)
-    this.objects.set(path, nres)
+    const nres = this.objects.set(path, new Resolved(this, path, otype))
     if (metas.some(isPersist)) this.resolveData(nres, resolver)
     else nres.resolvedData()
     return nres
@@ -170,9 +169,8 @@ export abstract class DataStore {
     if (!vmeta) throw new Error(`No view at path '${path}'`)
     if (vmeta.type !== "view") throw new Error(`Non-view property at path '${path}'`)
     const tmeta = tableForView(pmetas, vmeta)
-    const nres = new ResolvedView(this, path, vmeta, tmeta)
+    const nres = this.views.set(path, new ResolvedView(this, path, vmeta, tmeta))
     this.resolveViewData(nres)
-    this.views.set(path, nres)
     return nres
   }
 

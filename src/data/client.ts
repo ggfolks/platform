@@ -188,9 +188,8 @@ export class ClientStore implements Disposable {
     if (res) return res.ref<T>()
 
     if (DebugLog) log.debug("Resolving object", "path", path, "otype", otype)
-    const nres = new ResolvedObject(this, path, otype)
+    const nres = this.resolved.set(path, new ResolvedObject(this, path, otype))
     nres.state.whenOnce(s => s === "disposed", _ => this.resolved.delete(path))
-    this.resolved.set(path, nres)
     nres.init(this.client.state)
     return nres.ref()
   }
@@ -202,9 +201,8 @@ export class ClientStore implements Disposable {
     if (res) return res.ref<RMap<UUID,T>>()
 
     if (DebugLog) log.debug("Resolving view", "path", path, "view", view)
-    const nres = new ResolvedView(this, path, view)
+    const nres = this.resolved.set(path, new ResolvedView(this, path, view))
     nres.state.whenOnce(s => s === "disposed", _ => this.resolved.delete(path))
-    this.resolved.set(path, nres)
     nres.init(this.client.state)
     return nres.ref()
   }
