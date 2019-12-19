@@ -202,16 +202,16 @@ export class ThreeRenderEngine implements RenderEngine {
     raycaster.ray.origin.fromArray(origin)
     raycaster.ray.direction.fromArray(direction)
     raycasterResults.length = 0
-    raycaster.intersectObject(this._activeScene, true, raycasterResults)
+
+    raycasterIntersectObject(this._activeScene, layerMask)
+
     if (target) target.length = 0
     else target = []
     for (const result of raycasterResults) {
-      const transform = getTransform(result.object)
-      if (!(transform.gameObject.layerFlags & layerMask)) continue
       target.push({
         distance: result.distance,
         point: result.point.toArray(vec3.create()) as vec3,
-        transform,
+        transform: getTransform(result.object),
         textureCoord: result.uv ? result.uv.toArray(vec2.create()) as vec2 : undefined,
         triangleIndex: result.faceIndex,
       })
@@ -392,6 +392,13 @@ export class ThreeRenderEngine implements RenderEngine {
   dispose () {
     this._disposer.dispose()
   }
+}
+
+function raycasterIntersectObject (object :Object3D, layerMask :number) {
+  const transform = object.userData.transform
+  if (transform && !(transform.gameObject.layerFlags & layerMask)) return
+  object.raycast(raycaster, raycasterResults)
+  for (const child of object.children) raycasterIntersectObject(child, layerMask)
 }
 
 function getTransform (object :Object3D) :Transform {
