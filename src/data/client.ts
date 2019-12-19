@@ -181,6 +181,9 @@ export class ClientStore implements Disposable {
   }
 
   resolve<T extends DObject> (path :Path, otype :DObjectType<T>) :[T, Remover] {
+    for (const comp of path) if (comp === undefined) throw new Error(
+      `Path contains undefined component: ${path}`)
+
     const res = this.resolved.get(path)
     if (res) return res.ref<T>()
 
