@@ -1,4 +1,4 @@
-import {FetchResourceLoader} from "../core/assets"
+import {FetchResourceLoader} from "../asset/loader"
 import {StyleDefs} from "./style"
 import {UI, Theme} from "./ui"
 

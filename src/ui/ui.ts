@@ -1,7 +1,7 @@
 import {PMap, log} from "../core/util"
 import {Record} from "../core/data"
 import {makeConfig} from "../core/config"
-import {ResourceLoader} from "../core/assets"
+import {ResourceLoader} from "../asset/loader"
 import {StyleContext, StyleDefs} from "./style"
 import {Model, MissingModelElem, MissingConfig} from "./model"
 import {Control, Element, ErrorViz, Styler, Root} from "./element"

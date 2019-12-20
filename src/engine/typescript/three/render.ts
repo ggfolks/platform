@@ -8,7 +8,6 @@ import {
   SphereBufferGeometry, Texture, TorusBufferGeometry, Vector2, Vector3, WebGLRenderer,
 } from "three"
 import {SkeletonUtils} from "three/examples/jsm/utils/SkeletonUtils"
-import {ResourceLoader} from "../../../core/assets"
 import {Clock} from "../../../core/clock"
 import {Color} from "../../../core/color"
 import {refEquals} from "../../../core/data"
@@ -16,6 +15,7 @@ import {Bounds, Plane, Ray, dim2, rect, vec2, vec2zero, vec3} from "../../../cor
 import {Mutable, Subject, Value} from "../../../core/react"
 import {MutableMap, RMap} from "../../../core/rcollect"
 import {Disposer, Noop, NoopRemover, Remover, getValue} from "../../../core/util"
+import {ResourceLoader} from "../../../asset/loader"
 import {Graph, GraphConfig} from "../../../graph/graph"
 import {PropertyMeta, setEnumMeta} from "../../../graph/meta"
 import {GLTF, loadGLTF, loadGLTFAnimationClip} from "../../../scene3/entity"

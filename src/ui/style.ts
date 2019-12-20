@@ -3,7 +3,7 @@ import {dim2, rect} from "../core/math"
 import {dataEquals} from "../core/data"
 import {Color} from "../core/color"
 import {Subject} from "../core/react"
-import {ResourceLoader} from "../core/assets"
+import {ResourceLoader} from "../asset/loader"
 import {makeRoundRectPath, strokeLinePath, strokeRoundRectSide} from "./util"
 
 const SpecPrefix = "$"

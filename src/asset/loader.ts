@@ -1,6 +1,6 @@
-import {NoopRemover, log} from "./util"
-import {Data} from "./data"
-import {Subject} from "./react"
+import {NoopRemover, log} from "../core/util"
+import {Data} from "../core/data"
+import {Subject} from "../core/react"
 
 function eventToError (pre :string, err :Event|string) :Error {
   if (typeof err === "string") return new Error(`${pre}: ${err}`)

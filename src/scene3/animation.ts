@@ -1,8 +1,8 @@
 import {AnimationMixer, Event} from "three"
 
-import {ResourceLoader} from "../core/assets"
 import {Emitter, Mutable, Value} from "../core/react"
 import {Disposable, Disposer, PMap, getValue} from "../core/util"
+import {ResourceLoader} from "../asset/loader"
 import {loadGLTFAnimationClip} from "./entity"
 
 /** The configuration for an animation controller. */

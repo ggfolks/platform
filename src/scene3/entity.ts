@@ -7,11 +7,11 @@ import {
 import {GLTFLoader} from "three/examples/jsm/loaders/GLTFLoader"
 import {SkeletonUtils} from "three/examples/jsm/utils/SkeletonUtils"
 
-import {ResourceLoader} from "../core/assets"
 import {Clock} from "../core/clock"
 import {Subject} from "../core/react"
 import {RMap} from "../core/rcollect"
 import {Noop, NoopRemover, Remover, log} from "../core/util"
+import {ResourceLoader} from "../asset/loader"
 import {Pointer} from "../input/hand"
 import {
   Component,

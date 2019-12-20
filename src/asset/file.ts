@@ -1,6 +1,6 @@
-import {NoopRemover, log} from "./util"
-import {Subject} from "./react"
-import {ResourceLoader} from "./assets"
+import {NoopRemover, log} from "../core/util"
+import {Subject} from "../core/react"
+import {ResourceLoader} from "./loader"
 import * as fs from "fs"
 import * as p from "path"
 

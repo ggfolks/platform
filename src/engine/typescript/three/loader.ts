@@ -1,7 +1,7 @@
 import {FileLoader} from "three"
 import {Noop, NoopRemover, log} from "../../../core/util"
-import {ResourceLoader} from "../../../core/assets"
 import {Subject} from "../../../core/react"
+import {ResourceLoader} from "../../../asset/loader"
 
 export class ThreeResourceLoader extends ResourceLoader {
 

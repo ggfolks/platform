@@ -1,6 +1,7 @@
 demo/node_modules
 demo/tsconfig.tsbuildinfo
 docs
+lib/asset
 lib/auth
 lib/channel
 lib/core
