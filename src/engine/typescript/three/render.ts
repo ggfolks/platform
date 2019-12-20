@@ -1315,6 +1315,7 @@ class ThreeAnimation extends TypeScriptComponent implements Animation {
       mixer.addEventListener("finished", () => {
         if (!this._clampWhenFinished) this.playing = ""
       })
+      if (this.playing) this._requireClip(this.playing).once(clip => this._playClip(clip, mixer))
     }))
 
     // automatically add the URLs of any model loaded
@@ -1347,10 +1348,7 @@ class ThreeAnimation extends TypeScriptComponent implements Animation {
     this.getProperty<string>("playing").onValue(nameOrUrl => {
       if (nameOrUrl) {
         Subject.join2(this._requireClip(nameOrUrl), this._mixerSubject).once(([clip, mixer]) => {
-          const action = mixer.stopAllAction().clipAction(clip)
-          action.clampWhenFinished = this._clampWhenFinished
-          action.timeScale = this.timeScale
-          action.setLoop(this._loopMode, this.repetitions).stop().play()
+          this._playClip(clip, mixer)
         })
       } else {
         this._mixerSubject.once(mixer => mixer.stopAllAction())
@@ -1359,20 +1357,15 @@ class ThreeAnimation extends TypeScriptComponent implements Animation {
     this.getProperty<WrapMode>("wrapMode").onValue(mode => {
       const nameOrUrl = this.playing
       if (!nameOrUrl) return
-      const clip = this._requireClip(nameOrUrl)
-      Subject.join2(clip, this._mixerSubject).once(([clip, mixer]) => {
-        const action = mixer.clipAction(clip)
-        action.clampWhenFinished = this._clampWhenFinished
-        action.timeScale = this.timeScale
-        action.setLoop(this._loopMode, this.repetitions).stop().play()
+      Subject.join2(this._requireClip(nameOrUrl), this._mixerSubject).once(([clip, mixer]) => {
+        mixer.clipAction(clip).setLoop(this._loopMode, this.repetitions)
       })
     })
     for (const property of ["timeScale", "repetitions"]) {
       this.getProperty<number>(property).onValue(value => {
         const nameOrUrl = this.playing
         if (!nameOrUrl) return
-        const clip = this._requireClip(nameOrUrl)
-        Subject.join2(clip, this._mixerSubject).once(([clip, mixer]) => {
+        Subject.join2(this._requireClip(nameOrUrl), this._mixerSubject).once(([clip, mixer]) => {
           mixer.clipAction(clip)[property] = value
         })
       })
@@ -1382,6 +1375,13 @@ class ThreeAnimation extends TypeScriptComponent implements Animation {
       .onChange(([playAutomatically]) => {
         if (this._urlsByName.has(playAutomatically)) this.playing = playAutomatically
       })
+  }
+
+  private _playClip (clip :AnimationClip, mixer :AnimationMixer) {
+    const action = mixer.stopAllAction().clipAction(clip)
+    action.clampWhenFinished = this._clampWhenFinished
+    action.timeScale = this.timeScale
+    action.setLoop(this._loopMode, this.repetitions).stop().play()
   }
 
   private get _loopMode () :number {
