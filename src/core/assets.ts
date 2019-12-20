@@ -32,15 +32,17 @@ export abstract class ResourceLoader {
       (location.origin + location.pathname)
   }
 
-  constructor (private _baseUrl :string) {}
+  constructor (private _baseUrl :string) {
+    this.setBaseUrl(_baseUrl) // add trailing slash if needed
+  }
 
   /** The URL prepended to all relative resource paths when loading over the network. */
   get baseUrl () :string { return this._baseUrl }
 
-  /** Configures the base URL of this resource loader.
-    * Resources loaded over the network will be loaded relative to this base. */
+  /** Configures the base URL of this resource loader. Resources loaded over the network will be
+    * loaded relative to this base. */
   setBaseUrl (baseUrl :string) {
-    this._baseUrl = baseUrl
+    this._baseUrl = baseUrl.endsWith("/") ? baseUrl : `${baseUrl}/`
   }
 
   /** Returns the URL to the asset at `path`. */
