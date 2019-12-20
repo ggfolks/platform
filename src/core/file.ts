@@ -22,9 +22,7 @@ export class FileResourceLoader extends ResourceLoader {
     return Subject.deriveSubject(disp => {
       readFile(filePath, parse, disp)
       if (!this.watch) return NoopRemover
-      const watcher = fs.watch(filePath, type => {
-        if (type === "change") readFile(filePath, parse, disp)
-      })
+      const watcher = fs.watch(filePath, () => readFile(filePath, parse, disp))
       return () => watcher.close()
     })
   }
