@@ -12,11 +12,6 @@ import {SyncMsg, ObjType} from "./protocol"
 // re-export Auth to make life easier for modules that define DObjects & DQueues & handlers
 export {Auth} from "../auth/auth"
 
-export type MetaMsg = {type :"created"}
-                    | {type :"destroyed"}
-                    | {type :"subscribed", id :UUID}
-                    | {type :"unsubscribed", id :UUID}
-
 export class DMutable<T> extends Mutable<T> {
 
   static create<T> (eq :Eq<T>, owner :DObject, idx :number, meta :ValueMeta, start :T) {
@@ -244,6 +239,18 @@ export abstract class DObject {
   canCreate (prop :string, auth :Auth) :boolean { return auth.isSystem }
 
   noteWrite (msg :SyncMsg) { this.source.sendSync(msg) }
+
+  /** Called on the server when this object was just resolved from persistent storage.
+    * The `ctx` will contain system auth info. */
+  wasResolved (ctx :DContext) {}
+
+  /** Called on the server when a client has subscribed to this object.
+    * The `ctx` will contain auth info for the subscriber. */
+  noteSubscribed (ctx :DContext) {}
+
+  /** Called on the server when a client has unsubscribed from this object.
+    * The `ctx` will contain auth info for the unsubscriber. */
+  noteUnsubscribed (ctx :DContext) {}
 
   applySync (msg :SyncMsg, fromSync :boolean) {
     const meta = this.metas[msg.idx], prop = this[meta.name]

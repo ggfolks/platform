@@ -4,7 +4,7 @@ import {Mutable, Subject, Value} from "../core/react"
 import {Encoder, Decoder} from "../core/codec"
 import {TestClient, RunQueue} from "../channel/test.channel"
 import {getPropMetas, dobject, dmap, dvalue, dcollection, dqueue} from "./meta"
-import {Auth, DataSource, DContext, DObject, DState, MetaMsg, findObjectType} from "./data"
+import {Auth, DataSource, DContext, DObject, DState, findObjectType} from "./data"
 import {addObject, getObject} from "./protocol"
 import {ClientStore} from "./client"
 import {MemoryDataStore, channelHandlers} from "./server"
@@ -104,12 +104,16 @@ class RoomObject extends DObject {
   @dqueue(handleRoomReq)
   roomq = this.queue<RoomReq>()
 
-  @dqueue(handleMetaMsg)
-  metaq = this.queue<MetaMsg>()
-
   canSubscribe (auth :Auth) {
     if (DebugLog) log.debug("canSubscribe", "auth", auth, "occs", Array.from(this.occupants.entries()))
     return this.occupants.has(auth.id) || super.canSubscribe(auth)
+  }
+
+  noteUnsubscribed (ctx :DContext) {
+    super.noteUnsubscribed(ctx)
+    if (DebugLog) log.debug("Removing occupant", "room", this.key, "user", ctx.auth.id)
+    this.occupants.delete(ctx.auth.id)
+    ctx.post(sysChatQ, {type: "occupied", id: this.key, occupants: this.occupants.size})
   }
 }
 
@@ -161,17 +165,6 @@ function handleRoomReq (ctx :DContext, obj :RoomObject, req :RoomReq) {
 
   case "delete":
     // TODO
-    break
-  }
-}
-
-function handleMetaMsg (ctx :DContext, obj :RoomObject, msg :MetaMsg) {
-  if (DebugLog) log.debug("handleMetaMsg", "msg", msg)
-  switch (msg.type) {
-  case "unsubscribed":
-    if (DebugLog) log.debug("Removing occupant", "room", obj.key, "user", msg.id)
-    obj.occupants.delete(msg.id)
-    ctx.post(sysChatQ, {type: "occupied", id: obj.key, occupants: obj.occupants.size})
     break
   }
 }

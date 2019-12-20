@@ -7,7 +7,7 @@ import {Mutable, Value} from "../core/react"
 import {MutableMap, RMap} from "../core/rcollect"
 import {Auth} from "../auth/auth"
 import {Named, PropMeta, TableMeta, ViewMeta, tableForView, getPropMetas, isPersist} from "./meta"
-import {DataSource, DObject, DObjectType, DState, DQueueAddr, MetaMsg, findObjectType} from "./data"
+import {DataSource, DObject, DObjectType, DState, DQueueAddr, findObjectType} from "./data"
 import {DataMsg, DataType, DataCodec, ObjMsg, ObjType, mkObjCodec, SyncMsg,
         ViewMsg, ViewType, ViewCodec} from "./protocol"
 import {ChannelHandler} from "../channel/channel"
@@ -32,13 +32,13 @@ export class Resolved implements DataSource {
 
   addSubscriber (sub :Subscriber) {
     this.subscribers.push(sub)
-    this.store.postMeta(this.object, {type: "subscribed", id: sub.auth.id})
+    this.object.noteSubscribed({auth: sub.auth, post: this.store.ctxPost})
   }
   removeSubscriber (sub :Subscriber) {
     const idx = this.subscribers.indexOf(sub)
     if (idx >= 0) {
       this.subscribers.splice(idx, 1)
-      this.store.postMeta(this.object, {type: "unsubscribed", id: sub.auth.id})
+      this.object.noteUnsubscribed({auth: sub.auth, post: this.store.ctxPost})
     }
   }
 
@@ -46,7 +46,7 @@ export class Resolved implements DataSource {
     if (this.state.current === "resolving") {
       if (DebugLog) log.debug("Object resolved", "obj", this.object)
       this.state.update("active")
-      this.store.postMeta(this.object, {type: "created"})
+      this.object.wasResolved({auth :sysAuth, post: this.store.ctxPost})
     }
   }
 
@@ -135,6 +135,8 @@ export abstract class DataStore {
   // will be times when the server datastore is also disconnected?)
   readonly state = Value.constant<DState>("active")
 
+  readonly ctxPost = (queue :DQueueAddr, msg :Record) => this.post(sysAuth, queue, msg)
+
   constructor (readonly rtype :DObjectType<any>) {}
 
   getMetas (path :Path) :PropMeta[]|undefined {
@@ -185,26 +187,11 @@ export abstract class DataStore {
           throw new Error("Access denied.")
         }
         // TODO: check canSubscribe permission?
-        meta.handler({auth, post: (queue, msg) => this.post(sysAuth, queue, msg)}, object, msg)
+        meta.handler({auth, post: this.ctxPost}, object, msg)
       } catch (err) {
         log.warn("Failed to post", "auth", auth, "queue", queue, "msg", msg, err)
       }
     })
-  }
-
-  postMeta (obj :DObject, msg :MetaMsg) {
-    if (DebugLog) log.debug("postMeta", "obj", obj, "msg", msg)
-    const meta = obj.metas.find(m => m.name === "metaq")
-    if (!meta) return
-    if (meta.type !== "queue") {
-      log.warn("Expected 'queue' type for 'metaq' property", "type", meta.type, "obj", obj)
-      return
-    }
-    try {
-      meta.handler({auth: sysAuth, post: (queue, msg) => this.post(sysAuth, queue, msg)}, obj, msg)
-    } catch (err) {
-      log.warn("Failed to post meta", "obj", obj, "msg", msg, err)
-    }
   }
 
   upSync (auth :Auth, obj :DObject, msg :SyncMsg) {
