@@ -169,8 +169,14 @@ export interface GameEngine extends Disposable {
     * @param config the configuration for the new space.
     * @param [layerMask=ALL_LAYERS_MASK] the layer mask to use to determine which objects to
     * replace.
+    * @param [mergedObjectConfig={}] the configuration to use for the object that will contain all
+    * static meshes in the space, or null to avoid merging.
     * @param [cache=true] whether or not to load the space through the cache. */
-  setSpace (config :SpaceConfig, layerMask? :number) :void
+  setSpace (
+    config :SpaceConfig,
+    layerMask? :number,
+    mergedObjectConfig? :GameObjectConfig|null,
+  ) :void
 
   /** Creates a set of game objects on the current page.
     * @param configs the map from name to config.

@@ -368,9 +368,18 @@ export class TypeScriptGameEngine implements GameEngine {
     return this.createGameObject(type, mergedConfig)
   }
 
-  setSpace (config :SpaceConfig, layerMask? :number) {
+  setSpace (config :SpaceConfig, layerMask? :number, mergedObjectConfig? :GameObjectConfig|null) {
     this.disposeGameObjects(layerMask)
-    this.createGameObjects(config, true)
+    if (mergedObjectConfig === null) {
+      this.createGameObjects(config, true)
+      return
+    }
+    this.renderEngine.startMerging(mergedObjectConfig)
+    try {
+      this.createGameObjects(config, true)
+    } finally {
+      this.renderEngine.stopMerging()
+    }
   }
 
   createGameObjects (configs :SpaceConfig, onDefaultPage = false) :PMap<GameObject> {

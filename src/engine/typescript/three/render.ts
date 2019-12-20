@@ -21,7 +21,9 @@ import {PropertyMeta, setEnumMeta} from "../../../graph/meta"
 import {GLTF, loadGLTF, loadGLTFAnimationClip} from "../../../scene3/entity"
 import {Hand, Pointer} from "../../../input/hand"
 import {wheelEvents} from "../../../input/react"
-import {ALL_LAYERS_MASK, DEFAULT_PAGE, ConfigurableConfig, Hover, Transform} from "../../game"
+import {
+  ALL_LAYERS_MASK, DEFAULT_PAGE, ConfigurableConfig, GameObjectConfig, Hover, Transform,
+} from "../../game"
 import {Animation, WrapMode, WrapModes} from "../../animation"
 import {getConfigurableMeta, property} from "../../meta"
 import {
@@ -32,7 +34,7 @@ import {decodeFused} from "../../util"
 import {
   TypeScriptComponent, TypeScriptCone, TypeScriptConfigurable, TypeScriptCube, TypeScriptCylinder,
   TypeScriptGameEngine, TypeScriptGameObject, TypeScriptMesh, TypeScriptMeshFilter, TypeScriptPage,
-  TypeScriptQuad, TypeScriptSphere, TypeScriptTorus, registerConfigurableType,
+  TypeScriptQuad, TypeScriptSphere, TypeScriptTorus, applyConfig, registerConfigurableType,
 } from "../game"
 
 setEnumMeta("LightType", LightTypes)
@@ -72,6 +74,8 @@ export class ThreeRenderEngine implements RenderEngine {
   readonly stats :Value<string[]>
   readonly scene = new Scene()
   readonly cameras :ThreeCamera[] = []
+
+  mergedStatic? :ThreeMergedStatic
 
   onAfterRender? :(scene :Scene, camera :CameraObject) => void
 
@@ -157,6 +161,22 @@ export class ThreeRenderEngine implements RenderEngine {
 
   noteFinished (url :string) :void {
     DefaultLoadingManager.itemEnd(url)
+  }
+
+  startMerging (config? :GameObjectConfig) :void {
+    const mergedConfig = {
+      mergedStatic: {},
+    }
+    if (config) applyConfig(mergedConfig, config)
+    const gameObject = this.gameEngine.createGameObject("merged", mergedConfig)
+    this.mergedStatic = gameObject.requireComponent<ThreeMergedStatic>("mergedStatic")
+  }
+
+  stopMerging () :void {
+    if (this.mergedStatic) {
+      this.mergedStatic.build()
+      this.mergedStatic = undefined
+    }
   }
 
   setBounds (bounds :rect) :void {
@@ -1043,6 +1063,23 @@ class ThreeModel extends ThreeBounded implements Model {
 
   init () {
     super.init()
+    Value
+      .join2(this.objectValue, this.getProperty<number>("opacity"))
+      .onValue(([object, opacity]) => updateOpacity(object, opacity))
+  }
+
+  awake () {
+    super.awake()
+    if (this.gameObject.isStatic) {
+      const renderEngine = this.gameEngine.renderEngine as ThreeRenderEngine
+      if (renderEngine.mergedStatic) {
+        renderEngine.mergedStatic.meshes.add(
+          this.url,
+          new Matrix4().fromArray(this.transform.localToWorldMatrix),
+        )
+        return
+      }
+    }
     this.getProperty<string>("url").onValue(url => {
       this._urlRemover()
       this.objectValue.update(undefined)
@@ -1051,9 +1088,6 @@ class ThreeModel extends ThreeBounded implements Model {
         this._boundsValid = false
       })
     })
-    Value
-      .join2(this.objectValue, this.getProperty<number>("opacity"))
-      .onValue(([object, opacity]) => updateOpacity(object, opacity))
   }
 
   dispose () {
@@ -1076,54 +1110,71 @@ class ThreeFusedModels extends ThreeBounded implements FusedModels {
 
   init () {
     super.init()
-    this.getProperty<Uint8Array>("encoded").onChange(topEncoded => {
-      const mergedMeshes = new MergedMeshes(this.gameEngine)
-      const positionVector = new Vector3()
-      const rotationQuaternion = new Quaternion()
-      const scaleVector = new Vector3()
-      const decode = (encoded :Uint8Array, parentMatrix :Matrix4) => {
-        decodeFused(encoded, {
-          visitTile: (url, bounds, position, rotation, scale, flags) => {
-            mergedMeshes.add(
-              url,
-              new Matrix4()
-                .compose(
-                  positionVector.fromArray(position),
-                  rotationQuaternion.fromArray(rotation),
-                  scaleVector.fromArray(scale),
-                )
-                .premultiply(parentMatrix),
-              bounds,
-            )
-          },
-          visitFusedTiles: (source, position, rotation, scale) => {
-            decode(
-              source,
-              new Matrix4()
-                .compose(
-                  positionVector.fromArray(position),
-                  rotationQuaternion.fromArray(rotation),
-                  scaleVector.fromArray(scale),
-                )
-                .premultiply(parentMatrix),
-            )
-          }
-        })
+    Value
+      .join2(this.objectValue, this.getProperty<number>("opacity"))
+      .onValue(([object, opacity]) => updateOpacity(object, opacity))
+  }
+
+  awake () {
+    super.awake()
+
+    const positionVector = new Vector3()
+    const rotationQuaternion = new Quaternion()
+    const scaleVector = new Vector3()
+    const decode = (mergedMeshes :MergedMeshes, encoded :Uint8Array, parentMatrix :Matrix4) => {
+      decodeFused(encoded, {
+        visitTile: (url, bounds, position, rotation, scale, flags) => {
+          mergedMeshes.add(
+            url,
+            new Matrix4()
+              .compose(
+                positionVector.fromArray(position),
+                rotationQuaternion.fromArray(rotation),
+                scaleVector.fromArray(scale),
+              )
+              .premultiply(parentMatrix),
+            bounds,
+          )
+        },
+        visitFusedTiles: (source, position, rotation, scale) => {
+          decode(
+            mergedMeshes,
+            source,
+            new Matrix4()
+              .compose(
+                positionVector.fromArray(position),
+                rotationQuaternion.fromArray(rotation),
+                scaleVector.fromArray(scale),
+              )
+              .premultiply(parentMatrix),
+          )
+        }
+      })
+    }
+    if (this.gameObject.isStatic) {
+      const renderEngine = this.gameEngine.renderEngine as ThreeRenderEngine
+      if (renderEngine.mergedStatic) {
+        decode(
+          renderEngine.mergedStatic.meshes,
+          this.encoded,
+          new Matrix4().fromArray(this.transform.localToWorldMatrix),
+        )
+        return
       }
-      decode(topEncoded, new Matrix4())
+    }
+    this.getProperty<Uint8Array>("encoded").onValue(encoded => {
+      const mergedMeshes = new MergedMeshes(this.gameEngine)
+      decode(mergedMeshes, encoded, new Matrix4())
 
       this.objectValue.update(undefined)
-      this._loadingEncoded = topEncoded
+      this._loadingEncoded = encoded
       mergedMeshes.build(group => {
-        if (this._loadingEncoded === topEncoded) {
+        if (this._loadingEncoded === encoded) {
           this.objectValue.update(group)
           this._boundsValid = false
         }
       })
     })
-    Value
-      .join2(this.objectValue, this.getProperty<number>("opacity"))
-      .onValue(([object, opacity]) => updateOpacity(object, opacity))
   }
 
   protected _updateObjectTransform (object :Object3D) {
@@ -1377,6 +1428,25 @@ function updateChildren (object :Object3D) {
 function getAnchor (url :string) {
   return url.substring(url.lastIndexOf("#") + 1)
 }
+
+class ThreeMergedStatic extends ThreeObjectComponent {
+  readonly meshes :MergedMeshes
+
+  constructor (
+    gameEngine :TypeScriptGameEngine,
+    supertype :string,
+    type :string,
+    gameObject :TypeScriptGameObject,
+  ) {
+    super(gameEngine, supertype, type, gameObject)
+    this.meshes = new MergedMeshes(gameEngine)
+  }
+
+  build () {
+    this.meshes.build(group => this.objectValue.update(group))
+  }
+}
+registerConfigurableType("component", undefined, "mergedStatic", ThreeMergedStatic)
 
 /** Handles the merging of a group of models into combined meshes. */
 class MergedMeshes {

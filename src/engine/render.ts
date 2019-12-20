@@ -2,7 +2,9 @@ import {Bounds, Ray, rect, vec2, vec3} from "../core/math"
 import {Color} from "../core/color"
 import {Value} from "../core/react"
 import {Disposable} from "../core/util"
-import {Component, Configurable, ConfigurableConfig, Hoverable, Transform} from "./game"
+import {
+  Component, Configurable, ConfigurableConfig, GameObjectConfig, Hoverable, Transform,
+} from "./game"
 
 /** Top-level interface to render engine. */
 export interface RenderEngine extends Disposable {
@@ -30,6 +32,13 @@ export interface RenderEngine extends Disposable {
   /** Notes that we finished loading a resource externally.
     * @param url the URL of the resource that we finished loading. */
   noteFinished (url :string) :void
+
+  /** Starts merging static objects into a single combined object.
+    * @param [config={}] the configuration to use for the merged object. */
+  startMerging (config? :GameObjectConfig) :void
+
+  /** Stops merging static objects and updates the merged object. */
+  stopMerging () :void
 
   /** Sets the onscreen bounds of the renderer. */
   setBounds (bounds :rect) :void
