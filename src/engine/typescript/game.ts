@@ -1483,3 +1483,22 @@ export class TypeScriptTile extends TypeScriptComponent implements Tile {
   @property("boolean") walkable = false
 }
 registerConfigurableType("component", ["engine"], "tile", TypeScriptTile)
+
+/** Base class for categories of preferences saved to local storage. */
+export abstract class PrefsCategory extends TypeScriptConfigurable {
+  abstract readonly title :string
+
+  init () {
+    super.init()
+    // read the initial values from local storage, update on change
+    for (const [property, meta] of this.propertiesMeta) {
+      if (meta.constraints.readonly || meta.constraints.transient) continue
+      const storageKey = this.type + "/" + property
+      const value = localStorage.getItem(storageKey)
+      if (value !== null) (this as any)[property] = this.gameEngine.loader.eval(value)
+      this.getProperty(property).onChange(
+        value => localStorage.setItem(storageKey, JavaScript.stringify(value)),
+      )
+    }
+  }
+}
