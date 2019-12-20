@@ -204,6 +204,7 @@ export class ThreeRenderEngine implements RenderEngine {
     raycasterResults.length = 0
 
     raycasterIntersectObject(this._activeScene, layerMask)
+    raycasterResults.sort(compareRaycasterResults)
 
     if (target) target.length = 0
     else target = []
@@ -399,6 +400,10 @@ function raycasterIntersectObject (object :Object3D, layerMask :number) {
   if (transform && !(transform.gameObject.layerFlags & layerMask)) return
   object.raycast(raycaster, raycasterResults)
   for (const child of object.children) raycasterIntersectObject(child, layerMask)
+}
+
+function compareRaycasterResults (a :Intersection, b :Intersection) {
+  return a.distance - b.distance
 }
 
 function getTransform (object :Object3D) :Transform {
