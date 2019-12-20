@@ -166,7 +166,7 @@ export interface GameEngine extends Disposable {
   createPrimitive (type :PrimitiveType, config? :GameObjectConfig) :GameObject
 
   /** Sets the current space, replacing all current game objects.
-    * @param path the path to the space configuration resource.
+    * @param config the configuration for the new space.
     * @param [layerMask=ALL_LAYERS_MASK] the layer mask to use to determine which objects to
     * replace.
     * @param [cache=true] whether or not to load the space through the cache. */
