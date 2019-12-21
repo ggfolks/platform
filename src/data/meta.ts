@@ -30,10 +30,12 @@ export type ValueMeta = {type: "value", vtype: ValueType, persist :boolean}
 export type SetMeta = {type: "set", etype: KeyType, persist :boolean}
 export type MapMeta = {type: "map", ktype: KeyType, vtype: ValueType, persist :boolean}
 export type CollectionMeta = {type: "collection", otype: DObjectTypeMap<any>}
+export type SingletonMeta = {type: "singleton", otype: DObjectType<any>}
 export type TableMeta = {type: "table"}
 export type ViewMeta = {type: "view", table :string, where :WhereClause[], order :OrderClause[]}
 export type QueueMeta = {type: "queue", handler :DHandler<any,any>, system :boolean}
-export type Meta = ValueMeta | SetMeta | MapMeta | CollectionMeta | TableMeta | ViewMeta | QueueMeta
+export type Meta = ValueMeta | SetMeta | MapMeta | CollectionMeta | SingletonMeta
+                 | TableMeta | ViewMeta | QueueMeta
 
 export type Named<T> = T & {name :string, index :number}
 export type PropMeta = Named<Meta>
@@ -89,6 +91,8 @@ export const dcollection = (otype :DObjectType<any>) =>
   propAdder({type: "collection", otype: id => otype})
 export const dhierarchy = (otype :DObjectTypeMap<any>) =>
   propAdder({type: "collection", otype})
+export const dsingleton = (otype :DObjectType<any>) =>
+  propAdder({type: "singleton", otype})
 export const dtable = () =>
   propAdder({type: "table"})
 export const dview = (table :string, where :WhereClause[], order :OrderClause[] = []) =>

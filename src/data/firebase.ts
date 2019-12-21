@@ -19,7 +19,7 @@ import {Data, DataMapKey, Record} from "../core/data"
 import {UUID} from "../core/uuid"
 import {Encoder, Decoder, SyncSet, SyncMap, ValueType, setTextCodec} from "../core/codec"
 import {SyncMsg, ObjType} from "./protocol"
-import {isPersist} from "./meta"
+import {getPropMetas, isPersist} from "./meta"
 import {DObject, DObjectType, DMutable} from "./data"
 import {DataStore, Resolved, Resolver, ResolvedView} from "./server"
 
@@ -27,26 +27,39 @@ const DebugLog = false
 
 setTextCodec(() => new TextEncoder() as any, () => new TextDecoder() as any)
 
-function pathToDocRef (db :Firestore, path :Path) :DocRef {
-  if (path.length < 2 || path.length % 2 != 0) throw new Error(`Can't make doc ref for ${path}`)
-  let ref = db.collection(path[0]).doc(path[1])
-  let idx = 2
+type DatabaseOrDocRef = Firestore | DocRef
+
+function pathToDocRef (db :Firestore, rtype :DObjectType<any>, path :Path) :DocRef {
+  if (path.length < 1) throw new Error(`Can't make doc ref for ${path}`)
+
+  let ref = db as DatabaseOrDocRef
+  let curtype = rtype, idx = 0
   while (idx < path.length) {
-    ref = ref.collection(path[idx]).doc(path[idx+1])
-    idx += 2
+    const curmetas = getPropMetas(curtype.prototype)
+    const colname = path[idx] as string, col = curmetas.find(m => m.name === colname)
+    if (!col) throw new Error(`Missing metadata for path component [path=${path}, idx=${idx}]`)
+    switch (col.type) {
+    case "collection":
+      curtype = col.otype(path[idx+1])
+      ref = ref.collection(path[idx]).doc(path[idx+1])
+      idx += 2 // skip the collection name and key
+      break
+    case "singleton":
+      curtype = col.otype
+      ref = ref.collection("singletons").doc(path[idx])
+      idx += 1 // skip the singleton name
+      break
+    default:
+      const etype = (idx < path.length-2) ? "collection" : "singleton"
+      throw new Error(`Expected '${etype}' property at path component [path=${path}, idx=${idx}]`)
+    }
   }
-  return ref
+  return ref as DocRef
 }
 
-function pathToColRef (db :Firestore, path :Path) :ColRef {
-  if (path.length < 1 || path.length % 2 != 1) throw new Error(`Can't make col ref for ${path}`)
-  let ref = db.collection(path[0])
-  let idx = 1
-  while (idx < path.length) {
-    ref = ref.doc(path[idx]).collection(path[idx+1])
-    idx += 2
-  }
-  return ref
+function pathToColRef (db :Firestore, rtype :DObjectType<any>, path :Path) :ColRef {
+  if (path.length < 2) throw new Error(`Can't make col ref for ${path}`)
+  return pathToDocRef(db, rtype, path.slice(0, path.length-1)).collection(path[path.length-1])
 }
 
 const encoder = new Encoder()
@@ -309,23 +322,23 @@ export class FirebaseDataStore extends DataStore {
   }
 
   createRecord (path :Path, key :UUID, data :Record) {
-    const ref = pathToColRef(this.db, path).doc(key)
+    const ref = pathToColRef(this.db, this.rtype, path).doc(key)
     if (DebugLog) log.debug("createRecord", "path", path, "key", key)
     ref.set(recordToFirestore(data))
   }
   updateRecord (path :Path, key :UUID, data :Record, merge :boolean) {
-    const ref = pathToColRef(this.db, path).doc(key)
+    const ref = pathToColRef(this.db, this.rtype, path).doc(key)
     if (DebugLog) log.debug("updateRecord", "path", path, "key", key)
     merge ? ref.set(data) : ref.update(recordToFirestore(data))
   }
   deleteRecord (path :Path, key :UUID) {
-    const ref = pathToColRef(this.db, path).doc(key)
+    const ref = pathToColRef(this.db, this.rtype, path).doc(key)
     if (DebugLog) log.debug("deleteRecord", "path", path, "key", key)
     ref.delete()
   }
 
   resolveData (res :Resolved, resolver? :Resolver) {
-    const ref = pathToDocRef(this.db, res.object.path)
+    const ref = pathToDocRef(this.db, this.rtype, res.object.path)
     const syncer = new DocSyncer(res.object.path, ref)
     this.syncers.set(res.object.path, syncer)
     if (resolver) {
@@ -344,7 +357,7 @@ export class FirebaseDataStore extends DataStore {
   }
 
   resolveViewData (res :ResolvedView) {
-    const cref = pathToColRef(this.db, res.tpath)
+    const cref = pathToColRef(this.db, this.rtype, res.tpath)
     // TODO: refine query based on res.vmeta
     const unlisten = cref.onSnapshot(snap => {
       const sets = []

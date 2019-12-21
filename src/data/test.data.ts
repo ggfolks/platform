@@ -1,5 +1,5 @@
-import {uuidv1} from "../core/uuid"
-import {getPropMetas, dobject, dvalue, dcollection, dhierarchy} from "./meta"
+import {UUID0, uuidv1} from "../core/uuid"
+import {getPropMetas, dobject, dvalue, dcollection, dhierarchy, dsingleton} from "./meta"
 import {Auth, DObject} from "./data"
 import {MemoryDataStore} from "./server"
 
@@ -43,6 +43,12 @@ export class SubSubAObject extends SubAObject {
 }
 
 @dobject
+export class SingleObject extends DObject {
+  @dvalue("string")
+  foo = this.value("")
+}
+
+@dobject
 export class RootObject extends DObject {
 
   canSubscribe (auth :Auth) { return true }
@@ -58,6 +64,9 @@ export class RootObject extends DObject {
     }
   })
   bases = this.collection<BaseObject>()
+
+  @dsingleton(SingleObject)
+  single = this.singleton<SingleObject>()
 }
 
 test("metas", () => {
@@ -119,4 +128,15 @@ test("hierarchy", () => {
   const base = store.resolve(["bases", randomKey]).object as BaseObject
   expect(base instanceof BaseObject).toBe(true)
   expect(base.key).toEqual(randomKey)
+})
+
+test("singleton", () => {
+  const store = new MemoryDataStore(RootObject)
+
+  const single = store.resolve(["single"]).object as SingleObject
+  expect(single instanceof SingleObject).toBe(true)
+  expect(single.key).toEqual(UUID0)
+  expect(single.foo.current).toBe("")
+  single.foo.update("bar")
+  expect(single.foo.current).toBe("bar")
 })

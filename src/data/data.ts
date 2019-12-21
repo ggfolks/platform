@@ -5,7 +5,7 @@ import {Data, Record, dataEquals, refEquals} from "../core/data"
 import {ChangeFn, Eq, Mutable, Value, ValueFn, addListener, dispatchChange} from "../core/react"
 import {MutableSet, MutableMap} from "../core/rcollect"
 import {Auth} from "../auth/auth"
-import {WhereClause, OrderClause, PropMeta, ValueMeta, SetMeta, MapMeta, CollectionMeta, TableMeta,
+import {WhereClause, OrderClause, PropMeta, ValueMeta, SetMeta, MapMeta, TableMeta,
         DObjectTypeMap, tableForView, getPropMetas} from "./meta"
 import {SyncMsg, ObjType} from "./protocol"
 
@@ -88,16 +88,6 @@ class DMutableMap<K,V> extends MutableMap<K,V> {
   }
 }
 
-/** Defines an index on a collection of objects. */
-export class DIndex<O extends DObject> {
-
-  constructor (readonly owner :DObject, readonly name :string, readonly index :number,
-               readonly collection :CollectionMeta, readonly where :WhereClause[],
-               readonly order :OrderClause[]) {}
-
-  get path () :Path { return this.owner.path.concat(this.name) }
-}
-
 export class DCollection<O extends DObject> {
 
   constructor (readonly owner :DObject, readonly name :string, readonly otype :DObjectTypeMap<O>) {}
@@ -105,6 +95,13 @@ export class DCollection<O extends DObject> {
   get path () :Path { return this.owner.path.concat(this.name) }
 
   pathTo (key :UUID) :Path { return this.owner.path.concat([this.name, key]) }
+}
+
+export class DSingleton<O extends DObject> {
+
+  constructor (readonly owner :DObject, readonly name :string, readonly otype :DObjectType<O>) {}
+
+  get path () :Path { return this.owner.path.concat(this.name) }
 }
 
 export class DTable<R extends Record> {
@@ -167,10 +164,19 @@ export function findObjectType (rtype :DObjectType<any>, path :Path) :DObjectTyp
     // TODO: have metas include a map by name as well?
     const colname = path[idx] as string, col = curmetas.find(m => m.name === colname)
     if (!col) throw new Error(`Missing metadata for path component [path=${path}, idx=${idx}]`)
-    if (col.type !== "collection") throw new Error(
-      `Expected 'collection' property at path component [path=${path}, idx=${idx}]`)
-    curtype = col.otype(path[idx+1])
-    idx += 2 // skip the collection name and key
+    switch (col.type) {
+    case "collection":
+      curtype = col.otype(path[idx+1])
+      idx += 2 // skip the collection name and key
+      break
+    case "singleton":
+      curtype = col.otype
+      idx += 1 // skip the singleton name
+      break
+    default:
+      const etype = (idx < path.length-2) ? "collection" : "singleton"
+      throw new Error(`Expected '${etype}' property at path component [path=${path}, idx=${idx}]`)
+    }
   }
   return curtype
 }
@@ -217,7 +223,11 @@ export abstract class DObject {
     readonly state :Value<DState>) {}
 
   /** This object's key in its owning collection. */
-  get key () :UUID { return this.path.length > 0 ? this.path[this.path.length-1] : UUID0 }
+  get key () :UUID {
+    if (this.path.length === 0) return UUID0 // root object
+    else if (this.path.length % 2 === 1) return UUID0 // singleton object
+    else return this.path[this.path.length-1] // collection object
+  }
 
   /** This object's disposedness state. */
   get disposed () :Value<boolean> { return this.state.map(ds => ds === "disposed") }
@@ -292,6 +302,12 @@ export abstract class DObject {
   protected collection<O extends DObject> () :DCollection<O> {
     const index = this.metaIdx++, meta = this.metas[index]
     return (meta.type !== "collection") ? metaMismatch(meta, "collection") : new DCollection<O>(
+      this, meta.name, meta.otype)
+  }
+
+  protected singleton<O extends DObject> () :DSingleton<O> {
+    const index = this.metaIdx++, meta = this.metas[index]
+    return (meta.type !== "singleton") ? metaMismatch(meta, "singleton") : new DSingleton<O>(
       this, meta.name, meta.otype)
   }
 
