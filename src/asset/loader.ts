@@ -1,4 +1,4 @@
-import {NoopRemover, log} from "../core/util"
+import {Remover, NoopRemover, log} from "../core/util"
 import {Data} from "../core/data"
 import {Subject} from "../core/react"
 
@@ -15,6 +15,9 @@ function composeUrl (baseUrl :string, maybeRelativeUrl :string) :string {
   return baseUrl + maybeRelativeUrl
 }
 
+type Loader = (path :string, loaded :(data :string) => void, failed :(err :Error) => void) => void
+type Watcher = (path :string) => Remover
+
 /** Resource loaders load resources from some source (the file system, the network, etc.) and
   * potentially reload the data if the loader supports hot reloading. Note that because this is a
   * "consumer" interface, any errors that occur when loading resources will simply be logged, and
@@ -22,8 +25,10 @@ function composeUrl (baseUrl :string, maybeRelativeUrl :string) :string {
   *
   * Resource paths should be separated by `/` and should generally be "relative" and will be
   * resolved relative to some root known by the resource loader. */
-export abstract class ResourceLoader {
+export class ResourceLoader {
   private readonly resources = new Map<string, Subject<any>>()
+  private readonly reloaders = new Map<string, () => void>()
+  private readonly watches = new Set<Remover>()
 
   /** Creates the default base URL based on the browser's location bar. This is temporary while we
     * develop and eventually we'll need to be explicit about from where resources are loaded. */
@@ -32,7 +37,21 @@ export abstract class ResourceLoader {
       (location.origin + location.pathname)
   }
 
-  constructor (private _baseUrl :string) {
+  /** Creates a resource loader that loads resources over the network via the `fetch` API. */
+  static fetchLoader (baseUrl :string) {
+    const loader = new ResourceLoader(baseUrl, (path, loaded, failed) => {
+      const url = loader.getUrl(path)
+      fetch(url).then(rsp => {
+        if (rsp.ok) rsp.text().then(loaded, failed)
+        else failed(new Error(rsp.statusText))
+      }, failed)
+    })
+    return loader
+  }
+
+  constructor (private _baseUrl :string,
+               private readonly loader :Loader,
+               private readonly watcher :Watcher = _ => NoopRemover) {
     this.setBaseUrl(_baseUrl) // add trailing slash if needed
   }
 
@@ -83,8 +102,27 @@ export abstract class ResourceLoader {
   getResource<R> (path :string, parse :(data :string) => R, cache :boolean) :Subject<R> {
     // TODO: resource caching
     let res = this.resources.get(path)
-    if (!res) this.resources.set(path, res = this.loadResource(path, parse))
+    if (!res) this.resources.set(path, res = Subject.deriveSubject(disp => {
+      const reload = () => this.loader(
+        path, data => disp(parse(data)),
+        err => log.warn("Failed to load resource data", "path", path, err))
+      this.reloaders.set(path, reload)
+      const unwatch = this.watcher(path)
+      this.watches.add(unwatch)
+      reload()
+      return () => {
+        this.reloaders.delete(path)
+        this.watches.delete(unwatch)
+        unwatch()
+      }
+    }))
     return res as Subject<R>
+  }
+
+  /** Informs the resource loader that a resource has been updated and should be reloaded. */
+  noteUpdated (path :string) {
+    const reloader = this.reloaders.get(path)
+    reloader && reloader()
   }
 
   /** Parses a JavaScript value and returns the result.  Currently this just evaluates the string,
@@ -93,22 +131,10 @@ export abstract class ResourceLoader {
     * @return the parsed value. */
   eval (code :string) :Object { return eval(code) }
 
-  protected abstract loadResource<R> (path :string, convert :(data :string) => R) :Subject<R>
-}
-
-/** A resource loader that loads resources over the network via the `fetch` API. */
-export class FetchResourceLoader extends ResourceLoader {
-
-  protected loadResource<R> (path :string, parse :(data :string) => R) :Subject<R> {
-    const url = this.getUrl(path)
-    return Subject.deriveSubject(disp => {
-      fetch(url).then(rsp => {
-        if (rsp.ok) rsp.text().then(
-          data => disp(parse(data)),
-          err => log.warn("Failed to load resource data", "url", url, err))
-        else log.warn("Failed to load resource data", "url", url, "rsp", rsp.statusText)
-      }, err => log.warn("Failed to load resource data", "url", url, err))
-      return NoopRemover
-    })
+  /** Cleans up after this resource loader. This does not necessarily unload all resources because
+    * external entities may retain references to them, but it cleans up what it can. */
+  dispose () {
+    for (const unwatch of this.watches) unwatch()
+    this.resources.clear()
   }
 }

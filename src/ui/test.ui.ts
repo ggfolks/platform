@@ -1,4 +1,4 @@
-import {FetchResourceLoader} from "../asset/loader"
+import {ResourceLoader} from "../asset/loader"
 import {StyleDefs} from "./style"
 import {UI, Theme} from "./ui"
 
@@ -47,7 +47,7 @@ const theme :Theme = {
 }
 
 test("style resolution", () => {
-  const ui = new UI(theme, styles, new FetchResourceLoader("unused"))
+  const ui = new UI(theme, styles, ResourceLoader.fetchLoader("unused"))
 
   const lstyles = {stroke: "$lightGray", disabled: {font: "$italic"}}
   const scope = {id: "button", states: ["normal", "disabled", "pressed"]}
