@@ -32,54 +32,33 @@ export interface GLTF {
   animations :AnimationClip[]
 }
 
-const activeGLTFs :Map<string, Subject<GLTF>> = new Map()
-const dormantGLTFs :Map<string, Promise<GLTF>> = new Map()
 const errorGeom = new BoxBufferGeometry()
 const errorMat = new MeshBasicMaterial({color: 0xFF0000})
 
-/** Loads a GLTF from the provided URL.
-  * @param url the URL of the GLTF to load.
+/** Loads a GLTF model.
+  * @param path the path to the resource that contains the GLTF data.
+  * @param cache whether or not to cache the loaded model.
   * @return a Subject that will resolve to the loaded model. */
-export function loadGLTF (loader :ResourceLoader, path :string) :Subject<GLTF> {
-  let gltf = activeGLTFs.get(path)
-  if (!gltf) {
-    let active = false
-    gltf = Subject.deriveSubject(dispatch => {
-      active = true
-      activeGLTFs.set(path, gltf!)
-      let savedGLTF = dormantGLTFs.get(path)
-      if (savedGLTF) {
-        dormantGLTFs.delete(path)
-      } else {
-        const url = loader.getUrl(path)
-        savedGLTF = new Promise(resolve => new GLTFLoader().load(
-          url,
-          gltf => {
-            // hack for alpha testing: enable on any materials with a color texture that has
-            // an alpha channel
-            gltf.scene.traverse((node :Object3D) => {
-              if (node instanceof Mesh) processMaterial(node.material)
-            })
-            resolve(gltf)
-          },
-          event => { /* do nothing with progress for now */ },
-          error => {
-            log.warn("Could not load GLTF", "url", url, "error", error)
-            resolve({scene: new Mesh(errorGeom, errorMat), animations: []})
-          },
-        ))
-      }
-      savedGLTF.then(gltf => {
-        if (active) dispatch(gltf)
-      })
-      return () => {
-        active = false
-        activeGLTFs.delete(path)
-        dormantGLTFs.set(path, savedGLTF!)
-      }
-    })
-  }
-  return gltf
+export function loadGLTF (loader :ResourceLoader, path :string, cache = true) :Subject<GLTF> {
+  return loader.getResourceVia(path, (path, loaded, failed) => {
+    const url = loader.getUrl(path)
+    new GLTFLoader().load(
+      url,
+      gltf => {
+        // hack for alpha testing: enable on any materials with a color texture that has
+        // an alpha channel
+        gltf.scene.traverse((node :Object3D) => {
+          if (node instanceof Mesh) processMaterial(node.material)
+        })
+        loaded(gltf)
+      },
+      event => { /* do nothing with progress for now */ },
+      error => {
+        failed(new Error(error.message))
+        loaded({scene: new Mesh(errorGeom, errorMat), animations: []})
+      },
+    )
+  }, cache)
 }
 
 function processMaterial (material :Material|Material[]) {
