@@ -593,6 +593,8 @@ type MessageHandler = (...args :any[]) => void
 const GameObjectPropertiesMeta = MutableMap.local<string, PropertyMeta>()
 GameObjectPropertiesMeta.set("isStatic", {type: "boolean", constraints: {}})
 
+let messageCounter = 0
+
 export class TypeScriptGameObject implements GameObject {
   readonly id :string
   readonly tagValue = Mutable.local("")
@@ -773,9 +775,13 @@ export class TypeScriptGameObject implements GameObject {
   }
 
   sendMessage (message :string, ...args :any[]) :void {
-    for (const key in this) {
-      const component = this[key]
-      if (component[message]) component[message](...args)
+    messageCounter++
+    for (const value of this.components.values()) {
+      const component = value as TypeScriptComponent
+      if (component[message] && component.lastMessage !== messageCounter) {
+        component.lastMessage = messageCounter
+        component[message](...args)
+      }
     }
     const handlers = this._messageHandlers.get(message)
     if (handlers) {
@@ -879,6 +885,8 @@ export function applyConfig (target :PMap<any>, config :PMap<any>) {
 export class TypeScriptComponent extends TypeScriptConfigurable implements Component {
   @property("number", {editable: false}) hideFlags = 0
   @property("number", {editable: false}) order = 0
+
+  lastMessage? :number
 
   readonly aliases :string[]
 
