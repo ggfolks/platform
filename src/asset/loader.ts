@@ -1,6 +1,6 @@
 import {Remover, NoopRemover, log} from "../core/util"
 import {Data} from "../core/data"
-import {Emitter, Subject} from "../core/react"
+import {Emitter, Subject, Mutable} from "../core/react"
 
 function eventToError (pre :string, err :Event|string) :Error {
   if (typeof err === "string") return new Error(`${pre}: ${err}`)
@@ -8,18 +8,48 @@ function eventToError (pre :string, err :Event|string) :Error {
 }
 
 const ABSOLUTE_URL_PATTERN = /^(https?|file|blob|data):/
+export const isAbsoluteUrl = (path :string) => ABSOLUTE_URL_PATTERN.test(path)
 
 function composeUrl (baseUrl :string, maybeRelativeUrl :string) :string {
-  if (ABSOLUTE_URL_PATTERN.test(maybeRelativeUrl)) return maybeRelativeUrl
+  if (isAbsoluteUrl(maybeRelativeUrl)) return maybeRelativeUrl
   if (maybeRelativeUrl.startsWith("/")) maybeRelativeUrl = maybeRelativeUrl.substring(1)
   return baseUrl + maybeRelativeUrl
 }
 
-type Loader = (path :string, loaded :(data :string) => void, failed :(err :Error) => void) => void
+type Loader<T> = (path :string, loaded :(data :T) => void, failed :(err :Error) => void) => void
 type Watcher = (path :string) => Remover
 
 type ResourceEvent = {type :"loaded", path :string}
                    | {type :"unloaded", path :string}
+
+class Resource<T,R> {
+  readonly value = Mutable.local<R|undefined>(undefined)
+  readonly subject = Subject.deriveSubject<R>(disp => {
+    const unobserve = this.value.onValue(v => v && disp(v))
+    return () => {
+      unobserve()
+      if (!this.cached) this.unload()
+    }
+  })
+  update = 0
+  cached = false
+
+  constructor (readonly owner :ResourceLoader, readonly path :string, readonly unwatch :Remover,
+               readonly loader :Loader<T>, readonly parser :(data :T) => R) {
+    owner.events.emit({type: "loaded", path})
+    this.reload()
+  }
+
+  reload () {
+    const path = (this.update++ === 0) ? this.path : `${this.path}?${this.update}`
+    this.loader(path, data => this.value.update(this.parser(data)),
+                err => log.warn("Failed to load resource data", "path", this.path, err))
+  }
+  unload () {
+    this.unwatch()
+    this.owner._unload(this.path)
+  }
+}
 
 /** Resource loaders load resources from some source (the file system, the network, etc.) and
   * potentially reload the data if the loader supports hot reloading. Note that because this is a
@@ -29,9 +59,7 @@ type ResourceEvent = {type :"loaded", path :string}
   * Resource paths should be separated by `/` and should generally be "relative" and will be
   * resolved relative to some root known by the resource loader. */
 export class ResourceLoader {
-  private readonly resources = new Map<string, Subject<any>>()
-  private readonly reloaders = new Map<string, () => void>()
-  private readonly watches = new Set<Remover>()
+  private readonly resources = new Map<string, Resource<any,any>>()
 
   /** Creates the default base URL based on the browser's location bar. This is temporary while we
     * develop and eventually we'll need to be explicit about from where resources are loaded. */
@@ -56,7 +84,7 @@ export class ResourceLoader {
   readonly events = new Emitter<ResourceEvent>()
 
   constructor (private _baseUrl :string,
-               private readonly loader :Loader,
+               private readonly loader :Loader<string>,
                private readonly watcher :Watcher = _ => NoopRemover) {
     this.setBaseUrl(_baseUrl) // add trailing slash if needed
   }
@@ -71,7 +99,7 @@ export class ResourceLoader {
   }
 
   /** Returns the URL to the asset at `path`. */
-  getUrl (path :string) { return composeUrl(this.baseUrl, path) }
+  getUrl (path :string) :string { return composeUrl(this.baseUrl, path) }
 
   /** Returns the object resource at `path`. The code is loaded as a text resource and then
     * materialized using `eval`. */
@@ -92,45 +120,32 @@ export class ResourceLoader {
   // TODO: binary resources? could return data as Uint8Array
 
   /** Loads the image resource at `path`. */
-  getImage (path :string, cache = true) :Subject<HTMLImageElement|Error> {
-    // TODO: image caching, if desired
-    const url = this.getUrl(path)
-    return Subject.deriveSubject(disp => {
+  getImage (path :string, cache = true) :Subject<HTMLImageElement> {
+    return this._getResource<HTMLImageElement,HTMLImageElement>(path, (path, loaded, failed) => {
+      const url = this.getUrl(path)
       const image = new Image()
       image.crossOrigin = ''
       image.src = url
-      image.onload = () => disp(image)
-      image.onerror = err => disp(eventToError(`Failed to load '${url}'`, err))
-      return NoopRemover // nothing to dispose, GC takes care of image
-    })
+      image.onload = () => loaded(image)
+      image.onerror = err => {
+        failed(eventToError(`Failed to load '${url}'`, err))
+        // TODO: also succeed with error image
+      }
+    }, cache, d => d)
   }
 
   getResource<R> (path :string, parse :(data :string) => R, cache :boolean) :Subject<R> {
-    // TODO: resource caching
-    let res = this.resources.get(path)
-    if (!res) this.resources.set(path, res = Subject.deriveSubject(disp => {
-      const reload = () => this.loader(
-        path, data => disp(parse(data)),
-        err => log.warn("Failed to load resource data", "path", path, err))
-      this.reloaders.set(path, reload)
-      const unwatch = this.watcher(path)
-      this.watches.add(unwatch)
-      reload()
-      this.events.emit({type: "loaded", path})
-      return () => {
-        this.reloaders.delete(path)
-        this.watches.delete(unwatch)
-        unwatch()
-        this.events.emit({type: "unloaded", path})
-      }
-    }))
-    return res as Subject<R>
+    return this._getResource(path, this.loader, cache, parse)
+  }
+
+  getResourceVia<R> (path :string, loader :Loader<R>, cache :boolean) :Subject<R> {
+    return this._getResource(path, loader, cache, d => d)
   }
 
   /** Informs the resource loader that a resource has been updated and should be reloaded. */
   noteUpdated (path :string) {
-    const reloader = this.reloaders.get(path)
-    reloader && reloader()
+    const resource = this.resources.get(path)
+    resource && resource.reload()
   }
 
   /** Parses a JavaScript value and returns the result.  Currently this just evaluates the string,
@@ -142,7 +157,20 @@ export class ResourceLoader {
   /** Cleans up after this resource loader. This does not necessarily unload all resources because
     * external entities may retain references to them, but it cleans up what it can. */
   dispose () {
-    for (const unwatch of this.watches) unwatch()
+    for (const resource of this.resources.values()) resource.unwatch()
     this.resources.clear()
+  }
+
+  _unload (path :string) {
+    this.resources.delete(path)
+  }
+
+  private _getResource<R, T> (path :string, loader :Loader<T>, cache :boolean,
+                              parser :(data :T) => R) :Subject<R> {
+    let res = this.resources.get(path)
+    if (!res) this.resources.set(path, res = new Resource(
+      this, path, this.watcher(path), loader, parser))
+    res.cached = res.cached || cache
+    return res.subject as Subject<R>
   }
 }

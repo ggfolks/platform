@@ -205,11 +205,7 @@ export function makePaint (ctx :StyleContext, config :PaintConfig) :Subject<Pain
   case   "color": return Subject.constant(new ColorPaint(ctx.resolveColor(config.color)))
   case  "linear":
   case  "radial": return Subject.constant(new GradientPaint(ctx, config))
-  case "pattern": return ctx.loader.getImage(config.image).map(img => {
-      if (img instanceof HTMLImageElement) return new PatternPaint(img, config)
-      // TODO: return error pattern
-      else return new ColorPaint("#FF0000")
-    })
+  case "pattern": return ctx.loader.getImage(config.image).map(img => new PatternPaint(img, config))
   }
   // though TypeScript thinks we're safe here, our data may have been coerced from a config object,
   // so we need to handle the unexpected case

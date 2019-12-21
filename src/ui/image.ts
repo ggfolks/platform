@@ -15,7 +15,7 @@ export interface ImageConfig extends Element.Config {
 
 /** Displays an image, which potentially varies based on the element state. */
 export class Image extends Element {
-  private image = this.observe<HTMLImageElement | Error | undefined>(undefined)
+  private image = this.observe<HTMLImageElement|undefined>(undefined)
   private scaleFactor = 1
 
   constructor (ctx :Element.Context, parent :Element, readonly config :ImageConfig) {
@@ -38,9 +38,7 @@ export class Image extends Element {
 
   protected rerender (canvas :CanvasRenderingContext2D, region :rect) {
     const image = this.image.current
-    if (image instanceof HTMLImageElement) {
-      canvas.drawImage(image, this.x, this.y, this.getWidth(image), this.getHeight(image))
-    }
+    if (image) canvas.drawImage(image, this.x, this.y, this.getWidth(image), this.getHeight(image))
   }
 
   protected getWidth (img :HTMLImageElement) :number {

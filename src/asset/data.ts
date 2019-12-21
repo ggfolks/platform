@@ -3,7 +3,7 @@ import {UUID} from "../core/uuid"
 import {dmap, dqueue} from "../data/meta"
 import {Auth} from "../auth/auth"
 import {DContext, DObject} from "../data/data"
-import {ResourceLoader} from "./loader"
+import {ResourceLoader, isAbsoluteUrl} from "./loader"
 
 export const DebugLog = false
 
@@ -59,8 +59,12 @@ export function watchLoader (loader :ResourceLoader, object :WatchObject) :Remov
   const unloader = loader.events.onEmit(ev => {
     if (DebugLog) log.debug("Loader change", "ev", ev)
     switch (ev.type) {
-    case "loaded": object.watchq.post({type: "watch", path: ev.path}) ; break
-    case "unloaded": object.watchq.post({type: "unwatch", path: ev.path}) ; break
+    case "loaded":
+      if (!isAbsoluteUrl(ev.path)) object.watchq.post({type: "watch", path: ev.path})
+      break
+    case "unloaded":
+      if (!isAbsoluteUrl(ev.path)) object.watchq.post({type: "unwatch", path: ev.path})
+      break
     }
   })
   const unobject = object.watched.onChange(ev => {
