@@ -1,6 +1,6 @@
 import {Remover, NoopRemover, log} from "../core/util"
 import {Data} from "../core/data"
-import {Subject} from "../core/react"
+import {Emitter, Subject} from "../core/react"
 
 function eventToError (pre :string, err :Event|string) :Error {
   if (typeof err === "string") return new Error(`${pre}: ${err}`)
@@ -17,6 +17,9 @@ function composeUrl (baseUrl :string, maybeRelativeUrl :string) :string {
 
 type Loader = (path :string, loaded :(data :string) => void, failed :(err :Error) => void) => void
 type Watcher = (path :string) => Remover
+
+type ResourceEvent = {type :"loaded", path :string}
+                   | {type :"unloaded", path :string}
 
 /** Resource loaders load resources from some source (the file system, the network, etc.) and
   * potentially reload the data if the loader supports hot reloading. Note that because this is a
@@ -48,6 +51,9 @@ export class ResourceLoader {
     })
     return loader
   }
+
+  /** Emits events when resources are loaded and unloaded. */
+  readonly events = new Emitter<ResourceEvent>()
 
   constructor (private _baseUrl :string,
                private readonly loader :Loader,
@@ -110,10 +116,12 @@ export class ResourceLoader {
       const unwatch = this.watcher(path)
       this.watches.add(unwatch)
       reload()
+      this.events.emit({type: "loaded", path})
       return () => {
         this.reloaders.delete(path)
         this.watches.delete(unwatch)
         unwatch()
+        this.events.emit({type: "unloaded", path})
       }
     }))
     return res as Subject<R>
