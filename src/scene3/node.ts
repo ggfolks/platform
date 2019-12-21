@@ -6,6 +6,7 @@ import {
 import {Subject, Value} from "../core/react"
 import {MutableMap} from "../core/rcollect"
 import {Noop, NoopRemover, getValue} from "../core/util"
+import {loadGLTFAnimationClip} from "../asset/gltf"
 import {Graph} from "../graph/graph"
 import {InputEdgeMeta, activateNodeConfigs, inputEdge, outputEdge, property} from "../graph/meta"
 import {NodeTypeRegistry, WrappedValue} from "../graph/node"
@@ -14,9 +15,7 @@ import {Component} from "../entity/entity"
 import {EntityComponentConfig, EntityComponentNode} from "../entity/node"
 import {PointerConfig} from "../input/node"
 import {AnimationController, AnimationControllerConfig} from "./animation"
-import {
-  CanonicalHoversId, CanonicalMixerId, CanonicalObjectId, HoverMap, loadGLTFAnimationClip,
-} from "./entity"
+import {CanonicalHoversId, CanonicalMixerId, CanonicalObjectId, HoverMap} from "./entity"
 
 /** Emits information about a single hover point. */
 abstract class HoverConfig implements EntityComponentConfig, PointerConfig {

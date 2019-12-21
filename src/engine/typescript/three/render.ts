@@ -18,7 +18,7 @@ import {Disposer, Noop, NoopRemover, Remover, getValue} from "../../../core/util
 import {ResourceLoader} from "../../../asset/loader"
 import {Graph, GraphConfig} from "../../../graph/graph"
 import {PropertyMeta, setEnumMeta} from "../../../graph/meta"
-import {GLTF, loadGLTF, loadGLTFAnimationClip} from "../../../scene3/entity"
+import {GLTF, loadGLTF, loadGLTFAnimationClip} from "../../../asset/gltf"
 import {Hand, Pointer} from "../../../input/hand"
 import {wheelEvents} from "../../../input/react"
 import {
