@@ -2,10 +2,11 @@ import {FileLoader} from "three"
 import {Noop} from "../../../core/util"
 import {ResourceLoader} from "../../../asset/loader"
 
-export function threeLoader (baseUrl :string) {
-  const loader = new ResourceLoader(baseUrl, (path, loaded, failed) => {
+/** Configures `loader` to use a Three.js `FileLoader` to load config data. This causes those
+  * resources to show up in Three's loading tracking system. */
+export function useThreeForData (loader :ResourceLoader) {
+  loader.setDataLoader((path, loaded, failed) => {
     new FileLoader().load(loader.getUrl(path), data => loaded(data as string), Noop,
                           errev => failed(new Error(errev.message)))
   })
-  return loader
 }

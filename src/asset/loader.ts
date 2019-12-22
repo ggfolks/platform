@@ -84,7 +84,7 @@ export class ResourceLoader {
   readonly events = new Emitter<ResourceEvent>()
 
   constructor (private _baseUrl :string,
-               private readonly loader :Loader<string>,
+               private loader :Loader<string>,
                private readonly watcher :Watcher = _ => NoopRemover) {
     this.setBaseUrl(_baseUrl) // add trailing slash if needed
   }
@@ -96,6 +96,11 @@ export class ResourceLoader {
     * loaded relative to this base. */
   setBaseUrl (baseUrl :string) {
     this._baseUrl = baseUrl.endsWith("/") ? baseUrl : `${baseUrl}/`
+  }
+
+  /** Configures the loader to use when loading text and config resources. */
+  setDataLoader (loader :Loader<string>) {
+    this.loader = loader
   }
 
   /** Returns the URL to the asset at `path`. */
