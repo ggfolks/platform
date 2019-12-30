@@ -212,6 +212,9 @@ export interface Light extends Component {
 
   /** The light intensity. */
   intensity :number
+
+  /** Whether or not this light casts shadows. */
+  castShadow :boolean
 }
 
 /** Represents a (GLTF) model loaded from a URL. */
@@ -222,6 +225,12 @@ export interface Model extends Bounded, Hoverable {
 
   /** The opacity to apply to the model. */
   opacity :number
+
+  /** Whether or not the model casts a shadow. */
+  castShadow :boolean
+
+  /** Whether or not the model receives shadows. */
+  receiveShadow :boolean
 }
 
 /** Represents a set of models fused together. */
@@ -232,4 +241,10 @@ export interface FusedModels extends Bounded, Hoverable {
 
   /** The opacity to apply to the models. */
   opacity :number
+
+  /** Whether or not the models cast a shadow. */
+  castShadow :boolean
+
+  /** Whether or not the models receive shadows. */
+  receiveShadow :boolean
 }

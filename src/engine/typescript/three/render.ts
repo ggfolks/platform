@@ -3,9 +3,10 @@ import {
   BufferGeometry, ConeBufferGeometry, CylinderBufferGeometry, DefaultLoadingManager,
   DirectionalLight, DoubleSide, FrontSide, Group, Intersection, Light as LightObject,
   LoopOnce, LoopRepeat, LoopPingPong, Material as MaterialObject, Matrix3, Matrix4, Mesh,
-  MeshBasicMaterial, MeshStandardMaterial, Object3D, OrthographicCamera, PerspectiveCamera,
-  PlaneBufferGeometry, Quaternion, Ray as RayObject, Raycaster, Scene, ShaderMaterial, Sphere,
-  SphereBufferGeometry, Texture, TorusBufferGeometry, Vector2, Vector3, WebGLRenderer,
+  MeshBasicMaterial, MeshStandardMaterial, Object3D, OrthographicCamera, PCFSoftShadowMap,
+  PerspectiveCamera, PlaneBufferGeometry, Quaternion, Ray as RayObject, Raycaster, Scene,
+  ShaderMaterial, Sphere, SphereBufferGeometry, Texture, TorusBufferGeometry, Vector2, Vector3,
+  WebGLRenderer,
 } from "three"
 import {SkeletonUtils} from "three/examples/jsm/utils/SkeletonUtils"
 import {Clock} from "../../../core/clock"
@@ -98,6 +99,9 @@ export class ThreeRenderEngine implements RenderEngine {
     // https://threejs.org/docs/index.html#examples/en/loaders/GLTFLoader
     this.renderer.gammaOutput = true
     this.renderer.gammaFactor = 2.2
+
+    this.renderer.shadowMap.enabled = true
+    this.renderer.shadowMap.type = PCFSoftShadowMap
 
     this.renderer.autoClear = false
 
@@ -1031,6 +1035,7 @@ class ThreeLight extends ThreeObjectComponent implements Light {
   @property("LightType") lightType :LightType = "ambient"
   @property("Color") color = Color.fromRGB(1, 1, 1)
   @property("number", {min: 0, wheelStep: 0.1}) intensity = 1
+  @property("boolean") castShadow = true
 
   get lightObject () :LightObject { return this.objectValue.current as LightObject }
 
@@ -1038,13 +1043,19 @@ class ThreeLight extends ThreeObjectComponent implements Light {
     super.init()
     const updateColor = () => this.lightObject.color.fromArray(this.color, 1)
     const updateIntensity = () => this.lightObject.intensity = this.intensity
+    const updateCastShadow = () => {
+      const lightObject = this.lightObject
+      if (lightObject instanceof DirectionalLight) lightObject.castShadow = this.castShadow
+    }
     this.getProperty<LightType>("lightType").onValue(lightType => {
       this.objectValue.update(lightType === "ambient" ? new AmbientLight() : new DirectionalLight())
       updateColor()
       updateIntensity()
+      updateCastShadow()
     })
     this.getProperty("color").onChange(updateColor)
     this.getProperty("intensity").onChange(updateIntensity)
+    this.getProperty("castShadow").onChange(updateCastShadow)
   }
 
   protected _updateObjectLayers (object :Object3D) {
@@ -1055,9 +1066,13 @@ class ThreeLight extends ThreeObjectComponent implements Light {
 }
 registerConfigurableType("component", ["render"], "light", ThreeLight)
 
+const ShadowProperties = ["castShadow", "receiveShadow"]
+
 class ThreeModel extends ThreeBounded implements Model {
   @property("url") url = ""
   @property("number", {min: 0, wheelStep: 0.01}) opacity = 1
+  @property("boolean") castShadow = true
+  @property("boolean") receiveShadow = true
 
   private _urlRemover :Remover = NoopRemover
 
@@ -1066,6 +1081,11 @@ class ThreeModel extends ThreeBounded implements Model {
     Value
       .join2(this.objectValue, this.getProperty<number>("opacity"))
       .onValue(([object, opacity]) => updateOpacity(object, opacity))
+    for (const property of ShadowProperties) {
+      Value
+        .join2(this.objectValue, this.getProperty(property))
+        .onValue(([object, value]) => updateMeshProperty(object, property, value))
+    }
   }
 
   awake () {
@@ -1105,6 +1125,8 @@ registerConfigurableType("component", ["render"], "model", ThreeModel)
 class ThreeFusedModels extends ThreeBounded implements FusedModels {
   @property("Uint8Array", {editable: false}) encoded = new Uint8Array(0)
   @property("number", {min: 0, wheelStep: 0.01}) opacity = 1
+  @property("boolean") castShadow = true
+  @property("boolean") receiveShadow = true
 
   private _loadingEncoded? :Uint8Array
 
@@ -1113,6 +1135,11 @@ class ThreeFusedModels extends ThreeBounded implements FusedModels {
     Value
       .join2(this.objectValue, this.getProperty<number>("opacity"))
       .onValue(([object, opacity]) => updateOpacity(object, opacity))
+    for (const property of ShadowProperties) {
+      Value
+        .join2(this.objectValue, this.getProperty(property))
+        .onValue(([object, value]) => updateMeshProperty(object, property, value))
+    }
   }
 
   awake () {
@@ -1207,6 +1234,13 @@ function updateOpacity (object :Object3D|undefined, opacity :number) {
     }
   })
   object.userData.opacity = opacity
+}
+
+function updateMeshProperty (object :Object3D|undefined, property :string, value :any) {
+  if (!object) return
+  object.traverse(node => {
+    if (node instanceof Mesh) node[property] = value
+  })
 }
 
 const PlaceholderGLTF = Subject.constant<GLTF>({
@@ -1688,6 +1722,7 @@ class OctreeMesh extends Mesh {
   ) {
     super(geometry, material)
     this._boundingBoxSize = getBoundingBoxSize(_boundingBox)
+    this.castShadow = this.receiveShadow = true
   }
 
   addToOctree (mesh :Mesh, matrix :Matrix4, boundingBox :Box3) {
