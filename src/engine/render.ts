@@ -231,6 +231,9 @@ export interface Model extends Bounded, Hoverable {
 
   /** Whether or not the model receives shadows. */
   receiveShadow :boolean
+
+  /** The flags associated with the model. */
+  flags :number
 }
 
 /** Represents a set of models fused together. */
@@ -241,10 +244,4 @@ export interface FusedModels extends Bounded, Hoverable {
 
   /** The opacity to apply to the models. */
   opacity :number
-
-  /** Whether or not the models cast a shadow. */
-  castShadow :boolean
-
-  /** Whether or not the models receive shadows. */
-  receiveShadow :boolean
 }

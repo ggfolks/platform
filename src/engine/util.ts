@@ -455,6 +455,12 @@ function getBinaryPrecision (position :vec3) :number {
 /** A flag indicating that the model can be walked upon. */
 export const WALKABLE_FLAG = (1 << 0)
 
+/** A flag indicating that the model should not cast shadows. */
+export const NO_CAST_SHADOW_FLAG = (1 << 1)
+
+/** A flag indicating that the model should not receive shadows. */
+export const NO_RECEIVE_SHADOW_FLAG = (1 << 2)
+
 /** Helper class to encode multiple model URLs/transforms into a compact merged format. */
 export class FusedEncoder {
   private readonly _encoder = new Encoder()

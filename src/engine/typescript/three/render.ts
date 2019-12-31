@@ -31,7 +31,7 @@ import {
   Bounded, Camera, FusedModels, Light, LightType, LightTypes, Material, MaterialSide, MaterialSides,
   MeshRenderer, Model, RaycastHit, RenderEngine,
 } from "../../render"
-import {decodeFused} from "../../util"
+import {NO_CAST_SHADOW_FLAG, NO_RECEIVE_SHADOW_FLAG, decodeFused} from "../../util"
 import {
   TypeScriptComponent, TypeScriptCone, TypeScriptConfigurable, TypeScriptCube, TypeScriptCylinder,
   TypeScriptGameEngine, TypeScriptGameObject, TypeScriptMesh, TypeScriptMeshFilter, TypeScriptPage,
@@ -1076,6 +1076,17 @@ class ThreeModel extends ThreeBounded implements Model {
 
   private _urlRemover :Remover = NoopRemover
 
+  get flags () :number {
+    return (
+      (this.castShadow ? 0 : NO_CAST_SHADOW_FLAG) |
+      (this.receiveShadow ? 0 : NO_RECEIVE_SHADOW_FLAG)
+    )
+  }
+  set flags (flags :number) {
+    this.castShadow = !(flags & NO_CAST_SHADOW_FLAG)
+    this.receiveShadow = !(flags & NO_RECEIVE_SHADOW_FLAG)
+  }
+
   init () {
     super.init()
     Value
@@ -1096,6 +1107,7 @@ class ThreeModel extends ThreeBounded implements Model {
         renderEngine.mergedStatic.meshes.add(
           this.url,
           new Matrix4().fromArray(this.transform.localToWorldMatrix),
+          this.flags,
         )
         return
       }
@@ -1125,8 +1137,6 @@ registerConfigurableType("component", ["render"], "model", ThreeModel)
 class ThreeFusedModels extends ThreeBounded implements FusedModels {
   @property("Uint8Array", {editable: false}) encoded = new Uint8Array(0)
   @property("number", {min: 0, wheelStep: 0.01}) opacity = 1
-  @property("boolean") castShadow = true
-  @property("boolean") receiveShadow = true
 
   private _loadingEncoded? :Uint8Array
 
@@ -1135,11 +1145,6 @@ class ThreeFusedModels extends ThreeBounded implements FusedModels {
     Value
       .join2(this.objectValue, this.getProperty<number>("opacity"))
       .onValue(([object, opacity]) => updateOpacity(object, opacity))
-    for (const property of ShadowProperties) {
-      Value
-        .join2(this.objectValue, this.getProperty(property))
-        .onValue(([object, value]) => updateMeshProperty(object, property, value))
-    }
   }
 
   awake () {
@@ -1160,6 +1165,7 @@ class ThreeFusedModels extends ThreeBounded implements FusedModels {
                 scaleVector.fromArray(scale),
               )
               .premultiply(parentMatrix),
+            flags,
             bounds,
           )
         },
@@ -1484,6 +1490,8 @@ registerConfigurableType("component", undefined, "mergedStatic", ThreeMergedStat
 
 /** Handles the merging of a group of models into combined meshes. */
 class MergedMeshes {
+
+  /** Maps keys (one character with flags + URL) to matrices/local bounds. */
   private readonly _models = new Map<string, {matrices :Matrix4[], bounds? :Bounds}>()
 
   constructor (readonly gameEngine :TypeScriptGameEngine) {}
@@ -1491,10 +1499,12 @@ class MergedMeshes {
   /** Adds a model instance to the merged group.
     * @param url the URL of the model to add.
     * @param matrix the transform matrix of the model relative to the merged group.
+    * @param flags the flags associated with the model.
     * @param [bounds] the tile bounds of the model, if any. */
-  add (url :string, matrix :Matrix4, bounds? :Bounds) {
-    let model = this._models.get(url)
-    if (!model) this._models.set(url, model = {matrices: [], bounds})
+  add (url :string, matrix :Matrix4, flags :number, bounds? :Bounds) {
+    const key = String.fromCharCode(flags) + url
+    let model = this._models.get(key)
+    if (!model) this._models.set(key, model = {matrices: [], bounds})
     model.matrices.push(matrix)
   }
 
@@ -1503,12 +1513,23 @@ class MergedMeshes {
   build (onFinish :(group :Group) => void) {
     // wait until we have all of the required models
     Subject
-      .join(...Array.from(this._models.keys(),
-                          path => loadGLTFWithBoundingBox(this.gameEngine.loader, path)))
+      .join(...Array.from(
+        this._models.keys(),
+        key => loadGLTFWithBoundingBox(this.gameEngine.loader, key.substring(1)),
+      ))
       .once(gltfs => {
-        const applyToModels = (op :(gltf :GLTF, matrices :Matrix4[], bounds? :Bounds) => void) => {
+        type ModelOp = (
+          gltf :GLTF,
+          matrices :Matrix4[],
+          flags :number,
+          bounds? :Bounds,
+        ) => void
+        const applyToModels = (op :ModelOp) => {
           let ii = 0
-          for (const {matrices, bounds} of this._models.values()) op(gltfs[ii++], matrices, bounds)
+          for (const [key, {matrices, bounds}] of this._models) {
+            const flags = key.charCodeAt(0)
+            op(gltfs[ii++], matrices, flags, bounds)
+          }
         }
 
         // compute the combined bounds (both tile bounds, which we store in the group for snapping,
@@ -1517,7 +1538,7 @@ class MergedMeshes {
         const tileBoundingBox = group.userData.boundingBox = new Box3()
         const geomBoundingBox = new Box3()
         const tmpBoundingBox = new Box3()
-        applyToModels((gltf, matrices, bounds) => {
+        applyToModels((gltf, matrices, flags, bounds) => {
           for (const matrix of matrices) {
             tmpBoundingBox.copy(gltf.scene.userData.boundingBox)
             geomBoundingBox.union(tmpBoundingBox.applyMatrix4(matrix))
@@ -1535,9 +1556,10 @@ class MergedMeshes {
           start :number,
           count :number,
           matrices :Matrix4[],
+          flags :number,
         ) => void
         const applyToMeshParts = (op :MeshPartOp) => {
-          applyToModels((gltf, matrices) => {
+          applyToModels((gltf, matrices, flags) => {
             gltf.scene.traverse(node => {
               if (!(
                 node instanceof Mesh &&
@@ -1547,9 +1569,9 @@ class MergedMeshes {
               if (Array.isArray(node.material)) {
                 for (const group of node.geometry.groups) {
                   const material = node.material[group.materialIndex || 0]
-                  op(material, node, group.start, group.count, matrices)
+                  op(material, node, group.start, group.count, matrices, flags)
                 }
-              } else op(node.material, node, 0, node.geometry.index.count, matrices)
+              } else op(node.material, node, 0, node.geometry.index.count, matrices, flags)
             })
           })
         }
@@ -1561,43 +1583,50 @@ class MergedMeshes {
           color :boolean
           mesh :OctreeMesh
         }
-        const stats = new Map<Texture|undefined, Stats>()
-        applyToMeshParts((material, mesh, start, count, matrices) => {
+        const stats = new Map<Texture|undefined, Map<number, Stats>>()
+        applyToMeshParts((material, mesh, start, count, matrices, flags) => {
           const texture = material["map"] as Texture|undefined
           let textureStats = stats.get(texture)
-          if (!textureStats) {
-            stats.set(texture, textureStats = {
+          if (!textureStats) stats.set(texture, textureStats = new Map())
+          let flagStats = textureStats.get(flags)
+          if (!flagStats) {
+            textureStats.set(flags, flagStats = {
               vertices: 0,
               indices: 0,
               color: false,
-              mesh: new OctreeMesh(new BufferGeometry(), material, geomBoundingBox),
+              mesh: new OctreeMesh(new BufferGeometry(), material, geomBoundingBox, flags),
             })
           }
           const geometry = mesh.geometry as BufferGeometry
-          textureStats.vertices += geometry.getAttribute("position").count * matrices.length
-          textureStats.indices += count * matrices.length
-          textureStats.color = textureStats.color || !!geometry.getAttribute("color")
+          flagStats.vertices += geometry.getAttribute("position").count * matrices.length
+          flagStats.indices += count * matrices.length
+          flagStats.color = flagStats.color || !!geometry.getAttribute("color")
         })
 
         // create and add the meshes
         for (const [texture, textureStats] of stats) {
-          const geometry = textureStats.mesh.geometry as BufferGeometry
-          geometry.boundingBox = new Box3()
-          group.add(textureStats.mesh)
-          const vertices = textureStats.vertices
-          const IndexArrayType = vertices < 65536 ? Uint16Array : Uint32Array
-          geometry.setIndex(new BufferAttribute(new IndexArrayType(textureStats.indices), 1))
-          geometry.setAttribute("position", new BufferAttribute(new Float32Array(vertices * 3), 3))
-          geometry.setAttribute("normal", new BufferAttribute(new Float32Array(vertices * 3), 3))
-          if (texture) {
-            geometry.setAttribute("uv", new BufferAttribute(new Float32Array(vertices * 2), 2))
+          for (const flagStats of textureStats.values()) {
+            const geometry = flagStats.mesh.geometry as BufferGeometry
+            geometry.boundingBox = new Box3()
+            group.add(flagStats.mesh)
+            const vertices = flagStats.vertices
+            const IndexArrayType = vertices < 65536 ? Uint16Array : Uint32Array
+            geometry.setIndex(new BufferAttribute(new IndexArrayType(flagStats.indices), 1))
+            geometry.setAttribute(
+              "position",
+              new BufferAttribute(new Float32Array(vertices * 3), 3),
+            )
+            geometry.setAttribute("normal", new BufferAttribute(new Float32Array(vertices * 3), 3))
+            if (texture) {
+              geometry.setAttribute("uv", new BufferAttribute(new Float32Array(vertices * 2), 2))
+            }
+            if (flagStats.color) {
+              geometry.setAttribute("color", new BufferAttribute(new Float32Array(vertices * 3), 3))
+            }
+            // restart the counts for population
+            flagStats.indices = 0
+            flagStats.vertices = 0
           }
-          if (textureStats.color) {
-            geometry.setAttribute("color", new BufferAttribute(new Float32Array(vertices * 3), 3))
-          }
-          // restart the counts for population
-          textureStats.indices = 0
-          textureStats.vertices = 0
         }
 
         // populate the meshes
@@ -1605,9 +1634,10 @@ class MergedMeshes {
         const m = partMatrix.elements
         const normalMatrix = new Matrix3()
         const n = normalMatrix.elements
-        applyToMeshParts((material, mesh, start, count, matrices) => {
+        applyToMeshParts((material, mesh, start, count, matrices, flags) => {
           const textureStats = stats.get(material["map"] as Texture|undefined)!
-          const destGeometry = textureStats.mesh.geometry as BufferGeometry
+          const flagStats = textureStats.get(flags)!
+          const destGeometry = flagStats.mesh.geometry as BufferGeometry
           const srcGeometry = mesh.geometry as BufferGeometry
           const srcPositionAttribute = srcGeometry.getAttribute("position")
           const vertices = srcPositionAttribute.count
@@ -1630,10 +1660,10 @@ class MergedMeshes {
             partMatrix.multiplyMatrices(matrix, mesh.matrixWorld)
             tmpBoundingBox.copy(srcGeometry.boundingBox).applyMatrix4(partMatrix)
             destGeometry.boundingBox.union(tmpBoundingBox)
-            textureStats.mesh.addToOctree(mesh, partMatrix.clone(), tmpBoundingBox.clone())
+            flagStats.mesh.addToOctree(mesh, partMatrix.clone(), tmpBoundingBox.clone())
 
             // transfer positions with transform
-            const offset = textureStats.vertices
+            const offset = flagStats.vertices
             for (let srcIdx = 0, srcEnd = vertices * 3, destIdx = offset * 3; srcIdx < srcEnd; ) {
               const sx = srcPosition[srcIdx++]
               const sy = srcPosition[srcIdx++]
@@ -1679,20 +1709,22 @@ class MergedMeshes {
 
             // transfer indices with offset
             for (
-              let srcIdx = start, srcEnd = start + count, destIdx = textureStats.indices;
+              let srcIdx = start, srcEnd = start + count, destIdx = flagStats.indices;
               srcIdx < srcEnd;
             ) {
               destIndices[destIdx++] = srcIndices[srcIdx++] + offset
             }
-            textureStats.vertices += vertices
-            textureStats.indices += count
+            flagStats.vertices += vertices
+            flagStats.indices += count
           }
         })
 
         // compute bounding spheres from boxes
         for (const textureStats of stats.values()) {
-          textureStats.mesh.geometry.boundingSphere =
-            textureStats.mesh.geometry.boundingBox.getBoundingSphere(new Sphere())
+          for (const flagStats of textureStats.values()) {
+            flagStats.mesh.geometry.boundingSphere =
+              flagStats.mesh.geometry.boundingBox.getBoundingSphere(new Sphere())
+          }
         }
 
         // notify the listener
@@ -1719,10 +1751,12 @@ class OctreeMesh extends Mesh {
     geometry :BufferGeometry,
     material :MaterialObject,
     private readonly _boundingBox :Box3,
+    flags :number,
   ) {
     super(geometry, material)
     this._boundingBoxSize = getBoundingBoxSize(_boundingBox)
-    this.castShadow = this.receiveShadow = true
+    this.castShadow = !(flags & NO_CAST_SHADOW_FLAG)
+    this.receiveShadow = !(flags & NO_RECEIVE_SHADOW_FLAG)
   }
 
   addToOctree (mesh :Mesh, matrix :Matrix4, boundingBox :Box3) {
