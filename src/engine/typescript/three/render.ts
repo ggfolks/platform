@@ -1036,7 +1036,7 @@ class ThreeLight extends ThreeObjectComponent implements Light {
   @property("Color") color = Color.fromRGB(1, 1, 1)
   @property("number", {min: 0, wheelStep: 0.1}) intensity = 1
   @property("boolean") castShadow = true
-  @property("number", {min: 0, wheelStep: 0.1}) shadowSize = 25
+  @property("number", {min: 0, wheelStep: 0.1}) shadowSize = 30
 
   get lightObject () :LightObject { return this.objectValue.current as LightObject }
 
@@ -1078,6 +1078,8 @@ class ThreeLight extends ThreeObjectComponent implements Light {
           camera.right = halfSize
           camera.bottom = -halfSize
           camera.top = halfSize
+          camera.near = -halfSize
+          camera.far = halfSize
           camera.updateProjectionMatrix()
         }
       })
