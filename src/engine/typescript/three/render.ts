@@ -1036,7 +1036,7 @@ class ThreeLight extends ThreeObjectComponent implements Light {
   @property("Color") color = Color.fromRGB(1, 1, 1)
   @property("number", {min: 0, wheelStep: 0.1}) intensity = 1
   @property("boolean") castShadow = true
-  @property("number", {min: 0, wheelStep: 0.1}) shadowSize = 20
+  @property("number", {min: 0, wheelStep: 0.1}) shadowSize = 25
 
   get lightObject () :LightObject { return this.objectValue.current as LightObject }
 
@@ -1048,6 +1048,7 @@ class ThreeLight extends ThreeObjectComponent implements Light {
         return
       }
       const light = new DirectionalLight()
+      light.shadow.bias = -0.0001
       light.shadow.mapSize.width = 1024
       light.shadow.mapSize.height = 1024
       this.objectValue.update(light)
