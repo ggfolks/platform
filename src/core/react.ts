@@ -33,7 +33,7 @@ export function addListener<T> (listeners :T[], listener :T) :Remover {
   * triggers multiple failures. */
 export class MultiError extends Error {
   constructor (readonly errors :Error[]) {
-    super(`${errors.length} errors`)
+    super(`${errors.length} errors: ${errors}`)
   }
 }
 

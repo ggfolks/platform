@@ -1036,26 +1036,43 @@ class ThreeLight extends ThreeObjectComponent implements Light {
   @property("Color") color = Color.fromRGB(1, 1, 1)
   @property("number", {min: 0, wheelStep: 0.1}) intensity = 1
   @property("boolean") castShadow = true
+  @property("number", {min: 0, wheelStep: 0.1}) shadowSize = 20
 
   get lightObject () :LightObject { return this.objectValue.current as LightObject }
 
   init () {
     super.init()
-    const updateColor = () => this.lightObject.color.fromArray(this.color, 1)
-    const updateIntensity = () => this.lightObject.intensity = this.intensity
-    const updateCastShadow = () => {
-      const lightObject = this.lightObject
-      if (lightObject instanceof DirectionalLight) lightObject.castShadow = this.castShadow
-    }
     this.getProperty<LightType>("lightType").onValue(lightType => {
       this.objectValue.update(lightType === "ambient" ? new AmbientLight() : new DirectionalLight())
-      updateColor()
-      updateIntensity()
-      updateCastShadow()
     })
-    this.getProperty("color").onChange(updateColor)
-    this.getProperty("intensity").onChange(updateIntensity)
-    this.getProperty("castShadow").onChange(updateCastShadow)
+    Value
+     .join2(this.objectValue, this.getProperty<Color>("color"))
+     .onValue(([object, color]) => {
+       if (object instanceof LightObject) object.color.fromArray(color, 1)
+     })
+    Value
+      .join2(this.objectValue, this.getProperty<number>("intensity"))
+      .onValue(([object, intensity]) => {
+        if (object instanceof LightObject) object.intensity = intensity
+      })
+    Value
+      .join2(this.objectValue, this.getProperty<boolean>("castShadow"))
+      .onValue(([object, castShadow]) => {
+        if (object instanceof DirectionalLight) object.castShadow = castShadow
+      })
+    Value
+      .join2(this.objectValue, this.getProperty<number>("shadowSize"))
+      .onValue(([object, shadowSize]) => {
+        if (object instanceof DirectionalLight) {
+          const camera = object.shadow.camera as OrthographicCamera
+          const halfSize = shadowSize / 2
+          camera.left = -halfSize
+          camera.right = halfSize
+          camera.bottom = -halfSize
+          camera.top = halfSize
+          camera.updateProjectionMatrix()
+        }
+      })
   }
 
   protected _updateObjectLayers (object :Object3D) {

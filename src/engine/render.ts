@@ -215,6 +215,9 @@ export interface Light extends Component {
 
   /** Whether or not this light casts shadows. */
   castShadow :boolean
+
+  /** The size of the shadow, for directional lights. */
+  shadowSize :number
 }
 
 /** Represents a (GLTF) model loaded from a URL. */
