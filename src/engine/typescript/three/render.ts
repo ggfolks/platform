@@ -1043,7 +1043,14 @@ class ThreeLight extends ThreeObjectComponent implements Light {
   init () {
     super.init()
     this.getProperty<LightType>("lightType").onValue(lightType => {
-      this.objectValue.update(lightType === "ambient" ? new AmbientLight() : new DirectionalLight())
+      if (lightType === "ambient") {
+        this.objectValue.update(new AmbientLight())
+        return
+      }
+      const light = new DirectionalLight()
+      light.shadow.mapSize.width = 1024
+      light.shadow.mapSize.height = 1024
+      this.objectValue.update(light)
     })
     Value
      .join2(this.objectValue, this.getProperty<Color>("color"))
