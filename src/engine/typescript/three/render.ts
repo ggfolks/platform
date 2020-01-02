@@ -1,12 +1,12 @@
 import {
-  AnimationClip, AnimationMixer, AmbientLight, BackSide, Box3, BoxBufferGeometry, BufferAttribute,
-  BufferGeometry, ConeBufferGeometry, CylinderBufferGeometry, DefaultLoadingManager,
-  DirectionalLight, DoubleSide, FrontSide, Group, Intersection, Light as LightObject,
-  LoopOnce, LoopRepeat, LoopPingPong, Material as MaterialObject, Matrix3, Matrix4, Mesh,
-  MeshBasicMaterial, MeshStandardMaterial, Object3D, OrthographicCamera, PCFSoftShadowMap,
-  PerspectiveCamera, PlaneBufferGeometry, Quaternion, Ray as RayObject, Raycaster, Scene,
-  ShaderMaterial, Sphere, SphereBufferGeometry, Texture, TorusBufferGeometry, Vector2, Vector3,
-  WebGLRenderer,
+  AnimationClip, AnimationMixer, AmbientLight, BackSide, Bone, Box3, BoxBufferGeometry,
+  BufferAttribute, BufferGeometry, ConeBufferGeometry, CylinderBufferGeometry,
+  DefaultLoadingManager, DirectionalLight, DoubleSide, FrontSide, Group, Intersection,
+  Light as LightObject, LoopOnce, LoopRepeat, LoopPingPong, Material as MaterialObject, Matrix3,
+  Matrix4, Mesh, MeshBasicMaterial, MeshStandardMaterial, Object3D, OrthographicCamera,
+  PCFSoftShadowMap, PerspectiveCamera, PlaneBufferGeometry, Quaternion, Ray as RayObject, Raycaster,
+  Scene, ShaderMaterial, SkinnedMesh, Sphere, SphereBufferGeometry, Texture, TorusBufferGeometry,
+  Vector2, Vector3, WebGLRenderer,
 } from "three"
 import {SkeletonUtils} from "three/examples/jsm/utils/SkeletonUtils"
 import {Clock} from "../../../core/clock"
@@ -1096,12 +1096,20 @@ registerConfigurableType("component", ["render"], "light", ThreeLight)
 const ShadowProperties = ["castShadow", "receiveShadow"]
 
 class ThreeModel extends ThreeBounded implements Model {
-  @property("url") url = ""
+  readonly urlsValue = Mutable.local([""])
+  readonly urlValue = this.urlsValue.bimap(urls => urls[0], (urls, url) => [url])
+
+  @property("url[]", {editable: false}) get urls () { return this.urlsValue.current }
+  set urls (urls :string[]) { this.urlsValue.update(urls) }
+
+  @property("url", {transient: true}) get url () { return this.urlValue.current }
+  set url (url :string) { this.urlValue.update(url) }
+
   @property("number", {min: 0, wheelStep: 0.01}) opacity = 1
   @property("boolean") castShadow = true
   @property("boolean") receiveShadow = true
 
-  private _urlRemover :Remover = NoopRemover
+  private _urlsRemover :Remover = NoopRemover
 
   get flags () :number {
     return (
@@ -1131,27 +1139,32 @@ class ThreeModel extends ThreeBounded implements Model {
     if (this.gameObject.isStatic) {
       const renderEngine = this.gameEngine.renderEngine as ThreeRenderEngine
       if (renderEngine.mergedStatic) {
-        renderEngine.mergedStatic.meshes.add(
-          this.url,
-          new Matrix4().fromArray(this.transform.localToWorldMatrix),
-          this.flags,
-        )
+        const matrix = new Matrix4().fromArray(this.transform.localToWorldMatrix)
+        const flags = this.flags
+        for (const url of this.urls) renderEngine.mergedStatic.meshes.add(url, matrix, flags)
         return
       }
     }
-    this.getProperty<string>("url").onValue(url => {
-      this._urlRemover()
+    this.getProperty<string[]>("urls").onValue(urls => {
+      this._urlsRemover()
       this.objectValue.update(undefined)
-      this._urlRemover = loadGLTFWithBoundingBox(this.gameEngine.loader, url).onValue(gltf => {
-        this.objectValue.update(SkeletonUtils.clone(gltf.scene) as Object3D)
-        this._boundsValid = false
-      })
+      this._urlsRemover = Subject
+        .join(...urls.map(url => loadGLTFWithBoundingBox(this.gameEngine.loader, url)))
+        .onValue(gltfs => {
+          this._boundsValid = false
+          if (gltfs.length === 0) return
+          const object = SkeletonUtils.clone(gltfs[0].scene) as Object3D
+          const nodes = new Map<string, Object3D>()
+          object.traverse(node => nodes.set(node.name, node))
+          for (let ii = 1; ii < gltfs.length; ii++) cloneInto(object, gltfs[ii].scene, nodes)
+          this.objectValue.update(object)
+        })
     })
   }
 
   dispose () {
     super.dispose()
-    this._urlRemover()
+    this._urlsRemover()
   }
 
   protected _updateObjectTransform (object :Object3D) {
@@ -1160,6 +1173,27 @@ class ThreeModel extends ThreeBounded implements Model {
   }
 }
 registerConfigurableType("component", ["render"], "model", ThreeModel)
+
+function cloneInto (target :Object3D, source :Object3D, nodes :Map<string, Object3D>) {
+  for (const sourceChild of source.children) {
+    let targetChild = nodes.get(sourceChild.name)
+    if (!(targetChild && targetChild.parent === target)) {
+      targetChild = sourceChild.clone(false)
+      if (sourceChild instanceof SkinnedMesh && targetChild instanceof SkinnedMesh) {
+        // refer to three/examples/js/utils/SkeletonUtils.js
+        targetChild.skeleton = sourceChild.skeleton.clone()
+        targetChild.skeleton.bones = sourceChild.skeleton.bones.map(
+          bone => nodes.get(bone.name) as Bone|undefined || bone,
+        )
+        targetChild.bindMatrix.copy(sourceChild.bindMatrix)
+        targetChild.bind(targetChild.skeleton, targetChild.bindMatrix)
+      }
+      target.add(targetChild)
+      nodes.set(sourceChild.name, targetChild)
+    }
+    cloneInto(targetChild, sourceChild, nodes)
+  }
+}
 
 class ThreeFusedModels extends ThreeBounded implements FusedModels {
   @property("Uint8Array", {editable: false}) encoded = new Uint8Array(0)

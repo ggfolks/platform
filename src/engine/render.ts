@@ -220,11 +220,14 @@ export interface Light extends Component {
   shadowSize :number
 }
 
-/** Represents a (GLTF) model loaded from a URL. */
+/** Represents a (GLTF) model loaded from a URL (or a set of overlaid models). */
 export interface Model extends Bounded, Hoverable {
 
-  /** The URL of the model to load. */
+  /** The URL of the first model to load. */
   url :string
+
+  /** The URLs of the models to load. */
+  urls :string[]
 
   /** The opacity to apply to the model. */
   opacity :number
