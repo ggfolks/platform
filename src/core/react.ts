@@ -188,9 +188,15 @@ export abstract class Source<T> {
   abstract map<U> (fn :(v:T) => U) :Source<U>
 
   /** Returns a reactive [[Value]] which starts with value `start` and is updated by combining
-    * values emitted by this source with the latest value via `fn` when they arrive. *Note:* the
-    * fold value is only "live" while it has listeners. When it has no listeners, it will not listen
-    * to `this` underlying source and will not observe events it emits.
+    * values emitted by this source with the latest value via `fn` when they arrive.
+    *
+    * *Note:* the fold value is only "live" while it has listeners. When it has no listeners, it
+    * will not listen to `this` underlying source and will not observe events it emits. Thus it is
+    * advisable to only ever create a value using this method and immediately listen to it. If you
+    * will be listening and unlistening to the value, you are better off recreating it each time so
+    * that it's more apparent to readers of the code that the value will contain `start` until a new
+    * value arrives.
+    *
     * @param fn used to compute new folded values when values arrive on `this` source.
     * @param eq used to check whether computed new values have actually changed.
     * [[Value]]s emit notifications only when values change. */
@@ -544,7 +550,17 @@ export class Value<T> extends ReadableSource<T> {
 
   /** Creates a value from `source` which starts with the value `start` and is updated by values
     * emitted by `source` whenever they arrive. The values emitted by `source` are compared for
-    * equality via `eq` (which defaults to `refEquals`) */
+    * equality via `eq` (which defaults to `refEquals`).
+    *
+    * *Note*: the returned value is only "live" while it has listeners. When it has no listeners, it
+    * will not listen to the underlying source and will not observe events it emits. While it has no
+    * listeners the value will be the last observed value and when it gains new listeners that value
+    * will be reported until some new value is emitted by the underlying source. Thus it is
+    * advisable to only ever create a value using this method and immediately listen to it. If you
+    * will be listening and unlistening to the value, you are better off recreating it each time so
+    * that it's more apparent to readers of the code that the value will contain `start` until a new
+    * value arrives.
+    */
   static from<T> (source :Source<T>, start :T, eq :Eq<T> = refEquals) :Value<T> {
     return source.fold(start, (o, n) => n, eq)
   }
