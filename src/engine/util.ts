@@ -293,6 +293,8 @@ const IDENTIFIER_PATTERN = /^[a-zA-Z_]\w*$/
 
 const constructorStringifiers = new Map<Function, (value :any, indent :number) => string>([
   [Float32Array, value => `Float32Array.of(${toFloat32ArrayString(value)})`],
+  [Uint16Array, value => `Uint16Array.of(${value.join(", ")})`],
+  [Uint32Array, value => `Uint32Array.of(${value.join(", ")})`],
   [Color, value => `Color.fromARGB(${toFloat32ArrayString(value)})`],
   [Bounds, value => {
     return `Bounds.create(${JavaScript.stringify(value.min)}, ${JavaScript.stringify(value.max)})`
@@ -351,7 +353,9 @@ const constructorCloners = new Map<Function, (value :any) => any>([
     for (const value of values) array.push(JavaScript.clone(value))
     return array
   }],
-  [Uint8Array, value => value], // treat Uint8Arrays as immutable for performance
+  [Uint32Array, value => value],
+  [Uint16Array, value => value],
+  [Uint8Array, value => value], // treat UintArrays as immutable for performance
 ])
 
 interface TypedArrayConstructor<T> {
@@ -609,5 +613,101 @@ export function decodeFused (source :Uint8Array, visitor :FusedVisitor) {
     position[2] = decoder.getVarInt()
     vec3.scale(position, position, 2 ** -precision)
     visitor.visitTile(url, bounds, position, CardinalRotations[cardinal], vec3one, flags)
+  }
+}
+
+interface Occupancy {
+  x :number
+  y :number
+  z :number
+  walkable :number
+  nextOccupancy? :Occupancy
+}
+
+/** Tracks occupancy in a 3D grid of fixed-size (0.5, 1.0, 0.5) cells, providing the means to find
+  * unoccupied cells and perform pathfinding. */
+export class NavGrid {
+
+  /** Maps 3D coordinate hashes to occupancy records. */
+  private readonly _occupancies = new Map<number, Occupancy>()
+
+  insert (bounds :Bounds, walkable :boolean) {
+    this._addToWalkable(bounds, walkable ? 1 : -1)
+  }
+
+  delete (bounds :Bounds, walkable :boolean) {
+    this._addToWalkable(bounds, walkable ? -1 : 1)
+  }
+
+  private _addToWalkable (bounds :Bounds, increment :number) {
+    this._visitOccupancies(bounds, occupancy => (occupancy.walkable += increment) === 0, true)
+  }
+
+  private _visitOccupancies (
+    bounds :Bounds|undefined,
+    op :(occupancy :Occupancy) => boolean|void,
+    create = false,
+    requireWalkable = false,
+  ) :boolean {
+    if (!bounds) {
+      for (const [hash, currentOccupancy] of this._occupancies) {
+        let occupancy :Occupancy|undefined = currentOccupancy
+        let previousOccupancy :Occupancy|undefined
+        for (; occupancy; occupancy = occupancy.nextOccupancy) {
+          if (requireWalkable && occupancy.walkable <= 0) return false
+          if (op(occupancy)) this._deleteOccupancy(hash, occupancy, previousOccupancy)
+          else previousOccupancy = occupancy
+        }
+      }
+      return true
+    }
+    const lx = Math.floor(bounds.min[0] * 2)
+    const ux = Math.max(lx + 1, Math.ceil(bounds.max[0] * 2))
+    const ly = Math.floor(bounds.min[1])
+    const uy = Math.max(ly + 1, Math.ceil(bounds.max[1]))
+    const lz = Math.floor(bounds.min[2] * 2)
+    const uz = Math.max(lz + 1, Math.ceil(bounds.max[2] * 2))
+    for (let x = lx; x < ux; x++) {
+      for (let y = ly; y < uy; y++) {
+        for (let z = lz; z < uz; z++) {
+          const hash = 31 * (31 * (217 + x) + y) + z
+          let occupancy = this._occupancies.get(hash)
+          let previousOccupancy :Occupancy|undefined
+          for (; occupancy; occupancy = occupancy.nextOccupancy) {
+            if (occupancy.x === x && occupancy.y === y && occupancy.z === z) {
+              if (requireWalkable && occupancy.walkable <= 0) return false
+              if (op(occupancy)) this._deleteOccupancy(hash, occupancy, previousOccupancy)
+              break
+            }
+            previousOccupancy = occupancy
+          }
+          if (!occupancy) {
+            if (requireWalkable) return false
+            if (create) {
+              occupancy = {x, y, z, walkable: 0}
+              if (!op(occupancy)) {
+                if (previousOccupancy) previousOccupancy.nextOccupancy = occupancy
+                else this._occupancies.set(hash, occupancy)
+              }
+            }
+          }
+        }
+      }
+    }
+    return true
+  }
+
+  private _deleteOccupancy (
+    hash :number,
+    occupancy :Occupancy,
+    previousOccupancy :Occupancy|undefined,
+  ) {
+    if (previousOccupancy) {
+      previousOccupancy.nextOccupancy = occupancy.nextOccupancy
+    } else if (occupancy.nextOccupancy) {
+      this._occupancies.set(hash, occupancy.nextOccupancy)
+    } else {
+      this._occupancies.delete(hash)
+    }
   }
 }

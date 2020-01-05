@@ -1,12 +1,11 @@
 import {
   AnimationClip, AnimationMixer, AmbientLight, BackSide, Bone, Box3, BoxBufferGeometry,
-  BufferAttribute, BufferGeometry, ConeBufferGeometry, CylinderBufferGeometry,
-  DefaultLoadingManager, DirectionalLight, DoubleSide, FrontSide, Group, Intersection,
-  Light as LightObject, LoopOnce, LoopRepeat, LoopPingPong, Material as MaterialObject, Matrix3,
-  Matrix4, Mesh, MeshBasicMaterial, MeshStandardMaterial, Object3D, OrthographicCamera,
-  PCFSoftShadowMap, PerspectiveCamera, PlaneBufferGeometry, Quaternion, Ray as RayObject, Raycaster,
-  Scene, ShaderMaterial, SkinnedMesh, Sphere, SphereBufferGeometry, Texture, TorusBufferGeometry,
-  Vector2, Vector3, WebGLRenderer,
+  BufferAttribute, BufferGeometry, CylinderBufferGeometry, DefaultLoadingManager, DirectionalLight,
+  DoubleSide, FrontSide, Group, Intersection, Light as LightObject, LoopOnce, LoopRepeat,
+  LoopPingPong, Material as MaterialObject, Matrix3, Matrix4, Mesh, MeshBasicMaterial,
+  MeshStandardMaterial, Object3D, OrthographicCamera, PCFSoftShadowMap, PerspectiveCamera,
+  PlaneBufferGeometry, Quaternion, Ray as RayObject, Raycaster, Scene, ShaderMaterial, SkinnedMesh,
+  Sphere, SphereBufferGeometry, Texture, Vector2, Vector3, WebGLRenderer,
 } from "three"
 import {SkeletonUtils} from "three/examples/jsm/utils/SkeletonUtils"
 import {Clock} from "../../../core/clock"
@@ -33,9 +32,10 @@ import {
 } from "../../render"
 import {NO_CAST_SHADOW_FLAG, NO_RECEIVE_SHADOW_FLAG, decodeFused} from "../../util"
 import {
-  TypeScriptComponent, TypeScriptCone, TypeScriptConfigurable, TypeScriptCube, TypeScriptCylinder,
-  TypeScriptGameEngine, TypeScriptGameObject, TypeScriptMesh, TypeScriptMeshFilter, TypeScriptPage,
-  TypeScriptQuad, TypeScriptSphere, TypeScriptTorus, applyConfig, registerConfigurableType,
+  TypeScriptComponent, TypeScriptConfigurable, TypeScriptCube, TypeScriptCylinder,
+  TypeScriptExplicitGeometry, TypeScriptGameEngine, TypeScriptGameObject, TypeScriptMesh,
+  TypeScriptMeshFilter, TypeScriptPage, TypeScriptQuad, TypeScriptSphere, applyConfig,
+  registerConfigurableType,
 } from "../game"
 
 setEnumMeta("LightType", LightTypes)
@@ -708,25 +708,58 @@ class ThreeBounded extends ThreeObjectComponent implements Bounded {
   }
 }
 
-const TypeScriptCubePrototype = TypeScriptCube.prototype as any
-TypeScriptCubePrototype._bufferGeometry = new BoxBufferGeometry()
+interface ThreeMesh {
+  readonly bufferGeometry :BufferGeometry
+}
 
-const TypeScriptCylinderPrototype = TypeScriptCylinder.prototype as any
-TypeScriptCylinderPrototype._bufferGeometry = new CylinderBufferGeometry()
+const SharedBoxBufferGeometry = new BoxBufferGeometry()
+class ThreeCube extends TypeScriptCube implements ThreeMesh {
+  readonly bufferGeometry = SharedBoxBufferGeometry
+}
+registerConfigurableType("mesh", [], "cube", ThreeCube)
 
-const TypeScriptQuadPrototype = TypeScriptQuad.prototype as any
-TypeScriptQuadPrototype._bufferGeometry = new PlaneBufferGeometry()
+const SharedCylinderGeometry = new CylinderBufferGeometry()
+class ThreeCylinder extends TypeScriptCylinder implements ThreeMesh {
+  readonly bufferGeometry = SharedCylinderGeometry
+}
+registerConfigurableType("mesh", [], "cylinder", ThreeCylinder)
 
-const TypeScriptSpherePrototype = TypeScriptSphere.prototype as any
-TypeScriptSpherePrototype._bufferGeometry = new SphereBufferGeometry(1, 16, 12)
+const SharedQuadGeometry = new PlaneBufferGeometry()
+class ThreeQuad extends TypeScriptQuad implements ThreeMesh {
+  readonly bufferGeometry = SharedQuadGeometry
+}
+registerConfigurableType("mesh", [], "quad", ThreeQuad)
 
-const TypeScriptConePrototype = TypeScriptCone.prototype as any
-TypeScriptConePrototype._bufferGeometry = new ConeBufferGeometry(1, 1, 16)
+const SharedSphereGeometry = new SphereBufferGeometry(1, 16, 12)
+class ThreeSphere extends TypeScriptSphere implements ThreeMesh {
+  readonly bufferGeometry = SharedSphereGeometry
+}
+registerConfigurableType("mesh", [], "sphere", ThreeSphere)
 
-const TypeScriptTorusPrototype = TypeScriptTorus.prototype as any
-TypeScriptTorusPrototype._bufferGeometry = new TorusBufferGeometry(1, 0.4, 16, 12)
+class ThreeExplicitGeometry extends TypeScriptExplicitGeometry implements ThreeMesh {
+  readonly bufferGeometry = this._disposer.add(new BufferGeometry())
 
-const emptyGeometry = new BufferGeometry()
+  init () {
+    super.init()
+    this.getProperty<Float32Array>("vertices").onValue(vertices => {
+      const position = this.bufferGeometry.getAttribute("position") as BufferAttribute|undefined
+      if (position) {
+        position.array = vertices
+        position.needsUpdate = true
+
+      } else this.bufferGeometry.setAttribute("position", new BufferAttribute(vertices, 3))
+    })
+    this.getProperty<Uint16Array|Uint32Array>("triangles").onValue(triangles => {
+      const index = this.bufferGeometry.getIndex()
+      if (index) {
+        index.array = triangles
+        index.needsUpdate = true
+
+      } else this.bufferGeometry.setIndex(new BufferAttribute(triangles, 1))
+    })
+  }
+}
+registerConfigurableType("mesh", [], "explicitGeometry", ThreeExplicitGeometry)
 
 class ThreeMeshRenderer extends ThreeBounded implements MeshRenderer {
   private _mesh = new Mesh()
@@ -814,12 +847,13 @@ class ThreeMeshRenderer extends ThreeBounded implements MeshRenderer {
             ? meshFilter.meshValue
             : Value.constant<TypeScriptMesh|null>(null),
           )
-        .onValue((mesh :any) => {
-          if (!(mesh && mesh._bufferGeometry)) {
+        .onValue(mesh => {
+          const threeMesh = mesh as ThreeMesh|null
+          if (!threeMesh) {
             this.objectValue.update(undefined)
             return
           }
-          const geometry = (mesh && mesh._bufferGeometry) || emptyGeometry
+          const geometry = threeMesh.bufferGeometry
           this._mesh.geometry = geometry
           if (!geometry.boundingBox) geometry.computeBoundingBox()
           this._mesh.userData.boundingBox = geometry.boundingBox
