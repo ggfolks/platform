@@ -22,8 +22,11 @@ export class Image extends Element {
     super(ctx, parent, config)
     this.disposer.add(ctx.model.resolveAs(config.image, "image").onValue(spec => {
       const path = typeof spec === "string" ? spec : spec.path
-      this.image.observe(ctx.style.loader.getImage(path))
-      this.scaleFactor = typeof spec === "string" ? 1 : spec.scaleFactor
+      if (path === "") this.image.update(undefined)
+      else {
+        this.image.observe(ctx.style.loader.getImage(path))
+        this.scaleFactor = typeof spec === "string" ? 1 : spec.scaleFactor
+      }
     }))
   }
 
