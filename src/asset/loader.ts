@@ -1,4 +1,4 @@
-import {Remover, NoopRemover, log} from "../core/util"
+import {Remover, NoopRemover, developMode, log} from "../core/util"
 import {Data} from "../core/data"
 import {Emitter, Subject, Mutable} from "../core/react"
 
@@ -22,6 +22,8 @@ type Watcher = (path :string) => Remover
 type ResourceEvent = {type :"loaded", path :string}
                    | {type :"unloaded", path :string}
 
+const UPDATE_ERA = Date.now()
+
 class Resource<T,R> {
   readonly value = Mutable.local<R|undefined>(undefined)
   readonly subject = Subject.deriveSubject<R>(disp => {
@@ -31,19 +33,21 @@ class Resource<T,R> {
       if (!this.cached) this.unload()
     }
   })
-  update = 0
+  update = UPDATE_ERA
   cached = false
 
   constructor (readonly owner :ResourceLoader, readonly path :string, readonly unwatch :Remover,
                readonly loader :Loader<T>, readonly parser :(data :T) => R) {
+    if (path === "") throw new Error("Invalid empty resource path")
     owner.events.emit({type: "loaded", path})
     this.reload()
   }
 
   reload () {
-    const path = (this.update++ === 0) ? this.path : `${this.path}?${this.update}`
-    this.loader(path, data => this.value.update(this.parser(data)),
-                err => log.warn("Failed to load resource data", "path", this.path, err))
+    const {path, loader, parser, value} = this
+    const vpath = developMode && !isAbsoluteUrl(path) ? `${path}?${this.update++}` : path
+    loader(vpath, data => value.update(parser(data)),
+           err => log.warn("Failed to load resource data", "path", vpath, err))
   }
   unload () {
     this.unwatch()
