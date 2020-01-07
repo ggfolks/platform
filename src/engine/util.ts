@@ -3,6 +3,7 @@ import {Decoder, Encoder} from "../core/codec"
 import {Color} from "../core/color"
 import {Bounds, quat, quatIdentity, vec3, vec3one, vec3unitY} from "../core/math"
 import {Interp, Easing} from "../core/interp"
+import {Emitter, Stream} from "../core/react"
 import {PMap, toFloat32String} from "../core/util"
 import {Time, Transform} from "./game"
 
@@ -631,16 +632,57 @@ export class NavGrid {
   /** Maps 3D coordinate hashes to occupancy records. */
   private readonly _occupancies = new Map<number, Occupancy>()
 
+  private _changed = new Emitter<void>()
+  private _walkableCellCount = 0
+
+  /** Returns a reference to a stream that fires when the grid is changed. */
+  get changed () :Stream<void> { return this._changed }
+
+  /** Returns the total number of walkable cells. */
+  get walkableCellCount () { return this._walkableCellCount }
+
+  /** Applies the provided operation to all walkable cells. */
+  visitWalkableCells (op :(occupancy :Occupancy) => void) {
+    this._visitOccupancies(undefined, occupancy => {
+      if (occupancy.walkable > 0) op(occupancy)
+    })
+  }
+
+  /** Adds a region to the grid.  All cells intersecting the region will be affected.
+    * @param bounds the bounds of the region to add.
+    * @param walkable whether or not the region is walkable. */
   insert (bounds :Bounds, walkable :boolean) {
     this._addToWalkable(bounds, walkable ? 1 : -1)
   }
 
+  /** Removes a region from the grid.  All cells intersecting the region will be affected.
+    * @param bounds the bounds of the region to remove.
+    * @param walkable whether or not the region was walkable. */
   delete (bounds :Bounds, walkable :boolean) {
     this._addToWalkable(bounds, walkable ? -1 : 1)
   }
 
   private _addToWalkable (bounds :Bounds, increment :number) {
-    this._visitOccupancies(bounds, occupancy => (occupancy.walkable += increment) === 0, true)
+    let changed = false
+    this._visitOccupancies(
+      bounds,
+      occupancy => {
+        const oldWalkable = occupancy.walkable
+        occupancy.walkable += increment
+        if (oldWalkable <= 0) {
+          if (occupancy.walkable > 0) {
+            this._walkableCellCount++
+            changed = true
+          }
+        } else if (occupancy.walkable <= 0) {
+          this._walkableCellCount--
+          changed = true
+        }
+        return occupancy.walkable === 0
+      },
+      true,
+    )
+    if (changed) this._changed.emit()
   }
 
   private _visitOccupancies (
