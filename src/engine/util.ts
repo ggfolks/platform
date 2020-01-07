@@ -617,12 +617,15 @@ export function decodeFused (source :Uint8Array, visitor :FusedVisitor) {
   }
 }
 
-interface Occupancy {
-  x :number
-  y :number
-  z :number
-  walkable :number
+class Occupancy {
+  walkableCount = 0
+  unwalkableCount = 0
   nextOccupancy? :Occupancy
+
+  get walkable () :boolean { return this.walkableCount > 0 && this.unwalkableCount === 0 }
+  get empty () :boolean { return this.walkableCount === 0 && this.unwalkableCount === 0 }
+
+  constructor (readonly x :number, readonly y :number, readonly z :number) {}
 }
 
 /** Tracks occupancy in a 3D grid of fixed-size (0.5, 1.0, 0.5) cells, providing the means to find
@@ -644,7 +647,7 @@ export class NavGrid {
   /** Applies the provided operation to all walkable cells. */
   visitWalkableCells (op :(occupancy :Occupancy) => void) {
     this._visitOccupancies(undefined, occupancy => {
-      if (occupancy.walkable > 0) op(occupancy)
+      if (occupancy.walkable) op(occupancy)
     })
   }
 
@@ -652,33 +655,30 @@ export class NavGrid {
     * @param bounds the bounds of the region to add.
     * @param walkable whether or not the region is walkable. */
   insert (bounds :Bounds, walkable :boolean) {
-    this._addToWalkable(bounds, walkable ? 1 : -1)
+    this._addToCounts(bounds, walkable, 1)
   }
 
   /** Removes a region from the grid.  All cells intersecting the region will be affected.
     * @param bounds the bounds of the region to remove.
     * @param walkable whether or not the region was walkable. */
   delete (bounds :Bounds, walkable :boolean) {
-    this._addToWalkable(bounds, walkable ? -1 : 1)
+    this._addToCounts(bounds, walkable, -1)
   }
 
-  private _addToWalkable (bounds :Bounds, increment :number) {
+  private _addToCounts (bounds :Bounds, walkable :boolean, increment :number) {
     let changed = false
     this._visitOccupancies(
       bounds,
       occupancy => {
         const oldWalkable = occupancy.walkable
-        occupancy.walkable += increment
-        if (oldWalkable <= 0) {
-          if (occupancy.walkable > 0) {
-            this._walkableCellCount++
-            changed = true
-          }
-        } else if (occupancy.walkable <= 0) {
-          this._walkableCellCount--
+        if (walkable) occupancy.walkableCount += increment
+        else occupancy.unwalkableCount += increment
+        if (occupancy.walkable !== oldWalkable) {
+          if (occupancy.walkable) this._walkableCellCount++
+          else this._walkableCellCount--
           changed = true
         }
-        return occupancy.walkable === 0
+        return occupancy.empty
       },
       true,
     )
@@ -696,7 +696,7 @@ export class NavGrid {
         let occupancy :Occupancy|undefined = currentOccupancy
         let previousOccupancy :Occupancy|undefined
         for (; occupancy; occupancy = occupancy.nextOccupancy) {
-          if (requireWalkable && occupancy.walkable <= 0) return false
+          if (requireWalkable && !occupancy.walkable) return false
           if (op(occupancy)) this._deleteOccupancy(hash, occupancy, previousOccupancy)
           else previousOccupancy = occupancy
         }
@@ -717,7 +717,7 @@ export class NavGrid {
           let previousOccupancy :Occupancy|undefined
           for (; occupancy; occupancy = occupancy.nextOccupancy) {
             if (occupancy.x === x && occupancy.y === y && occupancy.z === z) {
-              if (requireWalkable && occupancy.walkable <= 0) return false
+              if (requireWalkable && !occupancy.walkable) return false
               if (op(occupancy)) this._deleteOccupancy(hash, occupancy, previousOccupancy)
               break
             }
@@ -726,7 +726,7 @@ export class NavGrid {
           if (!occupancy) {
             if (requireWalkable) return false
             if (create) {
-              occupancy = {x, y, z, walkable: 0}
+              occupancy = new Occupancy(x, y, z)
               if (!op(occupancy)) {
                 if (previousOccupancy) previousOccupancy.nextOccupancy = occupancy
                 else this._occupancies.set(hash, occupancy)
