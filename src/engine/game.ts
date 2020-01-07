@@ -202,7 +202,7 @@ export interface GameEngine extends Disposable {
     * @param [hideMask=ALL_HIDE_FLAGS_MASK] the hide mask to use to filter objects out. */
   createConfig (layerMask? :number, hideMask? :number) :SpaceConfig
 
-  /** Finds all active game game objects with the specified tag and returns them.
+  /** Finds all active game objects with the specified tag and returns them.
     * @param tag the tag desired.
     * @param [target] an optional array to populate.  If not provided, a new array will be created.
     * @return the array of game objects with the tag. */

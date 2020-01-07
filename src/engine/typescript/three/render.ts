@@ -709,57 +709,56 @@ class ThreeBounded extends ThreeObjectComponent implements Bounded {
 }
 
 interface ThreeMesh {
-  readonly bufferGeometry :BufferGeometry
+  readonly bufferGeometry :Value<BufferGeometry>
 }
 
 const SharedBoxBufferGeometry = new BoxBufferGeometry()
 class ThreeCube extends TypeScriptCube implements ThreeMesh {
-  readonly bufferGeometry = SharedBoxBufferGeometry
+  readonly bufferGeometry = Value.constant<BufferGeometry>(SharedBoxBufferGeometry)
 }
 registerConfigurableType("mesh", [], "cube", ThreeCube)
 
 const SharedCylinderGeometry = new CylinderBufferGeometry()
 class ThreeCylinder extends TypeScriptCylinder implements ThreeMesh {
-  readonly bufferGeometry = SharedCylinderGeometry
+  readonly bufferGeometry = Value.constant<BufferGeometry>(SharedCylinderGeometry)
 }
 registerConfigurableType("mesh", [], "cylinder", ThreeCylinder)
 
 const SharedQuadGeometry = new PlaneBufferGeometry()
 class ThreeQuad extends TypeScriptQuad implements ThreeMesh {
-  readonly bufferGeometry = SharedQuadGeometry
+  readonly bufferGeometry = Value.constant<BufferGeometry>(SharedQuadGeometry)
 }
 registerConfigurableType("mesh", [], "quad", ThreeQuad)
 
 const SharedSphereGeometry = new SphereBufferGeometry(1, 16, 12)
 class ThreeSphere extends TypeScriptSphere implements ThreeMesh {
-  readonly bufferGeometry = SharedSphereGeometry
+  readonly bufferGeometry = Value.constant<BufferGeometry>(SharedSphereGeometry)
 }
 registerConfigurableType("mesh", [], "sphere", ThreeSphere)
 
 class ThreeExplicitGeometry extends TypeScriptExplicitGeometry implements ThreeMesh {
-  readonly bufferGeometry = this._disposer.add(new BufferGeometry())
+  readonly bufferGeometry = Mutable.local(new BufferGeometry())
 
   init () {
     super.init()
-    this.getProperty<Float32Array>("vertices").onValue(vertices => {
-      const position = this.bufferGeometry.getAttribute("position") as BufferAttribute|undefined
-      if (position) {
-        position.array = vertices
-        position.needsUpdate = true
-
-      } else this.bufferGeometry.setAttribute("position", new BufferAttribute(vertices, 3))
-    })
-    this.getProperty<Uint16Array|Uint32Array>("triangles").onValue(triangles => {
-      const index = this.bufferGeometry.getIndex()
-      if (index) {
-        index.array = triangles
-        index.needsUpdate = true
-
-      } else this.bufferGeometry.setIndex(new BufferAttribute(triangles, 1))
-    })
+    this._disposer.add(() => this.bufferGeometry.current.dispose())
+    Value
+      .join2(
+        this.getProperty<Float32Array>("vertices"),
+        this.getProperty<Uint16Array|Uint32Array>("triangles"),
+      )
+      .onValue(([vertices, triangles]) => {
+        this.bufferGeometry.current.dispose()
+        const geometry = new BufferGeometry()
+        geometry.setAttribute("position", new BufferAttribute(vertices, 3))
+        geometry.setIndex(new BufferAttribute(triangles, 1))
+        this.bufferGeometry.update(geometry)
+      })
   }
 }
 registerConfigurableType("mesh", [], "explicitGeometry", ThreeExplicitGeometry)
+
+const EmptyGeometry = new BufferGeometry()
 
 class ThreeMeshRenderer extends ThreeBounded implements MeshRenderer {
   private _mesh = new Mesh()
@@ -847,13 +846,11 @@ class ThreeMeshRenderer extends ThreeBounded implements MeshRenderer {
             ? meshFilter.meshValue
             : Value.constant<TypeScriptMesh|null>(null),
           )
-        .onValue(mesh => {
+        .switchMap(mesh => {
           const threeMesh = mesh as ThreeMesh|null
-          if (!threeMesh) {
-            this.objectValue.update(undefined)
-            return
-          }
-          const geometry = threeMesh.bufferGeometry
+          return threeMesh ? threeMesh.bufferGeometry : Value.constant(EmptyGeometry)
+        })
+        .onValue(geometry => {
           this._mesh.geometry = geometry
           if (!geometry.boundingBox) geometry.computeBoundingBox()
           this._mesh.userData.boundingBox = geometry.boundingBox
