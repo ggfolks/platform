@@ -292,11 +292,18 @@ export class TreeViewNode extends Drag.Elem {
         }
       })
 
-    } else {
+    } else if (!this._selectedKeys.has(this.key.current)) {
       this._selectedKeys.clear()
       this._selectedKeys.add(this.key.current)
     }
     return true
+  }
+
+  releaseSelect (event :MouseEvent|TouchEvent) {
+    if (!(event.ctrlKey || event.shiftKey)) {
+      this._selectedKeys.clear()
+      this._selectedKeys.add(this.key.current)
+    }
   }
 
   protected get customStyleScope () { return TreeViewNodeStyleScope }

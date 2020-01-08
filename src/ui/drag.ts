@@ -147,6 +147,12 @@ export namespace Drag {
       return false
     }
 
+    /** Provides another opportunity to select when a drag is called off before starting.
+      * @param event the event originally passed to [[select]]. */
+    releaseSelect (event :MouseEvent|TouchEvent) {
+      // nothing by default
+    }
+
     handlePointerDown (event :MouseEvent|TouchEvent, pos :vec2, into :PointerInteraction[]) {
       this.contents.handlePointerDown(event, pos, into)
       if (into.length > 0) return
@@ -196,6 +202,7 @@ export namespace Drag {
         release: (upEvent, pos) => {
           clear()
           if (dragRoot) owner.handleDrop(this)
+          else this.releaseSelect(event)
         },
         cancel: () => {
           clear()
