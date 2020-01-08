@@ -828,6 +828,13 @@ export class TypeScriptGameObject implements GameObject {
     return config
   }
 
+  disposeHierarchy () :void {
+    for (let ii = this.transform.childCount - 1; ii >= 0; ii--) {
+      this.transform.getChild(ii).gameObject.disposeHierarchy()
+    }
+    this.dispose()
+  }
+
   dispose () {
     this.activeSelf = false
     this.tag = ""

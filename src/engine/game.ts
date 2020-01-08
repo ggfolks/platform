@@ -317,6 +317,9 @@ export interface GameObject extends Disposable {
     * @param [hideMask=ALL_HIDE_FLAGS_MASK] the hide mask to use to filter components out. */
   createConfig (hideMask? :number) :GameObjectConfig
 
+  /** Disposes of this game object and all of its descendants. */
+  disposeHierarchy () :void
+
   /** Anything else is an untyped component. */
   readonly [type :string] :any
 }
