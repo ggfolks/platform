@@ -1136,13 +1136,13 @@ class ThreeModel extends ThreeBounded implements Model {
   @property("url", {transient: true}) get url () { return this.urlValue.current }
   set url (url :string) { this.urlValue.update(url) }
 
-  @property("number", {min: 0, wheelStep: 0.01}) opacity = 1
+  @property("number", {min: 0, max: 1, wheelStep: 0.01}) opacity = 1
   @property("boolean") castShadow = true
   @property("boolean") receiveShadow = true
 
   private _urlsRemover :Remover = NoopRemover
 
-  get flags () :number {
+  @property("number", {editable: false, transient: true}) get flags () :number {
     return (
       (this.castShadow ? 0 : NO_CAST_SHADOW_FLAG) |
       (this.receiveShadow ? 0 : NO_RECEIVE_SHADOW_FLAG)

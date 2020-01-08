@@ -466,6 +466,9 @@ export const NO_CAST_SHADOW_FLAG = (1 << 1)
 /** A flag indicating that the model should not receive shadows. */
 export const NO_RECEIVE_SHADOW_FLAG = (1 << 2)
 
+/** A flag indicating that the model is not a tile. */
+export const NON_TILE_FLAG = (1 << 3)
+
 /** Helper class to encode multiple model URLs/transforms into a compact merged format. */
 export class FusedEncoder {
   private readonly _encoder = new Encoder()
@@ -693,6 +696,7 @@ export class NavGrid {
   private _addFusedToCounts (source :Uint8Array, parentMatrix :mat4, increment :number) {
     decodeFused(source, {
       visitTile: (url, bounds, position, rotation, scale, flags) => {
+        if (flags & NON_TILE_FLAG) return
         mat4.fromRotationTranslationScale(tmpm, rotation, position, scale)
         Bounds.transformMat4(tmpb, bounds, mat4.multiply(tmpm, parentMatrix, tmpm))
         this._addToCounts(tmpb, Boolean(flags & WALKABLE_FLAG), increment)
