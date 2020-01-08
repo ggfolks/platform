@@ -540,7 +540,10 @@ export class TypeScriptGameEngine implements GameEngine {
   }
 
   _validateDirtyTransforms () {
-    for (const transform of this.dirtyTransforms) transform._validate(LOCAL_TO_WORLD_MATRIX_INVALID)
+    for (const transform of this.dirtyTransforms) {
+      transform._validate(LOCAL_TO_WORLD_MATRIX_INVALID)
+      transform.sendMessage("onTransformChanged")
+    }
     this.dirtyTransforms.clear()
   }
 
@@ -1400,9 +1403,6 @@ class TypeScriptTransform extends TypeScriptComponent implements Transform {
     }
     if (intersection & FORWARD_INVALID) {
       vec3.transformQuat(this._forwardTarget, vec3.set(this._forwardTarget, 0, 0, 1), this.rotation)
-    }
-    if (intersection & LOCAL_TO_WORLD_MATRIX_INVALID) {
-      this.sendMessage("onTransformChanged")
     }
   }
 }
