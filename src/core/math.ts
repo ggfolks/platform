@@ -408,6 +408,13 @@ export class Bounds {
     )
   }
 
+  /** Expands (or contracts) the bounds in all dimensions. */
+  static expand (out :Bounds, a :Bounds, amount :number) {
+    vec3.set(out.min, a.min[0] - amount, a.min[1] - amount, a.min[2] - amount)
+    vec3.set(out.max, a.max[0] + amount, a.max[1] + amount, a.max[2] + amount)
+    return out
+  }
+
   /** Transforms a set of bounds by a 4x4 matrix. */
   static transformMat4 (out :Bounds, a :Bounds, m :mat4) :Bounds {
     const minX = a.min[0], minY = a.min[1], minZ = a.min[2]

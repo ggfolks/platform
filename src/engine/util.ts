@@ -654,18 +654,26 @@ export class NavGrid {
     })
   }
 
-  /** Adds a region to the grid.  All cells intersecting the region will be affected.
-    * @param bounds the bounds of the region to add.
+  /** Adds a tile to the grid.
+    * @param min the local minima of the tile bounds.
+    * @param max the local maxima of the tile bounds.
+    * @param matrix the matrix to apply to the bounds.
     * @param walkable whether or not the region is walkable. */
-  insert (bounds :Bounds, walkable :boolean) {
-    this._addToCounts(bounds, walkable, 1)
+  insertTile (min :vec3, max :vec3, matrix :mat4, walkable :boolean) {
+    vec3.copy(tmpb.min, min)
+    vec3.copy(tmpb.max, max)
+    this._addToCounts(Bounds.transformMat4(tmpb, tmpb, matrix), walkable, 1)
   }
 
-  /** Removes a region from the grid.  All cells intersecting the region will be affected.
-    * @param bounds the bounds of the region to remove.
+  /** Removes a tile from the grid.
+  * @param min the local minima of the tile bounds.
+  * @param max the local maxima of the tile bounds.
+  * @param matrix the matrix to apply to the bounds.
     * @param walkable whether or not the region was walkable. */
-  delete (bounds :Bounds, walkable :boolean) {
-    this._addToCounts(bounds, walkable, -1)
+  deleteTile (min :vec3, max :vec3, matrix :mat4, walkable :boolean) {
+    vec3.copy(tmpb.min, min)
+    vec3.copy(tmpb.max, max)
+    this._addToCounts(Bounds.transformMat4(tmpb, tmpb, matrix), walkable, -1)
   }
 
   /** Adds a set of fused models to the grid.
@@ -697,6 +705,10 @@ export class NavGrid {
   }
 
   private _addToCounts (bounds :Bounds, walkable :boolean, increment :number) {
+    // adjust the bounds slightly to make sure they don't "spill out" of the cell
+    Bounds.expand(bounds, bounds, -0.0001)
+    bounds.max[1] = bounds.min[1] // bounds are "flat," for now
+
     let changed = false
     this._visitOccupancies(
       bounds,
