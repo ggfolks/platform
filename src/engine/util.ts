@@ -1,7 +1,7 @@
 import {Base64} from "../core/basex"
 import {Decoder, Encoder} from "../core/codec"
 import {Color} from "../core/color"
-import {Bounds, quat, quatIdentity, vec3, vec3one, vec3unitY} from "../core/math"
+import {Bounds, mat4, quat, quatIdentity, vec3, vec3one, vec3unitY} from "../core/math"
 import {Interp, Easing} from "../core/interp"
 import {Emitter, Stream} from "../core/react"
 import {PMap, toFloat32String} from "../core/util"
@@ -628,6 +628,9 @@ class Occupancy {
   constructor (readonly x :number, readonly y :number, readonly z :number) {}
 }
 
+const tmpm = mat4.create()
+const tmpb = Bounds.create()
+
 /** Tracks occupancy in a 3D grid of fixed-size (0.5, 1.0, 0.5) cells, providing the means to find
   * unoccupied cells and perform pathfinding. */
 export class NavGrid {
@@ -663,6 +666,34 @@ export class NavGrid {
     * @param walkable whether or not the region was walkable. */
   delete (bounds :Bounds, walkable :boolean) {
     this._addToCounts(bounds, walkable, -1)
+  }
+
+  /** Adds a set of fused models to the grid.
+    * @param source the encoded models.
+    * @param matrix the matrix to apply. */
+  insertFused (source :Uint8Array, matrix :mat4) {
+    this._addFusedToCounts(source, matrix, 1)
+  }
+
+  /** Removes a set of fused models from the grid.
+    * @param source the encoded models.
+    * @param matrix the matrix to apply. */
+  deleteFused (source :Uint8Array, matrix :mat4) {
+    this._addFusedToCounts(source, matrix, -1)
+  }
+
+  private _addFusedToCounts (source :Uint8Array, parentMatrix :mat4, increment :number) {
+    decodeFused(source, {
+      visitTile: (url, bounds, position, rotation, scale, flags) => {
+        mat4.fromRotationTranslationScale(tmpm, rotation, position, scale)
+        Bounds.transformMat4(tmpb, bounds, mat4.multiply(tmpm, parentMatrix, tmpm))
+        this._addToCounts(tmpb, Boolean(flags & WALKABLE_FLAG), increment)
+      },
+      visitFusedTiles: (source, position, rotation, scale) => {
+        const matrix = mat4.fromRotationTranslationScale(mat4.create(), rotation, position, scale)
+        this._addFusedToCounts(source, mat4.multiply(matrix, parentMatrix, matrix), increment)
+      },
+    })
   }
 
   private _addToCounts (bounds :Bounds, walkable :boolean, increment :number) {
