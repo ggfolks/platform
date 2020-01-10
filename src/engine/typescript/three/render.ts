@@ -72,6 +72,7 @@ export class ThreeRenderEngine implements RenderEngine {
 
   readonly renderer = new WebGLRenderer({antialias: devicePixelRatio === 1})
   readonly domElement = this.renderer.domElement
+  readonly enableShadows = Mutable.local(true)
   readonly stats :Value<string[]>
   readonly scene = new Scene()
   readonly cameras :ThreeCamera[] = []
@@ -1095,9 +1096,13 @@ class ThreeLight extends ThreeObjectComponent implements Light {
         if (object instanceof LightObject) object.intensity = intensity
       })
     Value
-      .join2(this.objectValue, this.getProperty<boolean>("castShadow"))
-      .onValue(([object, castShadow]) => {
-        if (object instanceof DirectionalLight) object.castShadow = castShadow
+      .join3(
+        this.objectValue,
+        this.getProperty<boolean>("castShadow"),
+        this.gameEngine.renderEngine.enableShadows,
+      )
+      .onValue(([object, castShadow, enableShadows]) => {
+        if (object instanceof DirectionalLight) object.castShadow = castShadow && enableShadows
       })
     Value
       .join2(this.objectValue, this.getProperty<number>("shadowSize"))

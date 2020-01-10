@@ -1,6 +1,6 @@
 import {Bounds, Ray, rect, vec2, vec3} from "../core/math"
 import {Color} from "../core/color"
-import {Value} from "../core/react"
+import {Mutable, Value} from "../core/react"
 import {Disposable} from "../core/util"
 import {
   Component, Configurable, ConfigurableConfig, GameObjectConfig, Hoverable, Transform,
@@ -20,6 +20,9 @@ export interface RenderEngine extends Disposable {
 
   /** The percentage of resources loaded (0 to 1). */
   readonly percentLoaded :Value<number>
+
+  /** Whether or not to enable shadows. */
+  readonly enableShadows :Mutable<boolean>
 
   /** Preloads a model URL. */
   preload (url :string) :void
