@@ -291,7 +291,7 @@ export class TypeScriptGameEngine implements GameEngine {
       ),
       loader,
       subgraphs: new SubgraphRegistry(registerEngineSubgraphs),
-      host: this._disposer.add(new HTMLHost(root)),
+      host: this._disposer.add(new HTMLHost(root, false)),
       theme: DefaultTheme,
       styles: DefaultStyles,
       screen,
