@@ -1,5 +1,6 @@
-import {Disposable} from "../core/util"
+import {Disposable, Disposer} from "../core/util"
 import {Mutable, Value} from "../core/react"
+import {keyEvents} from "./react"
 
 /** Provides reactive values for key states. */
 export class Keyboard implements Disposable {
@@ -13,11 +14,16 @@ export class Keyboard implements Disposable {
     return Keyboard._instance;
   }
 
+  private _disposer = new Disposer()
   private _keyStates :Map<number, Mutable<boolean>> = new Map()
 
   constructor () {
-    document.addEventListener("keydown", this._onKeyDown)
-    document.addEventListener("keyup", this._onKeyUp)
+    this._disposer.add(keyEvents("keydown").onEmit(event => {
+      if (!event.cancelBubble) this._getKeyState(event.keyCode).update(true)
+    }))
+    this._disposer.add(keyEvents("keyup").onEmit(event => {
+      this._getKeyState(event.keyCode).update(false)
+    }))
   }
 
   /** Returns the state value corresponding to the given key code. */
@@ -26,16 +32,7 @@ export class Keyboard implements Disposable {
   }
 
   dispose () {
-    document.removeEventListener("keydown", this._onKeyDown)
-    document.removeEventListener("keyup", this._onKeyUp)
-  }
-
-  private _onKeyDown = (event :KeyboardEvent) => {
-    if (!event.cancelBubble) this._getKeyState(event.keyCode).update(true)
-  }
-
-  private _onKeyUp = (event :KeyboardEvent) => {
-    this._getKeyState(event.keyCode).update(false)
+    this._disposer.dispose()
   }
 
   private _getKeyState (code :number) :Mutable<boolean> {
