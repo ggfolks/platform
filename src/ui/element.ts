@@ -5,7 +5,7 @@ import {Record} from "../core/data"
 import {Buffer, Emitter, Mutable, Source, Stream, Subject, Value, addListener} from "../core/react"
 import {MutableList, RList} from "../core/rcollect"
 import {Scale} from "../core/ui"
-import {keyEvents, mouseEvents, pointerEvents, touchEvents, wheelEvents} from "../input/react"
+import {mouseEvents, pointerEvents, preKeyEvents, touchEvents, wheelEvents} from "../input/react"
 import {Action, Command, Model} from "./model"
 import {Keymap, ModMap} from "./keymap"
 import {Spec, StyleContext, styleEquals} from "./style"
@@ -1266,7 +1266,7 @@ export class Host implements Disposable {
     this.disposer.add(wheelEvents.onEmit(ev => this.handleWheelEvent(ev)))
     this.disposer.add(touchEvents("touchstart", "touchmove", "touchcancel", "touchend").
                       onEmit(ev => this.handleTouchEvent(ev)))
-    this.disposer.add(keyEvents("keydown", "keyup").onEmit(ev => this.handleKeyEvent(ev)))
+    this.disposer.add(preKeyEvents("keydown", "keyup").onEmit(ev => this.handleKeyEvent(ev)))
     this.disposer.add(pointerEvents("pointerdown", "pointerup").onEmit(ev => {
       if (ev.type === "pointerdown") elem.setPointerCapture(ev.pointerId)
       else elem.releasePointerCapture(ev.pointerId)

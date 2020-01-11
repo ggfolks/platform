@@ -1,4 +1,4 @@
-import {Stream} from "../core/react"
+import {Emitter, Stream} from "../core/react"
 
 type FilterFlags<Base, Condition> = {
   [Key in keyof Base] :Base[Key] extends Condition ? Key : never
@@ -49,6 +49,21 @@ export function pointerEvents (...types :PointerEventTypes[]) :Stream<PointerEve
   })
 }
 
+const preKeyEventEmitters = {
+  keydown: new Emitter<KeyboardEvent>(),
+  keyup: new Emitter<KeyboardEvent>(),
+  keypress: new Emitter<KeyboardEvent>(),
+}
+for (const type in preKeyEventEmitters) {
+  const emitter = preKeyEventEmitters[type]
+  document.addEventListener(type, event => emitter.emit(event))
+}
+
+/** Returns the keyboard events on the document as a reactive stream. Listeners to this stream will
+  * be notified before listeners to [[keyEvents]]. */
+export function preKeyEvents (...types :KeyboardEventTypes[]) :Stream<KeyboardEvent> {
+  return Stream.merge(...types.map(type => preKeyEventEmitters[type]))
+}
 
 /** Returns the keyboard events on the document as a reactive stream. While the stream has
   * listeners, event listeners will be connected to the underlying document. */
