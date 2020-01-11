@@ -330,6 +330,11 @@ export abstract class AbstractText extends Control {
     this.cursor = ctx.elem.create(ctx, this, cconfig) as Cursor
 
     this.textState = {text: this.text, cursor: this.coffset, selection: this.label.selection}
+
+    // clear selection on loss of focus
+    this.focused.onValue(focused => {
+      if (!focused) this.label.selection.update([0, 0])
+    })
   }
 
   applyToChildren (op :Element.Op) {
@@ -645,9 +650,6 @@ export class EditableLabel extends AbstractText {
 
   constructor (ctx :Element.Context, parent :Element, readonly config :EditableLabelConfig) {
     super(ctx, parent, config, ctx.model.resolveAs(config.text, "text"))
-    this.focused.onValue(focused => {
-      if (!focused) this.label.selection.update([0, 0])
-    })
   }
 
   handleDoubleClick (event :MouseEvent, pos :vec2) :boolean {
