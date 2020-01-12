@@ -117,25 +117,11 @@ export namespace Drag {
 
   /** Base class for draggable list elements. */
   export abstract class Elem extends Control {
-    private readonly _createDragRoot :() => Root
     readonly key :Value<ModelKey>
 
-    constructor (ctx :Element.Context, parent :Element, config :ElemConfig) {
+    constructor (readonly ctx :Element.Context, parent :Element, config :ElemConfig) {
       super(ctx, parent, config)
       this.key = ctx.model.resolveAs(config.key, "key")
-      this._createDragRoot = () => {
-        const root = this.root.createPopup(ctx, {
-          type: "root",
-          inert: true,
-          contents: {
-            type: "box",
-            contents: config.contents,
-            style: {halign: "stretch", valign: "stretch", alpha: 0.5},
-          }
-        })
-        root.setSize(this.size(dim2.create()))
-        return root
-      }
     }
 
     /** Checks whether this element is selected. */
@@ -223,6 +209,26 @@ export namespace Drag {
 
     protected get computeState () {
       return this.enabled.current && this.selected ? "selected" : super.computeState
+    }
+
+    protected _createDragRoot () {
+      const root = this.root.createPopup(this.ctx, {
+        type: "root",
+        inert: true,
+        contents: {
+          type: "box",
+          contents: {
+            type: "column",
+            offPolicy: "stretch",
+            scopeId: this.styleScope.id,
+            overrideParentState: this.state.current,
+            contents: [this.config.contents],
+          },
+          style: {halign: "stretch", valign: "stretch", alpha: 0.5},
+        },
+      })
+      root.setSize(this.size(dim2.create()))
+      return root
     }
   }
 }

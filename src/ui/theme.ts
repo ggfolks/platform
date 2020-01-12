@@ -187,6 +187,7 @@ export const DefaultTheme :Theme = {
   treeViewNode: {
     box: {
       padding: 2,
+      halign: "left",
       hovered: {background: "$treeViewNodeHovered"},
       selected: {background: "$treeViewNodeSelected"},
       pressed: {background: "$treeViewNodePressed"},
