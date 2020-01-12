@@ -21,7 +21,8 @@ type DropCoord = {parentKey :ModelKey|undefined, index :number, insert :boolean}
 const dropCursorBounds = rect.create()
 
 function cursorBounds (node :TreeViewNode, below :boolean, into :rect) :rect {
-  return rect.set(into, node.x, node.y + (below ? node.height-1 : 0), node.width, 1)
+  const parent = node.parent!
+  return rect.set(into, parent.x, parent.y + (below ? parent.height : 0), parent.width, 1)
 }
 
 abstract class AbstractTreeView extends VGroup implements List.Like {
@@ -178,35 +179,42 @@ export class TreeView extends AbstractTreeView implements Drag.Owner {
 
   handleDrag (elem :Drag.Elem, pos :vec2) {
     const dragNode = elem as any as TreeViewNode, center = pos[1]
-    let dropDistance = Infinity
     let dropCoord :DropCoord|undefined, dropNode :TreeViewNode|undefined
-    this.visitVisibleNodes((node, parentKey, index) => {
-      const startPos = node.y
-      const startDistance = Math.abs(startPos - center)
-      if (startDistance < dropDistance) {
-        dropDistance = startDistance
-        dropCoord = {parentKey, index, insert: true}
-        dropNode = node
-        cursorBounds(node, false, dropCursorBounds)
-      }
-      const midPos = startPos + node.height / 2
-      const midDistance = Math.abs(midPos - center)
-      if (midDistance < dropDistance && node !== dragNode && !node.isDescendedFrom(dragNode)) {
-        dropDistance = midDistance
-        const tree = node.treeViewList
-        dropCoord = {parentKey: node.key.current, index: tree.contents.length, insert: false}
-        dropNode = undefined
-      }
-      const endPos = startPos + node.height
-      const endDistance = Math.abs(endPos - center)
-      if (endDistance < dropDistance) {
-        dropDistance = endDistance
-        dropCoord = {parentKey, index: index + 1, insert: true}
-        dropNode = node
-        cursorBounds(node, true, dropCursorBounds)
-      }
-    })
+    const lastElement = this.contents[this.contents.length - 1]
+    if (lastElement && center > lastElement.y + lastElement.height) {
+      dropCoord = {parentKey: undefined, index: this.contents.length, insert: true}
+      dropNode = lastElement.findChild("treeViewNode")! as TreeViewNode
+      cursorBounds(dropNode, true, dropCursorBounds)
 
+    } else {
+      let dropDistance = Infinity
+      this.visitVisibleNodes((node, parentKey, index) => {
+        const startPos = node.y
+        const startDistance = Math.abs(startPos - center)
+        if ((center > startPos || index === 0) && startDistance <= dropDistance) {
+          dropDistance = startDistance
+          dropCoord = {parentKey, index, insert: true}
+          dropNode = node
+          cursorBounds(node, false, dropCursorBounds)
+        }
+        const midPos = startPos + node.height / 2
+        const midDistance = Math.abs(midPos - center)
+        if (midDistance <= dropDistance && node !== dragNode && !node.isDescendedFrom(dragNode)) {
+          dropDistance = midDistance
+          const tree = node.treeViewList
+          dropCoord = {parentKey: node.key.current, index: tree.contents.length, insert: false}
+          dropNode = undefined
+        }
+        const endPos = startPos + node.height
+        const endDistance = Math.abs(endPos - center)
+        if (endDistance <= dropDistance) {
+          dropDistance = endDistance
+          dropCoord = {parentKey, index: index + 1, insert: true}
+          dropNode = node
+          cursorBounds(node, true, dropCursorBounds)
+        }
+      })
+    }
     this.dropCoord.update(dropCoord)
     if (!dropNode) this.hoveredTreeView.update(undefined)
     else {
