@@ -179,7 +179,7 @@ export class TreeView extends AbstractTreeView implements Drag.Owner {
   get canStartDrag () { return !!this._updateParentOrder }
 
   handleDrag (elem :Drag.Elem, pos :vec2) {
-    const dragNode = elem as any as TreeViewNode, center = pos[1]
+    const center = pos[1]
     let dropCoord :DropCoord|undefined, dropNode :TreeViewNode|undefined
     const lastElement = this.contents[this.contents.length - 1]
     if (lastElement && center > lastElement.y + lastElement.height) {
@@ -192,7 +192,11 @@ export class TreeView extends AbstractTreeView implements Drag.Owner {
       this.visitVisibleNodes((node, parentKey, index) => {
         const startPos = node.y
         const startDistance = Math.abs(startPos - center)
-        if ((center > startPos || index === 0) && startDistance <= dropDistance) {
+        if (
+          (center > startPos || index === 0) &&
+          startDistance <= dropDistance &&
+          this._canReparent(parentKey)
+        ) {
           dropDistance = startDistance
           dropCoord = {parentKey, index, insert: true}
           dropNode = node
@@ -200,7 +204,7 @@ export class TreeView extends AbstractTreeView implements Drag.Owner {
         }
         const midPos = startPos + node.height / 2
         const midDistance = Math.abs(midPos - center)
-        if (midDistance <= dropDistance && node !== dragNode && !node.isDescendedFrom(dragNode)) {
+        if (midDistance <= dropDistance && this._canReparent(node.key.current)) {
           dropDistance = midDistance
           const tree = node.treeViewList
           dropCoord = {parentKey: node.key.current, index: tree.contents.length, insert: false}
@@ -208,7 +212,7 @@ export class TreeView extends AbstractTreeView implements Drag.Owner {
         }
         const endPos = startPos + node.height
         const endDistance = Math.abs(endPos - center)
-        if (endDistance <= dropDistance) {
+        if (endDistance <= dropDistance && this._canReparent(parentKey)) {
           dropDistance = endDistance
           dropCoord = {parentKey, index: index + 1, insert: true}
           dropNode = node
@@ -241,6 +245,17 @@ export class TreeView extends AbstractTreeView implements Drag.Owner {
   handlePointerDown (event :MouseEvent|TouchEvent, pos :vec2, into :PointerInteraction[]) {
     super.handlePointerDown(event, pos, into)
     if (into.length === 0) this.selectedKeys.clear()
+  }
+
+  private _canReparent (parentKey :ModelKey|undefined) :boolean {
+    if (!parentKey) return true
+    const parentNode = this.nodes.get(parentKey)
+    if (!parentNode) return false
+    for (const key of this.selectedKeys) {
+      const selectedNode = this.nodes.get(key)
+      if (selectedNode && parentNode.isDescendedFrom(selectedNode)) return false
+    }
+    return true
   }
 }
 
@@ -277,7 +292,7 @@ export class TreeViewNode extends Drag.Elem {
 
   isDescendedFrom (node :TreeViewNode) {
     for (let ancestor = this.parent; ancestor; ancestor = ancestor.parent) {
-      if (ancestor === node) return true
+      if (ancestor === node.parent) return true
     }
     return false
   }
