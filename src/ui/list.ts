@@ -4,7 +4,7 @@ import {Remover} from "../core/util"
 import {Model, ModelKey, ElementsModel} from "./model"
 import {Spec} from "./style"
 import {Element} from "./element"
-import {AxisConfig, HGroup, OffAxisPolicy, VGroup} from "./group"
+import {AbsGroup, AxisConfig, HGroup, OffAxisPolicy, VGroup} from "./group"
 import {CursorConfig} from "./cursor"
 import {Drag} from "./drag"
 
@@ -59,6 +59,23 @@ export namespace List {
     readonly contents :Element[] = []
 
     constructor (ctx :Element.Context, parent :Element, readonly config :VertConfig) {
+      super(ctx, parent, config)
+      this.disposer.add(syncContents(ctx, this, ctx.model.resolveAs(config.model, "model")))
+    }
+  }
+
+  /** Defines configuration for [[Abs]] elements. */
+  export interface AbsConfig extends AbstractConfig {
+    type :"absList"
+  }
+
+  /** An absList displays a dynamic list of elements, each instantiated from a sub-model and a list
+    * element template. The elements are positioned arbitrarily like an [[AbsLayout]]. */
+  export class Abs extends AbsGroup implements Like {
+    readonly elements = new Map<ModelKey, Element>()
+    readonly contents :Element[] = []
+
+    constructor (ctx :Element.Context, parent :Element, readonly config :AbsConfig) {
       super(ctx, parent, config)
       this.disposer.add(syncContents(ctx, this, ctx.model.resolveAs(config.model, "model")))
     }
@@ -161,6 +178,7 @@ export namespace List {
   export const Catalog :Element.Catalog = {
     "hlist": (ctx, parent, cfg) => new Horiz(ctx, parent, cfg as HorizConfig),
     "vlist": (ctx, parent, cfg) => new Vert(ctx, parent, cfg as VertConfig),
+    "absList": (ctx, parent, cfg) => new Abs(ctx, parent, cfg as AbsConfig),
     "dragVList": (ctx, parent, cfg) => new DragVert(ctx, parent, cfg as DragVertConfig),
     "dragVElement": (ctx, parent, cfg) => new DragVElement(ctx, parent, cfg as DragVElementConfig),
   }

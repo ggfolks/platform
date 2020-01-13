@@ -1,7 +1,7 @@
 import {rect, vec2} from "../core/math"
 import {Mutable, Value} from "../core/react"
 import {MutableSet} from "../core/rcollect"
-import {ElementsModel, ModelKey, Spec} from "./model"
+import {ElementsModel, Model, ModelKey, Spec} from "./model"
 import {Element, PointerInteraction, Root, requireAncestor} from "./element"
 import {OffAxisPolicy, VGroup} from "./group"
 import {List} from "./list"
@@ -165,8 +165,9 @@ export interface TreeViewConfig extends AbstractTreeViewConfig {
 export class TreeView extends AbstractTreeView implements Drag.Owner {
   private readonly _updateParentOrder? :ParentOrderUpdater
   readonly dropCoord = Mutable.local<DropCoord|undefined>(undefined)
+  readonly nodes = new Map<ModelKey, TreeViewNode>()
 
-  constructor (ctx :Element.Context, parent :Element, readonly config :TreeViewConfig,
+  constructor (readonly ctx :Element.Context, parent :Element, readonly config :TreeViewConfig,
                readonly hoveredTreeView = Mutable.local<AbstractTreeView|undefined>(undefined)) {
     super(ctx, parent, config, undefined,
           ctx.model.resolveAs(config.selectedKeys, "selectedKeys"), hoveredTreeView)
@@ -255,7 +256,10 @@ export class TreeViewNode extends Drag.Elem {
 
   constructor (ctx :Element.Context, parent :Element, readonly config :TreeViewNodeConfig) {
     super(ctx, parent, config)
-    this._selectedKeys = this.requireAncestor(TreeView).selectedKeys
+    const treeView = this.requireAncestor(TreeView)
+    treeView.nodes.set(this.key.current, this)
+    this.disposer.add(() => treeView.nodes.delete(this.key.current))
+    this._selectedKeys = treeView.selectedKeys
     this.recomputeStateOnChange(this._selectedKeys)
 
     this.disposer.add(this.requireAncestor(TreeView).dropCoord.onValue(c => {
@@ -316,6 +320,38 @@ export class TreeViewNode extends Drag.Elem {
 
   protected get customStyleScope () { return TreeViewNodeStyleScope }
   protected get dragOwner () { return this.requireAncestor(TreeView) }
+
+  protected _createDragRoot () {
+    const treeView = this.requireAncestor(TreeView)
+    const model = treeView.ctx.model.resolveAs(treeView.config.model, "model")
+    const root = this.root.createPopup(this.ctx, {
+      type: "root",
+      inert: true,
+      contents: {
+        type: "absList",
+        element: (model :Model, key :ModelKey) => {
+          const node = treeView.nodes.get(key)
+          if (!node) return {type: "spacer"}
+          return {
+            type: "box",
+            constraints: {position: [node.x, node.y], size: [node.width, node.height]},
+            contents: {
+              type: "column",
+              offPolicy: "stretch",
+              scopeId: this.styleScope.id,
+              overrideParentState: this.state.current,
+              contents: [this.config.contents],
+            },
+            style: {halign: "stretch", valign: "stretch", alpha: 0.5},
+          }
+        },
+        model: {keys: this._selectedKeys, resolve: model.resolve},
+      },
+    })
+    root.sizeToFit()
+    root.origin.update(vec2.fromValues(-this.x, -this.y))
+    return root
+  }
 }
 
 export const TreeCatalog :Element.Catalog = {

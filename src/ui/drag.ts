@@ -159,6 +159,7 @@ export namespace Drag {
       const DragHysteresis = 5
       const dragPos = vec2.create(), dragOrigin = vec2.create(), dragSize = vec2.create()
       let dragRoot :Root|undefined
+      const rootOffset = vec2.create()
       let clear = () => {}
 
       into.push({
@@ -168,6 +169,7 @@ export namespace Drag {
             dragRoot = this._createDragRoot()
             dragRoot.size(dragSize)
             dragRoot.setCursor(this, "move")
+            vec2.copy(rootOffset, dragRoot.origin.current)
             this.root.dragPopup.update(dragRoot)
             clear = () => {
               this.clearCursor(this)
@@ -181,8 +183,9 @@ export namespace Drag {
             const posIdx = constraint === "horizontal" ? 1 : 0
             dragPos[posIdx] = this.bounds[posIdx]
           }
-          dragRoot.origin.update(vec2.add(dragOrigin, this.root.origin.current, dragPos))
-          owner.handleDrag(this, vec2.scaleAndAdd(dragPos, dragPos, dragSize, 0.5))
+          vec2.add(dragOrigin, this.root.origin.current, dragPos)
+          dragRoot.origin.update(vec2.add(dragOrigin, dragOrigin, rootOffset))
+          owner.handleDrag(this, pos)
           return dragRoot !== undefined
         },
         release: (upEvent, pos) => {
