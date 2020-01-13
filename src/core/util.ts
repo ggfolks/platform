@@ -223,45 +223,68 @@ export class Timestamp {
 
 export type Level = "debug" | "info" | "warn" | "error"
 
-function canToString (obj :any) {
-  return typeof obj !== "object" ||
-    Object.getPrototypeOf(obj).toString !== Object.prototype.toString
-}
+export class Logger {
 
-export function formatArgs (...args :any[]) :string {
-  let str = ""
-  for (let ii = 0, ll = args.length - (args.length%2); ii < ll; ii += 2) {
-    if (str.length > 0) str += ", "
-    const val = args[ii+1]
+  constructor (readonly maxDecimals? :number) {}
+
+  formatArg (val :any) :string {
     try {
-      if (canToString(val)) str += `${args[ii]}=${val}`
-      else str += `${args[ii]}=${JSON.stringify(val)}`
+      const vtype = typeof val
+      switch (vtype) {
+      case "undefined": return "<undef>"
+      case "string": return val
+      case "number":
+        const maxDecimals = this.maxDecimals
+        if (maxDecimals === undefined) return String(val)
+        else return val.toLocaleString(undefined, {maximumFractionDigits: maxDecimals})
+      case "object":
+        if (Array.isArray(val)) {
+          let str = ""
+          for (let ii = 0, ll = val.length; ii < ll; ii += 1) {
+            if (ii > 0) str += ","
+            str += this.formatArg(val[ii])
+          }
+          return str
+        }
+        else if (Object.getPrototypeOf(val).toString !== Object.prototype.toString) return String(val)
+        else return JSON.stringify(val)
+      default: return val.toString()
+      }
     } catch (err) {
-      str += `${args[ii]}=${val}`
+      return String(val)
     }
   }
-  return str
-}
 
-export function logAt (level :Level, msg :string, ...args :any[]) {
-  let logfn = console.log
-  switch (level) {
-  case "error": logfn = console.error ; break
-  case "warn": logfn = console.warn ; break
-  case "info": logfn = console.info ; break
+  formatArgs (...args :any[]) :string {
+    let str = ""
+    for (let ii = 0, ll = args.length - (args.length%2); ii < ll; ii += 2) {
+      if (str.length > 0) str += ", "
+      str += `${args[ii]}=${this.formatArg(args[ii+1])}`
+    }
+    return str
   }
-  const fargs = formatArgs(...args)
-  logfn(fargs.length > 0 ? `${msg} [${fargs}]` : msg)
-  if (args.length % 2 === 1) logfn(args[args.length-1])
+
+  logAt (level :Level, msg :string, ...args :any[]) {
+    let logfn = console.log
+    switch (level) {
+    case "error": logfn = console.error ; break
+    case "warn": logfn = console.warn ; break
+    case "info": logfn = console.info ; break
+    }
+    const fargs = this.formatArgs(...args)
+    logfn(fargs.length > 0 ? `${msg} [${fargs}]` : msg)
+    if (args.length % 2 === 1) logfn(args[args.length-1])
+  }
+
+  format (msg :string, ...args :any[]) { return `${msg} [${this.formatArgs(...args)}]` }
+  debug (msg :string, ...args :any[]) { this.logAt("debug", msg, ...args) }
+  info (msg :string, ...args :any[]) { this.logAt("info" , msg, ...args) }
+  warn (msg :string, ...args :any[]) { this.logAt("warn" , msg, ...args) }
+  error (msg :string, ...args :any[]) { this.logAt("error", msg, ...args) }
+
 }
 
-export const log = {
-  format: (msg :string, ...args :any[]) => `${msg} [${formatArgs(...args)}]`,
-  debug: (msg :string, ...args :any[]) => logAt("debug", msg, ...args),
-  info : (msg :string, ...args :any[]) => logAt("info" , msg, ...args),
-  warn : (msg :string, ...args :any[]) => logAt("warn" , msg, ...args),
-  error: (msg :string, ...args :any[]) => logAt("error", msg, ...args),
-}
+export const log = new Logger()
 
 /** Returns the provided value or, if undefined, the provided default. */
 export function getValue<T> (value :T|undefined, defaultValue :T) :T {
