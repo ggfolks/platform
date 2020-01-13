@@ -8,7 +8,7 @@ import {List} from "./list"
 import {Drag} from "./drag"
 import {CursorConfig, DefaultCursor, Cursor} from "./cursor"
 
-type ParentOrderUpdater = (key :ModelKey, parent :ModelKey|undefined, index :number) => void
+type ParentOrderUpdater = (keys :ModelKey[], parent :ModelKey|undefined, index :number) => void
 
 interface AbstractTreeViewConfig extends List.AbstractConfig {
   dropCursor? :CursorConfig
@@ -227,8 +227,9 @@ export class TreeView extends AbstractTreeView implements Drag.Owner {
 
   handleDrop (elem :Drag.Elem) {
     const coord = this.dropCoord.current
-    if (coord && this._updateParentOrder) this._updateParentOrder(
-      elem.key.current, coord.parentKey, coord.index)
+    if (coord && this._updateParentOrder) {
+      this._updateParentOrder(Array.from(this.selectedKeys), coord.parentKey, coord.index)
+    }
     this.cancelDrag()
   }
 
