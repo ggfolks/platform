@@ -128,6 +128,8 @@ export abstract class Element implements Disposable {
       : this.requireParent.state
   }
 
+  get showing () :boolean { return this.visible.current && (!this.parent || this.parent.showing) }
+
   /** Returns the path to this element in the root UI config. This is the list of the types of all
     * elements from the root down to (and including) this element. This is used in debug messages to
     * help the developer locate the element in the config when an error occurred creating it. */

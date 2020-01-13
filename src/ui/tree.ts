@@ -331,7 +331,7 @@ export class TreeViewNode extends Drag.Elem {
         type: "absList",
         element: (model :Model, key :ModelKey) => {
           const node = treeView.nodes.get(key)
-          if (!node) return {type: "spacer"}
+          if (!(node && node.showing)) return {type: "spacer"}
           return {
             type: "box",
             constraints: {position: [node.x, node.y], size: [node.width, node.height]},
