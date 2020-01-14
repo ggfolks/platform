@@ -1,7 +1,7 @@
 import {Bounds, Ray, rect, vec2, vec3} from "../core/math"
 import {Color} from "../core/color"
 import {Mutable, Value} from "../core/react"
-import {Disposable} from "../core/util"
+import {Disposable, PMap} from "../core/util"
 import {
   Component, Configurable, ConfigurableConfig, GameObjectConfig, Hoverable, Transform,
 } from "./game"
@@ -231,6 +231,9 @@ export interface Model extends Bounded, Hoverable {
 
   /** The URLs of the models to load. */
   urls :string[]
+
+  /** Maps mesh names to morph target influences. */
+  morphTargetInfluences :PMap<number[]>
 
   /** The opacity to apply to the model. */
   opacity :number

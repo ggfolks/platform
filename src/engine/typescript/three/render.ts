@@ -14,7 +14,7 @@ import {refEquals} from "../../../core/data"
 import {Bounds, Plane, Ray, dim2, rect, vec2, vec2zero, vec3} from "../../../core/math"
 import {Mutable, Subject, Value} from "../../../core/react"
 import {MutableMap, RMap} from "../../../core/rcollect"
-import {Disposer, Noop, NoopRemover, Remover, getValue} from "../../../core/util"
+import {Disposer, Noop, NoopRemover, PMap, Remover, getValue} from "../../../core/util"
 import {ResourceLoader} from "../../../asset/loader"
 import {Graph, GraphConfig} from "../../../graph/graph"
 import {PropertyMeta, setEnumMeta} from "../../../graph/meta"
@@ -1129,8 +1129,6 @@ class ThreeLight extends ThreeObjectComponent implements Light {
 }
 registerConfigurableType("component", ["render"], "light", ThreeLight)
 
-const ShadowProperties = ["castShadow", "receiveShadow"]
-
 class ThreeModel extends ThreeBounded implements Model {
   readonly urlsValue = Mutable.local([""])
   readonly urlValue = this.urlsValue.bimap(urls => urls[0], (urls, url) => [url])
@@ -1140,6 +1138,9 @@ class ThreeModel extends ThreeBounded implements Model {
 
   @property("url", {transient: true}) get url () { return this.urlValue.current }
   set url (url :string) { this.urlValue.update(url) }
+
+  @property("PMap<number[]>", {editable: false, transient: true})
+    morphTargetInfluences :PMap<number[]> = {}
 
   @property("number", {min: 0, max: 1, wheelStep: 0.01}) opacity = 1
   @property("boolean") castShadow = true
@@ -1163,11 +1164,21 @@ class ThreeModel extends ThreeBounded implements Model {
     Value
       .join2(this.objectValue, this.getProperty<number>("opacity"))
       .onValue(([object, opacity]) => updateOpacity(object, opacity))
-    for (const property of ShadowProperties) {
+    for (const property of ["castShadow", "receiveShadow"]) {
       Value
         .join2(this.objectValue, this.getProperty(property))
         .onValue(([object, value]) => updateMeshProperty(object, property, value))
     }
+    Value
+      .join2(this.objectValue, this.getProperty<PMap<number[]>>("morphTargetInfluences"))
+      .onValue(([object, morphTargetInfluences]) => {
+        if (!object) return
+        object.traverse(node => {
+          if (!(node instanceof Mesh)) return
+          const influences = morphTargetInfluences[node.name]
+          if (influences) node.morphTargetInfluences = influences
+        })
+      })
   }
 
   awake () {
@@ -1342,7 +1353,7 @@ function updateOpacity (object :Object3D|undefined, opacity :number) {
 function updateMeshProperty (object :Object3D|undefined, property :string, value :any) {
   if (!object) return
   object.traverse(node => {
-    if (node instanceof Mesh) node[property] = value
+    if (node instanceof Mesh && node[property] !== undefined) node[property] = value
   })
 }
 
