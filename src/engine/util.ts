@@ -669,9 +669,9 @@ export class NavGrid {
   }
 
   /** Removes a tile from the grid.
-  * @param min the local minima of the tile bounds.
-  * @param max the local maxima of the tile bounds.
-  * @param matrix the matrix to apply to the bounds.
+    * @param min the local minima of the tile bounds.
+    * @param max the local maxima of the tile bounds.
+    * @param matrix the matrix to apply to the bounds.
     * @param walkable whether or not the region was walkable. */
   deleteTile (min :vec3, max :vec3, matrix :mat4, walkable :boolean) {
     vec3.copy(tmpb.min, min)
