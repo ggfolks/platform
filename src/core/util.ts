@@ -187,6 +187,9 @@ export class Timestamp {
   static readonly HOURS   = {millisPer: 60*60*1000}
   static readonly DAYS    = {millisPer: 24*60*60*1000}
 
+  /** A sentinel value for time zero (zero millis from the epoch). */
+  static zero = new Timestamp(0)
+
   /** Creates a timestamp with the current time. */
   static now () { return new Timestamp(Date.now()) }
 
