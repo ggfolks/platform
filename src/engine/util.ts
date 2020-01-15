@@ -4,7 +4,7 @@ import {Color} from "../core/color"
 import {Bounds, mat4, quat, quatIdentity, vec3, vec3one, vec3unitY} from "../core/math"
 import {Interp, Easing} from "../core/interp"
 import {Emitter, Stream} from "../core/react"
-import {PMap, toFloat32String} from "../core/util"
+import {PMap, log, toFloat32String} from "../core/util"
 import {Time, Transform} from "./game"
 
 /** A coroutine that moves a transform over time from its current position to a new one.
@@ -623,6 +623,7 @@ export function decodeFused (source :Uint8Array, visitor :FusedVisitor) {
 class Occupancy {
   walkableCount = 0
   unwalkableCount = 0
+  lastVisit = 0
   nextOccupancy? :Occupancy
 
   get walkable () :boolean { return this.walkableCount > 0 && this.unwalkableCount === 0 }
@@ -634,7 +635,8 @@ class Occupancy {
 const tmpm = mat4.create()
 const tmpb = Bounds.create()
 
-const MAX_SEARCH_DISTANCE = 32
+const MAX_WALKABLE_SEARCH_DISTANCE = 32
+const MAX_PATH_LENGTH = 128
 
 /** Tracks occupancy in a 3D grid of fixed-size (0.5, 1.0, 0.5) cells, providing the means to find
   * unoccupied cells and perform pathfinding. */
@@ -649,6 +651,7 @@ export class NavGrid {
   private _changed = new Emitter<void>()
   private _walkableCellCount = 0
   private _floorWalkableCellCounts = new Map<number, number>()
+  private _currentVisit = 0
 
   /** Returns a reference to a stream that fires when the grid is changed. */
   get changed () :Stream<void> { return this._changed }
@@ -724,7 +727,7 @@ export class NavGrid {
     if (this._isCellWalkable(ox, y, oz)) return cellToPosition(vec3.fromValues(ox, y, oz))
 
     const cells :vec3[] = []
-    for (let distance = 1; distance < MAX_SEARCH_DISTANCE; distance++) {
+    for (let distance = 1; distance <= MAX_WALKABLE_SEARCH_DISTANCE; distance++) {
       const lx = ox - distance, ux = ox + distance
       const lz = oz - distance, uz = oz + distance
       for (let x = lx; x <= ux; x++) {
@@ -739,6 +742,101 @@ export class NavGrid {
         return cellToPosition(cells[Math.floor(Math.random() * cells.length)])
       }
     }
+    return undefined
+  }
+
+  /** Finds a path from the origin to the destination.
+    * @param origin the location at which to start the path.
+    * @param destination the location at which to end the path.
+    * @return the computed path, or undefined if a path could not be found. */
+  getPath (origin :vec3, destination :vec3) :vec3[]|undefined {
+    const start = positionToCell(vec3.clone(origin))
+    const end = positionToCell(vec3.clone(destination))
+
+    if (start[1] !== end[1]) return undefined
+
+    this._currentVisit++
+    this._visitCell(start[0], start[1], start[2])
+
+    interface WorkingPath {
+      cell :vec3
+      previous? :WorkingPath
+      length :number
+      estimate :number
+    }
+    const basePath = {cell: start, length: 0, estimate: vec3.distance(start, end)}
+    const fringe :WorkingPath[] = [basePath]
+
+    let bestPath = basePath
+    while (fringe.length > 0) {
+      bestPath = fringe[0]
+      if (vec3.equals(bestPath.cell, end)) {
+        const positions = []
+        for (let path :WorkingPath|undefined = bestPath; path; path = path.previous) {
+          positions.unshift(cellToPosition(path.cell))
+        }
+        return positions
+      }
+      if (bestPath.length >= MAX_PATH_LENGTH) {
+        log.warn("Reached max path length.", "start", start, "end", end)
+        return undefined
+      }
+      const lastPath = fringe.pop()!
+      if (fringe.length > 0) fringe[0] = lastPath
+
+      // filter down the heap
+      // https://en.wikipedia.org/wiki/Binary_heap#Extract
+      for (let idx = 0;; ) {
+        const leftIdx = (idx << 1) + 1
+        const rightIdx = leftIdx + 1
+        let smallestIdx = idx
+        if (leftIdx < fringe.length) {
+          if (fringe[leftIdx].estimate < fringe[smallestIdx].estimate) smallestIdx = leftIdx
+          if (
+            rightIdx < fringe.length &&
+            fringe[rightIdx].estimate < fringe[smallestIdx].estimate
+          ) {
+           smallestIdx = rightIdx
+         }
+        }
+        if (smallestIdx === idx) break
+        fringe[idx] = fringe[smallestIdx]
+        fringe[smallestIdx] = lastPath
+        idx = smallestIdx
+      }
+
+      // add neighbors
+      for (let ii = 0; ii < 8; ii++) {
+        const cell = vec3.clone(bestPath.cell)
+        let stepSize = 1
+        if (ii & 4) {
+          cell[2] += (ii & 2 ? 1 : -1)
+          cell[0] += (ii & 1 ? 1 : -1)
+          stepSize = Math.SQRT2
+        } else {
+          const sign = (ii & 1) ? 1 : -1
+          if (ii & 2) cell[2] += sign
+          else cell[0] += sign
+        }
+        if (!this._isCellWalkableAndUnvisited(cell[0], cell[1], cell[2])) continue
+        this._visitCell(cell[0], cell[1], cell[2])
+        const length = bestPath.length + stepSize
+        const estimate = length + vec3.distance(cell, end)
+        const path = {cell, previous: bestPath, length, estimate}
+        fringe.push(path)
+
+        // filter up the heap
+        for (let idx = fringe.length - 1; idx; ) {
+          const parentIdx = (idx - 1) >> 1
+          const parent = fringe[parentIdx]
+          if (estimate >= parent.estimate) break
+          fringe[idx] = parent
+          fringe[parentIdx] = path
+          idx = parentIdx
+        }
+      }
+    }
+    log.warn("Failed to find a path.", "start", start, "end", end)
     return undefined
   }
 
@@ -757,6 +855,26 @@ export class NavGrid {
       if (occupancy.x === x && occupancy.y === y && occupancy.z === z) return occupancy.walkable
     }
     return false
+  }
+
+  private _isCellWalkableAndUnvisited (x :number, y :number, z :number) :boolean {
+    let occupancy = this._occupancies.get(getCellHash(x, y, z))
+    for (; occupancy; occupancy = occupancy.nextOccupancy) {
+      if (occupancy.x === x && occupancy.y === y && occupancy.z === z) {
+        return occupancy.walkable && occupancy.lastVisit !== this._currentVisit
+      }
+    }
+    return false
+  }
+
+  private _visitCell (x :number, y :number, z :number) {
+    let occupancy = this._occupancies.get(getCellHash(x, y, z))
+    for (; occupancy; occupancy = occupancy.nextOccupancy) {
+      if (occupancy.x === x && occupancy.y === y && occupancy.z === z) {
+        occupancy.lastVisit = this._currentVisit
+        return
+      }
+    }
   }
 
   private _addFusedToCounts (source :Uint8Array, parentMatrix :mat4, increment :number) {
@@ -871,8 +989,10 @@ function getCellHash (x :number, y :number, z :number) {
 }
 
 function positionToBounds (position :vec3) :Bounds {
+  // get the position of the bottom center of the cell
   vec3.copy(tmpb.min, position)
   cellToPosition(positionToCell(tmpb.min))
+  // put the bounds in the center of the cell and give them a small nonzero size
   tmpb.min[1] += 0.5
   vec3.copy(tmpb.max, tmpb.min)
   Bounds.expand(tmpb, tmpb, 0.01)
