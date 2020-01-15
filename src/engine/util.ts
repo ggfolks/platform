@@ -634,15 +634,21 @@ class Occupancy {
 const tmpm = mat4.create()
 const tmpb = Bounds.create()
 
+const MAX_SEARCH_DISTANCE = 32
+
 /** Tracks occupancy in a 3D grid of fixed-size (0.5, 1.0, 0.5) cells, providing the means to find
   * unoccupied cells and perform pathfinding. */
 export class NavGrid {
+
+  /** The overall bounds of the grid. */
+  readonly bounds = Bounds.empty(Bounds.create())
 
   /** Maps 3D coordinate hashes to occupancy records. */
   private readonly _occupancies = new Map<number, Occupancy>()
 
   private _changed = new Emitter<void>()
   private _walkableCellCount = 0
+  private _floorWalkableCellCounts = new Map<number, number>()
 
   /** Returns a reference to a stream that fires when the grid is changed. */
   get changed () :Stream<void> { return this._changed }
@@ -652,7 +658,7 @@ export class NavGrid {
 
   /** Applies the provided operation to all walkable cells. */
   visitWalkableCells (op :(occupancy :Occupancy) => void) {
-    this._visitOccupancies(undefined, occupancy => {
+    this._visitAllOccupancies(occupancy => {
       if (occupancy.walkable) op(occupancy)
     })
   }
@@ -693,6 +699,66 @@ export class NavGrid {
     this._addFusedToCounts(source, matrix, -1)
   }
 
+  /** Adds a single occupant to the grid.
+    * @param position the occupant's position. */
+  insertOccupant (position :vec3) {
+    this._addToCounts(positionToBounds(position), false, 1)
+  }
+
+  /** Removes a single occupant from the grid.
+    * @param position the occupant's position. */
+  deleteOccupant (position :vec3) {
+    this._addToCounts(positionToBounds(position), false, -1)
+  }
+
+  /** Finds a walkable position as close as possible to the position provided.
+    * @param origin the position at which to start the search.
+    * @return the closest walkable position, or undefined if we failed to find one. */
+  getWalkablePosition (origin :vec3) :vec3|undefined {
+    // make sure there are walkable cells on the requested "floor"
+    const y = Math.round(origin[1])
+    if ((this._floorWalkableCellCounts.get(y) || 0) <= 0) return undefined
+
+    const ox = Math.floor(origin[0] * 2)
+    const oz = Math.floor(origin[2] * 2)
+    if (this._isCellWalkable(ox, y, oz)) return cellToPosition(vec3.fromValues(ox, y, oz))
+
+    const cells :vec3[] = []
+    for (let distance = 1; distance < MAX_SEARCH_DISTANCE; distance++) {
+      const lx = ox - distance, ux = ox + distance
+      const lz = oz - distance, uz = oz + distance
+      for (let x = lx; x <= ux; x++) {
+        if (this._isCellWalkable(x, y, lz)) cells.push(vec3.fromValues(x, y, lz))
+        if (this._isCellWalkable(x, y, uz)) cells.push(vec3.fromValues(x, y, uz))
+      }
+      for (let z = lz + 1; z < uz; z++) {
+        if (this._isCellWalkable(lx, y, z)) cells.push(vec3.fromValues(lx, y, z))
+        if (this._isCellWalkable(ux, y, z)) cells.push(vec3.fromValues(ux, y, z))
+      }
+      if (cells.length > 0) {
+        return cellToPosition(cells[Math.floor(Math.random() * cells.length)])
+      }
+    }
+    return undefined
+  }
+
+  /** Resets the grid state. */
+  clear () {
+    Bounds.empty(this.bounds)
+    this._occupancies.clear()
+    this._walkableCellCount = 0
+    this._floorWalkableCellCounts.clear()
+    this._changed.emit()
+  }
+
+  private _isCellWalkable (x :number, y :number, z :number) :boolean {
+    let occupancy = this._occupancies.get(getCellHash(x, y, z))
+    for (; occupancy; occupancy = occupancy.nextOccupancy) {
+      if (occupancy.x === x && occupancy.y === y && occupancy.z === z) return occupancy.walkable
+    }
+    return false
+  }
+
   private _addFusedToCounts (source :Uint8Array, parentMatrix :mat4, increment :number) {
     decodeFused(source, {
       visitTile: (url, bounds, position, rotation, scale, flags) => {
@@ -713,6 +779,9 @@ export class NavGrid {
     Bounds.expand(bounds, bounds, -0.0001)
     bounds.max[1] = bounds.min[1] // bounds are "flat," for now
 
+    // add to overall bounds
+    Bounds.union(this.bounds, this.bounds, bounds)
+
     let changed = false
     this._visitOccupancies(
       bounds,
@@ -721,35 +790,36 @@ export class NavGrid {
         if (walkable) occupancy.walkableCount += increment
         else occupancy.unwalkableCount += increment
         if (occupancy.walkable !== oldWalkable) {
-          if (occupancy.walkable) this._walkableCellCount++
-          else this._walkableCellCount--
+          if (occupancy.walkable) {
+            this._walkableCellCount++
+            let floorCount = this._floorWalkableCellCounts.get(occupancy.y) || 0
+            this._floorWalkableCellCounts.set(occupancy.y, floorCount + 1)
+          }
+          else {
+            this._walkableCellCount--
+            let floorCount = this._floorWalkableCellCounts.get(occupancy.y) || 0
+            this._floorWalkableCellCounts.set(occupancy.y, floorCount - 1)
+          }
           changed = true
         }
         return occupancy.empty
       },
-      true,
     )
     if (changed) this._changed.emit()
   }
 
-  private _visitOccupancies (
-    bounds :Bounds|undefined,
-    op :(occupancy :Occupancy) => boolean|void,
-    create = false,
-    requireWalkable = false,
-  ) :boolean {
-    if (!bounds) {
-      for (const [hash, currentOccupancy] of this._occupancies) {
-        let occupancy :Occupancy|undefined = currentOccupancy
-        let previousOccupancy :Occupancy|undefined
-        for (; occupancy; occupancy = occupancy.nextOccupancy) {
-          if (requireWalkable && !occupancy.walkable) return false
-          if (op(occupancy)) this._deleteOccupancy(hash, occupancy, previousOccupancy)
-          else previousOccupancy = occupancy
-        }
+  private _visitAllOccupancies (op :(occupancy :Occupancy) => boolean|void) {
+    for (const [hash, currentOccupancy] of this._occupancies) {
+      let occupancy :Occupancy|undefined = currentOccupancy
+      let previousOccupancy :Occupancy|undefined
+      for (; occupancy; occupancy = occupancy.nextOccupancy) {
+        if (op(occupancy)) this._deleteOccupancy(hash, occupancy, previousOccupancy)
+        else previousOccupancy = occupancy
       }
-      return true
     }
+  }
+
+  private _visitOccupancies (bounds :Bounds, op :(occupancy :Occupancy) => boolean|void) {
     const lx = Math.floor(bounds.min[0] * 2)
     const ux = Math.max(lx + 1, Math.ceil(bounds.max[0] * 2))
     const ly = Math.floor(bounds.min[1])
@@ -759,31 +829,26 @@ export class NavGrid {
     for (let x = lx; x < ux; x++) {
       for (let y = ly; y < uy; y++) {
         for (let z = lz; z < uz; z++) {
-          const hash = 31 * (31 * (217 + x) + y) + z
+          const hash = getCellHash(x, y, z)
           let occupancy = this._occupancies.get(hash)
           let previousOccupancy :Occupancy|undefined
           for (; occupancy; occupancy = occupancy.nextOccupancy) {
             if (occupancy.x === x && occupancy.y === y && occupancy.z === z) {
-              if (requireWalkable && !occupancy.walkable) return false
               if (op(occupancy)) this._deleteOccupancy(hash, occupancy, previousOccupancy)
               break
             }
             previousOccupancy = occupancy
           }
           if (!occupancy) {
-            if (requireWalkable) return false
-            if (create) {
-              occupancy = new Occupancy(x, y, z)
-              if (!op(occupancy)) {
-                if (previousOccupancy) previousOccupancy.nextOccupancy = occupancy
-                else this._occupancies.set(hash, occupancy)
-              }
+            occupancy = new Occupancy(x, y, z)
+            if (!op(occupancy)) {
+              if (previousOccupancy) previousOccupancy.nextOccupancy = occupancy
+              else this._occupancies.set(hash, occupancy)
             }
           }
         }
       }
     }
-    return true
   }
 
   private _deleteOccupancy (
@@ -799,4 +864,30 @@ export class NavGrid {
       this._occupancies.delete(hash)
     }
   }
+}
+
+function getCellHash (x :number, y :number, z :number) {
+  return 31 * (31 * (217 + x) + y) + z
+}
+
+function positionToBounds (position :vec3) :Bounds {
+  vec3.copy(tmpb.min, position)
+  cellToPosition(positionToCell(tmpb.min))
+  tmpb.min[1] += 0.5
+  vec3.copy(tmpb.max, tmpb.min)
+  Bounds.expand(tmpb, tmpb, 0.01)
+  return tmpb
+}
+
+function positionToCell (position :vec3) :vec3 {
+  position[0] = Math.floor(position[0] * 2)
+  position[1] = Math.round(position[1])
+  position[2] = Math.floor(position[2] * 2)
+  return position
+}
+
+function cellToPosition (cell :vec3) :vec3 {
+  cell[0] = cell[0]/2 + 0.25
+  cell[2] = cell[2]/2 + 0.25
+  return cell
 }
