@@ -208,18 +208,26 @@ export class Stage {
       const unmouse = mouseEvents("mousedown", "mousemove", "mouseup").onEmit(ev => {
         switch (ev.type) {
         case "mousedown":
-          mousedown = true
-          emit({type: "start", pos: root.mouseToPos(mousepos, ev)})
+          if (!ev.defaultPrevented) {
+            mousedown = true
+            emit({type: "start", pos: root.mouseToPos(mousepos, ev)})
+            ev.preventDefault()
+          }
           break
         case "mousemove":
-          if (mousedown) emit({type: "move", pos: root.mouseToPos(mousepos, ev)})
+          if (mousedown) {
+            emit({type: "move", pos: root.mouseToPos(mousepos, ev)})
+            ev.preventDefault()
+          }
           break
         case "mouseup":
-          if (mousedown) emit({type: "end", pos: root.mouseToPos(mousepos, ev)})
+          if (mousedown) {
+            emit({type: "end", pos: root.mouseToPos(mousepos, ev)})
+            ev.preventDefault()
+          }
           mousedown = false
           break
         }
-        ev.preventDefault()
       })
 
       let curtouchid :number|undefined = undefined
@@ -234,25 +242,28 @@ export class Stage {
               switch (ev.type) {
               case "touchmove":
                 emit({type: "move", pos: root.touchToPos(touchpos, touch)})
+                ev.preventDefault()
                 break
               case "touchcancel":
                 emit({type: "cancel", pos: root.touchToPos(touchpos, touch)})
+                ev.preventDefault()
                 curtouchid = undefined
                 break
               case "touchend":
                 emit({type: "end", pos: root.touchToPos(touchpos, touch)})
+                ev.preventDefault()
                 curtouchid = undefined
                 break
               }
               // if we already have a touch in progress, ignore new touches
             }
           }
-        } else if (ev.type === "touchstart") {
+        } else if (ev.type === "touchstart" && !ev.defaultPrevented) {
           const st = ev.changedTouches[0]
           curtouchid = st.identifier
           emit({type: "start", pos: root.touchToPos(touchpos, st)})
+          ev.preventDefault()
         }
-        ev.preventDefault()
       })
 
       return () => { unmouse() ; untouch() }

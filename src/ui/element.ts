@@ -825,7 +825,10 @@ export class Root extends Container {
     // if this mouse event is in our bounds, stop it from propagating to (lower) roots; except in
     // the case of mouseup because a mouse interaction might start on one root and then drag over to
     // our root, but we want to be sure the original root also hears about the mouseup
-    if (event.type !== "mouseup" && inBounds) event.cancelBubble = true
+    if (event.type !== "mouseup" && inBounds) {
+      event.cancelBubble = true
+      event.preventDefault()
+    }
 
     switch (event.type) {
     case "mousedown":
