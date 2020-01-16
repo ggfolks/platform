@@ -224,8 +224,8 @@ export class Stage {
           if (mousedown) {
             emit({type: "end", pos: root.mouseToPos(mousepos, ev)})
             ev.preventDefault()
+            mousedown = false
           }
-          mousedown = false
           break
         }
       })
