@@ -14,9 +14,17 @@ export type UUID = string
 /** A UUID containing all zeros. */
 export const UUID0 = uuidToString(mkUUID())
 
-/** Returns `true` if `value` looks like a UUID, i.e. it is a length 16 `Uint8Array`. */
+/** Returns `true` if `value` looks like a binary UUID, i.e. it is a length 16 `Uint8Array`. */
 export function isUUIDB (value :any) :boolean {
   return (value instanceof Uint8Array) && (value.length == 16)
+}
+
+const uuidRe = /^[A-Za-z0-9]{20,22}$/
+
+/** Returns `true` if `value` looks like a string UUID, i.e. it contains only valid base-62
+  * characters and is in the right length range. */
+export function isUUID (value :string) :boolean {
+  return uuidRe.test(value)
 }
 
 export type RandomSource = (array :Uint8Array) => void
