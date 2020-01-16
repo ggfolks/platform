@@ -208,8 +208,8 @@ export class Stage {
       const unmouse = mouseEvents("mousedown", "mousemove", "mouseup").onEmit(ev => {
         switch (ev.type) {
         case "mousedown":
+          mousedown = true
           if (!ev.defaultPrevented) {
-            mousedown = true
             emit({type: "start", pos: root.mouseToPos(mousepos, ev)})
             ev.preventDefault()
           }
