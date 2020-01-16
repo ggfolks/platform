@@ -775,7 +775,7 @@ export class NavGrid {
         for (let path :WorkingPath|undefined = bestPath; path; path = path.previous) {
           positions.unshift(cellToPosition(path.cell))
         }
-        return positions
+        return this._collapsePath(positions)
       }
       if (bestPath.length >= MAX_PATH_LENGTH) {
         log.warn("Reached max path length.", "start", start, "end", end)
@@ -847,6 +847,65 @@ export class NavGrid {
     this._walkableCellCount = 0
     this._floorWalkableCellCounts.clear()
     this._changed.emit()
+  }
+
+  private _collapsePath (path :vec3[]) :vec3[] {
+    const collapsed = [path.shift()!]
+    startLoop: while (path.length > 0) {
+      const start = collapsed[collapsed.length - 1]
+      for (let jj = path.length - 1; jj > 0; jj--) {
+        const end = path[jj]
+        if (this._isSegmentWalkable(start, end)) {
+          collapsed.push(end)
+          path.splice(0, jj + 1)
+          continue startLoop
+        }
+      }
+      collapsed.push(path.shift()!)
+    }
+    return collapsed
+  }
+
+  private _isSegmentWalkable (start :vec3, end :vec3) :boolean {
+    const y = Math.round(start[1])
+
+    let px = start[0], pz = start[2]
+    let cx = Math.floor(px * 2), cz = Math.floor(pz * 2)
+    const dx = end[0] - start[0], dz = end[2] - start[2]
+    const ex = Math.floor(end[0] * 2), ez = Math.floor(end[2] * 2)
+    while (
+      (dx > 0 ? cx < ex : cx > ex) ||
+      (dz > 0 ? cz < ez : cz > ez)
+    ) {
+      let t = Infinity
+      let nx = cx, nz = cz
+      if (dx > 0) {
+        t = ((cx + 1)/2 - px) / dx
+        nx++
+      } else if (dx < 0) {
+        t = (cx/2 - px) / dx
+        nx--
+      }
+      if (dz > 0) {
+        const zt = ((cz + 1)/2 - pz) / dz
+        if (zt <= t) {
+          nz++
+          if (zt < t) nx = cx
+        }
+      } else if (dz < 0) {
+        const zt = (cz/2 - pz) / dz
+        if (zt <= t) {
+          nz--
+          if (zt < t) nx = cx
+        }
+      }
+      if (!this._isCellWalkable(nx, y, nz)) return false
+      px += t*dx
+      pz += t*dz
+      cx = nx
+      cz = nz
+    }
+    return true
   }
 
   private _isCellWalkable (x :number, y :number, z :number) :boolean {
