@@ -1,7 +1,7 @@
-import {Prop, Remover} from "./util"
+import {Prop, Remover, addListener} from "./util"
 import {Interp, interpRange} from "./interp"
 import {vec2} from "./math"
-import {Emitter, Mutable, Stream, Value, addListener} from "./react"
+import {Emitter, Mutable, Stream, Value} from "./react"
 
 /** An animation is simply a function that takes a delta time and returns how much time remains
   * until the animation is finished. When the animation returns 0 or less than 0, it is considered

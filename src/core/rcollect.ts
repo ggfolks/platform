@@ -1,7 +1,6 @@
-import {Remover, NoopRemover, filteredIterable} from "./util"
+import {Remover, NoopRemover, addListener, filteredIterable} from "./util"
 import {Data, dataEquals, refEquals} from "./data"
-import {Eq, Mutable, Remove, Source, Subject,
-        Value, ValueFn, dispatchValue, addListener} from "./react"
+import {Eq, Mutable, Remove, Source, Subject, Value, ValueFn, dispatchValue} from "./react"
 
 //
 // Reactive lists

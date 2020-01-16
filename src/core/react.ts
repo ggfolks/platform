@@ -1,4 +1,4 @@
-import {Remover, NoopRemover, RProp, Prop, VProp} from "./util"
+import {Remover, NoopRemover, RProp, Prop, VProp, addListener, removeListener} from "./util"
 import {Data, dataEquals, refEquals} from "./data"
 
 // TypeScript infers literal types for type parameters with bounds, so when we bound our reactive
@@ -16,18 +16,6 @@ export type Eq<T> = (a:T, b:T) => boolean
 
 //
 // Listener plumbing
-
-function removeListener<T> (listeners :T[], listener :T) {
-  let ii = listeners.indexOf(listener)
-  if (ii >= 0) listeners.splice(ii, 1)
-}
-
-/** Adds `listener` to `listeners`.
-  * @return a `Remover` thunk that can be used to remove `listener` from `listeners`. */
-export function addListener<T> (listeners :T[], listener :T) :Remover {
-  listeners.push(listener)
-  return () => removeListener(listeners, listener)
-}
 
 /** An error that encapsulates multiple errors. Thrown when dispatching to reactive callbacks
   * triggers multiple failures. */

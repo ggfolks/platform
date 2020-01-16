@@ -8,6 +8,19 @@ export const Noop = () => {}
   * potentially undefined remover thunk. */
 export const NoopRemover :Remover = Noop
 
+/** Removes `listener` from `listeners`. */
+export function removeListener<T> (listeners :T[], listener :T) {
+  let ii = listeners.indexOf(listener)
+  if (ii >= 0) listeners.splice(ii, 1)
+}
+
+/** Adds `listener` to `listeners`.
+  * @return a `Remover` thunk that can be used to remove `listener` from `listeners`. */
+export function addListener<T> (listeners :T[], listener :T) :Remover {
+  listeners.push(listener)
+  return () => removeListener(listeners, listener)
+}
+
 // NOTE: WebPack magically rewrites process.env.NODE_ENV for us; when we stop using WebPack we
 // should provide some other way to find out if we're in development or production mode
 export const developMode = process.env.NODE_ENV === "development"

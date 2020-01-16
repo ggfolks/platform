@@ -1,8 +1,8 @@
-import {Remover, log} from "../core/util"
+import {Remover, addListener, log} from "../core/util"
 import {UUID, UUID0} from "../core/uuid"
 import {Path} from "../core/path"
 import {Data, Record, dataEquals, refEquals} from "../core/data"
-import {ChangeFn, Eq, Mutable, Value, ValueFn, addListener, dispatchChange} from "../core/react"
+import {ChangeFn, Eq, Mutable, Value, ValueFn, dispatchChange} from "../core/react"
 import {MutableSet, MutableMap} from "../core/rcollect"
 import {Auth} from "../auth/auth"
 import {WhereClause, OrderClause, PropMeta, ValueMeta, SetMeta, MapMeta, TableMeta,
