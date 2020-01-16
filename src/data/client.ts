@@ -15,6 +15,7 @@ const DebugLog = false
 /** Creates a server address based on the browser location. */
 export function addrFromLocation (path :string) :URL {
   const addr = new URL(window.location.href)
+  addr.hash = ""
   addr.protocol = (addr.protocol === "https:") ? "wss:" : "ws:"
   if (addr.port === "3000") addr.port = "8080"
   const locpath = addr.pathname
