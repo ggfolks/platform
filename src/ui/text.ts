@@ -2,7 +2,7 @@ import {dim2, vec2, rect} from "../core/math"
 import {refEquals} from "../core/data"
 import {Noop, NoopRemover, Remover, PMap, getValue} from "../core/util"
 import {Mutable, Subject, Value} from "../core/react"
-import {Control, Element, PointerInteraction} from "./element"
+import {Control, Element, Host, PointerInteraction} from "./element"
 import {Spec, FontConfig, Paint, PaintConfig, ShadowConfig, Span, EmptySpan} from "./style"
 import {Model, Action, NoopAction} from "./model"
 import {CtrlMask, MetaMask, Bindings} from "./keymap"
@@ -408,14 +408,15 @@ export abstract class AbstractText extends Control {
     if (!host) return
     const text = host.showTextOverlay()
     if (!text) return
-    this._clearOverlay = this.configInput(text)
+    this._clearOverlay = this.configInput(host, text)
   }
 
-  protected configInput (input :HTMLInputElement) :Remover {
+  protected configInput (host :Host, input :HTMLInputElement) :Remover {
     // sync the bounds of the input element to the bounds of the text (and scale)
     let ix = 0, iy = 0, iwidth = 0, iheight = 0, xscale = 0, yscale = 0
     const unbsync = this.root.clock.onEmit(_ => {
       const bounds = this.bounds, hbounds = this.toHostCoords(rect.copy(tmpr, bounds), true)
+      host.setTextOverlayBounds(hbounds)
       if (hbounds[0] !== ix) input.style.left = `${ix = hbounds[0]}px`
       if (hbounds[1] !== iy) input.style.top = `${iy = hbounds[1]}px`
       if (bounds[2] !== iwidth) input.style.width = `${iwidth = bounds[2]}px`

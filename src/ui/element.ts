@@ -825,18 +825,18 @@ export class Root extends Container {
     // if this mouse event is in our bounds, stop it from propagating to (lower) roots; except in
     // the case of mouseup because a mouse interaction might start on one root and then drag over to
     // our root, but we want to be sure the original root also hears about the mouseup
-    if (event.type !== "mouseup" && inBounds) {
-      event.cancelBubble = true
-      event.preventDefault()
-    }
+    if (event.type !== "mouseup" && inBounds) event.cancelBubble = true
 
     switch (event.type) {
     case "mousedown":
-      if (inBounds) this.maybeStartInteraction(event, pos, button)
+      if (inBounds && this.maybeStartInteraction(event, pos, button)) event.preventDefault()
       break
 
     case "mousemove":
-      if (iacts) this.dispatchMove(event, pos, iacts)
+      if (iacts) {
+        this.dispatchMove(event, pos, iacts)
+        event.preventDefault()
+      }
       else this._updateElementsOver(pos)
       break
 
@@ -845,11 +845,12 @@ export class Root extends Container {
         for (const iact of iacts) iact.release(event, pos)
         this.interacts[button] = undefined
         this._updateElementsOver(pos)
+        event.preventDefault()
       }
       break
 
     case "dblclick":
-      if (inBounds) this.eventTarget.maybeHandleDoubleClick(event, pos)
+      if (inBounds && this.eventTarget.maybeHandleDoubleClick(event, pos)) event.preventDefault()
       break
     }
     return inBounds
@@ -1323,9 +1324,13 @@ export class Host implements Disposable {
     }
   }
 
-  /** If this thos supports an HTML input element used to overlay text fields to allow them to work
+  /** If this host supports an HTML input element used to overlay text fields to allow them to work
     * on mobile, adds that element to the DOM and returns it. Returns `undefined` otherwise. */
   showTextOverlay () :HTMLInputElement|undefined { return undefined }
+
+  /** Informs the host of the current bounds of the text overlay. This is needed to adjudicate
+    * touch and mouse events between our input handling and the text input element. */
+  setTextOverlayBounds (bounds :rect) {}
 
   dispatchEvent (event :UIEvent, op :(r:Root) => void) {
     this._dispatching = true
@@ -1420,6 +1425,7 @@ export class Host implements Disposable {
 /** A host that simply appends canvases to an HTML element (which should be positioned). */
 export class HTMLHost extends Host {
   private readonly _textOverlay? :HTMLInputElement
+  private readonly _textOverlayBounds = rect.create()
 
   constructor (elem :HTMLElement, enableTextOverlay = true) {
     super(elem)
@@ -1461,8 +1467,20 @@ export class HTMLHost extends Host {
     return text
   }
 
+  setTextOverlayBounds (bounds :rect) {
+    rect.copy(this._textOverlayBounds, bounds)
+  }
+
+  handleMouseEvent (event :MouseEvent) {
+    // don't dispatch mouse events to the roots while we have a text overlay
+    const haveOverlay = this._textOverlay && this._textOverlay.parentNode
+    if (!haveOverlay || !rect.contains(this._textOverlayBounds, vec2.set(
+      tmpv, event.clientX, event.clientY))) super.handleMouseEvent(event)
+  }
+  // TODO: we probably need to do the same as above for touch events
+
   handleKeyEvent (event :KeyboardEvent) {
-    // don't dispatch key events to the root while we have a text overlay
+    // don't dispatch key events to the roots while we have a text overlay
     if (!(this._textOverlay && this._textOverlay.parentNode)) super.handleKeyEvent(event)
   }
 }
