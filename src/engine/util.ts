@@ -642,8 +642,8 @@ const MAX_PATH_LENGTH = 128
   * unoccupied cells and perform pathfinding. */
 export class NavGrid {
 
-  /** The overall bounds of the grid. */
-  readonly bounds = Bounds.empty(Bounds.create())
+  /** The bounds of the grid's walkable areas. */
+  readonly walkableBounds = Bounds.empty(Bounds.create())
 
   /** Maps 3D coordinate hashes to occupancy records. */
   private readonly _occupancies = new Map<number, Occupancy>()
@@ -842,7 +842,7 @@ export class NavGrid {
 
   /** Resets the grid state. */
   clear () {
-    Bounds.empty(this.bounds)
+    Bounds.empty(this.walkableBounds)
     this._occupancies.clear()
     this._walkableCellCount = 0
     this._floorWalkableCellCounts.clear()
@@ -893,12 +893,12 @@ export class NavGrid {
   }
 
   private _addToCounts (bounds :Bounds, walkable :boolean, increment :number) {
+    // add to walkable bounds
+    if (walkable) Bounds.union(this.walkableBounds, this.walkableBounds, bounds)
+
     // adjust the bounds slightly to make sure they don't "spill out" of the cell
     Bounds.expand(bounds, bounds, -0.0001)
     bounds.max[1] = bounds.min[1] // bounds are "flat," for now
-
-    // add to overall bounds
-    Bounds.union(this.bounds, this.bounds, bounds)
 
     let changed = false
     this._visitOccupancies(
