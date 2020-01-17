@@ -526,7 +526,7 @@ export class Scroller extends TransformedContainer {
         if (Math.abs(baseOffset - this.offset[oidx]) > ClaimDist) claimed = true
         return claimed
       },
-      release: (event) => {
+      release: (event, pos) => {
         anim && anim.release(pos[oidx], event.timeStamp)
         this.setAnim(anim)
         clearCursor()

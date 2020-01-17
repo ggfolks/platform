@@ -13,7 +13,7 @@ export type PointerInteraction = {
   move: (moveEvent :MouseEvent|TouchEvent, pos :vec2) => boolean
   /** Called when the pointer is released while this interaction is active.
     * This ends the interaction. */
-  release: (upEvent :MouseEvent|TouchEvent) => void
+  release: (upEvent :MouseEvent|TouchEvent, pos :vec2) => void
   /** Called if this action is canceled. This ends the interaction. */
   cancel: () => void
 
@@ -138,7 +138,7 @@ export class InteractionManager {
       break
 
     case "mouseup":
-      if (this.handleUp(event, button)) {
+      if (this.handleUp(event, mx, my, button)) {
         event.preventDefault()
         this.updateMouseHover(event)
         currentEditNumber += 1
@@ -196,7 +196,7 @@ export class InteractionManager {
     case "touchend":
     case "touchcancel":
       const canceled = event.type === "touchcancel"
-      if (this.handleUp(event, 0, canceled)) {
+      if (this.handleUp(event, tx, ty, 0, canceled)) {
         this.activeTouchId = undefined
         event.preventDefault()
         if (!canceled) currentEditNumber += 1
@@ -243,10 +243,12 @@ export class InteractionManager {
     return true
   }
 
-  private handleUp (event :MouseEvent|TouchEvent, button :number, cancel = false) :boolean {
+  private handleUp (event :MouseEvent|TouchEvent, x :number, y :number, button :number,
+                    cancel = false) :boolean {
     const state = this.istate[button]
     if (!state) return false
-    for (const iact of state.iacts) cancel ? iact.cancel() : iact.release(event)
+    state.prov.toLocal(x, y, pos)
+    for (const iact of state.iacts) cancel ? iact.cancel() : iact.release(event, pos)
     delete this.istate[button]
     return true
   }

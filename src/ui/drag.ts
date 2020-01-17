@@ -189,7 +189,7 @@ export namespace Drag {
           owner.handleDrag(this, pos)
           return dragRoot !== undefined
         },
-        release: (upEvent) => {
+        release: (upEvent, pos) => {
           clear()
           if (dragRoot) owner.handleDrop(this)
           else this.releaseSelect(event)
