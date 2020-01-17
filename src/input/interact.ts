@@ -84,10 +84,12 @@ export function incrementEditNumber () {
 
 const pos = vec2.create()
 
+type IState = {iacts :PointerInteraction[], prov :InteractionProvider}
+
 export class InteractionManager {
   private readonly disposer = new Disposer()
   private readonly providers :InteractionProvider[] = []
-  private readonly interacts :PointerInteraction[][] = []
+  private readonly istate :IState[] = []
   private readonly overlayRect = rect.fromValues(0, 0, 0, 0)
   private activeTouchId :number|undefined = undefined
 
@@ -109,7 +111,7 @@ export class InteractionManager {
   }
 
   get hasInteractions () :boolean {
-    for (const iacts of this.interacts) if (iacts) return true
+    for (const state of this.istate) if (state) return true
     return false
   }
 
@@ -121,9 +123,7 @@ export class InteractionManager {
   }
 
   private handleMouseEvent (event :MouseEvent) {
-    const button = event.button, iacts = this.interacts[button]
-    const mx = event.clientX, my = event.clientY
-
+    const button = event.button, mx = event.clientX, my = event.clientY
     switch (event.type) {
     case "mousedown":
       if (this.handleDown(event, mx, my, button)) {
@@ -133,16 +133,12 @@ export class InteractionManager {
       break
 
     case "mousemove":
-      if (iacts) {
-        this.handleMove(event, mx, my, iacts)
-        event.preventDefault()
-      } else this.updateMouseHover(event)
+      if (this.handleMove(event, mx, my, button)) event.preventDefault()
+      else this.updateMouseHover(event)
       break
 
     case "mouseup":
-      if (iacts) {
-        for (const iact of iacts) iact.release(event)
-        delete this.interacts[button]
+      if (this.handleUp(event, button)) {
         event.preventDefault()
         this.updateMouseHover(event)
         currentEditNumber += 1
@@ -184,48 +180,36 @@ export class InteractionManager {
 
   private handleTouch (event :TouchEvent, touch :Touch) {
     const tx = touch.clientX, ty = touch.clientY
-
-    const iacts = this.interacts[0]
     switch (event.type) {
     case "touchstart":
       if (this.handleDown(event, tx, ty, 0)) {
-        // note that we are assuming responsibility for the event
         event.cancelBubble = true
         event.preventDefault()
         this.activeTouchId = touch.identifier
       }
       break
+
     case "touchmove":
-      if (iacts) {
-        this.handleMove(event, tx, ty, iacts)
-        event.preventDefault()
-      }
+      if (this.handleMove(event, tx, ty, 0)) event.preventDefault()
       break
+
     case "touchend":
-      if (iacts) {
-        for (const iact of iacts) iact.release(event)
-        delete this.interacts[0]
-        this.activeTouchId = undefined
-        event.preventDefault()
-        currentEditNumber += 1
-      }
-      break
     case "touchcancel":
-      if (iacts) {
-        for (const iact of iacts) iact.cancel()
-        delete this.interacts[0]
+      const canceled = event.type === "touchcancel"
+      if (this.handleUp(event, 0, canceled)) {
         this.activeTouchId = undefined
         event.preventDefault()
+        if (!canceled) currentEditNumber += 1
       }
       break
     }
   }
 
   private handleDown (event :MouseEvent|TouchEvent, x :number, y :number, button :number) :boolean {
-    const oiacts = this.interacts[button]
-    if (oiacts) {
-      log.warn("Starting new interaction but have old?", "event", event.type, "old", oiacts)
-      for (const iact of oiacts) iact.cancel()
+    const ostate = this.istate[button]
+    if (ostate) {
+      log.warn("Starting new interaction but have old?", "event", event.type, "old", ostate.iacts)
+      for (const iact of ostate.iacts) iact.cancel()
     }
 
     // if the down event falls in an area obscured by an overlay element,
@@ -237,29 +221,34 @@ export class InteractionManager {
       if (!p.toLocal(x, y, pos)) continue
       p.handlePointerDown(event, pos, niacts)
       if (niacts.length === 0) continue
-      for (const iact of niacts) iact.provider = p
-      this.interacts[button] = niacts
+      this.istate[button] = {iacts: niacts, prov: p}
       return true
     }
     return false
   }
 
-  private handleMove (event :MouseEvent|TouchEvent, x :number, y :number,
-                      iacts :PointerInteraction[]) {
-    let provider :InteractionProvider|undefined = undefined
-    for (const iact of iacts) {
-      // interactions will be grouped by provider, so only recompute pos when we see the source
-      // provider has changed
-      const iprovider = iact.provider as InteractionProvider
-      if (provider !== iprovider) iprovider.toLocal(x, y, pos)
+  private handleMove (event :MouseEvent|TouchEvent, x :number, y :number, button :number) :boolean {
+    const state = this.istate[button]
+    if (!state) return false
+    state.prov.toLocal(x, y, pos)
+    for (const iact of state.iacts) {
       if (iact.move(event, pos)) {
         // if any interaction claims the interaction, cancel all the rest
-        for (const cc of iacts) if (cc !== iact) cc.cancel()
-        iacts.length = 0
-        iacts.push(iact)
-        return
+        for (const cc of state.iacts) if (cc !== iact) cc.cancel()
+        state.iacts.length = 0
+        state.iacts.push(iact)
+        break
       }
     }
+    return true
+  }
+
+  private handleUp (event :MouseEvent|TouchEvent, button :number, cancel = false) :boolean {
+    const state = this.istate[button]
+    if (!state) return false
+    for (const iact of state.iacts) cancel ? iact.cancel() : iact.release(event)
+    delete this.istate[button]
+    return true
   }
 
   private updateMouseHover (event :MouseEvent) {
