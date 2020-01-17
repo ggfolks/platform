@@ -1,9 +1,10 @@
-import {Disposer, log, insertSorted} from "../core/util"
+import {Disposer, Remover, addListener, log, insertSorted} from "../core/util"
 import {dim2, mat2d, rect, vec2, vec2zero} from "../core/math"
 import {Color} from "../core/color"
 import {Emitter, Stream} from "../core/react"
 import {Clock} from "../core/clock"
 import {Animator, Anim} from "../core/anim"
+import {GestureHandler, InteractionManager} from "../input/interact"
 import {mouseEvents, touchEvents} from "../input/react"
 import {Renderer, Tile} from "./gl"
 import {QuadBatch} from "./batch"
@@ -54,16 +55,9 @@ export abstract class Actor {
     if (this.parent) this.parent.layerChanged(this)
   }
 
-  mouseToPos (into :vec2, ev :MouseEvent) :vec2 {
+  toLocal (x :number, y :number, into :vec2) :vec2 {
     const rect = this.requireStage.renderer.canvas.getBoundingClientRect()
-    return this.trans.inverseTransform(
-      into, vec2.set(into, ev.clientX-rect.left, ev.clientY-rect.top))
-  }
-
-  touchToPos (into :vec2, touch :Touch) :vec2 {
-    const rect = this.requireStage.renderer.canvas.getBoundingClientRect()
-    return this.trans.inverseTransform(
-      into, vec2.set(into, touch.clientX-rect.left, touch.clientY-rect.top))
+    return this.trans.inverseTransform(into, vec2.set(into, x-rect.left, y-rect.top))
   }
 
   delete (dispose = true) { this.requireParent.removeActor(this, dispose) }
@@ -188,7 +182,8 @@ type PointerEvent = {type :PointerEventType, pos :vec2}
 const MaxDt = 1/15
 
 export class Stage {
-  private disposer = new Disposer()
+  private readonly disposer = new Disposer()
+  private readonly ghandlers :GestureHandler[] = []
 
   readonly clock :Stream<number> = new Emitter()
   readonly anim = new Animator()
@@ -196,9 +191,26 @@ export class Stage {
   readonly events = new Emitter<ActorEvent>()
   readonly root = new RootGroup(this)
 
-  constructor (readonly renderer :Renderer) {
+  constructor (readonly renderer :Renderer, interact :InteractionManager) {
     this.clock.onEmit(dt => this.anim.update(dt))
     this.clock.onEmit(dt => this.fxanim.update(dt))
+    this.disposer.add(interact.addProvider({
+      zIndex: 0, // TODO: allow customize?
+      toLocal: (x, y, pos) => {
+        this.root.toLocal(x, y, pos)
+        const rect = this.renderer.canvas.getBoundingClientRect()
+        return x >= rect.left && y >= rect.top && x <= rect.right && y <= rect.bottom
+      },
+      handlePointerDown: (event, pos, into) => {
+        for (const gh of this.ghandlers) gh.handlePointerDown(event, pos, into)
+      },
+      updateMouseHover: (event, pos) => {}, // noop
+      handleDoubleClick: (event, pos) => false, // noop
+    }))
+  }
+
+  addGestureHandler (handler :GestureHandler) :Remover {
+    return addListener(this.ghandlers, handler)
   }
 
   pointer (root :Actor) :Stream<PointerEvent> {
@@ -210,19 +222,19 @@ export class Stage {
         case "mousedown":
           if (!ev.defaultPrevented) {
             mousedown = true
-            emit({type: "start", pos: root.mouseToPos(mousepos, ev)})
+            emit({type: "start", pos: root.toLocal(ev.clientX, ev.clientY, mousepos)})
             ev.preventDefault()
           }
           break
         case "mousemove":
           if (mousedown) {
-            emit({type: "move", pos: root.mouseToPos(mousepos, ev)})
+            emit({type: "move", pos: root.toLocal(ev.clientX, ev.clientY, mousepos)})
             ev.preventDefault()
           }
           break
         case "mouseup":
           if (mousedown) {
-            emit({type: "end", pos: root.mouseToPos(mousepos, ev)})
+            emit({type: "end", pos: root.toLocal(ev.clientX, ev.clientY, mousepos)})
             ev.preventDefault()
             mousedown = false
           }
@@ -241,16 +253,16 @@ export class Stage {
             if (touch.identifier === curtouchid) {
               switch (ev.type) {
               case "touchmove":
-                emit({type: "move", pos: root.touchToPos(touchpos, touch)})
+                emit({type: "move", pos: root.toLocal(touch.clientX, touch.clientY, touchpos)})
                 ev.preventDefault()
                 break
               case "touchcancel":
-                emit({type: "cancel", pos: root.touchToPos(touchpos, touch)})
+                emit({type: "cancel", pos: root.toLocal(touch.clientX, touch.clientY, touchpos)})
                 ev.preventDefault()
                 curtouchid = undefined
                 break
               case "touchend":
-                emit({type: "end", pos: root.touchToPos(touchpos, touch)})
+                emit({type: "end", pos: root.toLocal(touch.clientX, touch.clientY, touchpos)})
                 ev.preventDefault()
                 curtouchid = undefined
                 break
@@ -261,7 +273,7 @@ export class Stage {
         } else if (ev.type === "touchstart" && !ev.defaultPrevented) {
           const st = ev.changedTouches[0]
           curtouchid = st.identifier
-          emit({type: "start", pos: root.touchToPos(touchpos, st)})
+          emit({type: "start", pos: root.toLocal(st.clientX, st.clientY, touchpos)})
           ev.preventDefault()
         }
       })
