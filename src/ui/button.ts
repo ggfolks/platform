@@ -1,7 +1,8 @@
 import {dim2, rect, vec2} from "../core/math"
 import {Mutable, Value} from "../core/react"
 import {Action, NoopAction, Spec} from "./model"
-import {Control, Element, PointerInteraction} from "./element"
+import {PointerInteraction} from "../input/interact"
+import {Control, Element} from "./element"
 
 export interface ButtonConfig extends Control.Config {
   type :"button"
@@ -30,8 +31,9 @@ export abstract class AbstractButton extends Control {
         return false
       },
       release: () => {
+        const wasPressed = this._pressed.current
         this._pressed.update(false)
-        if (rect.contains(this.hitBounds, pos)) this.onClick()
+        if (wasPressed) this.onClick()
       },
       cancel: () => this._pressed.update(false)
     })

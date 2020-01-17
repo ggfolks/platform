@@ -13,6 +13,7 @@ import {
   WebGLRenderer,
 } from "three"
 
+import {InteractionManager} from "../input/interact"
 import {Host, Root} from "./element"
 
 const DefaultPlaneBufferGeometry = new PlaneBufferGeometry()
@@ -20,8 +21,8 @@ const DefaultPlaneBufferGeometry = new PlaneBufferGeometry()
 export class Host3 extends Host {
   readonly group = new Group()
 
-  constructor (renderer :WebGLRenderer) {
-    super(renderer.domElement)
+  constructor (renderer :WebGLRenderer, interact :InteractionManager) {
+    super(renderer.domElement, interact)
     this.roots.onChange(ev => {
       if (ev.type === "added") this.rootAdded(ev.elem, ev.index)
     })

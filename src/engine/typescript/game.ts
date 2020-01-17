@@ -16,6 +16,7 @@ import {
 } from "../../graph/matrix"
 import {registerSignalNodes} from "../../graph/signal"
 import {SubgraphRegistry, registerUtilNodes} from "../../graph/util"
+import {InteractionManager} from "../../input/interact"
 import {registerInputNodes} from "../../input/node"
 import {HTMLHost} from "../../ui/element"
 import {registerUINodes} from "../../ui/node"
@@ -277,7 +278,10 @@ export class TypeScriptGameEngine implements GameEngine {
 
   get gameObjects () :RMap<string, GameObject> { return this._gameObjects }
 
-  constructor (readonly root :HTMLElement, screen :Value<rect>, readonly loader :ResourceLoader) {
+  constructor (readonly root :HTMLElement,
+               readonly interact :InteractionManager,
+               screen :Value<rect>,
+               readonly loader :ResourceLoader) {
     this.ctx = {
       types: new NodeTypeRegistry(
         registerLogicNodes,
@@ -291,7 +295,7 @@ export class TypeScriptGameEngine implements GameEngine {
       ),
       loader,
       subgraphs: new SubgraphRegistry(registerEngineSubgraphs),
-      host: this._disposer.add(new HTMLHost(root, false)),
+      host: this._disposer.add(new HTMLHost(root, interact, false)),
       theme: DefaultTheme,
       styles: DefaultStyles,
       screen,

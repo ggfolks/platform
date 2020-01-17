@@ -2,7 +2,8 @@ import {dim2, vec2, rect} from "../core/math"
 import {refEquals} from "../core/data"
 import {Noop, NoopRemover, Remover, PMap, getValue} from "../core/util"
 import {Mutable, Subject, Value} from "../core/react"
-import {Control, Element, Host, PointerInteraction} from "./element"
+import {PointerInteraction} from "../input/interact"
+import {Control, Element, Host} from "./element"
 import {Spec, FontConfig, Paint, PaintConfig, ShadowConfig, Span, EmptySpan} from "./style"
 import {Model, Action, NoopAction} from "./model"
 import {CtrlMask, MetaMask, Bindings} from "./keymap"
@@ -416,7 +417,6 @@ export abstract class AbstractText extends Control {
     let ix = 0, iy = 0, iwidth = 0, iheight = 0, xscale = 0, yscale = 0
     const unbsync = this.root.clock.onEmit(_ => {
       const bounds = this.bounds, hbounds = this.toHostCoords(rect.copy(tmpr, bounds), true)
-      host.setTextOverlayBounds(hbounds)
       if (hbounds[0] !== ix) input.style.left = `${ix = hbounds[0]}px`
       if (hbounds[1] !== iy) input.style.top = `${iy = hbounds[1]}px`
       if (bounds[2] !== iwidth) input.style.width = `${iwidth = bounds[2]}px`
@@ -426,6 +426,11 @@ export abstract class AbstractText extends Control {
         input.style.transform = `scale(${xscale = cxscale}, ${yscale = cyscale})`
         input.style.transformOrigin = `left top`
       }
+      // adjust the bounds to account for the host origin
+      const hcrect = host.elem.getBoundingClientRect()
+      hbounds[0] += hcrect.left
+      hbounds[1] += hcrect.top
+      host.interact.setOverlayRect(hbounds)
     })
     // TODO: we should perhaps use the bounds of the box instead of the bounds
     // of the text, in case someone is doing something extra tricky...
@@ -459,6 +464,7 @@ export abstract class AbstractText extends Control {
     setTimeout(() => input.addEventListener("blur", onBlur))
 
     return () => {
+      host.interact.clearOverlayRect()
       input.parentNode && input.parentNode.removeChild(input)
       input.removeAttribute("inputmode")
       input.removeEventListener("input", onInput)
@@ -659,7 +665,7 @@ export class EditableLabel extends AbstractText {
     this.focus()
     const iacts :PointerInteraction[] = []
     this.handlePointerDown(event, pos, iacts)
-    for (const iact of iacts) iact.release(event, pos)
+    for (const iact of iacts) iact.release(event)
     return true
   }
 

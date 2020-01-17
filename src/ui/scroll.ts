@@ -3,7 +3,8 @@ import {Interp, Easing} from "../core/interp"
 import {clamp, rect, vec2} from "../core/math"
 import {Clock} from "../core/clock"
 import {Mutable, Buffer} from "../core/react"
-import {Control, Element, PointerInteraction} from "./element"
+import {PointerInteraction} from "../input/interact"
+import {Control, Element} from "./element"
 
 const transformedPos = vec2.create()
 const transformedRegion = rect.create()
@@ -525,7 +526,7 @@ export class Scroller extends TransformedContainer {
         if (Math.abs(baseOffset - this.offset[oidx]) > ClaimDist) claimed = true
         return claimed
       },
-      release: (event, pos) => {
+      release: (event) => {
         anim && anim.release(pos[oidx], event.timeStamp)
         this.setAnim(anim)
         clearCursor()

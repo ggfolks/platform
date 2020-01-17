@@ -5,7 +5,9 @@ import {Record} from "../core/data"
 import {Buffer, Emitter, Mutable, Source, Stream, Subject, Value} from "../core/react"
 import {MutableList, RList} from "../core/rcollect"
 import {Scale} from "../core/ui"
-import {mouseEvents, pointerEvents, preKeyEvents, touchEvents, wheelEvents} from "../input/react"
+import {pointerEvents, preKeyEvents, wheelEvents} from "../input/react"
+import {GestureHandler, InteractionManager, PointerInteraction,
+        incrementEditNumber} from "../input/interact"
 import {Action, Command, Model} from "./model"
 import {Keymap, ModMap} from "./keymap"
 import {Spec, StyleContext, styleEquals} from "./style"
@@ -555,48 +557,8 @@ export abstract class Container extends Element {
   }
 }
 
-/** Encapsulates a mouse or touch interaction. An interaction can be started by an element when a
-  * button or touch is pressed over it, or by a gesture handler. Multiple interactions may be
-  * started by the same press/touch and based on subsequent input one of the interactions can claim
-  * primacy and the other interactions will be canceled. */
-export type PointerInteraction = {
-  /** Called when the pointer is moved while this interaction is active.
-    * @return true if this interaction has accumulated enough input to know that it should be
-    * granted exclusive control. */
-  move: (moveEvent :MouseEvent|TouchEvent, pos :vec2) => boolean
-  /** Called when the pointer is released while this interaction is active.
-    * This ends the interaction. */
-  release: (upEvent :MouseEvent|TouchEvent, pos :vec2) => void
-  /** Called if this action is canceled. This ends the interaction. */
-  cancel: () => void
-
-  // allow extra stuff in interaction to allow communication with parent elements
-  [extra :string] :any
-}
-
-/** Allows arbitrary code to participate in mouse/touch input handling for a root. If no element
-  * starts a pointer interaction, registered gesture handlers are given a chance to do so. As with
-  * elements, once an interaction is started, it gets all move/drag events and the final up/end. */
-export interface GestureHandler {
-
-  /** Checks whether this handler wishes to handle this pointer interaction.
-    * @param event the event forwarded from the browser.
-    * @param pos the position of the event relative to the root origin.
-    * @return an interaction to be started or `undefined`. */
-  handlePointerDown (event :MouseEvent|TouchEvent, pos :vec2, into :PointerInteraction[]) :void
-}
-
-let currentEditNumber = 0
-
-/** Returns the current value of the edit number, which is simply a number that we increment after
-  * certain input events (mouse up, key up) to determine which edits should be merged. */
-export function getCurrentEditNumber () {
-  return currentEditNumber
-}
-
 /** The top-level of the UI hierarchy. Manages the canvas into which the UI is rendered. */
 export class Root extends Container {
-  private readonly interacts :Array<PointerInteraction[]|undefined> = []
   private readonly _clock = new Emitter<Clock>()
   private readonly _scale :Scale
   private readonly _hintSize :Value<dim2>
@@ -606,7 +568,6 @@ export class Root extends Container {
   private readonly _dirtyRegion = rect.create()
   private _elementsOver = new Set<Element>()
   private _lastElementsOver = new Set<Element>()
-  private _activeTouchId :number|undefined = undefined
   private _rendering = false
 
   readonly canvasElem :HTMLCanvasElement = document.createElement("canvas")
@@ -810,125 +771,56 @@ export class Root extends Container {
     return this._validateAndRender()
   }
 
-  /** Dispatches a browser mouse event to this root.
-    * @param host the host that is liaising between this root and the browser events.
-    * @param event the browser event to dispatch.
-    * @return whether this event was in this root's bounds. */
-  dispatchMouseEvent (host :Host, event :MouseEvent) :boolean {
-    // TODO: we're assuming the root/renderer scale is the same as the browser display unit to pixel
-    // ratio (mouse events come in display units), so everything "just lines up"; if we want to
-    // support other weird ratios between browser display units and backing buffers, we have to be
-    // more explicit about all this...
-    const pos = host.mouseToRoot(this, event, tmpv), inBounds = rect.contains(this.hitBounds, pos)
-    const button = event.button, iacts = this.interacts[button]
-
-    // if this mouse event is in our bounds, stop it from propagating to (lower) roots; except in
-    // the case of mouseup because a mouse interaction might start on one root and then drag over to
-    // our root, but we want to be sure the original root also hears about the mouseup
-    if (event.type !== "mouseup" && inBounds) event.cancelBubble = true
-
-    switch (event.type) {
-    case "mousedown":
-      if (inBounds && this.maybeStartInteraction(event, pos, button)) event.preventDefault()
-      break
-
-    case "mousemove":
-      if (iacts) {
-        this.dispatchMove(event, pos, iacts)
-        event.preventDefault()
-      }
-      else this._updateElementsOver(pos)
-      break
-
-    case "mouseup":
-      if (iacts) {
-        for (const iact of iacts) iact.release(event, pos)
-        this.interacts[button] = undefined
-        this._updateElementsOver(pos)
-        event.preventDefault()
-      }
-      break
-
-    case "dblclick":
-      if (inBounds && this.eventTarget.maybeHandleDoubleClick(event, pos)) event.preventDefault()
-      break
-    }
-    return inBounds
-  }
-
-  /** Dispatches a browser touch event to this root.
-    * @param host the host that is liaising between this root and the browser events.
-    * @param event the browser event to dispatch. */
-  dispatchTouchEvent (host :Host, event :TouchEvent) {
-    if (event.type === "touchstart") {
-      if (this._activeTouchId === undefined && event.changedTouches.length === 1) {
-        const touch = event.changedTouches[0]
-        const pos = host.touchToRoot(this, touch, tmpv)
-        if (rect.contains(this.hitBounds, pos)) {
-          // note that we are assuming responsibility for the event
-          event.cancelBubble = true
-          event.preventDefault()
-          if (this.maybeStartInteraction(event, pos, 0)) this._activeTouchId = touch.identifier
-        }
-      }
-
-    } else {
-      const iacts = this.interacts[0]
-      for (let ii = 0, ll = event.changedTouches.length; ii < ll; ii += 1) {
-        const touch = event.changedTouches[ii]
-        if (touch.identifier !== this._activeTouchId) continue
-        switch (event.type) {
-        case "touchmove":
-          if (iacts) {
-            const pos = host.touchToRoot(this, touch, tmpv)
-            this.dispatchMove(event, pos, iacts)
-            event.preventDefault()
-          }
-          break
-        case "touchend":
-          if (iacts) {
-            const pos = host.touchToRoot(this, touch, tmpv)
-            for (const iact of iacts) iact.release(event, pos)
-            this.interacts[0] = undefined
-            this._activeTouchId = undefined
-            event.preventDefault()
-          }
-          break
-        case "touchcancel":
-          if (iacts) {
-            for (const iact of iacts) iact.cancel()
-            this.interacts[0] = undefined
-            this._activeTouchId = undefined
-            event.preventDefault()
-          }
-          break
-        }
-        break
-      }
-    }
-  }
-
   dispatchWheelEvent (host :Host, event :WheelEvent) {
-    const pos = host.mouseToRoot(this, event, tmpv)
+    const ro = this.origin.current
+    const pos = host.adjustPos(vec2.set(tmpv, event.clientX-ro[0], event.clientY-ro[1]))
     if (rect.contains(this.hitBounds, pos)) event.cancelBubble = true
-    if (this.eventTarget.maybeHandleWheel(event, pos) && !this._hasInteracts()) {
-      this._updateElementsOver(pos)
+    if (this.eventTarget.maybeHandleWheel(event, pos)) {
+      // if there are no active interactions, update our hover elements as scrolling may have moved
+      // elements under or out from under the mouse
+      if (!host.interact.hasInteractions) this._updateElementsOver(pos)
     }
-  }
-
-  private _hasInteracts () :boolean {
-    for (const interact of this.interacts) {
-      if (interact) return true
-    }
-    return false
   }
 
   wasAdded (host :Host) {
-    this.host.update(host)
-    const unwatch = host.hoveredRoot.onChange((root, oroot) => {
-      if (oroot === this) this._clearElementsOver()
+    const self = this
+    const uninteract = host.interact.addProvider({
+      get zIndex () { return self.zIndex },
+
+      toLocal: (x, y, pos) => {
+        // TODO: we're assuming the root/renderer scale is the same as the browser display unit to
+        // pixel ratio (mouse events come in display units), so everything "just lines up"; if we
+        // want to support other weird ratios between browser display units and backing buffers, we
+        // have to be more explicit about all this...
+        const ro = this.origin.current
+        host.adjustPos(vec2.set(pos, x-ro[0], y-ro[1]))
+        return rect.contains(this.hitBounds, pos)
+      },
+
+      handlePointerDown: (event, pos, into) => {
+        // if the pointer is pressed down outside the bounds of the focused element, clear focus
+        const focus = host.focus.current
+        if (focus && focus.root === this && !rect.contains(focus.hitBounds, pos)) {
+          host.focus.update(undefined)
+        }
+
+        const iacts = into.length
+        this.eventTarget.maybeHandlePointerDown(event, pos, into)
+        for (const handler of this._gestureHandlers) handler.handlePointerDown(event, pos, into)
+        // if we click and hit no interactive control, clear any menu popup
+        if (into.length === iacts && !!this.menuPopup.current) {
+          this.menuPopup.update(undefined)
+          // if we're clearing a menu popup, recompute the hovered elements because they will
+          // previously have been blocked by the menu modality
+          if (event.type.startsWith("mouse")) this._updateElementsOver(pos)
+        }
+      },
+
+      handleDoubleClick: (event, pos) => this.eventTarget.maybeHandleDoubleClick(event, pos),
+      updateMouseHover: (event, pos) => this._updateElementsOver(pos),
     })
-    this.events.whenOnce(e => e === "removed", unwatch)
+    this.events.whenOnce(e => e === "removed", uninteract)
+    this.host.update(host)
     this.events.emit("added")
   }
 
@@ -987,46 +879,6 @@ export class Root extends Container {
   }
 
   private get eventTarget () :Element { return this.targetElem.current || this.contents }
-
-  private maybeStartInteraction (event :MouseEvent|TouchEvent, pos :vec2, button :number) :boolean {
-    const oiacts = this.interacts[button]
-    if (oiacts) {
-      log.warn("Starting new interaction but have old?", "event", event.type, "old", oiacts)
-      for (const iact of oiacts) iact.cancel()
-    }
-
-    const niacts :PointerInteraction[] = []
-    this.eventTarget.maybeHandlePointerDown(event, pos, niacts)
-    for (const handler of this._gestureHandlers) handler.handlePointerDown(event, pos, niacts)
-    if (niacts.length > 0) this.interacts[button] = niacts
-    else {
-      this.interacts[button] = undefined
-      // if we click and hit no interactive control, clear the focus
-      this.clearFocus()
-      // also clear any menu popup
-      if (!!this.menuPopup.current) {
-        this.menuPopup.update(undefined)
-        // if we're clearing a menu popup, recompute the hovered elements because they will
-        // previously have been blocked by the menu modality; we defer this one frame because we are
-        // in the middle of processing an event right now and the removal of the menu root will not
-        // happen until that event dispatch is completed
-        if (event.type.startsWith("mouse")) this.clock.once(() => this._updateElementsOver(pos))
-      }
-    }
-    return (niacts.length > 0)
-  }
-
-  private dispatchMove (event :MouseEvent|TouchEvent, pos :vec2, iacts :PointerInteraction[]) {
-    // if any interaction claims the interaction, cancel all the rest
-    for (const iact of iacts) {
-      if (iact.move(event, pos)) {
-        for (const cc of iacts) if (cc !== iact) cc.cancel()
-        iacts.length = 0
-        iacts.push(iact)
-        return
-      }
-    }
-  }
 
   private _validateAndRender () {
     const dirty = this._dirtyRegion
@@ -1259,19 +1111,14 @@ export namespace Styler {
 export class Host implements Disposable {
   private readonly disposer = new Disposer()
   private readonly _roots = MutableList.local<Root>()
-  private readonly _hoveredRoot = Mutable.local<Root|undefined>(undefined)
   private readonly _pending :Array<() => void> = []
   private _dispatching = false
 
   /** The control which has the keyboard focus, if any. */
   readonly focus = Mutable.local<Control|undefined>(undefined)
 
-  constructor (readonly elem :HTMLElement) {
-    this.disposer.add(mouseEvents("mousedown", "mousemove", "mouseup", "dblclick").
-                      onEmit(ev => this.handleMouseEvent(ev)))
+  constructor (readonly elem :HTMLElement, readonly interact :InteractionManager) {
     this.disposer.add(wheelEvents.onEmit(ev => this.handleWheelEvent(ev)))
-    this.disposer.add(touchEvents("touchstart", "touchmove", "touchcancel", "touchend").
-                      onEmit(ev => this.handleTouchEvent(ev)))
     this.disposer.add(preKeyEvents("keydown", "keyup").onEmit(ev => this.handleKeyEvent(ev)))
     this.disposer.add(pointerEvents("pointerdown", "pointerup").onEmit(ev => {
       if (ev.type === "pointerdown") elem.setPointerCapture(ev.pointerId)
@@ -1286,9 +1133,6 @@ export class Host implements Disposable {
 
   /** The roots currently added to this host. */
   get roots () :RList<Root> { return this._roots }
-
-  /** The root over which the mouse is currently hovered, if any. */
-  get hoveredRoot () :Value<Root|undefined> { return this._hoveredRoot }
 
   /** Adds `root` to this host. The root will be inserted into the root list after all roots with a
     * lower or equal z-index, and before any roots with a higher z-index. */
@@ -1350,29 +1194,13 @@ export class Host implements Disposable {
     }
   }
 
-  mouseToRoot (root :Root, event :MouseEvent, into :vec2) :vec2 {
-    const ro = root.origin.current
-    return this.adjustPos(vec2.set(into, event.clientX-ro[0], event.clientY-ro[1]))
-  }
-  touchToRoot (root :Root, touch :Touch, into :vec2) :vec2 {
-    const ro = root.origin.current
-    return this.adjustPos(vec2.set(into, touch.clientX-ro[0], touch.clientY-ro[1]))
-  }
-  protected adjustPos (pos :vec2) :vec2 {
+  adjustPos (pos :vec2) :vec2 {
     const rect = this.elem.getBoundingClientRect()
     pos[0] -= rect.left
     pos[1] -= rect.top
     return pos
   }
 
-  handleMouseEvent (event :MouseEvent) {
-    let hover :Root|undefined = undefined
-    this.dispatchEvent(event, r => {
-      if (r.dispatchMouseEvent(this, event)) hover = r
-    })
-    this._hoveredRoot.update(hover)
-    if (event.type === "mouseup") currentEditNumber += 1
-  }
   handleKeyEvent (event :KeyboardEvent) {
     const focus = this.focus.current
     let handled = focus && focus.handleKeyEvent(event)
@@ -1385,7 +1213,7 @@ export class Host implements Disposable {
       event.cancelBubble = true
     }
     if (event.type === "keyup" && (event.ctrlKey || event.altKey || event.metaKey)) {
-      currentEditNumber++
+      incrementEditNumber()
     }
   }
 
@@ -1398,15 +1226,11 @@ export class Host implements Disposable {
     const direction = Math.sign(event.deltaY)
     if (this._wheelTimeout !== undefined) {
       window.clearTimeout(this._wheelTimeout)
-      if (this._wheelDirection !== direction) currentEditNumber++
+      if (this._wheelDirection !== direction) incrementEditNumber()
     }
     this.dispatchEvent(event, r => r.dispatchWheelEvent(this, event))
-    this._wheelTimeout = window.setTimeout(() => currentEditNumber++, 500)
+    this._wheelTimeout = window.setTimeout(incrementEditNumber, 500)
     this._wheelDirection = direction
-  }
-  handleTouchEvent (event :TouchEvent) {
-    this.dispatchEvent(event, r => r.dispatchTouchEvent(this, event))
-    if (event.type === "touchend") currentEditNumber += 1
   }
 
   update (clock :Clock) {
@@ -1425,10 +1249,9 @@ export class Host implements Disposable {
 /** A host that simply appends canvases to an HTML element (which should be positioned). */
 export class HTMLHost extends Host {
   private readonly _textOverlay? :HTMLInputElement
-  private readonly _textOverlayBounds = rect.create()
 
-  constructor (elem :HTMLElement, enableTextOverlay = true) {
-    super(elem)
+  constructor (elem :HTMLElement, interact :InteractionManager, enableTextOverlay = true) {
+    super(elem, interact)
     if (enableTextOverlay) {
       const text = this._textOverlay = document.createElement("input")
       text.style.position = "absolute"
@@ -1466,18 +1289,6 @@ export class HTMLHost extends Host {
     this.elem.appendChild(text)
     return text
   }
-
-  setTextOverlayBounds (bounds :rect) {
-    rect.copy(this._textOverlayBounds, bounds)
-  }
-
-  handleMouseEvent (event :MouseEvent) {
-    // don't dispatch mouse events to the roots while we have a text overlay
-    const haveOverlay = this._textOverlay && this._textOverlay.parentNode
-    if (!haveOverlay || !rect.contains(this._textOverlayBounds, vec2.set(
-      tmpv, event.clientX, event.clientY))) super.handleMouseEvent(event)
-  }
-  // TODO: we probably need to do the same as above for touch events
 
   handleKeyEvent (event :KeyboardEvent) {
     // don't dispatch key events to the roots while we have a text overlay

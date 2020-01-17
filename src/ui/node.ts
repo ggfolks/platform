@@ -11,7 +11,8 @@ import {
   CategoryNode, InputEdge, InputEdges, Node, NodeConfig,
   NodeContext, NodeInput, NodeTypeRegistry,
 } from "../graph/node"
-import {Host, Root, getCurrentEditNumber} from "./element"
+import {getCurrentEditNumber} from "../input/interact"
+import {Host, Root} from "./element"
 import {Action, Command, Model, ModelData, ModelKey, ElementsModel, mapModel} from "./model"
 import {Property} from "./property"
 import {Theme, UI} from "./ui"

@@ -1,6 +1,7 @@
 import {dim2, rect, vec2, vec2zero} from "../core/math"
 import {getValue, log, developMode} from "../core/util"
-import {Element, PointerInteraction} from "./element"
+import {PointerInteraction} from "../input/interact"
+import {Element} from "./element"
 
 const tmpr = rect.create()
 

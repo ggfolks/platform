@@ -1,12 +1,13 @@
-import {Root, Host} from "./element"
 import {Renderer, Texture, createTexture, imageToTexture} from "../scene2/gl"
 import {Surface} from "../scene2/surface"
+import {InteractionManager} from "../input/interact"
+import {Root, Host} from "./element"
 
 export class Host2 extends Host {
   textures :Texture[] = []
 
-  constructor (readonly renderer :Renderer) {
-    super(renderer.canvas)
+  constructor (readonly renderer :Renderer, interact :InteractionManager) {
+    super(renderer.canvas, interact)
     this.roots.onChange(ev => {
       if (ev.type === "added") this.rootAdded(ev.elem, ev.index)
     })

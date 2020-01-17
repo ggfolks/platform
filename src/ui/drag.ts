@@ -1,8 +1,9 @@
 import {dim2, rect, vec2} from "../core/math"
 import {Mutable, Value} from "../core/react"
 import {Noop} from "../core/util"
+import {PointerInteraction} from "../input/interact"
 import {ModelKey} from "./model"
-import {Control, Element, PointerInteraction, Root} from "./element"
+import {Control, Element, Root} from "./element"
 import {Spec} from "./style"
 import {CursorConfig, Cursor, DefaultCursor} from "./cursor"
 
@@ -188,7 +189,7 @@ export namespace Drag {
           owner.handleDrag(this, pos)
           return dragRoot !== undefined
         },
-        release: (upEvent, pos) => {
+        release: (upEvent) => {
           clear()
           if (dragRoot) owner.handleDrop(this)
           else this.releaseSelect(event)
