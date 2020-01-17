@@ -665,7 +665,7 @@ export class EditableLabel extends AbstractText {
     this.focus()
     const iacts :PointerInteraction[] = []
     this.handlePointerDown(event, pos, iacts)
-    for (const iact of iacts) iact.release(event)
+    for (const iact of iacts) iact.release(event, pos)
     return true
   }
 
