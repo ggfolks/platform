@@ -21,18 +21,12 @@ export type PointerInteraction = {
   [extra :string] :any
 }
 
-/** Allows arbitrary code to participate in mouse/touch input handling. At the top-level this is
-  * performed by `InteractionProvider` instances, but an interaction provider may allow the
-  * registration of gesture handlers that all operate in its coordinate system, so this interface
-  * simplifies that process. */
-export interface GestureHandler {
-
-  /** Checks whether this handler wishes to handle this pointer interaction.
-    * @param event the event forwarded from the browser.
-    * @param pos the position of the event relative to the root origin.
-    * @return an interaction to be started or `undefined`. */
-  handlePointerDown (event :MouseEvent|TouchEvent, pos :vec2, into :PointerInteraction[]) :void
-}
+/** A helper type for interaction providers which allow pluggable gesture handlers.
+  * @param event the event forwarded from the browser.
+  * @param pos the position of the event in the provider's coordinate system.
+  * @param iacts append an interaction to this array to start it. */
+export type GestureHandler =
+  (event :MouseEvent|TouchEvent, pos :vec2, into :PointerInteraction[]) => void
 
 /** Allows an application component to participate in coordinated user input interactions. Certain
   * input events (mouse and touch down) begin "pointer interactions" which then hear about
@@ -47,7 +41,7 @@ export interface GestureHandler {
   * `toLocal` method is used to determine whether the event is in bounds as well as to translate
   * positions from browser window coordinates into the provider's coordinates (to simplify life for
   * the pointer interaction implementations). */
-export interface InteractionProvider extends GestureHandler {
+export interface InteractionProvider {
 
   /** Controls the order in which interaction providers are notified of events. Providers are
     * notified from highest to lowest z-index. */
@@ -57,6 +51,12 @@ export interface InteractionProvider extends GestureHandler {
     * coordinate system, written into `pos`.
     * @return whether coordinates are in bounds for this provider. */
   toLocal (x :number, y :number, pos :vec2) :boolean
+
+  /** Checks whether this handler wishes to handle this pointer interaction.
+    * @param event the event forwarded from the browser.
+    * @param pos the position of the event in the provider's coordinate system.
+    * @param iacts append an interaction to this array to start it. */
+  handlePointerDown (event :MouseEvent|TouchEvent, pos :vec2, into :PointerInteraction[]) :void
 
   /** Called when the mouse moves but there are no active interactions as well as immediately after
     * any interactions complete, with the mouse position at the time of completion. A provider

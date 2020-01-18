@@ -202,7 +202,7 @@ export class Stage {
         return x >= rect.left && y >= rect.top && x <= rect.right && y <= rect.bottom
       },
       handlePointerDown: (event, pos, into) => {
-        for (const gh of this.ghandlers) gh.handlePointerDown(event, pos, into)
+        for (const gh of this.ghandlers) gh(event, pos, into)
       },
       updateMouseHover: (event, pos) => {}, // noop
       handleDoubleClick: (event, pos) => false, // noop

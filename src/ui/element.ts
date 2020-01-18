@@ -806,7 +806,7 @@ export class Root extends Container {
 
         const iacts = into.length
         this.eventTarget.maybeHandlePointerDown(event, pos, into)
-        for (const handler of this._gestureHandlers) handler.handlePointerDown(event, pos, into)
+        for (const handler of this._gestureHandlers) handler(event, pos, into)
         // if we click and hit no interactive control, clear any menu popup
         if (into.length === iacts && !!this.menuPopup.current) {
           this.menuPopup.update(undefined)
