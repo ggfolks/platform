@@ -21,6 +21,80 @@ export function* moveTo (
   yield* animateTo(transform, "localPosition", position, duration, ease)
 }
 
+/** A coroutine that moves a transform along a cubic spline to the specified endpoint, using the
+  * provided previous and next points to determine tangents.
+  * @param transform the transform to modify.
+  * @param previous the point before the current position.
+  * @param end the target position.
+  * @param next the position after the target position.
+  * @param speed the speed at which to travel. */
+export function* moveThrough (
+  transform :Transform,
+  previous :vec3,
+  end :vec3,
+  next :vec3,
+  speed :number,
+) {
+  // see https://en.wikipedia.org/wiki/Cubic_Hermite_spline#Catmull%E2%80%93Rom_spline
+  // and http://www.cs.cmu.edu/~462/www/projects/assn2/assn2/catmullRom.pdf
+  // and https://qroph.github.io/2018/07/30/smooth-paths-using-catmull-rom-splines.html
+
+  const p0 = previous
+  const p1 = vec3.clone(transform.localPosition)
+  const p2 = end
+  const p3 = next
+
+  const alpha = 0.5 // "centripetal" Catmull-Rom
+  const t01 = Math.pow(vec3.distance(p0, p1), alpha)
+  const t12 = Math.pow(vec3.distance(p1, p2), alpha)
+  const t23 = Math.pow(vec3.distance(p2, p3), alpha)
+
+  const tmp1 = vec3.subtract(vec3.create(), p1, p0)
+  vec3.scale(tmp1, tmp1, 1 / t01)
+  const tmp2 = vec3.subtract(vec3.create(), p2, p0)
+  vec3.scale(tmp2, tmp2, 1 / (t01 + t12))
+  const d1 = vec3.subtract(vec3.create(), tmp1, tmp2)
+
+  vec3.subtract(tmp1, p3, p2)
+  vec3.scale(tmp1, tmp1, 1 / t23)
+  vec3.subtract(tmp2, p3, p1)
+  vec3.scale(tmp2, tmp2, 1 / (t12 + t23))
+  const d2 = vec3.subtract(vec3.create(), tmp1, tmp2)
+
+  const m1 = vec3.subtract(vec3.create(), p2, p1)
+  vec3.scaleAndAdd(m1, m1, d1, t12)
+  const m2 = vec3.subtract(vec3.create(), p2, p1)
+  vec3.scaleAndAdd(m2, m2, d2, t12)
+
+  // compute the cubic coefficients a and b (c is m1, d is p1)
+  const a = vec3.subtract(vec3.create(), p1, p2)
+  vec3.add(a, vec3.add(a, vec3.scale(a, a, 2), m1), m2)
+  const b = vec3.subtract(vec3.create(), p2, p1)
+  vec3.subtract(b, vec3.scaleAndAdd(b, vec3.scale(b, b, 3), m1, -2), m2)
+
+  const position = vec3.create()
+  const tangent = vec3.create()
+  for (let t = 0; t < 1; ) {
+    // compute the position using the parameter and coefficients
+    const t2 = t * t, t3 = t2 * t
+    vec3.scale(position, a, t3)
+    vec3.scaleAndAdd(position, position, b, t2)
+    vec3.scaleAndAdd(position, position, m1, t)
+    vec3.add(transform.localPosition, position, p1)
+
+    // compute the tangent
+    vec3.scale(tangent, a, 3 * t2)
+    vec3.scaleAndAdd(tangent, tangent, b, 2 * t)
+    vec3.add(tangent, tangent, m1)
+
+    // use the tangent to compute rotation and update parameter
+    t = Math.min(t + Time.deltaTime * speed / vec3.length(tangent), 1)
+    yRotationTo(transform.localRotation, tangent)
+
+    yield
+  }
+}
+
 /** A coroutine that rotates a transform over time from its current orientation to a new one.
   * @param transform the transform to modify.
   * @param rotation the new rotation (in local space).
@@ -33,80 +107,6 @@ export function* rotateTo (
   ease :Interp = Easing.linear,
 ) {
   yield* animateTo(transform, "localRotation", rotation, duration, ease)
-}
-
-/** A coroutine that moves a transform over time from its current position to a new one, passing
-  * near an intermediate position.
-  * @param transform the transform to modify.
-  * @param middle the middle position (in local space).
-  * @param end the end position (in local space).
-  * @param radius the (maximum) radius of curvature.
-  * @param speed the speed, in units per second, at which to move. */
-export function* curveTo (
-  transform :Transform,
-  middle :vec3,
-  end :vec3,
-  radius :number,
-  speed :number,
-) {
-  const start = transform.localPosition
-  const middleStart = vec3.subtract(vec3.create(), start, middle)
-  const middleStartLength = vec3.length(middleStart)
-  const middleEnd = vec3.subtract(vec3.create(), end, middle)
-  const middleEndLength = vec3.length(middleEnd)
-  const cornerAngle = vec3.angle(middleStart, middleEnd)
-  if (cornerAngle === 0 || cornerAngle === Math.PI) {
-    // no bend, no curve
-    yield* moveTo(transform, end, (middleStartLength + middleEndLength) / speed)
-    return
-  }
-  const tanHalfAngle = Math.tan(cornerAngle / 2)
-  const curveDistance = Math.min(radius / tanHalfAngle, middleStartLength, middleEndLength)
-  const curveStart = vec3.scaleAndAdd(
-    vec3.create(),
-    middle,
-    middleStart,
-    curveDistance / middleStartLength,
-  )
-  yield* moveTo(transform, curveStart, (middleStartLength - curveDistance) / speed)
-  radius = curveDistance * tanHalfAngle
-  const angle = Math.PI - cornerAngle
-  const duration = angle * radius / speed
-  const rotation = yRotationTo(quat.create(), middleEnd)
-  const crossProduct = vec3.cross(vec3.create(), middleEnd, middleStart)
-  yield* waitForAll(
-    arcTo(transform, radius, angle * Math.sign(crossProduct[1]), duration),
-    rotateTo(transform, rotation, duration),
-  )
-  yield* moveTo(transform, end, (middleEndLength - curveDistance) / speed)
-}
-
-/** Moves the local position of the transform in an arc.
-  * @param transform the transform to modify.
-  * @param radius the radius of curvature.
-  * @param angle the angle to move, in radians (positive for CCW).
-  * @param duration the duration over which to move.
-  * @param [ease=linear] the type of easing to use. */
-export function* arcTo (
-  transform :Transform,
-  radius :number,
-  angle :number,
-  duration :number,
-  ease :Interp = Easing.linear,
-) {
-  const start = vec3.clone(transform.localPosition)
-  const center = vec3.scaleAndAdd(
-    vec3.create(),
-    start,
-    transform.right,
-    angle > 0 ? radius : -radius,
-  )
-  let elapsed = 0
-  do {
-    yield
-    vec3.rotateY(transform.localPosition, start, center, angle * ease(elapsed / duration))
-  } while ((elapsed += Time.deltaTime) < duration)
-  vec3.rotateY(transform.localPosition, start, center, angle)
 }
 
 /** Finds the quaternion that rotates Z+ to the specified direction about y.  This is useful in
@@ -185,39 +185,6 @@ export function* animateTo (
     object[name] = interpolate(startValue, value, ease(elapsed / duration))
   } while ((elapsed += Time.deltaTime) < duration)
   object[name] = value
-}
-
-/** A coroutine that animations a property over time from its current value to a target value,
-  * approaching an intermediate value along the way.
-  * @param object the object to modify.
-  * @param name the name of the property to modify.
-  * @param middleValue the intermediate value of the property.
-  * @param endValue the new value of the property.
-  * @param duration the duration, in seconds, over which to animate the property.
-  * @param [ease=linear] the type of easing to use in animating. */
-export function* animateThrough (
-  object :PMap<any>,
-  name :string,
-  middleValue :any,
-  endValue :any,
-  duration :number,
-  ease :Interp = Easing.linear,
-) {
-  const value = object[name]
-  const startValue = copy(value)
-  const firstValue = copy(value)
-  const secondValue = copy(value)
-  const interpolate = getInterpolateFn(value)
-  let elapsed = 0
-  do {
-    yield
-    const t = ease(elapsed / duration)
-    // https://en.wikipedia.org/wiki/De_Casteljau%27s_algorithm#B%C3%A9zier_curve
-    interpolate(startValue, middleValue, t, firstValue)
-    interpolate(middleValue, endValue, t, secondValue)
-    object[name] = interpolate(firstValue, secondValue, t)
-  } while ((elapsed += Time.deltaTime) < duration)
-  object[name] = endValue
 }
 
 function copy (value :any) {
