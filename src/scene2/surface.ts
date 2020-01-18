@@ -118,8 +118,10 @@ export class Surface {
   startClipped (x :number, y :number, width :number, height :number) :boolean {
     const batch = this.batch
     batch.flush() // flush any pending unclipped calls
-    const sy = this.target.flip ? this.target.size[1]-y-height : y
-    const r = this.pushScissorState(x, sy, width, height)
+    const sfx = this.target.scale[0], sfy = this.target.scale[1]
+    const sx = x*sfx, sy = y*sfy, swidth = width*sfx, sheight = height*sfy
+    const fy = this.target.flip ? this.target.size[1]-sy-sheight : sy
+    const r = this.pushScissorState(sx, fy, swidth, sheight)
     batch.glc.scissor(r[0], r[1], r[2], r[3])
     if (this.scissorDepth == 1) batch.glc.enable(GLC.SCISSOR_TEST)
     checkError(batch.glc, "startClipped")
