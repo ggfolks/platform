@@ -13,7 +13,7 @@ import {SyncMsg, ObjType} from "./protocol"
 import {DMutable, DObject, DObjectType} from "./data"
 import {AbstractDataStore, Resolved, Resolver} from "./server"
 
-const DebugLog = true
+const DebugLog = false
 
 setTextCodec(() => new TextEncoder() as any, () => new TextDecoder() as any)
 
