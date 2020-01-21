@@ -91,6 +91,8 @@ export class InteractionManager {
   private readonly providers :InteractionProvider[] = []
   private readonly istate :IState[] = []
   private readonly overlayRect = rect.fromValues(0, 0, 0, 0)
+  private readonly afterDispatch :Array<() => void> = []
+  private dispatching = false
   private activeTouchId :number|undefined = undefined
 
   constructor () {
@@ -102,12 +104,19 @@ export class InteractionManager {
 
   addProvider (provider :InteractionProvider) :Remover {
     const providers = this.providers
-    let index = 0
-    for (let ll = providers.length; index < ll; index += 1) {
-      if (provider.zIndex > providers[index].zIndex) break
+    if (this.dispatching) {
+      this.afterDispatch.push(() => this.addProvider(provider))
+    } else {
+      let index = 0
+      for (let ll = providers.length; index < ll; index += 1) {
+        if (provider.zIndex > providers[index].zIndex) break
+      }
+      providers.splice(index, 0, provider)
     }
-    providers.splice(index, 0, provider)
-    return () => removeListener(providers, provider)
+    return () => {
+      if (this.dispatching) this.afterDispatch.push(() => removeListener(providers, provider))
+      else removeListener(providers, provider)
+    }
   }
 
   get hasInteractions () :boolean {
@@ -149,15 +158,16 @@ export class InteractionManager {
       // if the event falls in an area obscured by an overlay element,
       // don't process it and let the browser do its normal processing
       if (!rect.contains(this.overlayRect, vec2.set(pos, mx, my))) {
-        for (const prov of this.providers) {
-          if (prov.toLocal(mx, my, pos)) {
-            if (prov.handleDoubleClick(event, pos)) {
+        this.dispatch(p => {
+          if (p.toLocal(mx, my, pos)) {
+            if (p.handleDoubleClick(event, pos)) {
               event.cancelBubble = true
               event.preventDefault()
             }
-            break
+            return true
           }
-        }
+          return false
+        })
       }
     }
   }
@@ -217,14 +227,19 @@ export class InteractionManager {
     if (rect.contains(this.overlayRect, vec2.set(pos, x, y))) return false
 
     const niacts :PointerInteraction[] = []
-    for (const p of this.providers) {
-      if (!p.toLocal(x, y, pos)) continue
-      p.handlePointerDown(event, pos, niacts)
-      if (niacts.length === 0) continue
-      this.istate[button] = {iacts: niacts, prov: p}
-      return true
-    }
-    return false
+    return this.dispatch(p => {
+      if (!p.toLocal(x, y, pos)) return false
+      try {
+        p.handlePointerDown(event, pos, niacts)
+        if (niacts.length > 0) {
+          this.istate[button] = {iacts: niacts, prov: p}
+          return true
+        }
+      } catch (err) {
+        log.warn("Provider choked on pointer down", "prov", p, "pos", pos, err)
+      }
+      return false
+    })
   }
 
   private handleMove (event :MouseEvent|TouchEvent, x :number, y :number, button :number) :boolean {
@@ -254,9 +269,25 @@ export class InteractionManager {
   }
 
   private updateMouseHover (event :MouseEvent) {
-    for (const p of this.providers) {
+    this.dispatch(p => {
       p.toLocal(event.clientX, event.clientY, pos)
       p.updateMouseHover(event, pos)
+      return false
+    })
+  }
+
+  private dispatch (action :(p :InteractionProvider) => boolean) :boolean {
+    this.dispatching = true
+    try {
+      for (const p of this.providers) if (action(p)) return true
+      return false
+    }
+    finally {
+      this.dispatching = false
+      if (this.afterDispatch.length > 0) {
+        for (const op of this.afterDispatch) op()
+        this.afterDispatch.length = 0
+      }
     }
   }
 }
