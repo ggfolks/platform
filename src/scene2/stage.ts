@@ -110,12 +110,11 @@ export class Sprite extends Actor {
   }
 
   contains (pos :vec2) :boolean {
-    const x = pos[0], y = pos[1]
-    const eorig = this.trans.readOrigin(tmppos), eox = eorig[0], eoy = eorig[1]
-    const epos = this.trans.readTranslation(tmppos), ex = epos[0]-eox, ey = epos[1]-eoy
-    if (x < ex || y < ey) return false
+    const lpos = this.trans.inverseTransform(tmppos, pos)
+    const lx = lpos[0], ly = lpos[1]
+    if (lx < 0 || ly < 0) return false
     const esize = this.readSize()
-    if (x > ex+esize[0] || y > ey+esize[1]) return false
+    if (lx > esize[0] || ly > esize[1]) return false
     // TODO: other fine grained hit testing?
     return true
   }
