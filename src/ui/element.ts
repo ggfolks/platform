@@ -1154,8 +1154,13 @@ export class Host implements Disposable {
   removeRoot (root :Root, dispose = true) {
     if (this._dispatching) this._pending.push(() => this.removeRoot(root, dispose))
     else {
-      if (root.host.current !== this) throw new Error(log.format(
-        "Removing root from non-hosting host", "host", this, "root", root, "rootHost", root.host))
+      const curhost = root.host.current
+      if (curhost === undefined) {
+        console.trace(log.format("Requested to remove unhosted root", "host", this, "root", root))
+        return
+      }
+      if (curhost !== this) throw new Error(log.format(
+        "Removing root from non-hosting host", "host", this, "root", root, "rootHost", curhost))
       const idx = this._roots.indexOf(root)
       if (idx >= 0) {
         this._roots.delete(idx)
