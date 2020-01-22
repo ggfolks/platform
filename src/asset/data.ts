@@ -69,7 +69,7 @@ export function watchLoader (loader :ResourceLoader, object :WatchObject) :Remov
   })
   const unobject = object.watched.onChange(ev => {
     if (DebugLog) log.debug("Watched change", "ev", ev)
-    if (ev.type === "set") loader.noteUpdated(ev.key)
+    if (ev.type === "set" && ev.value) loader.noteUpdated(ev.key)
   })
   return () => { unloader() ; unobject() }
 }
