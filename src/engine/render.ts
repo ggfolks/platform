@@ -265,7 +265,7 @@ export interface Projector extends Component {
   url :string
 
   /** The size of the projection. */
-  size :number
+  size :vec3
 
   /** The opacity of the projection. */
   opacity :number

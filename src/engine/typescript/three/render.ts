@@ -30,7 +30,7 @@ import {
   Bounded, Camera, FusedModels, Light, LightType, LightTypes, Material, MaterialSide, MaterialSides,
   MeshRenderer, Model, Projector, RaycastHit, RenderEngine,
 } from "../../render"
-import {NO_CAST_SHADOW_FLAG, NO_RECEIVE_SHADOW_FLAG, NON_TILE_FLAG, decodeFused} from "../../util"
+import {NO_CAST_SHADOW_FLAG, NO_RECEIVE_SHADOW_FLAG, decodeFused} from "../../util"
 import {
   TypeScriptComponent, TypeScriptConfigurable, TypeScriptCube, TypeScriptCylinder,
   TypeScriptExplicitGeometry, TypeScriptGameEngine, TypeScriptGameObject, TypeScriptMesh,
@@ -1582,24 +1582,25 @@ function getAnchor (url :string) {
 const tmpMatrix4 = new Matrix4()
 const tmpMeshes = new Map<Matrix4, Mesh>()
 
-const PROJECTOR_EXCLUDE_MASK = NO_RECEIVE_SHADOW_FLAG | NON_TILE_FLAG
-
 const ProjectorMaterial = new ShaderMaterial({
   vertexShader: `
     uniform mat4 textureMatrix;
-    varying vec2 textureCoord;
+    varying vec3 texCoord;
     void main(void) {
-      textureCoord = (textureMatrix * modelMatrix * vec4(position, 1.0)).st;
+      texCoord = (textureMatrix * modelMatrix * vec4(position, 1.0)).stp;
       gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
     }
   `,
   fragmentShader: `
     uniform sampler2D texture;
     uniform float opacity;
-    varying vec2 textureCoord;
+    varying vec3 texCoord;
     void main(void) {
-      vec4 baseColor = texture2D(texture, textureCoord);
-      gl_FragColor = vec4(baseColor.rgb, baseColor.a * opacity);
+      vec4 baseColor = texture2D(texture, texCoord.st);
+      vec3 steps = step(vec3(0.0, 0.0, 0.0), texCoord) * step(texCoord, vec3(1.0, 1.0, 1.0));
+      float alpha = baseColor.a * opacity * steps.x * steps.y * steps.z;
+      if (alpha < 0.005) discard;
+      gl_FragColor = vec4(baseColor.rgb, alpha);
     }
   `,
   transparent: true,
@@ -1610,12 +1611,12 @@ const ProjectorMaterial = new ShaderMaterial({
   },
 })
 
-const TextureOffset = new Vector3(0.5, 0.5, 0)
+const TextureOffset = new Vector3(0.5, 0.5, 0.5)
 const TextureRotation = new Quaternion().setFromAxisAngle(new Vector3(1, 0, 0), Math.PI / 2)
 
 class ThreeProjector extends TypeScriptComponent implements Projector {
   @property("url") url = ""
-  @property("number", {min: 0, wheelStep: 0.1}) size = 1
+  @property("vec3") size = vec3.fromValues(1, 1, 1)
   @property("number", {min: 0, max: 1, wheelStep: 0.01}) opacity = 1
 
   private readonly _group = new Group()
@@ -1657,13 +1658,12 @@ class ThreeProjector extends TypeScriptComponent implements Projector {
   }
 
   private _updateMeshes () {
-    const halfSize = this.size / 2
-    tmpBoundingBox.min.set(-halfSize, -halfSize, -halfSize)
-    tmpBoundingBox.max.set(halfSize, halfSize, halfSize)
+    tmpBoundingBox.min.fromArray(this.size).multiplyScalar(-0.5)
+    tmpBoundingBox.max.fromArray(this.size).multiplyScalar(0.5)
     tmpBoundingBox.applyMatrix4(tmpMatrix4.fromArray(this.transform.localToWorldMatrix))
     const renderEngine = this.gameEngine.renderEngine as ThreeRenderEngine
     for (const mergedStatic of renderEngine.mergedStatic) {
-      mergedStatic.getIntersecting(tmpBoundingBox, PROJECTOR_EXCLUDE_MASK, tmpMeshes)
+      mergedStatic.getIntersecting(tmpBoundingBox, NO_RECEIVE_SHADOW_FLAG, tmpMeshes)
     }
     // remove anything that isn't present in the new map
     for (const [matrix, mesh] of this._meshes) {
@@ -1690,7 +1690,11 @@ class ThreeProjector extends TypeScriptComponent implements Projector {
   private _updateTextureMatrix () {
     const textureMatrix :Matrix4 = this._material.uniforms.textureMatrix.value
     textureMatrix.fromArray(this.transform.worldToLocalMatrix)
-    tmpMatrix4.compose(TextureOffset, TextureRotation, tmpVector3.setScalar(1 / this.size))
+    tmpMatrix4.compose(
+      TextureOffset,
+      TextureRotation,
+      tmpVector3.set(1 / this.size[0], 1 / this.size[1], 1 / this.size[2]),
+    )
     textureMatrix.premultiply(tmpMatrix4)
   }
 }
