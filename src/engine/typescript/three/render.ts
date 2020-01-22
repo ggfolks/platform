@@ -5,7 +5,7 @@ import {
   LoopPingPong, Material as MaterialObject, Matrix3, Matrix4, Mesh, MeshBasicMaterial,
   MeshStandardMaterial, Object3D, OrthographicCamera, PCFSoftShadowMap, PerspectiveCamera,
   PlaneBufferGeometry, Quaternion, Ray as RayObject, Raycaster, Scene, ShaderMaterial, SkinnedMesh,
-  Sphere, SphereBufferGeometry, Texture, Vector2, Vector3, WebGLRenderer,
+  Sphere, SphereBufferGeometry, Texture, TextureLoader, Vector2, Vector3, WebGLRenderer,
 } from "three"
 import {SkeletonUtils} from "three/examples/jsm/utils/SkeletonUtils"
 import {Clock} from "../../../core/clock"
@@ -13,7 +13,7 @@ import {Color} from "../../../core/color"
 import {refEquals} from "../../../core/data"
 import {Bounds, Plane, Ray, dim2, rect, vec2, vec2zero, vec3} from "../../../core/math"
 import {Mutable, Subject, Value} from "../../../core/react"
-import {MutableMap, RMap} from "../../../core/rcollect"
+import {MutableMap, MutableSet, RMap} from "../../../core/rcollect"
 import {Disposer, Noop, NoopRemover, PMap, Remover, getValue} from "../../../core/util"
 import {ResourceLoader} from "../../../asset/loader"
 import {Graph, GraphConfig} from "../../../graph/graph"
@@ -28,9 +28,9 @@ import {Animation, WrapMode, WrapModes} from "../../animation"
 import {getConfigurableMeta, property} from "../../meta"
 import {
   Bounded, Camera, FusedModels, Light, LightType, LightTypes, Material, MaterialSide, MaterialSides,
-  MeshRenderer, Model, RaycastHit, RenderEngine,
+  MeshRenderer, Model, Projector, RaycastHit, RenderEngine,
 } from "../../render"
-import {NO_CAST_SHADOW_FLAG, NO_RECEIVE_SHADOW_FLAG, decodeFused} from "../../util"
+import {NO_CAST_SHADOW_FLAG, NO_RECEIVE_SHADOW_FLAG, NON_TILE_FLAG, decodeFused} from "../../util"
 import {
   TypeScriptComponent, TypeScriptConfigurable, TypeScriptCube, TypeScriptCylinder,
   TypeScriptExplicitGeometry, TypeScriptGameEngine, TypeScriptGameObject, TypeScriptMesh,
@@ -77,7 +77,8 @@ export class ThreeRenderEngine implements RenderEngine {
   readonly scene = new Scene()
   readonly cameras :ThreeCamera[] = []
 
-  mergedStatic? :ThreeMergedStatic
+  mergingStatic? :ThreeMergedStatic
+  readonly mergedStatic = MutableSet.local<ThreeMergedStatic>()
 
   onAfterRender? :(scene :Scene, camera :CameraObject) => void
 
@@ -174,13 +175,14 @@ export class ThreeRenderEngine implements RenderEngine {
     }
     if (config) applyConfig(mergedConfig, config)
     const gameObject = this.gameEngine.createGameObject("merged", mergedConfig)
-    this.mergedStatic = gameObject.requireComponent<ThreeMergedStatic>("mergedStatic")
+    this.mergingStatic = gameObject.requireComponent<ThreeMergedStatic>("mergedStatic")
   }
 
   stopMerging () :void {
-    if (this.mergedStatic) {
-      this.mergedStatic.build()
-      this.mergedStatic = undefined
+    if (this.mergingStatic) {
+      this.mergingStatic.build()
+      this.mergedStatic.add(this.mergingStatic)
+      this.mergingStatic = undefined
     }
   }
 
@@ -1185,10 +1187,10 @@ class ThreeModel extends ThreeBounded implements Model {
     super.awake()
     if (this.gameObject.isStatic) {
       const renderEngine = this.gameEngine.renderEngine as ThreeRenderEngine
-      if (renderEngine.mergedStatic) {
+      if (renderEngine.mergingStatic) {
         const matrix = new Matrix4().fromArray(this.transform.localToWorldMatrix)
         const flags = this.flags
-        for (const url of this.urls) renderEngine.mergedStatic.meshes.add(url, matrix, flags)
+        for (const url of this.urls) renderEngine.mergingStatic.meshes.add(url, matrix, flags)
         return
       }
     }
@@ -1294,9 +1296,9 @@ class ThreeFusedModels extends ThreeBounded implements FusedModels {
     }
     if (this.gameObject.isStatic) {
       const renderEngine = this.gameEngine.renderEngine as ThreeRenderEngine
-      if (renderEngine.mergedStatic) {
+      if (renderEngine.mergingStatic) {
         decode(
-          renderEngine.mergedStatic.meshes,
+          renderEngine.mergingStatic.meshes,
           this.encoded,
           new Matrix4().fromArray(this.transform.localToWorldMatrix),
         )
@@ -1577,6 +1579,137 @@ function getAnchor (url :string) {
   return url.substring(url.lastIndexOf("#") + 1)
 }
 
+const tmpMatrix4 = new Matrix4()
+const tmpMeshes = new Map<Matrix4, Mesh>()
+
+const PROJECTOR_EXCLUDE_MASK = NO_RECEIVE_SHADOW_FLAG | NON_TILE_FLAG
+
+const ProjectorMaterial = new ShaderMaterial({
+  vertexShader: `
+    uniform mat4 textureMatrix;
+    varying vec2 textureCoord;
+    void main(void) {
+      textureCoord = (textureMatrix * modelMatrix * vec4(position, 1.0)).st;
+      gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+    }
+  `,
+  fragmentShader: `
+    uniform sampler2D texture;
+    uniform float opacity;
+    varying vec2 textureCoord;
+    void main(void) {
+      vec4 baseColor = texture2D(texture, textureCoord);
+      gl_FragColor = vec4(baseColor.rgb, baseColor.a * opacity);
+    }
+  `,
+  transparent: true,
+  uniforms: {
+    texture: {value: undefined},
+    textureMatrix: {value: new Matrix4()},
+    opacity: {value: 1},
+  },
+})
+
+const TextureOffset = new Vector3(0.5, 0.5, 0)
+const TextureRotation = new Quaternion().setFromAxisAngle(new Vector3(1, 0, 0), Math.PI / 2)
+
+class ThreeProjector extends TypeScriptComponent implements Projector {
+  @property("url") url = ""
+  @property("number", {min: 0, wheelStep: 0.1}) size = 1
+  @property("number", {min: 0, max: 1, wheelStep: 0.01}) opacity = 1
+
+  private readonly _group = new Group()
+  private readonly _material = ProjectorMaterial.clone()
+  private readonly _meshes = new Map<Matrix4, Mesh>()
+
+  init () {
+    super.init()
+    const renderEngine = this.gameEngine.renderEngine as ThreeRenderEngine
+    this._group.userData.transform = this.transform
+    renderEngine.scene.add(this._group)
+    this._disposer.add(renderEngine.mergedStatic.onValue(() => this._updateMeshes()))
+    this._disposer.add(
+      this.getProperty<string>("url")
+        .toSubject()
+        .switchMap(
+          url => url ? loadTexture(this.gameEngine.loader, url) : Subject.constant(undefined),
+        )
+        .onValue(texture => this._material.uniforms.texture.value = texture)
+    )
+    this.getProperty<number>("opacity").onValue(
+      opacity => this._material.uniforms.opacity.value = opacity,
+    )
+    this.getProperty<number>("size").onValue(() => {
+      this._updateMeshes()
+      this._updateTextureMatrix()
+    })
+  }
+
+  onTransformChanged () {
+    this._updateMeshes()
+    this._updateTextureMatrix()
+  }
+
+  dispose () {
+    super.dispose()
+    const renderEngine = this.gameEngine.renderEngine as ThreeRenderEngine
+    renderEngine.scene.remove(this._group)
+  }
+
+  private _updateMeshes () {
+    const halfSize = this.size / 2
+    tmpBoundingBox.min.set(-halfSize, -halfSize, -halfSize)
+    tmpBoundingBox.max.set(halfSize, halfSize, halfSize)
+    tmpBoundingBox.applyMatrix4(tmpMatrix4.fromArray(this.transform.localToWorldMatrix))
+    const renderEngine = this.gameEngine.renderEngine as ThreeRenderEngine
+    for (const mergedStatic of renderEngine.mergedStatic) {
+      mergedStatic.getIntersecting(tmpBoundingBox, PROJECTOR_EXCLUDE_MASK, tmpMeshes)
+    }
+    // remove anything that isn't present in the new map
+    for (const [matrix, mesh] of this._meshes) {
+      if (!tmpMeshes.has(matrix)) {
+        this._group.remove(mesh)
+        this._meshes.delete(matrix)
+      }
+    }
+    // add anything new, update
+    for (const [matrix, mesh] of tmpMeshes) {
+      let projectionMesh = this._meshes.get(matrix)
+      if (!projectionMesh) {
+        projectionMesh = new Mesh(mesh.geometry, this._material)
+        projectionMesh.matrixAutoUpdate = false
+        projectionMesh.matrixWorld.copy(matrix)
+        this._group.add(projectionMesh)
+        this._meshes.set(matrix, projectionMesh)
+      }
+    }
+    // clear for next time
+    tmpMeshes.clear()
+  }
+
+  private _updateTextureMatrix () {
+    const textureMatrix :Matrix4 = this._material.uniforms.textureMatrix.value
+    textureMatrix.fromArray(this.transform.worldToLocalMatrix)
+    tmpMatrix4.compose(TextureOffset, TextureRotation, tmpVector3.setScalar(1 / this.size))
+    textureMatrix.premultiply(tmpMatrix4)
+  }
+}
+registerConfigurableType("component", undefined, "projector", ThreeProjector)
+
+function loadTexture (loader :ResourceLoader, path :string, cache = true) :Subject<Texture> {
+  return loader.getResourceVia(path, (path, loaded, failed) => {
+    new TextureLoader().load(
+      loader.getUrl(path),
+      loaded,
+      Noop,
+      error => {
+        failed(new Error(error.message))
+        // TODO: also succeed with an error texture
+      },
+    )
+  }, cache)
+}
+
 class ThreeMergedStatic extends ThreeObjectComponent {
   readonly meshes :MergedMeshes
 
@@ -1592,6 +1725,20 @@ class ThreeMergedStatic extends ThreeObjectComponent {
 
   build () {
     this.meshes.build(group => this.objectValue.update(group))
+  }
+
+  getIntersecting (bounds :Box3, excludeMask :number, results :Map<Matrix4, Mesh>) {
+    const group = this.objectValue.current
+    if (!group) return
+    for (const child of group.children) {
+      const mesh = child as OctreeMesh
+      if (!(mesh.flags & excludeMask)) mesh.getIntersecting(bounds, results)
+    }
+  }
+
+  dispose () {
+    super.dispose()
+    this.renderEngine.mergedStatic.delete(this)
   }
 }
 registerConfigurableType("component", undefined, "mergedStatic", ThreeMergedStatic)
@@ -1859,7 +2006,7 @@ class OctreeMesh extends Mesh {
     geometry :BufferGeometry,
     material :MaterialObject,
     private readonly _boundingBox :Box3,
-    flags :number,
+    readonly flags :number,
   ) {
     super(geometry, material)
     this._boundingBoxSize = getBoundingBoxSize(_boundingBox)
@@ -1901,6 +2048,12 @@ class OctreeMesh extends Mesh {
       intersect.distance = intersect.point.distanceTo(raycaster.ray.origin)
       intersect.object = this
     }
+  }
+
+  getIntersecting (bounds :Box3, results :Map<Matrix4, Mesh>) {
+    currentOctreeVisit++
+    nodeBounds.copy(this._boundingBox)
+    this._root.getIntersecting(bounds, results)
   }
 }
 
@@ -1979,6 +2132,35 @@ class OctreeNode {
         nodeBounds.min.z + halfSizeZ,
       )
       if (raycaster.ray.intersectsBox(nodeBounds)) child.raycast(raycaster, intersects)
+    }
+  }
+
+  getIntersecting (bounds :Box3, results :Map<Matrix4, Mesh>) {
+    if (this.occupants) {
+      for (const occupant of this.occupants) {
+        if (occupant.lastVisit === currentOctreeVisit) continue
+        occupant.lastVisit = currentOctreeVisit
+        if (bounds.intersectsBox(occupant.boundingBox)) results.set(occupant.matrix, occupant.mesh)
+      }
+    }
+    if (!this.children) return
+    const minX = nodeBounds.min.x, minY = nodeBounds.min.y, minZ = nodeBounds.min.z
+    const halfSizeX = (nodeBounds.max.x - minX) * 0.5
+    const halfSizeY = (nodeBounds.max.y - minY) * 0.5
+    const halfSizeZ = (nodeBounds.max.z - minZ) * 0.5
+    for (let ii = 0; ii < 8; ii++) {
+      const child = this.children[ii]
+      if (!child) continue
+      const offsetX = (ii & 1) ? halfSizeX : 0
+      const offsetY = (ii & 2) ? halfSizeY : 0
+      const offsetZ = (ii & 4) ? halfSizeZ : 0
+      nodeBounds.min.set(minX + offsetX, minY + offsetY, minZ + offsetZ)
+      nodeBounds.max.set(
+        nodeBounds.min.x + halfSizeX,
+        nodeBounds.min.y + halfSizeY,
+        nodeBounds.min.z + halfSizeZ,
+      )
+      if (bounds.intersectsBox(nodeBounds)) child.getIntersecting(bounds, results)
     }
   }
 }

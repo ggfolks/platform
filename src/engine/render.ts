@@ -257,3 +257,16 @@ export interface FusedModels extends Bounded, Hoverable {
   /** The opacity to apply to the models. */
   opacity :number
 }
+
+/** Projects an image (such as a blob shadow) onto static geometry. */
+export interface Projector extends Component {
+
+  /** The URL of the image to project. */
+  url :string
+
+  /** The size of the projection. */
+  size :number
+
+  /** The opacity of the projection. */
+  opacity :number
+}
