@@ -232,6 +232,20 @@ export abstract class RSet<E> extends Source<ReadonlySet<E>> implements Readonly
     * @return a remover thunk (invoke with no args to unregister `fn`). */
   abstract onChange (fn :(change :SetChange<E>) => any) :Remover
 
+  /** Registers `fn` to be notified when elements are added to this set.
+    * @param current if `true`, `fn` will be called for each element currently in this set.
+    * @return a remover thunk (invoke with no args to unregister `fn`). */
+  onAdded (fn :(elem :E) => any, current = false) :Remover {
+    const remover = this.onChange(ch => ch.type === "added" && fn(ch.elem))
+    if (current) this.forEach(fn)
+    return remover
+  }
+  /** Registers `fn` to be notified when elements are deleted from this set.
+    * @return a remover thunk (invoke with no args to unregister `fn`). */
+  onDeleted (fn :(elem :E) => any) :Remover {
+    return this.onChange(ch => ch.type === "deleted" && fn(ch.elem))
+  }
+
   // from Source
   onEmit (fn :ValueFn<ReadonlySet<E>>) :Remover {
     return this.onChange(change => fn(this.data))
@@ -457,6 +471,21 @@ export abstract class RMap<K,V> extends Source<ReadonlyMap<K,V>> implements Read
   /** Registers `fn` to be notified of changes to this map.
     * @return a remover thunk (invoke with no args to unregister `fn`). */
   abstract onChange (fn :(change :MapChange<K,V>) => any) :Remover
+
+  /** Registers `fn` to be notified when mappings are set.
+    * @param current if `true`, `fn` will be called for each current existing mapping
+    * (with `undefined` as the previous element).
+    * @return a remover thunk (invoke with no args to unregister `fn`). */
+  onSet (fn :(key :K, value :V, prev :V|undefined) => any, current = false) :Remover {
+    const remover = this.onChange(ch => ch.type === "set" && fn(ch.key, ch.value, ch.prev))
+    if (current) for (const [key, value] of this) fn(key, value, undefined)
+    return remover
+  }
+  /** Registers `fn` to be notified when mappings are deleted.
+    * @return a remover thunk (invoke with no args to unregister `fn`). */
+  onDeleted (fn :(key :K, prev :V) => any) :Remover {
+    return this.onChange(ch => ch.type === "deleted" && fn(ch.key, ch.prev))
+  }
 
   // from Source
   onEmit (fn :ValueFn<ReadonlyMap<K,V>>) :Remover {
