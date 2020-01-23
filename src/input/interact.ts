@@ -17,6 +17,9 @@ export type PointerInteraction = {
   /** Called if this action is canceled. This ends the interaction. */
   cancel: () => void
 
+  /** An optional coordinate localizer used in preference to the provider's localizer if present. */
+  toLocal? :(x :number, y :number, pos :vec2) => void
+
   // allow extra stuff in interaction to allow secret side communication between handlers
   [extra :string] :any
 }
@@ -24,9 +27,9 @@ export type PointerInteraction = {
 /** A helper type for interaction providers which allow pluggable gesture handlers.
   * @param event the event forwarded from the browser.
   * @param pos the position of the event in the provider's coordinate system.
-  * @param iacts append an interaction to this array to start it. */
+  * @return an interaction to start, or `undefined`. */
 export type GestureHandler =
-  (event :MouseEvent|TouchEvent, pos :vec2, into :PointerInteraction[]) => void
+  (event :MouseEvent|TouchEvent, pos :vec2) => PointerInteraction|undefined
 
 /** Allows an application component to participate in coordinated user input interactions. Certain
   * input events (mouse and touch down) begin "pointer interactions" which then hear about
@@ -245,8 +248,8 @@ export class InteractionManager {
   private handleMove (event :MouseEvent|TouchEvent, x :number, y :number, button :number) :boolean {
     const state = this.istate[button]
     if (!state) return false
-    state.prov.toLocal(x, y, pos)
     for (const iact of state.iacts) {
+      (iact.toLocal || state.prov.toLocal)(x, y, pos)
       if (iact.move(event, pos)) {
         // if any interaction claims the interaction, cancel all the rest
         for (const cc of state.iacts) if (cc !== iact) cc.cancel()
@@ -262,8 +265,10 @@ export class InteractionManager {
                     cancel = false) :boolean {
     const state = this.istate[button]
     if (!state) return false
-    state.prov.toLocal(x, y, pos)
-    for (const iact of state.iacts) cancel ? iact.cancel() : iact.release(event, pos)
+    for (const iact of state.iacts) {
+      (iact.toLocal || state.prov.toLocal)(x, y, pos)
+      cancel ? iact.cancel() : iact.release(event, pos)
+    }
     delete this.istate[button]
     return true
   }
