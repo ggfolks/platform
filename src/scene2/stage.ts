@@ -4,7 +4,7 @@ import {Color} from "../core/color"
 import {Emitter, Stream} from "../core/react"
 import {Clock} from "../core/clock"
 import {Animator, Anim} from "../core/anim"
-import {GestureHandler, InteractionManager} from "../input/interact"
+import {GestureHandler, InteractionManager, PointerInteraction} from "../input/interact"
 import {mouseEvents, touchEvents} from "../input/react"
 import {Renderer, Tile} from "./gl"
 import {QuadBatch} from "./batch"
@@ -24,6 +24,8 @@ interface Parent {
 
 type ActorEvent = {type: "added", actor :Actor}
                 | {type: "removed", actor :Actor}
+                | {type: "staged", actor :Actor}
+                | {type: "unstaged", actor :Actor}
                 | {type: "disposed", actor :Actor}
 
 export abstract class Actor {
@@ -31,6 +33,7 @@ export abstract class Actor {
   readonly vel = vec2.create()
   readonly events = new Emitter<ActorEvent>()
 
+  private _ghandlers? :GestureHandler[]
   private _layer = 0
   parent :Parent|undefined
   enabled = true
@@ -60,6 +63,29 @@ export abstract class Actor {
     return this.trans.inverseTransform(into, vec2.set(into, x-rect.left, y-rect.top))
   }
 
+  addGestureHandler (handler :GestureHandler) :Remover {
+    let handlers = this._ghandlers
+    if (!handlers) {
+      handlers = this._ghandlers = []
+      this.stage && this.listenGestures(this.stage)
+    }
+    return addListener(handlers, handler)
+  }
+
+  handlePointerDown (event :MouseEvent|TouchEvent, pos :vec2, into :PointerInteraction[]) {
+    const handlers = this._ghandlers
+    if (handlers) {
+      this.trans.inverseTransform(tmppos, pos) // convert from stage to actor coords
+      for (const gh of handlers) {
+        const iact = gh(event, tmppos)
+        if (iact) {
+          iact.toLocal = (x, y, ipos) => this.toLocal(x, y, ipos)
+          into.push(iact)
+        }
+      }
+    }
+  }
+
   delete (dispose = true) { this.requireParent.removeActor(this, dispose) }
   deleteAfter (anim :Animator, time :number, dispose = true) {
     anim.add(Anim.delayedAction(time, () => this.delete(dispose)))
@@ -71,10 +97,23 @@ export abstract class Actor {
     if (vel[0] !== 0 || vel[1] !== 0) this.trans.applyDeltaTranslation(vel, dt)
   }
 
+  wasStaged (stage :Stage) {
+    this.events.emit({type: "staged", actor: this})
+    if (this._ghandlers) this.listenGestures(stage)
+  }
+  willUnstage (stage :Stage) {
+    this.events.emit({type: "unstaged", actor: this})
+  }
+
   abstract render (batch :QuadBatch, txUpdated :boolean) :void
 
   dispose () {
     this.events.emit({type: "disposed", actor: this})
+  }
+
+  private listenGestures (stage :Stage) {
+    const ungesture = stage.addGestureActor(this)
+    this.events.whenOnce(ev => ev.type === "unstaged", ungesture)
   }
 }
 
@@ -110,8 +149,11 @@ export class Sprite extends Actor {
   }
 
   contains (pos :vec2) :boolean {
-    const lpos = this.trans.inverseTransform(tmppos, pos)
-    const lx = lpos[0], ly = lpos[1]
+    return this.containsLocal(this.trans.inverseTransform(tmppos, pos))
+  }
+
+  containsLocal (pos :vec2) :boolean {
+    const lx = pos[0], ly = pos[1]
     if (lx < 0 || ly < 0) return false
     const esize = this.readSize()
     if (lx > esize[0] || ly > esize[1]) return false
@@ -123,6 +165,16 @@ export class Sprite extends Actor {
     batch.addTile(this.tile, this.tint, this.trans.data as mat2d, vec2zero, this.tile.size)
     return true
   }
+
+  onClick (fn :(ev :MouseEvent|TouchEvent, pos :vec2) => void) :Remover {
+    return this.addGestureHandler((ev, pos) => this.containsLocal(pos) ? {
+      move: (ev, pos) => false,
+      release: (ev, pos) => {
+        if (this.containsLocal(pos)) fn(ev, pos)
+      },
+      cancel: () => {},
+    } : undefined)
+  }
 }
 
 export class Group extends Actor implements Parent {
@@ -132,12 +184,16 @@ export class Group extends Actor implements Parent {
     actor.parent = this
     insertSorted(this.actors, actor, (a, b) => a.layer - b.layer)
     actor.events.emit({type: "added", actor})
+    const stage = this.stage
+    if (stage) actor.wasStaged(stage)
   }
 
   removeActor (actor :Actor, dispose = true) {
     const idx = this.actors.indexOf(actor)
     if (idx < 0) log.warn("Deleted unknown actor?", "group", this, "actor", actor)
     else {
+      const stage = this.stage
+      if (stage) actor.willUnstage(stage)
       this.actors.splice(idx, 1)
       actor.parent = undefined
       actor.events.emit({type: "removed", actor})
@@ -165,6 +221,15 @@ export class Group extends Actor implements Parent {
     }
   }
 
+  wasStaged (stage :Stage) {
+    super.wasStaged(stage)
+    for (const actor of this.actors) actor.wasStaged(stage)
+  }
+  willUnstage (stage :Stage) {
+    super.willUnstage(stage)
+    for (const actor of this.actors) actor.willUnstage(stage)
+  }
+
   dispose () {
     for (const actor of this.actors) actor.dispose()
   }
@@ -182,6 +247,7 @@ const MaxDt = 1/15
 
 export class Stage {
   private readonly disposer = new Disposer()
+  private readonly gactors :Actor[] = []
   private readonly ghandlers :GestureHandler[] = []
 
   readonly clock :Stream<number> = new Emitter()
@@ -196,12 +262,16 @@ export class Stage {
     this.disposer.add(interact.addProvider({
       zIndex: 0, // TODO: allow customize?
       toLocal: (x, y, pos) => {
-        this.root.toLocal(x, y, pos)
         const rect = this.renderer.canvas.getBoundingClientRect()
+        vec2.set(pos, x-rect.left, y-rect.top)
         return x >= rect.left && y >= rect.top && x <= rect.right && y <= rect.bottom
       },
       handlePointerDown: (event, pos, into) => {
-        for (const gh of this.ghandlers) gh(event, pos, into)
+        for (const gh of this.ghandlers) {
+          const iact = gh(event, pos)
+          if (iact) into.push(iact)
+        }
+        for (const ga of this.gactors) ga.handlePointerDown(event, pos, into)
       },
       updateMouseHover: (event, pos) => {}, // noop
       handleDoubleClick: (event, pos) => false, // noop
@@ -210,6 +280,10 @@ export class Stage {
 
   addGestureHandler (handler :GestureHandler) :Remover {
     return addListener(this.ghandlers, handler)
+  }
+
+  addGestureActor (actor :Actor) :Remover {
+    return addListener(this.gactors, actor)
   }
 
   pointer (root :Actor) :Stream<PointerEvent> {
