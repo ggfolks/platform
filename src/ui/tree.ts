@@ -199,18 +199,18 @@ export class TreeView extends AbstractTreeView implements Drag.Owner {
             if (this._scrollTimeout === undefined) {
               this._scrollTimeout = window.setTimeout(() => {
                 this.root.validate()
-                let min = Infinity, max = -Infinity
+                let offset = scroller.axisOffset
                 for (const key of this.selectedKeys) {
                   const node = this.nodes.get(key)
                   if (node) {
-                    min = Math.min(min, node.y)
-                    max = Math.max(max, node.y + node.height)
+                    offset = clamp(
+                      offset,
+                      node.y + node.height - scroller.y - scroller.height,
+                      node.y - scroller.y,
+                    )
                   }
                 }
-                scroller.scrollTo(
-                  clamp(scroller.axisOffset, max - scroller.y - scroller.height, min - scroller.y),
-                  false,
-                )
+                scroller.scrollTo(offset, false)
                 this._scrollTimeout = undefined
               }, 0)
             }
