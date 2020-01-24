@@ -1501,6 +1501,7 @@ export class TypeScriptTile extends TypeScriptComponent implements Tile {
   @property("vec3") min = vec3.clone(DefaultTileBounds.min)
   @property("vec3") max = vec3.clone(DefaultTileBounds.max)
   @property("boolean") walkable = false
+  @property("boolean") blocking = false
 }
 registerConfigurableType("component", ["engine"], "tile", TypeScriptTile)
 

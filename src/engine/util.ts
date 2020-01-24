@@ -436,6 +436,9 @@ export const NO_RECEIVE_SHADOW_FLAG = (1 << 2)
 /** A flag indicating that the model is not a tile. */
 export const NON_TILE_FLAG = (1 << 3)
 
+/** A flag indicating that the model obscures tiles behind it. */
+export const BLOCKING_FLAG = (1 << 4)
+
 /** Helper class to encode multiple model URLs/transforms into a compact merged format. */
 export class FusedEncoder {
   private readonly _encoder = new Encoder()
@@ -639,22 +642,24 @@ export class NavGrid {
     * @param min the local minima of the tile bounds.
     * @param max the local maxima of the tile bounds.
     * @param matrix the matrix to apply to the bounds.
-    * @param walkable whether or not the region is walkable. */
-  insertTile (min :vec3, max :vec3, matrix :mat4, walkable :boolean) {
+    * @param walkable whether or not the region is walkable.
+    * @param blocking whether or not the region is blocking. */
+  insertTile (min :vec3, max :vec3, matrix :mat4, walkable :boolean, blocking :boolean) {
     vec3.copy(tmpb.min, min)
     vec3.copy(tmpb.max, max)
-    this._addToCounts(Bounds.transformMat4(tmpb, tmpb, matrix), walkable, 1)
+    this._addToCounts(Bounds.transformMat4(tmpb, tmpb, matrix), walkable, blocking, 1)
   }
 
   /** Removes a tile from the grid.
     * @param min the local minima of the tile bounds.
     * @param max the local maxima of the tile bounds.
     * @param matrix the matrix to apply to the bounds.
-    * @param walkable whether or not the region was walkable. */
-  deleteTile (min :vec3, max :vec3, matrix :mat4, walkable :boolean) {
+    * @param walkable whether or not the region was walkable.
+    * @param blocking whether or not the region is blocking. */
+  deleteTile (min :vec3, max :vec3, matrix :mat4, walkable :boolean, blocking :boolean) {
     vec3.copy(tmpb.min, min)
     vec3.copy(tmpb.max, max)
-    this._addToCounts(Bounds.transformMat4(tmpb, tmpb, matrix), walkable, -1)
+    this._addToCounts(Bounds.transformMat4(tmpb, tmpb, matrix), walkable, blocking, -1)
   }
 
   /** Adds a set of fused models to the grid.
@@ -674,13 +679,13 @@ export class NavGrid {
   /** Adds a single occupant to the grid.
     * @param position the occupant's position. */
   insertOccupant (position :vec3) {
-    this._addToCounts(positionToBounds(position), false, 1)
+    this._addToCounts(positionToBounds(position), false, false, 1)
   }
 
   /** Removes a single occupant from the grid.
     * @param position the occupant's position. */
   deleteOccupant (position :vec3) {
-    this._addToCounts(positionToBounds(position), false, -1)
+    this._addToCounts(positionToBounds(position), false, false, -1)
   }
 
   /** Finds a standable position as close as possible to the position provided.
@@ -936,7 +941,7 @@ export class NavGrid {
         if (flags & NON_TILE_FLAG) return
         mat4.fromRotationTranslationScale(tmpm, rotation, position, scale)
         Bounds.transformMat4(tmpb, bounds, mat4.multiply(tmpm, parentMatrix, tmpm))
-        this._addToCounts(tmpb, Boolean(flags & WALKABLE_FLAG), increment)
+        this._addToCounts(tmpb, !!(flags & WALKABLE_FLAG), !!(flags & BLOCKING_FLAG), increment)
       },
       visitFusedTiles: (source, position, rotation, scale) => {
         const matrix = mat4.fromRotationTranslationScale(mat4.create(), rotation, position, scale)
@@ -945,12 +950,9 @@ export class NavGrid {
     })
   }
 
-  private _addToCounts (bounds :Bounds, walkable :boolean, increment :number) {
+  private _addToCounts (bounds :Bounds, walkable :boolean, blocking :boolean, increment :number) {
     // add to walkable bounds
     if (walkable) Bounds.union(this.walkableBounds, this.walkableBounds, bounds)
-
-    // if the bounds are higher than one unit, block areas behind
-    const blocking = bounds.max[1] - bounds.min[1] > 1
 
     // adjust the bounds slightly to make sure they don't "spill out" of the cell
     Bounds.expand(bounds, bounds, -0.0001)

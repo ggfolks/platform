@@ -610,4 +610,7 @@ export interface Tile extends Component {
 
   /** Whether or not characters can walk on the tile. */
   walkable :boolean
+
+  /** Whether or not the tile obscures tiles behind it. */
+  blocking :boolean
 }
