@@ -589,11 +589,13 @@ export function decodeFused (source :Uint8Array, visitor :FusedVisitor) {
 
 class Occupancy {
   walkableCount = 0
+  blockingCount = 0
   unwalkableCount = 0
   lastVisit = 0
   nextOccupancy? :Occupancy
 
   get walkable () :boolean { return this.walkableCount > 0 && this.unwalkableCount === 0 }
+  get blocking () :boolean { return this.blockingCount > 0 }
   get empty () :boolean { return this.walkableCount === 0 && this.unwalkableCount === 0 }
 
   constructor (readonly x :number, readonly y :number, readonly z :number) {}
@@ -681,29 +683,29 @@ export class NavGrid {
     this._addToCounts(positionToBounds(position), false, -1)
   }
 
-  /** Finds a walkable position as close as possible to the position provided.
+  /** Finds a standable position as close as possible to the position provided.
     * @param origin the position at which to start the search.
-    * @return the closest walkable position, or undefined if we failed to find one. */
-  getWalkablePosition (origin :vec3) :vec3|undefined {
+    * @return the closest standable position, or undefined if we failed to find one. */
+  getStandablePosition (origin :vec3) :vec3|undefined {
     // make sure there are walkable cells on the requested "floor"
     const y = Math.round(origin[1])
     if ((this._floorWalkableCellCounts.get(y) || 0) <= 0) return undefined
 
     const ox = Math.floor(origin[0] * 2)
     const oz = Math.floor(origin[2] * 2)
-    if (this._isCellWalkable(ox, y, oz)) return cellToPosition(vec3.fromValues(ox, y, oz))
+    if (this._isCellStandable(ox, y, oz)) return cellToPosition(vec3.fromValues(ox, y, oz))
 
     const cells :vec3[] = []
     for (let distance = 1; distance <= MAX_WALKABLE_SEARCH_DISTANCE; distance++) {
       const lx = ox - distance, ux = ox + distance
       const lz = oz - distance, uz = oz + distance
       for (let x = lx; x <= ux; x++) {
-        if (this._isCellWalkable(x, y, lz)) cells.push(vec3.fromValues(x, y, lz))
-        if (this._isCellWalkable(x, y, uz)) cells.push(vec3.fromValues(x, y, uz))
+        if (this._isCellStandable(x, y, lz)) cells.push(vec3.fromValues(x, y, lz))
+        if (this._isCellStandable(x, y, uz)) cells.push(vec3.fromValues(x, y, uz))
       }
       for (let z = lz + 1; z < uz; z++) {
-        if (this._isCellWalkable(lx, y, z)) cells.push(vec3.fromValues(lx, y, z))
-        if (this._isCellWalkable(ux, y, z)) cells.push(vec3.fromValues(ux, y, z))
+        if (this._isCellStandable(lx, y, z)) cells.push(vec3.fromValues(lx, y, z))
+        if (this._isCellStandable(ux, y, z)) cells.push(vec3.fromValues(ux, y, z))
       }
       if (cells.length > 0) {
         return cellToPosition(cells[Math.floor(Math.random() * cells.length)])
@@ -875,6 +877,31 @@ export class NavGrid {
     return true
   }
 
+  private _isCellStandable (x :number, y :number, z :number) :boolean {
+    let occupancy = this._occupancies.get(getCellHash(x, y, z))
+    for (; occupancy; occupancy = occupancy.nextOccupancy) {
+      if (occupancy.x === x && occupancy.y === y && occupancy.z === z) {
+        if (!occupancy.walkable) return false
+        // "scan" forward to ensure that nothing is blocking the location
+        const lz = Math.floor(this.walkableBounds.min[2] * 2)
+        const uz = Math.max(lz + 1, Math.ceil(this.walkableBounds.max[2] * 2))
+        for (let bz = z + 1; bz < uz; bz++) {
+          if (this._isCellBlocking(x, y, bz)) return false
+        }
+        return true
+      }
+    }
+    return false
+  }
+
+  private _isCellBlocking (x :number, y :number, z :number) :boolean {
+    let occupancy = this._occupancies.get(getCellHash(x, y, z))
+    for (; occupancy; occupancy = occupancy.nextOccupancy) {
+      if (occupancy.x === x && occupancy.y === y && occupancy.z === z) return occupancy.blocking
+    }
+    return false
+  }
+
   private _isCellWalkable (x :number, y :number, z :number) :boolean {
     let occupancy = this._occupancies.get(getCellHash(x, y, z))
     for (; occupancy; occupancy = occupancy.nextOccupancy) {
@@ -922,6 +949,9 @@ export class NavGrid {
     // add to walkable bounds
     if (walkable) Bounds.union(this.walkableBounds, this.walkableBounds, bounds)
 
+    // if the bounds are higher than one unit, block areas behind
+    const blocking = bounds.max[1] - bounds.min[1] > 1
+
     // adjust the bounds slightly to make sure they don't "spill out" of the cell
     Bounds.expand(bounds, bounds, -0.0001)
     bounds.max[1] = bounds.min[1] // bounds are "flat," for now
@@ -931,6 +961,7 @@ export class NavGrid {
       bounds,
       occupancy => {
         const oldWalkable = occupancy.walkable
+        const oldBlocking = occupancy.blocking
         if (walkable) occupancy.walkableCount += increment
         else occupancy.unwalkableCount += increment
         if (occupancy.walkable !== oldWalkable) {
@@ -944,6 +975,10 @@ export class NavGrid {
             let floorCount = this._floorWalkableCellCounts.get(occupancy.y) || 0
             this._floorWalkableCellCounts.set(occupancy.y, floorCount - 1)
           }
+          changed = true
+        }
+        if (blocking) occupancy.blockingCount += increment
+        if (occupancy.blocking !== oldBlocking) {
           changed = true
         }
         return occupancy.empty
