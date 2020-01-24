@@ -57,8 +57,15 @@ export class Observer<T> implements Disposable {
 export function requireAncestor<P> (
   parent :Element|undefined, pclass :new (...args :any[]) => P
 ) :P {
+  const ancestor = getAncestor(parent, pclass)
+  if (!ancestor) throw new Error(`Expected to find ancestor of type ${pclass}`)
+  return ancestor
+}
+
+export function getAncestor<P> (
+  parent :Element|undefined, pclass :new (...args :any[]) => P
+) :P|undefined {
   while (parent && !(parent instanceof pclass)) parent = parent.parent
-  if (!parent) throw new Error(`Expected to find ancestor of type ${pclass}`)
   return parent
 }
 
@@ -356,6 +363,10 @@ export abstract class Element implements Disposable {
 
   protected canHandleEvent (event :Event, pos :vec2) :boolean {
     return this.visible.current && rect.contains(this.hitBounds, pos)
+  }
+
+  protected getAncestor<P> (pclass :new (...args :any[]) => P) :P|undefined {
+    return getAncestor(this.parent, pclass)
   }
 
   protected requireAncestor<P> (pclass :new (...args :any[]) => P) :P {

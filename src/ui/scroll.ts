@@ -387,6 +387,14 @@ export class Scroller extends TransformedContainer {
     return Math.round(selfSize * this.axisOffset / Math.max(selfSize, this.contents.bounds[idx]))
   }
 
+  /** Scrolls so that the specified element (a descendant of this) is visible. */
+  scrollUntilVisible (element :Element, animate = true) {
+    const [min, max] = this.horiz
+      ? [element.x + element.width - this.x - this.width, element.x - this.x]
+      : [element.y + element.height - this.y - this.height, element.y - this.y]
+    this.scrollTo(clamp(this.axisOffset, min, max), animate)
+  }
+
   /** Scrolls to the specified offset from the top/left-most scroll position. */
   scrollTo (offset :number, animate = true) {
     if (!animate) this._updateAxisOffset(offset)

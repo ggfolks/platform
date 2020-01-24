@@ -2,12 +2,13 @@ import {rect, vec2} from "../core/math"
 import {Mutable, Value} from "../core/react"
 import {MutableSet} from "../core/rcollect"
 import {PointerInteraction} from "../input/interact"
-import {ElementsModel, Model, ModelKey, Spec} from "./model"
+import {Action, ElementsModel, Model, ModelKey, Spec} from "./model"
 import {Element, Root, requireAncestor} from "./element"
 import {OffAxisPolicy, VGroup} from "./group"
 import {List} from "./list"
 import {Drag} from "./drag"
 import {CursorConfig, DefaultCursor, Cursor} from "./cursor"
+import {Scroller} from "./scroll"
 
 type ParentOrderUpdater = (keys :ModelKey[], parent :ModelKey|undefined, index :number) => void
 
@@ -146,12 +147,20 @@ export interface TreeViewListConfig extends AbstractTreeViewConfig {
 }
 
 export class TreeViewList extends AbstractTreeView {
+  readonly expanded :Value<boolean>
+  readonly toggleExpanded :Action
 
   constructor (ctx :Element.Context, parent :Element, config :AbstractTreeViewConfig) {
     super(ctx, parent, config, ctx.model.resolveAs(config.key, "key").current,
           requireAncestor(parent, TreeView).selectedKeys,
           requireAncestor(parent, TreeView).hoveredTreeView)
     this.syncContents(ctx, config)
+    this.expanded = ctx.model.resolve("expanded")
+    this.toggleExpanded = ctx.model.resolveAction("toggleExpanded")
+  }
+
+  expand () {
+    if (!this.expanded.current) this.toggleExpanded()
   }
 }
 
@@ -174,6 +183,23 @@ export class TreeView extends AbstractTreeView implements Drag.Owner {
           ctx.model.resolveAs(config.selectedKeys, "selectedKeys"), hoveredTreeView)
     this._updateParentOrder = ctx.model.resolveOpt(config.updateParentOrder)
     this.syncContents(ctx, config)
+
+    // if we're in a scroller, automatically expand and scroll to newly selected nodes
+    const scroller = this.getAncestor(Scroller)
+    if (scroller) {
+      this.disposer.add(this.selectedKeys.onChange(change => {
+        if (change.type === "added") {
+          const node = this.nodes.get(change.elem)
+          if (node) {
+            for (let ancestor = node.parent; ancestor; ancestor = ancestor.parent) {
+              if (ancestor instanceof TreeViewList) ancestor.expand()
+            }
+            this.root.validate()
+            scroller.scrollUntilVisible(node, false)
+          }
+        }
+      }))
+    }
   }
 
   get dragConstraint () :Drag.Constraint { return "none" }
