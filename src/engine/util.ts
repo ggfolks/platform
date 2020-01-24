@@ -693,25 +693,42 @@ export class NavGrid {
 
     const ox = Math.floor(origin[0] * 2)
     const oz = Math.floor(origin[2] * 2)
-    if (this._isCellStandable(ox, y, oz)) return cellToPosition(vec3.fromValues(ox, y, oz))
+    if (this.isCellStandable(ox, y, oz)) return cellToPosition(vec3.fromValues(ox, y, oz))
 
     const cells :vec3[] = []
     for (let distance = 1; distance <= MAX_WALKABLE_SEARCH_DISTANCE; distance++) {
       const lx = ox - distance, ux = ox + distance
       const lz = oz - distance, uz = oz + distance
       for (let x = lx; x <= ux; x++) {
-        if (this._isCellStandable(x, y, lz)) cells.push(vec3.fromValues(x, y, lz))
-        if (this._isCellStandable(x, y, uz)) cells.push(vec3.fromValues(x, y, uz))
+        if (this.isCellStandable(x, y, lz)) cells.push(vec3.fromValues(x, y, lz))
+        if (this.isCellStandable(x, y, uz)) cells.push(vec3.fromValues(x, y, uz))
       }
       for (let z = lz + 1; z < uz; z++) {
-        if (this._isCellStandable(lx, y, z)) cells.push(vec3.fromValues(lx, y, z))
-        if (this._isCellStandable(ux, y, z)) cells.push(vec3.fromValues(ux, y, z))
+        if (this.isCellStandable(lx, y, z)) cells.push(vec3.fromValues(lx, y, z))
+        if (this.isCellStandable(ux, y, z)) cells.push(vec3.fromValues(ux, y, z))
       }
       if (cells.length > 0) {
         return cellToPosition(cells[Math.floor(Math.random() * cells.length)])
       }
     }
     return undefined
+  }
+
+  isCellStandable (x :number, y :number, z :number) :boolean {
+    let occupancy = this._occupancies.get(getCellHash(x, y, z))
+    for (; occupancy; occupancy = occupancy.nextOccupancy) {
+      if (occupancy.x === x && occupancy.y === y && occupancy.z === z) {
+        if (!occupancy.walkable) return false
+        // "scan" forward to ensure that nothing is blocking the location
+        const lz = Math.floor(this.walkableBounds.min[2] * 2)
+        const uz = Math.max(lz + 1, Math.ceil(this.walkableBounds.max[2] * 2))
+        for (let bz = z + 1; bz < uz; bz++) {
+          if (this._isCellBlocking(x, y, bz)) return false
+        }
+        return true
+      }
+    }
+    return false
   }
 
   /** Finds a path from the origin to the destination.
@@ -875,23 +892,6 @@ export class NavGrid {
       cz = nz
     }
     return true
-  }
-
-  private _isCellStandable (x :number, y :number, z :number) :boolean {
-    let occupancy = this._occupancies.get(getCellHash(x, y, z))
-    for (; occupancy; occupancy = occupancy.nextOccupancy) {
-      if (occupancy.x === x && occupancy.y === y && occupancy.z === z) {
-        if (!occupancy.walkable) return false
-        // "scan" forward to ensure that nothing is blocking the location
-        const lz = Math.floor(this.walkableBounds.min[2] * 2)
-        const uz = Math.max(lz + 1, Math.ceil(this.walkableBounds.max[2] * 2))
-        for (let bz = z + 1; bz < uz; bz++) {
-          if (this._isCellBlocking(x, y, bz)) return false
-        }
-        return true
-      }
-    }
-    return false
   }
 
   private _isCellBlocking (x :number, y :number, z :number) :boolean {

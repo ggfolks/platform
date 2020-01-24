@@ -3,9 +3,10 @@ import {
   BufferAttribute, BufferGeometry, CylinderBufferGeometry, DefaultLoadingManager, DirectionalLight,
   DoubleSide, FrontSide, Group, Intersection, Light as LightObject, LoopOnce, LoopRepeat,
   LoopPingPong, Material as MaterialObject, Matrix3, Matrix4, Mesh, MeshBasicMaterial,
-  MeshStandardMaterial, Object3D, OrthographicCamera, PCFSoftShadowMap, PerspectiveCamera,
+  MeshStandardMaterial, NoColors, Object3D, OrthographicCamera, PCFSoftShadowMap, PerspectiveCamera,
   PlaneBufferGeometry, Quaternion, Ray as RayObject, Raycaster, Scene, ShaderMaterial, SkinnedMesh,
-  Sphere, SphereBufferGeometry, Texture, TextureLoader, Vector2, Vector3, WebGLRenderer,
+  Sphere, SphereBufferGeometry, Texture, TextureLoader, Vector2, Vector3, VertexColors,
+  WebGLRenderer,
 } from "three"
 import {SkeletonUtils} from "three/examples/jsm/utils/SkeletonUtils"
 import {Clock} from "../../../core/clock"
@@ -448,6 +449,7 @@ abstract class ThreeMaterial extends TypeScriptConfigurable implements Material 
   @property("number", {min: 0, max: 1, wheelStep: 0.1}) alphaTest = 0
   @property("MaterialSide") side :MaterialSide = "front"
   @property("number", {min: 0, max: 1, wheelStep: 0.1}) opacity = 1
+  @property("boolean") vertexColors = false
 
   constructor (
     readonly gameEngine :TypeScriptGameEngine,
@@ -473,6 +475,10 @@ abstract class ThreeMaterial extends TypeScriptConfigurable implements Material 
         : side === "back"
         ? BackSide
         : DoubleSide
+      this.object.needsUpdate = true
+    })
+    this.getProperty<boolean>("vertexColors").onValue(vertexColors => {
+      this.object.vertexColors = vertexColors ? VertexColors : NoColors
       this.object.needsUpdate = true
     })
   }
@@ -746,14 +752,16 @@ class ThreeExplicitGeometry extends TypeScriptExplicitGeometry implements ThreeM
     super.init()
     this._disposer.add(() => this.bufferGeometry.current.dispose())
     Value
-      .join2(
+      .join3(
         this.getProperty<Float32Array>("vertices"),
+        this.getProperty<Float32Array>("colors"),
         this.getProperty<Uint16Array|Uint32Array>("triangles"),
       )
-      .onValue(([vertices, triangles]) => {
+      .onValue(([vertices, colors, triangles]) => {
         this.bufferGeometry.current.dispose()
         const geometry = new BufferGeometry()
         geometry.setAttribute("position", new BufferAttribute(vertices, 3))
+        if (colors.length > 0) geometry.setAttribute("color", new BufferAttribute(colors, 3))
         geometry.setIndex(new BufferAttribute(triangles, 1))
         this.bufferGeometry.update(geometry)
       })

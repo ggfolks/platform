@@ -136,6 +136,9 @@ export interface Material extends Configurable {
 
   /** The material opacity. */
   opacity :number
+
+  /** Whether or not to enable vertex colors on the material. */
+  vertexColors :boolean
 }
 
 /** Represents a camera attached to a game object. */

@@ -578,6 +578,9 @@ export interface ExplicitGeometry extends Mesh {
   /** The geometry vertices. */
   vertices :Float32Array
 
+  /** The geometry colors. */
+  colors :Float32Array
+
   /** The geometry triangle indices. */
   triangles :Uint16Array|Uint32Array
 }

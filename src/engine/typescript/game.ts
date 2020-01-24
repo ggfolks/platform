@@ -1460,6 +1460,7 @@ registerConfigurableType("mesh", [], "quad", TypeScriptQuad)
 
 export class TypeScriptExplicitGeometry extends TypeScriptMesh implements ExplicitGeometry {
   @property("Float32Array", {editable: false}) vertices = new Float32Array()
+  @property("Float32Array", {editable: false}) colors = new Float32Array()
   @property("Uint16Array|Uint32Array", {editable: false}) triangles = new Uint16Array()
 }
 registerConfigurableType("mesh", [], "explicitGeometry", TypeScriptExplicitGeometry)
