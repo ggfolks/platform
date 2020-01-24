@@ -1,4 +1,4 @@
-import {rect, vec2} from "../core/math"
+import {clamp, rect, vec2} from "../core/math"
 import {Mutable, Value} from "../core/react"
 import {MutableSet} from "../core/rcollect"
 import {PointerInteraction} from "../input/interact"
@@ -177,6 +177,8 @@ export class TreeView extends AbstractTreeView implements Drag.Owner {
   readonly dropCoord = Mutable.local<DropCoord|undefined>(undefined)
   readonly nodes = new Map<ModelKey, TreeViewNode>()
 
+  private _scrollTimeout? :number
+
   constructor (readonly ctx :Element.Context, parent :Element, readonly config :TreeViewConfig,
                readonly hoveredTreeView = Mutable.local<AbstractTreeView|undefined>(undefined)) {
     super(ctx, parent, config, undefined,
@@ -194,8 +196,24 @@ export class TreeView extends AbstractTreeView implements Drag.Owner {
             for (let ancestor = node.parent; ancestor; ancestor = ancestor.parent) {
               if (ancestor instanceof TreeViewList) ancestor.expand()
             }
-            this.root.validate()
-            scroller.scrollUntilVisible(node, false)
+            if (this._scrollTimeout === undefined) {
+              this._scrollTimeout = window.setTimeout(() => {
+                this.root.validate()
+                let min = Infinity, max = -Infinity
+                for (const key of this.selectedKeys) {
+                  const node = this.nodes.get(key)
+                  if (node) {
+                    min = Math.min(min, node.y)
+                    max = Math.max(max, node.y + node.height)
+                  }
+                }
+                scroller.scrollTo(
+                  clamp(scroller.axisOffset, max - scroller.y - scroller.height, min - scroller.y),
+                  false,
+                )
+                this._scrollTimeout = undefined
+              }, 0)
+            }
           }
         }
       }))
@@ -272,6 +290,11 @@ export class TreeView extends AbstractTreeView implements Drag.Owner {
   handlePointerDown (event :MouseEvent|TouchEvent, pos :vec2, into :PointerInteraction[]) {
     super.handlePointerDown(event, pos, into)
     if (into.length === 0) this.selectedKeys.clear()
+  }
+
+  dispose () {
+    super.dispose()
+    if (this._scrollTimeout !== undefined) window.clearTimeout(this._scrollTimeout)
   }
 
   private _canReparent (parentKey :ModelKey|undefined) :boolean {
