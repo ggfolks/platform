@@ -26,8 +26,8 @@ const tmpmat = mat2d.create(), tmpdim = dim2.create()
   * [[Surface.end]]. This ensures that the batch into which the surface is rendering is properly
   * flushed to the GPU at the right times. */
 export class Surface {
-  private lastTrans = mat2d.create()
-  private readonly transformStack :mat2d[] = [this.lastTrans]
+  private readonly transformStack :mat2d[] = []
+  private nextTxPos = 0
   private batch :QuadBatch
 
   private scissors :rect[] = []
@@ -40,6 +40,9 @@ export class Surface {
   private checkIntersection = false
   private intersectionTestPoint = vec2.create()
   private intersectionTestSize = vec2.create()
+
+  /** The current transform. */
+  readonly tx = mat2d.create()
 
   /** Creates a surface which will render to `target` using `defaultBatch` as its default quad
     * renderer. */
@@ -90,22 +93,20 @@ export class Surface {
     }
   }
 
-  /** The current transform. */
-  get tx () :mat2d {
-    return this.lastTrans
-  }
-
   /** Saves the current transform. */
   saveTx () :Surface {
-    this.transformStack.push(this.lastTrans = mat2d.clone(this.lastTrans))
+    const ts = this.transformStack, ntp = this.nextTxPos++
+    const saveTx = ts[ntp] || (ts[ntp] = mat2d.create())
+    mat2d.copy(saveTx, this.tx)
     return this
   }
 
   /** Restores the transform previously stored by [[saveTx]]. */
   restoreTx () :Surface {
-    if (this.transformStack.length <= 1) throw new Error("Unbalanced save/restore")
-    this.transformStack.pop()
-    this.lastTrans = this.transformStack[this.transformStack.length-1]
+    const ntp = this.nextTxPos
+    if (ntp === 0) throw new Error("Unbalanced save/restore")
+    this.nextTxPos -= 1
+    mat2d.copy(this.tx, this.transformStack[ntp-1])
     return this
   }
 
