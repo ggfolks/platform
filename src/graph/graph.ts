@@ -117,34 +117,6 @@ export class Graph implements Disposable {
     for (const node of this._nodes.values()) node.disconnect()
   }
 
-  /** Creates a string representing a vertex shader for this graph. */
-  createVertexShader () :string {
-    return `
-      varying vec4 worldPosition;
-      void main(void) {
-        worldPosition = modelMatrix * vec4(position, 1.0);
-        gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
-      }
-    `
-  }
-
-  /** Creates a string representing a fragment shader for this graph. */
-  createFragmentShader () :string {
-    return `
-      varying vec4 worldPosition;
-      void main(void) {
-        vec4 modPosition = mod(worldPosition.xzxz - vec4(0.5), vec4(vec2(1.0), vec2(0.25)));
-        vec4 lowerSteps = step(vec4(vec2(0.02), vec2(0.005)), modPosition);
-        vec4 upperSteps = vec4(1.0) - step(vec4(vec2(0.98), vec2(0.245)), modPosition);
-        float outside = lowerSteps.x * lowerSteps.y * lowerSteps.z * lowerSteps.w *
-          upperSteps.x * upperSteps.y * upperSteps.z * upperSteps.w;
-        if (outside > 0.5) discard;
-        float scale = 0.25 * exp(-0.1 * distance(worldPosition.xz, cameraPosition.xz));
-        gl_FragColor = vec4(scale, scale, scale, 1.0);
-      }
-    `
-  }
-
   /** Retrieves a reactive value representing the identified input edges. */
   getValues<T> (inputs :InputEdges<T>, defaultValue :T) :Value<T[]> {
     if (!inputs) {

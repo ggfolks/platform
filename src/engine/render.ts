@@ -141,6 +141,26 @@ export interface Material extends Configurable {
   vertexColors :boolean
 }
 
+/** Represents a basic, unlit material. */
+export interface BasicMaterial extends Material {
+
+  /** The material color. */
+  color :Color
+}
+
+/** Represents a standard (PBR) material. */
+export interface StandardMaterial extends BasicMaterial {}
+
+/** Represents a material defined by shaders. */
+export interface ShaderMaterial extends Material {
+
+  /** The material vertex shader. */
+  vertexShader :string
+
+  /** The material fragment shader. */
+  fragmentShader :string
+}
+
 /** Represents a camera attached to a game object. */
 export interface Camera extends Component, Hoverable {
 

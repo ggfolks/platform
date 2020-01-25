@@ -4,9 +4,9 @@ import {
   DoubleSide, FrontSide, Group, Intersection, Light as LightObject, LoopOnce, LoopRepeat,
   LoopPingPong, Material as MaterialObject, Matrix3, Matrix4, Mesh, MeshBasicMaterial,
   MeshStandardMaterial, NoColors, Object3D, OrthographicCamera, PCFSoftShadowMap, PerspectiveCamera,
-  PlaneBufferGeometry, Quaternion, Ray as RayObject, Raycaster, Scene, ShaderMaterial, SkinnedMesh,
-  Sphere, SphereBufferGeometry, Texture, TextureLoader, Vector2, Vector3, VertexColors,
-  WebGLRenderer,
+  PlaneBufferGeometry, Quaternion, Ray as RayObject, Raycaster, Scene,
+  ShaderMaterial as ShaderMaterialObject, SkinnedMesh, Sphere, SphereBufferGeometry, Texture,
+  TextureLoader, Vector2, Vector3, VertexColors, WebGLRenderer,
 } from "three"
 import {SkeletonUtils} from "three/examples/jsm/utils/SkeletonUtils"
 import {Clock} from "../../../core/clock"
@@ -17,7 +17,6 @@ import {Mutable, Subject, Value} from "../../../core/react"
 import {MutableMap, MutableSet, RMap} from "../../../core/rcollect"
 import {Disposer, Noop, NoopRemover, PMap, Remover, getValue} from "../../../core/util"
 import {ResourceLoader} from "../../../asset/loader"
-import {Graph, GraphConfig} from "../../../graph/graph"
 import {PropertyMeta, setEnumMeta} from "../../../graph/meta"
 import {GLTF, loadGLTF, loadGLTFAnimationClip} from "../../../asset/gltf"
 import {Hand, Pointer} from "../../../input/hand"
@@ -28,8 +27,9 @@ import {
 import {Animation, WrapMode, WrapModes} from "../../animation"
 import {getConfigurableMeta, property} from "../../meta"
 import {
-  Bounded, Camera, FusedModels, Light, LightType, LightTypes, Material, MaterialSide, MaterialSides,
-  MeshRenderer, Model, Projector, RaycastHit, RenderEngine,
+  BasicMaterial, Bounded, Camera, FusedModels, Light, LightType, LightTypes, Material, MaterialSide,
+  MaterialSides, MeshRenderer, Model, Projector, RaycastHit, RenderEngine, ShaderMaterial,
+  StandardMaterial,
 } from "../../render"
 import {NO_CAST_SHADOW_FLAG, NO_RECEIVE_SHADOW_FLAG, decodeFused} from "../../util"
 import {
@@ -486,11 +486,8 @@ abstract class ThreeMaterial extends TypeScriptConfigurable implements Material 
 
 type BasicStandardMaterial = MeshBasicMaterial | MeshStandardMaterial
 
-class ThreeBasicMaterial extends ThreeMaterial {
-  private readonly _color :Color
-
-  get color () :Color { return this._color }
-  set color (color :Color) { Color.copy(this._color, color) }
+class ThreeBasicMaterial extends ThreeMaterial implements BasicMaterial {
+  @property("Color") color = Color.fromRGB(1, 1, 1)
 
   constructor (
     readonly gameEngine :TypeScriptGameEngine,
@@ -499,26 +496,18 @@ class ThreeBasicMaterial extends ThreeMaterial {
     readonly object :BasicStandardMaterial = new MeshBasicMaterial(),
   ) {
     super(gameEngine, supertype, type, object)
-    this._color = new Proxy(Color.fromRGB(1, 1, 1), {
-      set: (obj, prop, value) => {
-        obj[prop] = value
-        this._updateColor()
-        return true
-      },
-      get: (obj, prop) => {
-        return obj[prop]
-      },
-    })
   }
 
-  private _updateColor () {
-    this.object.color.fromArray(this._color, 1)
-    this.object.opacity = this._color[0]
+  init () {
+    super.init()
+    this.getProperty<Color>("color").onValue(color => {
+      this.object.color.fromArray(color, 1)
+    })
   }
 }
 registerConfigurableType("material", [], "basic", ThreeBasicMaterial)
 
-class ThreeStandardMaterial extends ThreeBasicMaterial {
+class ThreeStandardMaterial extends ThreeBasicMaterial implements StandardMaterial {
 
   constructor (
     readonly gameEngine :TypeScriptGameEngine,
@@ -530,35 +519,39 @@ class ThreeStandardMaterial extends ThreeBasicMaterial {
 }
 registerConfigurableType("material", [], "standard", ThreeStandardMaterial)
 
-class ThreeShaderMaterial extends ThreeMaterial {
-  private readonly _vertexShaderGraph :Graph
-  private readonly _fragmentShaderGraph :Graph
+const DEFAULT_VERTEX_SHADER = `
+  void main(void) {
+    gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+  }
+`
 
-  @property("GraphConfig", {editable: false}) get vertexShaderGraphConfig () :GraphConfig {
-    return this._vertexShaderGraph.config
+const DEFAULT_FRAGMENT_SHADER = `
+  void main(void) {
+    gl_FragColor = vec4(1.0, 0.0, 0.0, 1.0);
   }
-  set vertexShaderGraphConfig (config :GraphConfig) {
-    this._vertexShaderGraph.reconfigure(config)
-    this.object.vertexShader = this._vertexShaderGraph.createVertexShader()
-  }
+`
 
-  @property("GraphConfig", {editable: false}) get fragmentShaderGraphConfig () :GraphConfig {
-    return this._fragmentShaderGraph.config
-  }
-  set fragmentShaderGraphConfig (config :GraphConfig) {
-    this._fragmentShaderGraph.reconfigure(config)
-    this.object.fragmentShader = this._fragmentShaderGraph.createFragmentShader()
-  }
+class ThreeShaderMaterial extends ThreeMaterial implements ShaderMaterial {
+  @property("string", {editable: false}) vertexShader = DEFAULT_VERTEX_SHADER
+  @property("string", {editable: false}) fragmentShader = DEFAULT_FRAGMENT_SHADER
 
   constructor (
     readonly gameEngine :TypeScriptGameEngine,
     readonly supertype :string,
     readonly type :string,
-    readonly object = new ShaderMaterial(),
+    readonly object = new ShaderMaterialObject(),
   ) {
     super(gameEngine, supertype, type, object)
-    this._vertexShaderGraph = new Graph(gameEngine.ctx, {})
-    this._fragmentShaderGraph = new Graph(gameEngine.ctx, {})
+  }
+
+  init () {
+    super.init()
+    for (const property of ["vertexShader", "fragmentShader"]) {
+      this.getProperty<string>(property).onValue(shader => {
+        this.object[property] = shader
+        this.object.needsUpdate = true
+      })
+    }
   }
 }
 registerConfigurableType("material", [], "shader", ThreeShaderMaterial)
@@ -1590,7 +1583,7 @@ function getAnchor (url :string) {
 const tmpMatrix4 = new Matrix4()
 const tmpMeshes = new Map<Matrix4, Mesh>()
 
-const ProjectorMaterial = new ShaderMaterial({
+const ProjectorMaterial = new ShaderMaterialObject({
   vertexShader: `
     uniform mat4 textureMatrix;
     varying vec3 texCoord;
