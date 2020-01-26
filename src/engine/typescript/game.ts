@@ -25,8 +25,8 @@ import {
   ALL_LAYERS_MASK, DEFAULT_LAYER_FLAG, ALL_HIDE_FLAGS_MASK, DEFAULT_PAGE, Component,
   ComponentConstructor, Configurable, ConfigurableConfig, CoordinateFrame, Coroutine, Cube,
   Cylinder, DefaultTileBounds, ExplicitGeometry, GameContext, GameEngine, GameObject,
-  GameObjectConfig, Graph, Mesh, MeshFilter, Page, PrimitiveType, Quad, SpaceConfig, Sphere, Tile,
-  Time, Transform, Updatable,
+  GameObjectConfig, Graph, Indicator, Mesh, MeshFilter, Page, PrimitiveType, Quad, SpaceConfig,
+  SpawnPoint, Sphere, Tile, Time, Transform, Updatable,
 } from "../game"
 import {getConfigurableMeta, property} from "../meta"
 import {PhysicsEngine} from "../physics"
@@ -1458,6 +1458,9 @@ registerConfigurableType("mesh", [], "cube", TypeScriptCube)
 export class TypeScriptQuad extends TypeScriptMesh implements Quad {}
 registerConfigurableType("mesh", [], "quad", TypeScriptQuad)
 
+export class TypeScriptIndicator extends TypeScriptMesh implements Indicator {}
+registerConfigurableType("mesh", [], "indicator", TypeScriptIndicator)
+
 export class TypeScriptExplicitGeometry extends TypeScriptMesh implements ExplicitGeometry {
   @property("Float32Array", {editable: false}) vertices = new Float32Array()
   @property("Float32Array", {editable: false}) colors = new Float32Array()
@@ -1504,6 +1507,9 @@ export class TypeScriptTile extends TypeScriptComponent implements Tile {
   @property("boolean") blocking = false
 }
 registerConfigurableType("component", ["engine"], "tile", TypeScriptTile)
+
+export class TypeScriptSpawnPoint extends TypeScriptComponent implements SpawnPoint {}
+registerConfigurableType("component", ["engine"], "spawnPoint", TypeScriptSpawnPoint)
 
 /** Base class for categories of preferences saved to local storage. */
 export abstract class PrefsCategory extends TypeScriptConfigurable {

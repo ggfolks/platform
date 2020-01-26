@@ -57,8 +57,8 @@ export interface Configurable extends Disposable {
 }
 
 /** The available primitive types. */
-export type PrimitiveType = "sphere" | "cylinder" | "cube" | "quad"
-export const PrimitiveTypes = ["sphere", "cylinder", "cube", "quad"]
+export type PrimitiveType = "sphere" | "cylinder" | "cube" | "quad" | "indicator"
+export const PrimitiveTypes = ["sphere", "cylinder", "cube", "quad", "indicator"]
 
 /** The type used to configure game objects. */
 export interface GameObjectConfig {
@@ -82,6 +82,9 @@ export const DEFAULT_PAGE = "default"
 
 /** The default object layer flag. */
 export const DEFAULT_LAYER_FLAG = (1 << 0)
+
+/** The editor object layer flag. */
+export const EDITOR_LAYER_FLAG = (1 << 31)
 
 /** A mask that matches all layers. */
 export const ALL_LAYERS_MASK = ~0
@@ -572,6 +575,9 @@ export interface Cube extends Mesh {}
 /** A quad mesh. */
 export interface Quad extends Mesh {}
 
+/** An indicator mesh. */
+export interface Indicator extends Mesh {}
+
 /** A mesh that explicitly defines its geometry. */
 export interface ExplicitGeometry extends Mesh {
 
@@ -614,3 +620,6 @@ export interface Tile extends Component {
   /** Whether or not the tile obscures tiles behind it. */
   blocking :boolean
 }
+
+/** Represents a location at which players are spawned. */
+export interface SpawnPoint extends Component {}

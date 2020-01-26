@@ -1,14 +1,15 @@
 import {
   AnimationClip, AnimationMixer, AmbientLight, BackSide, Bone, Box3, BoxBufferGeometry,
-  BufferAttribute, BufferGeometry, CylinderBufferGeometry, DefaultLoadingManager, DirectionalLight,
-  DoubleSide, FrontSide, Group, Intersection, Light as LightObject, LoopOnce, LoopRepeat,
-  LoopPingPong, Material as MaterialObject, Matrix3, Matrix4, Mesh, MeshBasicMaterial,
-  MeshStandardMaterial, NoColors, Object3D, OrthographicCamera, PCFSoftShadowMap, PerspectiveCamera,
-  PlaneBufferGeometry, Quaternion, Ray as RayObject, Raycaster, Scene,
-  ShaderMaterial as ShaderMaterialObject, SkinnedMesh, Sphere, SphereBufferGeometry, Texture,
+  BufferAttribute, BufferGeometry, ConeBufferGeometry, CylinderBufferGeometry,
+  DefaultLoadingManager, DirectionalLight, DoubleSide, FrontSide, Group, Intersection,
+  Light as LightObject, LoopOnce, LoopRepeat, LoopPingPong, Material as MaterialObject, Matrix3,
+  Matrix4, Mesh, MeshBasicMaterial, MeshStandardMaterial, NoColors, Object3D, OrthographicCamera,
+  PCFSoftShadowMap, PerspectiveCamera, PlaneBufferGeometry, Quaternion, Ray as RayObject, Raycaster,
+  Scene, ShaderMaterial as ShaderMaterialObject, SkinnedMesh, Sphere, SphereBufferGeometry, Texture,
   TextureLoader, Vector2, Vector3, VertexColors, WebGLRenderer,
 } from "three"
 import {SkeletonUtils} from "three/examples/jsm/utils/SkeletonUtils"
+import {BufferGeometryUtils} from "three/examples/jsm/utils/BufferGeometryUtils"
 import {Clock} from "../../../core/clock"
 import {Color} from "../../../core/color"
 import {refEquals} from "../../../core/data"
@@ -34,9 +35,9 @@ import {
 import {NO_CAST_SHADOW_FLAG, NO_RECEIVE_SHADOW_FLAG, decodeFused} from "../../util"
 import {
   TypeScriptComponent, TypeScriptConfigurable, TypeScriptCube, TypeScriptCylinder,
-  TypeScriptExplicitGeometry, TypeScriptGameEngine, TypeScriptGameObject, TypeScriptMesh,
-  TypeScriptMeshFilter, TypeScriptPage, TypeScriptQuad, TypeScriptSphere, applyConfig,
-  registerConfigurableType,
+  TypeScriptExplicitGeometry, TypeScriptGameEngine, TypeScriptGameObject, TypeScriptIndicator,
+  TypeScriptMesh, TypeScriptMeshFilter, TypeScriptPage, TypeScriptQuad, TypeScriptSphere,
+  applyConfig, registerConfigurableType,
 } from "../game"
 
 setEnumMeta("LightType", LightTypes)
@@ -737,6 +738,20 @@ class ThreeSphere extends TypeScriptSphere implements ThreeMesh {
   readonly bufferGeometry = Value.constant<BufferGeometry>(SharedSphereGeometry)
 }
 registerConfigurableType("mesh", [], "sphere", ThreeSphere)
+
+const bodyGeometry = new ConeBufferGeometry(0.25, 1.5)
+bodyGeometry.translate(0, 0.75, 0)
+const headGeometry = new SphereBufferGeometry(0.25)
+headGeometry.translate(0, 1.25, 0)
+
+const SharedIndicatorGeometry = BufferGeometryUtils.mergeBufferGeometries(
+  [bodyGeometry, headGeometry],
+)
+
+class ThreeIndicator extends TypeScriptIndicator implements ThreeMesh {
+  readonly bufferGeometry = Value.constant<BufferGeometry>(SharedIndicatorGeometry)
+}
+registerConfigurableType("mesh", [], "indicator", ThreeIndicator)
 
 class ThreeExplicitGeometry extends TypeScriptExplicitGeometry implements ThreeMesh {
   readonly bufferGeometry = Mutable.local(new BufferGeometry())
@@ -1624,12 +1639,18 @@ class ThreeProjector extends TypeScriptComponent implements Projector {
   private readonly _material = ProjectorMaterial.clone()
   private readonly _meshes = new Map<Matrix4, Mesh>()
 
-  init () {
-    super.init()
+  awake () {
     const renderEngine = this.gameEngine.renderEngine as ThreeRenderEngine
     this._group.userData.transform = this.transform
     renderEngine.scene.add(this._group)
-    this._disposer.add(renderEngine.mergedStatic.onValue(() => this._updateMeshes()))
+    this._disposer.add(
+      renderEngine.mergedStatic
+        .fold<ThreeMergedStatic[]>([], (_, mergedStatic) => Array.from(mergedStatic))
+        .switchMap(
+          mergedStatic => Value.join(...mergedStatic.map(mergedStatic => mergedStatic.objectValue)),
+        )
+        .onChange(() => this._updateMeshes())
+    )
     this._disposer.add(
       this.getProperty<string>("url")
         .toSubject()
