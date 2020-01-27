@@ -10,7 +10,7 @@ import {Renderer, Tile} from "./gl"
 import {QuadBatch} from "./batch"
 import {Transform} from "./transform"
 
-const tmppos = vec2.create(), tmpscale = vec2.create()
+const tmppos = vec2.create(), tmpscale = vec2.create(), contpos = vec2.create()
 const tmpsize = dim2.create(), tmpbounds = rect.create()
 
 const defaultTint = Color.fromRGB(1, 1, 1)
@@ -149,7 +149,11 @@ export class Sprite extends Actor {
   }
 
   contains (pos :vec2) :boolean {
-    return this.containsLocal(this.trans.inverseTransform(tmppos, pos))
+    return this.containsLocal(this.trans.inverseTransform(contpos, pos))
+  }
+
+  containsParent (pos :vec2) :boolean {
+    return this.contains(this.requireParent.trans.transform(contpos, pos))
   }
 
   containsLocal (pos :vec2) :boolean {
