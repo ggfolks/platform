@@ -22,11 +22,8 @@ interface Parent {
   removeActor (actor :Actor, dispose :boolean) :void
 }
 
-type ActorEvent = {type: "added", actor :Actor}
-                | {type: "removed", actor :Actor}
-                | {type: "staged", actor :Actor}
-                | {type: "unstaged", actor :Actor}
-                | {type: "disposed", actor :Actor}
+type ActorEvent = "added" | "removed" | "staged" | "unstaged"
+                | "willRender" | "didRender" | "disposed"
 
 export abstract class Actor {
   readonly trans = new Transform()
@@ -98,29 +95,35 @@ export abstract class Actor {
   }
 
   wasStaged (stage :Stage) {
-    this.events.emit({type: "staged", actor: this})
+    this.events.emit("staged")
     if (this._ghandlers) this.listenGestures(stage)
   }
   willUnstage (stage :Stage) {
-    this.events.emit({type: "unstaged", actor: this})
+    this.events.emit("unstaged")
   }
 
-  abstract render (batch :QuadBatch, txUpdated :boolean) :void
+  render (batch :QuadBatch, txUpdated :boolean) {
+    this.events.emit("willRender")
+    this.renderImpl(batch, txUpdated)
+    this.events.emit("didRender")
+  }
+
+  abstract renderImpl (batch :QuadBatch, txUpdated :boolean) :void
 
   dispose () {
-    this.events.emit({type: "disposed", actor: this})
+    this.events.emit("disposed")
   }
 
   private listenGestures (stage :Stage) {
     const ungesture = stage.addGestureActor(this)
-    this.events.whenOnce(ev => ev.type === "unstaged", ungesture)
+    this.events.whenOnce(ev => ev === "unstaged", ungesture)
   }
 }
 
 export class Sprite extends Actor {
   tint = Color.clone(defaultTint)
 
-  constructor (readonly tile :Tile) {
+  constructor (public tile :Tile) {
     super()
     if (tile === undefined) throw new Error(`Sprite created with undefined tile`)
   }
@@ -165,7 +168,7 @@ export class Sprite extends Actor {
     return true
   }
 
-  render (batch :QuadBatch, txUpdated :boolean) {
+  renderImpl (batch :QuadBatch, txUpdated :boolean) {
     batch.addTile(this.tile, this.tint, this.trans.data as mat2d, vec2zero, this.tile.size)
     return true
   }
@@ -187,7 +190,7 @@ export class Group extends Actor implements Parent {
   addActor (actor :Actor) {
     actor.parent = this
     insertSorted(this.actors, actor, (a, b) => a.layer - b.layer)
-    actor.events.emit({type: "added", actor})
+    actor.events.emit("added")
     const stage = this.stage
     if (stage) actor.wasStaged(stage)
   }
@@ -200,7 +203,7 @@ export class Group extends Actor implements Parent {
       if (stage) actor.willUnstage(stage)
       this.actors.splice(idx, 1)
       actor.parent = undefined
-      actor.events.emit({type: "removed", actor})
+      actor.events.emit("removed")
       if (dispose) actor.dispose()
     }
   }
@@ -216,7 +219,7 @@ export class Group extends Actor implements Parent {
     for (const actor of this.actors) actor.update(dt)
   }
 
-  render (batch :QuadBatch, txUpdated :boolean) {
+  renderImpl (batch :QuadBatch, txUpdated :boolean) {
     const trans = this.trans
     for (const actor of this.actors) {
       const actorTxUpdated = txUpdated || actor.trans.dirty
