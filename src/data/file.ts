@@ -3,7 +3,8 @@ import * as fs from "fs"
 import {TextEncoder, TextDecoder} from "util"
 
 import {UUID} from "../core/uuid"
-import {Record} from "../core/data"
+import {Data, Record} from "../core/data"
+import {Base64} from "../core/basex"
 import {MutableMap} from "../core/rcollect"
 import {Path, PathMap} from "../core/path"
 import {Encoder, Decoder, SyncSet, SyncMap, ValueType, setTextCodec} from "../core/codec"
@@ -16,6 +17,28 @@ import {AbstractDataStore, Resolved, Resolver} from "./server"
 const DebugLog = false
 
 setTextCodec(() => new TextEncoder() as any, () => new TextDecoder() as any)
+
+const encoder = new Encoder()
+
+function dataToBase64 (value :Data) :string {
+  encoder.addValue(value, "data")
+  return Base64.encode(encoder.finish())
+}
+
+function dataFromBase64 (encoded :string) :Data {
+  const decoder = new Decoder(Base64.decode(encoded))
+  return decoder.getValue("data") as Data
+}
+
+function recordToBase64 (value :Record) :string {
+  encoder.addValue(value, "record")
+  return Base64.encode(encoder.finish())
+}
+
+function recordFromBase64 (encoded :string) :Record {
+  const decoder = new Decoder(Base64.decode(encoded))
+  return decoder.getValue("record") as Record
+}
 
 function valueToJSON (value :any, vtype :ValueType) :any {
   switch (vtype) {
@@ -33,8 +56,8 @@ function valueToJSON (value :any, vtype :ValueType) :any {
   case "string": return value as string
   case "timestamp": return value.millis
   case "uuid": return value as UUID // UUID is string in JS
-  case "data": return value
-  case "record": return value
+  case "data": return dataToBase64(value)
+  case "record": return recordToBase64(value)
   }
 }
 
@@ -54,8 +77,8 @@ function valueFromJSON (value :any, vtype :ValueType) :any {
   case "string": return value as string
   case "timestamp": return new Timestamp(value as number)
   case "uuid": return value as string // UUID is a string in JS and Firestore
-  case "data": return value
-  case "record": return value
+  case "data": return dataFromBase64(value)
+  case "record": return recordFromBase64(value)
   }
 }
 
