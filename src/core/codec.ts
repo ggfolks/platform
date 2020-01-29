@@ -480,7 +480,7 @@ export class Decoder {
   getByteArray () {
     const size = this.getSize32()
     const pos = this.prepGet(size)
-    return new Uint8Array(this.source.buffer, pos, size)
+    return new Uint8Array(this.source.buffer, this.source.byteOffset+pos, size)
   }
 
   getData () {
