@@ -3,14 +3,14 @@ import * as fs from "fs"
 import {TextEncoder, TextDecoder} from "util"
 
 import {UUID} from "../core/uuid"
-import {Data, Record} from "../core/data"
-import {Base64} from "../core/basex"
+import {Record} from "../core/data"
+import {Mutable} from "../core/react"
 import {MutableMap} from "../core/rcollect"
 import {Path, PathMap} from "../core/path"
-import {Encoder, Decoder, SyncSet, SyncMap, ValueType, setTextCodec} from "../core/codec"
-import {Timestamp, log} from "../core/util"
-import {MapMeta, isPersist} from "./meta"
-import {SyncMsg, ObjType} from "./protocol"
+import {Encoder, Decoder, setTextCodec} from "../core/codec"
+import {log} from "../core/util"
+import {isPersist} from "./meta"
+import {SyncMsg} from "./protocol"
 import {DMutable, DObject, DObjectType} from "./data"
 import {AbstractDataStore, Resolved, Resolver} from "./server"
 
@@ -18,160 +18,103 @@ const DebugLog = false
 
 setTextCodec(() => new TextEncoder() as any, () => new TextDecoder() as any)
 
-const encoder = new Encoder()
-
-function dataToBase64 (value :Data) :string {
-  encoder.addValue(value, "data")
-  return Base64.encode(encoder.finish())
-}
-
-function dataFromBase64 (encoded :string) :Data {
-  const decoder = new Decoder(Base64.decode(encoded))
-  return decoder.getValue("data") as Data
-}
-
-function recordToBase64 (value :Record) :string {
-  encoder.addValue(value, "record")
-  return Base64.encode(encoder.finish())
-}
-
-function recordFromBase64 (encoded :string) :Record {
-  const decoder = new Decoder(Base64.decode(encoded))
-  return decoder.getValue("record") as Record
-}
-
-function valueToJSON (value :any, vtype :ValueType) :any {
-  switch (vtype) {
-  case "undefined": return null
-  case "boolean": return value as boolean
-  case "int8":
-  case "int16":
-  case "int32":
-  case "size8":
-  case "size16":
-  case "size32":
-  case "float32":
-  case "float64":
-  case "number": return value as number
-  case "string": return value as string
-  case "timestamp": return value.millis
-  case "uuid": return value as UUID // UUID is string in JS
-  case "data": return dataToBase64(value)
-  case "record": return recordToBase64(value)
-  }
-}
-
-function valueFromJSON (value :any, vtype :ValueType) :any {
-  switch (vtype) {
-  case "undefined": return undefined
-  case "boolean": return value as boolean
-  case "int8":
-  case "int16":
-  case "int32":
-  case "size8":
-  case "size16":
-  case "size32":
-  case "float32":
-  case "float64":
-  case "number": return value as number
-  case "string": return value as string
-  case "timestamp": return new Timestamp(value as number)
-  case "uuid": return value as string // UUID is a string in JS and Firestore
-  case "data": return dataFromBase64(value)
-  case "record": return recordFromBase64(value)
-  }
-}
-
-// TODO: do we want fromSync to be true in here?
-function setFromJSON<E> (elems :any[], etype :ValueType, into :SyncSet<E>) {
-  const tmp = new Set<E>()
-  for (const elem of elems) tmp.add(valueFromJSON(elem, etype))
-  for (const elem of into) if (!tmp.has(elem)) into.delete(elem, true)
-  for (const elem of tmp) into.add(elem, true)
-}
-
-function setToJSON<E> (set :Set<E>, etype :ValueType) :any[] {
-  const data = []
-  for (const elem of set) data.push(valueToJSON(elem, etype))
-  return data
-}
-
-function mapFromJSON<V> (data :any, vtype :ValueType, into :SyncMap<string,V>) {
-  const keys = [], vals :V[] = []
-  for (const key in data) {
-    keys.push(key)
-    vals.push(valueFromJSON(data[key], vtype))
-  }
-  for (const key of into.keys()) if (!keys.includes(key)) into.delete(key, true)
-  for (let ii = 0; ii < keys.length; ii += 1) into.set(keys[ii], vals[ii], true)
-}
-
-function mapToJSON<V> (map :Map<string,V>, meta :MapMeta) :Record {
-  const data :Record = {}
-  for (const [key, value] of map) data[key] = valueToJSON(value, meta.vtype)
-  return data
-}
-
-function applyData (obj :DObject, data :Record) {
+export function addObject (enc :Encoder, obj :DObject) {
   for (const meta of obj.metas) {
     if (!isPersist(meta)) continue
-    const value = data[meta.name] as any
-    if (value === undefined) continue // TEMP: todo, handle undefined `value` props
     const prop = obj[meta.name]
     switch (meta.type) {
-    case "value": (prop as DMutable<any>).update(valueFromJSON(value, meta.vtype), true) ; break
-    case "set": setFromJSON(value, meta.etype, (prop as SyncSet<any>)) ; break
-    case "map": mapFromJSON(value, meta.vtype, (prop as SyncMap<string,any>)) ; break
+    case "value":
+      enc.addValue(meta.index, "size8")
+      enc.addValue((prop as Mutable<any>).current, meta.vtype)
+      break
+    case "set":
+      enc.addValue(meta.index, "size8")
+      enc.addSet((prop as Set<any>), meta.etype)
+      break
+    case "map":
+      enc.addValue(meta.index, "size8")
+      enc.addMap((prop as Map<any, any>), meta.ktype, meta.vtype)
+      break
+    case "collection": break
+    case "queue": break
     }
   }
+  enc.addValue(255, "size8")
+}
+
+function getObject (dec :Decoder, into :DObject) :DObject {
+  const errors :Error[] = []
+  while (true) {
+    const idx = dec.getValue("size8")
+    if (idx === 255) break
+    const meta = into.metas[idx]
+    if (!meta) throw new Error(log.format("Missing object meta", "obj", into, "idx", idx))
+    const prop = into[meta.name]
+    switch (meta.type) {
+    case "value":
+      const nvalue = dec.getValue(meta.vtype)
+      try { (prop as DMutable<any>).update(nvalue, true) }
+      catch (err) { errors.push(err) }
+      break
+    case "set":
+      dec.syncSet(meta.etype, (prop as Set<any>), errors)
+      break
+    case "map":
+      dec.syncMap(meta.ktype, meta.vtype, (prop as Map<any, any>), errors)
+      break
+    case "collection": break // TODO: anything?
+    case "queue": break // TODO: anything?
+    }
+  }
+  // these are just application errors, not decoding errors, so log them and move on
+  for (const err of errors) log.warn("Notify failure during object receive", "obj", into, err)
+  return into
 }
 
 const pathToDir = (root :string, path :Path) => P.join(root, ...path)
 const pathToFile = (root :string, path :Path, file :string) => P.join(pathToDir(root, path), file)
 
-const readData = async (file :string) => {
+const readObject = async (file :string, into :DObject) => {
+  try {
+    const buffer = await fs.promises.readFile(file)
+    const dec = new Decoder(buffer)
+    getObject(dec, into)
+  } catch (err) {
+    if (err.code !== "ENOENT") throw err
+  }
+}
+
+const writeObject = async (file :string, obj :DObject) => {
+  const enc = new Encoder()
+  addObject(enc, obj)
+  const newFile = `${file}.new`
+  await fs.promises.writeFile(newFile, enc.finish())
+  return fs.promises.rename(newFile, file)
+}
+
+const readRecord = async (file :string) => {
   try {
     const buffer = await fs.promises.readFile(file)
     const dec = new Decoder(buffer)
     return dec.getValue("record")
   } catch (err) {
-    if (err.code === "ENOENT") return {}
-    else throw err
+    if (err.code !== "ENOENT") throw err
+    else return {}
   }
 }
 
-const writeData = async (file :string, data :Record) => {
+const writeRecord = async (file :string, rec :Record) => {
   const enc = new Encoder()
-  enc.addValue(data, "record")
+  enc.addValue(rec, "record")
   const newFile = `${file}.new`
   await fs.promises.writeFile(newFile, enc.finish())
   return fs.promises.rename(newFile, file)
 }
 
 class Syncer {
-  private needsFlush = false
+  needsFlush = false
   private needsDir = true
-  constructor (readonly file :string, readonly data :Record) {}
-
-  addSync (object :DObject, sync :SyncMsg) {
-    const meta = object.metas[sync.idx], data = this.data
-    // if (DebugLog) log.debug("syncToUpdate", "path", object.path, "type", sync.type,
-    //                         "name", meta.name)
-    switch (sync.type) {
-    case ObjType.VALSET:
-      data[meta.name] = valueToJSON(sync.value, sync.vtype)
-      break
-    case ObjType.SETADD:
-    case ObjType.SETDEL:
-      data[meta.name] = setToJSON(object[meta.name], sync.etype)
-      break
-    case ObjType.MAPSET:
-    case ObjType.MAPDEL:
-      data[meta.name] = mapToJSON(object[meta.name], meta as MapMeta)
-      break
-    }
-    this.needsFlush = true
-  }
+  constructor (readonly file :string, readonly object :DObject) {}
 
   async flush () {
     if (!this.needsFlush) return
@@ -185,8 +128,8 @@ class Syncer {
       }
     }
     try {
-      if (DebugLog) log.info("Flushing object data", "file", this.file, "data", this.data)
-      await writeData(this.file, this.data)
+      if (DebugLog) log.info("Flushing object data", "file", this.file, "obj", this.object)
+      await writeObject(this.file, this.object)
     } catch (err) {
       log.warn("Failed to write data for object", "file", this.file, err)
     }
@@ -210,23 +153,21 @@ export class FileDataStore extends AbstractDataStore {
 
   async resolveData (res :Resolved, resolver? :Resolver) {
     const file = pathToFile(this.rootDir, res.object.path, "data.bin")
-    let data = {}
-    try {
-      data = await readData(file)
+    const syncer = new Syncer(file, res.object)
+    this.syncers.set(res.object.path, syncer)
+    if (resolver) resolver(res.object)
+    else try {
+      await readObject(file, res.object)
     } catch (err) {
       log.warn("Failed to resolve data", "file", file, err)
     }
-    const syncer = new Syncer(file, data)
-    this.syncers.set(res.object.path, syncer)
-    if (resolver) resolver(res.object)
-    else applyData(res.object, data)
     res.resolvedData()
   }
 
   persistSync (obj :DObject, msg :SyncMsg) {
     const syncer = this.syncers.get(obj.path)
     if (!syncer) log.warn("Missing ref for sync persist", "obj", obj)
-    else syncer.addSync(obj, msg)
+    else syncer.needsFlush = true
   }
 
   protected async resolveTableData (path :Path, table :MutableMap<UUID, Record>) {
@@ -241,7 +182,7 @@ export class FileDataStore extends AbstractDataStore {
       for (const key of keys) {
         if (!key.endsWith(".bin")) continue
         try {
-          const data = await readData(P.join(dir, key))
+          const data = await readRecord(P.join(dir, key))
           table.set(key.substring(0, key.length-5), data)
         } catch (err) {
           log.warn("Failed to read table record", "dir", dir, "key", key, err)
@@ -258,7 +199,7 @@ export class FileDataStore extends AbstractDataStore {
         if (DebugLog) log.info(
           "Writing table record", "table", path, "file", file, "data", change.value)
         try {
-          await writeData(file, change.value)
+          await writeRecord(file, change.value)
         } catch (err) {
           log.warn("Failure writing table data", "file", file, err)
         }
