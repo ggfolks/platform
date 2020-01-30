@@ -72,7 +72,10 @@ export class ThreeRenderEngine implements RenderEngine {
   private readonly _percentLoaded = Mutable.local(1)
   private _frameCount = 0
 
-  readonly renderer = new WebGLRenderer({antialias: devicePixelRatio === 1})
+  readonly renderer = new WebGLRenderer({
+    antialias: devicePixelRatio === 1,
+    powerPreference: "high-performance",
+  })
   readonly domElement = this.renderer.domElement
   readonly enableShadows = Mutable.local(true)
   readonly stats :Value<string[]>
