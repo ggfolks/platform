@@ -823,6 +823,7 @@ export class Root extends Container {
         }
         // if we click and started no interactions, clear any menu popup
         if (into.length === iacts && !!this.menuPopup.current) {
+          event.cancelBubble = true
           this.menuPopup.update(undefined)
           // if we're clearing a menu popup, recompute the hovered elements because they will
           // previously have been blocked by the menu modality

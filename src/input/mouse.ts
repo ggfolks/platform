@@ -31,9 +31,27 @@ export class Mouse implements Disposable {
     return this._lastClient
   }
 
-  /** Returns whether or not the mouse has entered the canvas. */
+  /** Returns whether or not the mouse has entered the document. */
   get entered () {
     return this._entered
+  }
+
+  /** Returns whether or not any of the buttons have been pressed on the canvas. */
+  get pressed () {
+    return (
+      this.getButtonState(0).current ||
+      this.getButtonState(1).current ||
+      this.getButtonState(2).current
+    )
+  }
+
+  /** Returns whether or not any of the buttons have been pressed on the document. */
+  get rawPressed () {
+    return (
+      this.getRawButtonState(0).current ||
+      this.getRawButtonState(1).current ||
+      this.getRawButtonState(2).current
+    )
   }
 
   constructor (private readonly _canvas :HTMLElement) {

@@ -51,18 +51,14 @@ export class Hand implements Disposable {
       mouseClient[1] < rect.top ||
       mouseClient[1] > rect.bottom
     )
-    const pressed = (
-      this.mouse.getRawButtonState(0).current ||
-      this.mouse.getRawButtonState(1).current ||
-      this.mouse.getRawButtonState(2).current
-    )
+    const pressed = this.mouse.pressed
     let pointer = this._pointers.get(MOUSE_ID)
     // remain "inside" after we've pressed the pointer inside until the pointer is released
     // remain "outside" after we've pressed the pointer outside until the pointer is released
     if (
       this.mouse.entered &&
       mouseClient &&
-      (outside ? pressed && pointer && pointer.pressed : pointer || !pressed)
+      (outside ? pressed && pointer && pointer.pressed : pointer || !this.mouse.rawPressed)
     ) {
       vec2.set(position, mouseClient[0] - rect.left, mouseClient[1] - rect.top)
       if (!(
