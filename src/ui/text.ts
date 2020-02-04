@@ -26,7 +26,8 @@ export interface LabelStyle {
 /** Defines configuration for [[Label]]. */
 export interface AbstractLabelConfig extends Element.Config {
   style :PMap<LabelStyle>
-  wrapText? :boolean
+  wrapText? :boolean,
+  spill? :number
 }
 
 /** Base class for elements that display styled text. */
@@ -62,6 +63,16 @@ export abstract class AbstractLabel extends Element {
   protected computePreferredSize (hintX :number, hintY :number, into :dim2) {
     if (this.config.wrapText) this.span.current.updateWraps(hintX, into)
     else dim2.copy(into, this.span.current.size)
+  }
+
+  protected expandBounds (hitBounds :rect, renderBounds :rect) {
+    const spill = this.config.spill
+    if (spill) {
+      renderBounds[0] -= spill
+      renderBounds[1] -= spill
+      renderBounds[2] += 2*spill
+      renderBounds[3] += 2*spill
+    }
   }
 
   protected relayout () {
