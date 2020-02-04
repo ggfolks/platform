@@ -833,6 +833,7 @@ export class Root extends Container {
 
       handleDoubleClick: (event, pos) => this.eventTarget.maybeHandleDoubleClick(event, pos),
       updateMouseHover: (event, pos) => this._updateElementsOver(pos),
+      endMouseHover: () => this._clearElementsOver(),
     })
     this.events.whenOnce(e => e === "removed", uninteract)
     this.host.update(host)

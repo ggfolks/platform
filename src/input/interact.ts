@@ -66,6 +66,9 @@ export interface InteractionProvider {
     * should use this to provide hover feedback. */
   updateMouseHover (event :MouseEvent, pos :vec2) :void
 
+  /** Called when the mouse stops hovering over a provider. */
+  endMouseHover () :void
+
   /** Called when a double click is performed in this provider's bounds.
     * @return true if the provider handled the click, false otherwise. */
   handleDoubleClick (event :MouseEvent, pos :vec2) :boolean
@@ -97,9 +100,11 @@ export class InteractionManager {
   private readonly afterDispatch :Array<() => void> = []
   private dispatching = false
   private activeTouchId :number|undefined = undefined
+  private hoveredProviders = new Set<InteractionProvider>()
+  private lastHoveredProviders = new Set<InteractionProvider>()
 
   constructor () {
-    this.disposer.add(mouseEvents("mousedown", "mousemove", "mouseup", "dblclick").
+    this.disposer.add(mouseEvents("mousedown", "mousemove", "mouseup", "mouseleave", "dblclick").
                       onEmit(ev => this.handleMouseEvent(ev)))
     this.disposer.add(touchEvents("touchstart", "touchmove", "touchcancel", "touchend").
                       onEmit(ev => this.handleTouchEvent(ev)))
@@ -117,6 +122,7 @@ export class InteractionManager {
       providers.splice(index, 0, provider)
     }
     return () => {
+      this.lastHoveredProviders.delete(provider)
       if (this.dispatching) this.afterDispatch.push(() => removeListener(providers, provider))
       else removeListener(providers, provider)
     }
@@ -155,6 +161,10 @@ export class InteractionManager {
         this.updateMouseHover(event)
         currentEditNumber += 1
       }
+      break
+
+    case "mouseleave":
+      this.clearMouseHover()
       break
 
     case "dblclick":
@@ -274,11 +284,24 @@ export class InteractionManager {
   }
 
   private updateMouseHover (event :MouseEvent) {
+    const {hoveredProviders, lastHoveredProviders} = this
     this.dispatch(p => {
       p.toLocal(event.clientX, event.clientY, pos)
       p.updateMouseHover(event, pos)
+      hoveredProviders.add(p)
       return false
     })
+    for (const provider of lastHoveredProviders) {
+      if (!hoveredProviders.has(provider)) provider.endMouseHover()
+    }
+    lastHoveredProviders.clear()
+    this.hoveredProviders = lastHoveredProviders
+    this.lastHoveredProviders = hoveredProviders
+  }
+
+  private clearMouseHover () {
+    for (const provider of this.lastHoveredProviders) provider.endMouseHover()
+    this.lastHoveredProviders.clear()
   }
 
   private dispatch (action :(p :InteractionProvider) => boolean) :boolean {

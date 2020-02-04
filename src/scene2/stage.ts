@@ -1,4 +1,4 @@
-import {Disposer, Remover, addListener, log, insertSorted} from "../core/util"
+import {Disposer, Noop, Remover, addListener, log, insertSorted} from "../core/util"
 import {dim2, mat2d, rect, vec2, vec2zero} from "../core/math"
 import {Color} from "../core/color"
 import {Emitter, Stream} from "../core/react"
@@ -280,7 +280,8 @@ export class Stage {
         }
         for (const ga of this.gactors) ga.handlePointerDown(event, pos, into)
       },
-      updateMouseHover: (event, pos) => {}, // noop
+      updateMouseHover: Noop,
+      endMouseHover: Noop,
       handleDoubleClick: (event, pos) => false, // noop
     }))
   }
