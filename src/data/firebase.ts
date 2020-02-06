@@ -17,9 +17,9 @@ import {Timestamp, log} from "../core/util"
 import {Path, PathMap} from "../core/path"
 import {Data, DataMapKey, Record} from "../core/data"
 import {UUID} from "../core/uuid"
-import {Encoder, Decoder, SyncSet, SyncMap, ValueType, setTextCodec} from "../core/codec"
+import {Encoder, Decoder, SyncSet, SyncMap, KeyType, ValueType, setTextCodec} from "../core/codec"
 import {SyncMsg, ObjType} from "./protocol"
-import {getPropMetas, isPersist} from "./meta"
+import {MapMeta, getPropMetas, isPersist} from "./meta"
 import {DObject, DObjectType, DMutable} from "./data"
 import {DataStore, Resolved, Resolver, ResolvedView} from "./server"
 
@@ -137,10 +137,27 @@ function setFromFirestore<E> (elems :any[], etype :ValueType, into :SyncSet<E>) 
   for (const elem of tmp) into.add(elem, true)
 }
 
-function mapFromFirestore<V> (data :any, vtype :ValueType, into :SyncMap<string,V>) {
+function keyToString (key :any, ktype :KeyType) :string {
+  if (ktype === "string" || ktype === "uuid") return key
+  else if (ktype === "undefined" || ktype === "null") return ""
+  else if (ktype === "timestamp") return `${(key as Timestamp).millis}`
+  else return `${key}` // numeric or boolean
+}
+
+function keyFromString (key :string, ktype :KeyType) :any {
+  if (ktype === "string" || ktype === "uuid") return key
+  else if (ktype === "undefined") return undefined
+  else if (ktype === "null") return null
+  else if (ktype === "timestamp") return new Timestamp(+key)
+  else if (ktype === "boolean") return key === "true"
+  else return +key // numeric
+}
+
+function mapFromFirestore<K,V> (data :any, ktype :KeyType, vtype :ValueType,
+                                into :SyncMap<K,V>) {
   const keys = [], vals :V[] = []
   for (const key in data) {
-    keys.push(key)
+    keys.push(keyFromString(key, ktype))
     vals.push(valueFromFirestore(data[key], vtype))
   }
   for (const key of into.keys()) if (!keys.includes(key)) into.delete(key, true)
@@ -157,7 +174,8 @@ function applySnap (snap :DocSnap, object :DObject) {
     case "value": (prop as DMutable<any>).update(
         valueFromFirestore(value, meta.vtype), true) ; break
     case "set": setFromFirestore(value, meta.etype, (prop as SyncSet<any>)) ; break
-    case "map": mapFromFirestore(value, meta.vtype, (prop as SyncMap<string,any>)) ; break
+    case "map": mapFromFirestore(
+        value, meta.ktype, meta.vtype, (prop as SyncMap<any,any>)) ; break
     default: break // nothing to sync for collection & queue props
     }
   }
@@ -200,7 +218,7 @@ const DEFAULT_FLUSH_FREQ = 60 * 1000
 
 type ValDelta = {type :"value", value :any}
 type SetDelta = {type :"set", add :Set<Data>, del :Set<Data>}
-type MapDelta = {type :"map", set :Map<DataMapKey,Data>, del :Set<DataMapKey>}
+type MapDelta = {type :"map", ktype :KeyType, set :Map<DataMapKey,Data>, del :Set<DataMapKey>}
 type Delta = ValDelta | SetDelta | MapDelta
 type Update = {[key :string] :Delta}
 
@@ -211,9 +229,10 @@ function getSetDelta (update :Update, prop :string) :SetDelta {
   else throw new Error(`Expected set delta, got ${delta.type} (for ${prop})`)
 }
 
-function getMapDelta (update :Update, prop :string) :MapDelta {
+function getMapDelta (update :Update, prop :string, ktype :KeyType) :MapDelta {
   const delta = update[prop]
-  if (!delta) return (update[prop] = {type: "map", set: new Map<DataMapKey,Data>(), del: new Set<DataMapKey>()})
+  if (!delta) return (update[prop] = {
+    type: "map", ktype, set: new Map<DataMapKey,Data>(), del: new Set<DataMapKey>()})
   else if (delta.type === "map") return delta
   else throw new Error(`Expected map delta, got ${delta.type} (for ${prop})`)
 }
@@ -249,12 +268,12 @@ class DocSyncer {
       break
     case ObjType.MAPSET:
       const setValue = valueToFirestore(sync.value, sync.vtype)
-      const setDelta = getMapDelta(update, meta.name)
+      const setDelta = getMapDelta(update, meta.name, (meta as MapMeta).ktype)
       setDelta.set.set(sync.key, setValue)
       setDelta.del.delete(sync.key)
       break
     case ObjType.MAPDEL:
-      const mdelDelta = getMapDelta(update, meta.name)
+      const mdelDelta = getMapDelta(update, meta.name, (meta as MapMeta).ktype)
       mdelDelta.set.delete(sync.key)
       mdelDelta.del.add(sync.key)
       break
@@ -288,8 +307,9 @@ class DocSyncer {
         break
 
       case "map":
-        for (const [k, v] of delta.set) data[`${key}.${k}`] = v
-        for (const k of delta.del) data[`${key}.${k}`] = FieldValue.delete()
+        const ktype = delta.ktype
+        for (const [k, v] of delta.set) data[`${key}.${keyToString(k, ktype)}`] = v
+        for (const k of delta.del) data[`${key}.${keyToString(k, ktype)}`] = FieldValue.delete()
         break
       }
     }
