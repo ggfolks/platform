@@ -20,6 +20,11 @@ export type PointerInteraction = {
   /** An optional coordinate localizer used in preference to the provider's localizer if present. */
   toLocal? :(x :number, y :number, pos :vec2) => void
 
+  /** If this is true, any other pointer interaction that started at the same time as this one will
+    * be immediately canceled. This can be used if you don't want to wait for the first pointer move
+    * to claim exclusive control over the pointer. */
+  exclusive? :boolean
+
   // allow extra stuff in interaction to allow secret side communication between handlers
   [extra :string] :any
 }
@@ -91,6 +96,17 @@ export function incrementEditNumber () {
 const pos = vec2.create()
 
 type IState = {iacts :PointerInteraction[], prov :InteractionProvider}
+
+function handleExclusive (iacts :PointerInteraction[]) :PointerInteraction[] {
+  if (iacts.length <= 1) return iacts
+  for (const iact of iacts) {
+    if (iact.exclusive) {
+      for (const ia of iacts) if (ia !== iact) ia.cancel()
+      return [iact]
+    }
+  }
+  return iacts
+}
 
 export class InteractionManager {
   private readonly disposer = new Disposer()
@@ -245,7 +261,7 @@ export class InteractionManager {
       try {
         p.handlePointerDown(event, pos, niacts)
         if (niacts.length > 0) {
-          this.istate[button] = {iacts: niacts, prov: p}
+          this.istate[button] = {iacts: handleExclusive(niacts), prov: p}
           return true
         }
       } catch (err) {
