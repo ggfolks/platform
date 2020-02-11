@@ -212,26 +212,26 @@ export abstract class DataStore {
 export abstract class AbstractDataStore extends DataStore {
   protected readonly tables = new PathMap<MutableMap<UUID, Record>>()
 
-  createRecord (path :Path, key :UUID, data :Record) {
-    const table = this.resolveTable(path)
+  async createRecord (path :Path, key :UUID, data :Record) {
+    const table = await this.resolveTable(path)
     if (table.has(key)) log.warn(
       "createRecord already exists", "path", path, "key", key, "data", data)
     else table.set(key, data)
   }
-  updateRecord (path :Path, key :UUID, data :Record, merge :boolean) {
-    const table = this.resolveTable(path)
+  async updateRecord (path :Path, key :UUID, data :Record, merge :boolean) {
+    const table = await this.resolveTable(path)
     if (!table.has(key)) log.warn(
       "updateRecord does not exist", "path", path, "key", key, "data", data)
     else if (merge) table.update(key, prev => mergeConfig(prev!, data))
     else table.set(key, data)
   }
-  deleteRecord (path :Path, key :UUID) {
-    const table = this.resolveTable(path)
+  async deleteRecord (path :Path, key :UUID) {
+    const table = await this.resolveTable(path)
     table.delete(key)
   }
 
-  resolveViewData (res :ResolvedView) {
-    const table = this.resolveTable(res.tpath)
+  async resolveViewData (res :ResolvedView) {
+    const table = await this.resolveTable(res.tpath)
     const unlisten = table.onChange(change => {
       switch (change.type) {
       case "set":
@@ -249,13 +249,13 @@ export abstract class AbstractDataStore extends DataStore {
     res.resolvedRecords()
   }
 
-  protected resolveTableData (path :Path, table :MutableMap<UUID, Record>) {}
+  protected async resolveTableData (path :Path, table :MutableMap<UUID, Record>) {}
 
-  private resolveTable (path :Path) :MutableMap<UUID, Record> {
+  private async resolveTable (path :Path) :Promise<MutableMap<UUID, Record>> {
     let table = this.tables.get(path)
     if (!table) {
       this.tables.set(path, table = MutableMap.local<UUID, Record>())
-      this.resolveTableData(path, table)
+      await this.resolveTableData(path, table)
     }
     return table
   }

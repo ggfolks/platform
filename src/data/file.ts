@@ -174,6 +174,7 @@ export class FileDataStore extends AbstractDataStore {
     const dir = pathToDir(this.rootDir, path)
     try {
       await fs.promises.mkdir(dir, {recursive: true})
+      if (DebugLog) log.info("Created directory for table", "tpath", path, "tdir", dir)
     } catch (err) {
       log.warn("Failed to create table directory", "dir", dir, err)
     }
