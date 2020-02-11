@@ -20,10 +20,19 @@ export type PointerInteraction = {
   /** An optional coordinate localizer used in preference to the provider's localizer if present. */
   toLocal? :(x :number, y :number, pos :vec2) => void
 
-  /** If this is true, any other pointer interaction that started at the same time as this one will
-    * be immediately canceled. This can be used if you don't want to wait for the first pointer move
-    * to claim exclusive control over the pointer. */
-  exclusive? :boolean
+  /** If defined, this specifies an "exclusivity group" for this interaction. All actions except the
+    * highest `priority` action(s) in an exclusivity group will be immediately canceled.
+    *
+    * This can be used if you need to adjudicate exclusivity before the first pointer move event is
+    * dispatched. It is also useful for adjudicating between a subset of interactions that should
+    * not overlap, while allowing other interactions to proceed. For example two drag interactions
+    * can be tagged with `drag` exclusivity, which still allows a third tap interaction to overlap
+    * with whichever of the drag interactions that took priority. */
+  exclusive? :string
+
+  /** Used in conjunction with `exclusive` to determine which conflicting interaction is used.
+    * If not specified, an interaction's priority is `0`. */
+  priority? :number
 
   // allow extra stuff in interaction to allow secret side communication between handlers
   [extra :string] :any
@@ -99,10 +108,19 @@ type IState = {iacts :PointerInteraction[], prov :InteractionProvider}
 
 function handleExclusive (iacts :PointerInteraction[]) :PointerInteraction[] {
   if (iacts.length <= 1) return iacts
+  const prios = new Map<string, number>()
   for (const iact of iacts) {
-    if (iact.exclusive) {
-      for (const ia of iacts) if (ia !== iact) ia.cancel()
-      return [iact]
+    if (iact.exclusive !== undefined) prios.set(iact.exclusive, iact.priority || 0)
+  }
+  for (let ii = 0; ii < iacts.length; ii += 1) {
+    const iact = iacts[ii]
+    if (iact.exclusive === undefined) continue
+    const prio = iact.priority || 0, max = prios.get(iact.exclusive) || 0
+    if (prio < max) {
+      log.info("Canceling additional " + iact.exclusive + " iact (" + prio + ").")
+      iact.cancel()
+      iacts.splice(ii, 1)
+      ii -= 1
     }
   }
   return iacts
