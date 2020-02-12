@@ -117,7 +117,6 @@ function handleExclusive (iacts :PointerInteraction[]) :PointerInteraction[] {
     if (iact.exclusive === undefined) continue
     const prio = iact.priority || 0, max = prios.get(iact.exclusive) || 0
     if (prio < max) {
-      log.info("Canceling additional " + iact.exclusive + " iact (" + prio + ").")
       iact.cancel()
       iacts.splice(ii, 1)
       ii -= 1
