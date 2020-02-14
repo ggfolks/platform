@@ -48,6 +48,8 @@ export const toDegree = (radians :number) => radians * radiansToDegrees
 
 export class dim2 extends Float32Array {
 
+  static zero = dim2.create()
+
   static create () :dim2 {
     return new Float32Array(2)
   }
