@@ -36,6 +36,8 @@ export abstract class Actor {
   enabled = true
   visible = true
 
+  get interactive () { return this.visible && this.enabled }
+
   get requireParent () :Parent {
     const parent = this.parent
     if (parent === undefined) throw new Error(`Parent expected (${this})`)
@@ -280,7 +282,9 @@ export class Stage {
           const iact = gh(event, pos)
           if (iact) into.push(iact)
         }
-        for (const ga of this.gactors) ga.handlePointerDown(event, pos, into)
+        for (const ga of this.gactors) {
+          if (ga.interactive) ga.handlePointerDown(event, pos, into)
+        }
       },
       updateMouseHover: Noop,
       endMouseHover: Noop,
