@@ -499,7 +499,6 @@ export abstract class AbstractText extends Control {
 
   protected onEnter () {
     this._onEnter()
-    this.blur()
   }
 
   protected onEscape () {
