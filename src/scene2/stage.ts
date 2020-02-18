@@ -175,6 +175,8 @@ export class Sprite extends Actor {
 
   onClick (fn :(ev :MouseEvent|TouchEvent, pos :vec2) => void) :Remover {
     return this.addGestureHandler((ev, pos) => this.containsLocal(pos) ? {
+      exclusive: "click",
+      priority: this.layer,
       move: (ev, pos) => false,
       release: (ev, pos) => {
         if (this.containsLocal(pos)) fn(ev, pos)
