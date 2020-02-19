@@ -389,8 +389,8 @@ export class Scroller extends TransformedContainer {
 
   /** Scrolls to the specified offset from the top/left-most scroll position. */
   scrollTo (offset :number, animate = true) {
-    if (!animate) this._updateAxisOffset(offset)
-    else this.setAnim(new TweenAnim(this, offset, Easing.quadIn))
+    if (animate) this.setAnim(new TweenAnim(this, offset, Easing.quadIn))
+    else this.root.clock.once(_ => this._updateAxisOffset(offset))
   }
 
   /** Scrolls to the top/left-most scroll position. */
