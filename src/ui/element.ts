@@ -69,6 +69,8 @@ export function getAncestor<P> (
   return parent
 }
 
+enum VPhase { NONE = 0, LAYOUT, VALIDATE }
+
 /** The basic building block of UIs. Elements have a bounds, are part of a UI hierarchy (have a
   * parent, except for the root element), and participate in the cycle of invalidation, validation
   * and rendering. */
@@ -78,7 +80,7 @@ export abstract class Element implements Disposable {
   protected readonly _valid = Mutable.local(false)
   protected readonly _styleScope? :Element.StyleScope
   protected readonly disposer = new Disposer()
-  protected _validating = false
+  protected _validating = VPhase.NONE
 
   readonly parent :Element|undefined
   readonly visible :Value<boolean>
@@ -130,7 +132,7 @@ export abstract class Element implements Disposable {
 
   get root () :Root { return this.requireParent.root }
   get valid () :Value<boolean> { return this._valid }
-  get validating () :boolean { return this._validating }
+  get validating () :boolean { return this._validating !== VPhase.NONE }
   get state () :Value<string> {
     return this.config.overrideParentState
       ? Value.constant(this.config.overrideParentState)
@@ -204,9 +206,12 @@ export abstract class Element implements Disposable {
 
   invalidate (dirty :boolean = true, force? :boolean) {
     if (force || (this._valid.current && this.visible.current)) {
+      const parent = this.parent
+      if (parent && parent._validating === VPhase.VALIDATE) throw new Error(
+        `Cannot invalidate element during parent validation phase ${this} / ${parent}`)
       this._valid.update(false)
       this._psize[0] = -1 // force psize recompute
-      this.parent && this.parent.invalidate(false)
+      parent && parent.invalidate(false)
       if (dirty) this.dirty()
     }
   }
@@ -218,11 +223,12 @@ export abstract class Element implements Disposable {
   validate () :boolean {
     if (this._valid.current) return false
     if (this.visible.current) {
-      this._validating = true
+      this._validating = VPhase.LAYOUT
       this.relayout()
+      this._validating = VPhase.VALIDATE
       this.applyToChildren(child => child.validate())
       this.recomputeBounds()
-      this._validating = false
+      this._validating = VPhase.NONE
     }
     this._valid.update(true)
     return true
