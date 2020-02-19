@@ -188,7 +188,7 @@ export class ClientStore implements Disposable {
     const res = this.resolved.get(path)
     if (res) return res.ref<T>()
 
-    if (DebugLog) log.debug("Resolving object", "path", path, "otype", otype)
+    if (DebugLog) log.debug("Resolving object", "path", path, "otype", otype.name)
     const nres = this.resolved.set(path, new ResolvedObject(this, path, otype))
     nres.state.whenOnce(s => s === "disposed", _ => this.resolved.delete(path))
     nres.init(this.client.state)
