@@ -164,8 +164,8 @@ export class Sprite extends Actor {
   containsLocal (pos :vec2) :boolean {
     const lx = pos[0], ly = pos[1]
     if (lx < 0 || ly < 0) return false
-    const esize = this.readSize()
-    if (lx > esize[0] || ly > esize[1]) return false
+    const tsize = this.tile.size
+    if (lx > tsize[0] || ly > tsize[1]) return false
     // TODO: other fine grained hit testing?
     return true
   }
