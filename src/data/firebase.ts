@@ -370,6 +370,7 @@ export class FirebaseDataStore extends DataStore {
           try { applySnap(snap, res.object) }
           catch (err) {
             log.warn("Failed to apply snapshot", "obj", res.object, err)
+            // TODO: put object in error state? or only if this is the initial snapshot
           }
         }
         // the first time we hear back from Firebase, the sync doc may not exist; in that case we
