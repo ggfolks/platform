@@ -366,7 +366,12 @@ export class FirebaseDataStore extends DataStore {
       res.resolvedData()
     } else {
       const unlisten = ref.onSnapshot(snap => {
-        if (snap.exists) applySnap(snap, res.object)
+        if (snap.exists) {
+          try { applySnap(snap, res.object) }
+          catch (err) {
+            log.warn("Failed to apply snapshot", "obj", res.object, err)
+          }
+        }
         // the first time we hear back from Firebase, the sync doc may not exist; in that case we
         // have to tell the syncer to create it before its first sync to the doc
         else syncer.needCreate = true
