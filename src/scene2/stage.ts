@@ -228,7 +228,7 @@ export class Group extends Actor implements Parent {
     for (const actor of this.actors) {
       const actorTxUpdated = txUpdated || actor.trans.dirty
       if (actorTxUpdated) actor.trans.updateMatrix(trans)
-      if (actor.enabled && actor.visible) actor.render(batch, actorTxUpdated)
+      if (actor.visible) actor.render(batch, actorTxUpdated)
     }
   }
 
@@ -386,7 +386,7 @@ export class Stage {
   render (batch :QuadBatch) {
     const root = this.root, txUpdated = root.trans.dirty
     if (txUpdated) root.trans.updateMatrix()
-    if (root.enabled && root.visible) root.render(batch, txUpdated)
+    if (root.visible) root.render(batch, txUpdated)
   }
 
   dispose () {
