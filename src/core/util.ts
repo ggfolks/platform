@@ -211,9 +211,14 @@ export class Timestamp {
     return a.millis < b.millis ? -1 : a.millis > b.millis ? 1 : 0
   }
 
+  /** Returns `a - b` as a fractional number of `interval`s. */
+  static fdiff (a :Timestamp, b :Timestamp, interval :Interval) :number {
+    return (a.millis - b.millis)/interval.millisPer
+  }
+
   /** Returns `a - b` as a (rounded) number of `interval`s. */
   static diff (a :Timestamp, b :Timestamp, interval :Interval) :number {
-    return Math.round((a.millis - b.millis)/interval.millisPer)
+    return Math.round(Timestamp.fdiff(a, b, interval))
   }
 
   // TODO: should we use seconds + nanos like Firebase?
