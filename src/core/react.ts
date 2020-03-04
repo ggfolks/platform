@@ -124,9 +124,9 @@ export abstract class Source<T> {
   static switch<T> (sources :Source<Source<T>>) :Source<T> {
     return Subject.deriveSubject(disp => {
       let disconnect = NoopRemover
-      let unlisten = sources.onEmit(source => {
+      let unlisten = sources.onValue(source => {
         disconnect()
-        disconnect = source.onEmit(disp)
+        disconnect = source.onValue(disp)
       })
       return () => { disconnect() ; unlisten() }
     })
