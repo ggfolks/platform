@@ -61,6 +61,52 @@ export class Image extends Element {
   protected scale (size :number) { return size / this.scaleFactor }
 }
 
+/** Defines configuration for [[Canvas]] elements. */
+export interface CanvasConfig extends Element.Config {
+  type :"canvas"
+  width :number
+  height :number
+}
+
+/** Displays an image, which potentially varies based on the element state. */
+export class Canvas extends Element {
+  private readonly canvas :HTMLCanvasElement
+  private readonly rctx :CanvasRenderingContext2D
+
+  constructor (ctx :Element.Context, parent :Element, readonly config :CanvasConfig) {
+    super(ctx, parent, config)
+    const canvas = this.canvas = document.createElement("canvas")
+
+    const scale = this.root.scale
+    canvas.width = Math.ceil(scale.scaled(config.width))
+    canvas.height = Math.ceil(scale.scaled(config.height))
+    canvas.style.width = `${config.width}px`
+    canvas.style.height = `${config.height}px`
+
+    const rctx = canvas.getContext("2d")
+    if (rctx) this.rctx = rctx
+    else throw new Error(`No 2D rendering context for <canvas>?!`)
+    rctx.scale(scale.factor, scale.factor)
+  }
+
+  redraw (fn :(ctx :CanvasRenderingContext2D) => void) {
+    fn(this.rctx)
+    this.invalidate()
+  }
+
+  protected computePreferredSize (hintX :number, hintY :number, into :dim2) {
+    dim2.set(into, this.config.width, this.config.height)
+  }
+
+  protected relayout () {} // nothing needed
+
+  protected rerender (canvas :CanvasRenderingContext2D, region :rect) {
+    const {width, height} = this.config, image = this.canvas
+    canvas.drawImage(image, this.x, this.y, width, height)
+  }
+}
+
 export const ImageCatalog :Element.Catalog = {
   "image": (ctx, parent, cfg) => new Image(ctx, parent, cfg as ImageConfig),
+  "canvas": (ctx, parent, cfg) => new Canvas(ctx, parent, cfg as CanvasConfig),
 }
