@@ -577,7 +577,6 @@ export abstract class Container extends Element {
 /** The top-level of the UI hierarchy. Manages the canvas into which the UI is rendered. */
 export class Root extends Container {
   private readonly _clock = new Emitter<Clock>()
-  private readonly _scale :Scale
   private readonly _hintSize :Value<dim2>
   private readonly _minSize :Value<dim2>
   private readonly _cursorOwners = new Map<Element, string>()
@@ -589,6 +588,7 @@ export class Root extends Container {
 
   readonly canvasElem :HTMLCanvasElement = document.createElement("canvas")
   readonly canvas :CanvasRenderingContext2D
+  readonly scale :Scale
   readonly contents :Element
   readonly cursor = Mutable.local("auto")
 
@@ -625,7 +625,7 @@ export class Root extends Container {
     const canvas = this.canvasElem.getContext("2d")
     if (canvas) this.canvas = canvas
     else throw new Error(`Canvas rendering context not supported?`)
-    this._scale = config.scale ? config.scale : defScale
+    this.scale = config.scale ? config.scale : defScale
     this._hintSize = ctx.model.resolveOr(config.hintSize, defHintSize)
     this.invalidateOnChange(this._hintSize)
     this._minSize = ctx.model.resolveOr(config.minSize, defMinSize)
@@ -870,7 +870,7 @@ export class Root extends Container {
 
   protected relayout () {
     super.relayout()
-    const canvas = this.canvasElem, toPixel = this._scale
+    const canvas = this.canvasElem, toPixel = this.scale
     const scaledWidth = Math.ceil(toPixel.scaled(this.width))
     const scaledHeight = Math.ceil(toPixel.scaled(this.height))
     if (canvas.width !== scaledWidth || canvas.height !== scaledHeight) {
@@ -882,7 +882,7 @@ export class Root extends Container {
   }
 
   protected rerender (canvas :CanvasRenderingContext2D, region :rect) {
-    const sf = this._scale.factor
+    const sf = this.scale.factor
     canvas.save()
     canvas.scale(sf, sf)
     if (debugDirty) {
@@ -914,7 +914,7 @@ export class Root extends Container {
   private _updateElementsOver (pos :vec2) {
     // TODO: why are we scaling the canvas here? applyToContaining is just adding containing
     // elements to a set, surely nothing is rendering to canvas?
-    const sf = this._scale.factor
+    const sf = this.scale.factor
     this.canvas.save()
     this.canvas.scale(sf, sf)
     const {_elementsOver, _lastElementsOver} = this
