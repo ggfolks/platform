@@ -1041,6 +1041,21 @@ export class Control extends Container {
 
   handleFocus (focused :boolean) { this.focused.update(focused) }
 
+  handlePointerDown (event :MouseEvent|TouchEvent, pos :vec2, into :PointerInteraction[]) {
+    if (this.config.handlePointerDown) {
+      const iact = this.config.handlePointerDown(this, event, pos)
+      if (iact) into.push(iact)
+    } else super.handlePointerDown(event, pos, into)
+  }
+  handleWheel (event :WheelEvent, pos :vec2) :boolean {
+    return this.config.handleWheel ? this.config.handleWheel(this, event, pos) :
+      super.handleWheel(event, pos)
+  }
+  handleDoubleClick (event :MouseEvent, pos :vec2) :boolean {
+    return this.config.handleDoubleClick ? this.config.handleDoubleClick(this, event, pos) :
+      super.handleDoubleClick(event, pos)
+  }
+
   dispose (rootDisposing = false) {
     if (this.focused.current) this.blur()
     super.dispose(rootDisposing)
@@ -1065,7 +1080,7 @@ export class Control extends Container {
     return this.enabled.current && super.canHandleEvent(event, pos)
   }
 
-  protected canHandleButton (button :number) :boolean { return button === 0}
+  protected canHandleButton (button :number) :boolean { return button === 0 }
 
   /** If this control triggers an action, it must override this method to return the spec for that
     * action from its config. The control will use this to bind its enabled state to the action's
@@ -1081,6 +1096,10 @@ export namespace Control {
   /** Configuration shared by all [[Control]]s. */
   export interface Config extends Element.Config {
     enabled? :Spec<Value<boolean>>
+    handlePointerDown? :(
+      ctrl :Control, event :MouseEvent|TouchEvent, pos :vec2) => PointerInteraction|undefined
+    handleWheel? :(ctrl :Control, event :WheelEvent, pos :vec2) => boolean
+    handleDoubleClick? :(ctrl :Control, event :MouseEvent, pos :vec2) => boolean
     contents :Element.Config
   }
 
