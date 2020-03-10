@@ -62,6 +62,7 @@ export abstract class Actor {
     return this.trans.inverseTransform(into, vec2.set(into, x-rect.left, y-rect.top))
   }
 
+  // NOTE: actor gesture handlers operate in the _stage_ coordinate system
   addGestureHandler (handler :GestureHandler) :Remover {
     let handlers = this._ghandlers
     if (!handlers) {
@@ -74,13 +75,9 @@ export abstract class Actor {
   handlePointerDown (event :MouseEvent|TouchEvent, pos :vec2, into :PointerInteraction[]) {
     const handlers = this._ghandlers
     if (handlers) {
-      this.trans.inverseTransform(tmppos, pos) // convert from stage to actor coords
       for (const gh of handlers) {
-        const iact = gh(event, tmppos)
-        if (iact) {
-          iact.toLocal = (x, y, ipos) => this.toLocal(x, y, ipos)
-          into.push(iact)
-        }
+        const iact = gh(event, pos)
+        if (iact) into.push(iact)
       }
     }
   }
@@ -176,12 +173,12 @@ export class Sprite extends Actor {
   }
 
   onClick (fn :(ev :MouseEvent|TouchEvent, pos :vec2) => void) :Remover {
-    return this.addGestureHandler((ev, pos) => this.containsLocal(pos) ? {
+    return this.addGestureHandler((ev, pos) => this.contains(pos) ? {
       exclusive: "click",
       priority: this.layer,
       move: (ev, pos) => false,
       release: (ev, pos) => {
-        if (this.containsLocal(pos)) fn(ev, pos)
+        if (this.contains(pos)) fn(ev, pos)
       },
       cancel: () => {},
     } : undefined)

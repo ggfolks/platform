@@ -17,9 +17,6 @@ export type PointerInteraction = {
   /** Called if this action is canceled. This ends the interaction. */
   cancel: () => void
 
-  /** An optional coordinate localizer used in preference to the provider's localizer if present. */
-  toLocal? :(x :number, y :number, pos :vec2) => void
-
   /** If defined, this specifies an "exclusivity group" for this interaction. All actions except the
     * highest `priority` action(s) in an exclusivity group will be immediately canceled.
     *
@@ -291,8 +288,8 @@ export class InteractionManager {
   private handleMove (event :MouseEvent|TouchEvent, x :number, y :number, button :number) :boolean {
     const state = this.istate[button]
     if (!state) return false
+    state.prov.toLocal(x, y, pos)
     for (const iact of state.iacts) {
-      (iact.toLocal || state.prov.toLocal)(x, y, pos)
       if (iact.move(event, pos)) {
         // if any interaction claims the interaction, cancel all the rest
         for (const cc of state.iacts) if (cc !== iact) cc.cancel()
@@ -308,8 +305,8 @@ export class InteractionManager {
                     cancel = false) :boolean {
     const state = this.istate[button]
     if (!state) return false
+    state.prov.toLocal(x, y, pos)
     for (const iact of state.iacts) {
-      (iact.toLocal || state.prov.toLocal)(x, y, pos)
       cancel ? iact.cancel() : iact.release(event, pos)
     }
     delete this.istate[button]
