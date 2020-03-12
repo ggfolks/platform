@@ -290,12 +290,16 @@ export class InteractionManager {
     if (!state) return false
     state.prov.toLocal(x, y, pos)
     for (const iact of state.iacts) {
-      if (iact.move(event, pos)) {
-        // if any interaction claims the interaction, cancel all the rest
-        for (const cc of state.iacts) if (cc !== iact) cc.cancel()
-        state.iacts.length = 0
-        state.iacts.push(iact)
-        break
+      try {
+        if (iact.move(event, pos)) {
+          // if any interaction claims the interaction, cancel all the rest
+          for (const cc of state.iacts) if (cc !== iact) cc.cancel()
+          state.iacts.length = 0
+          state.iacts.push(iact)
+          break
+        }
+      } catch (error) {
+        log.warn("Interact choked in 'move'", "event", event, "pos", pos, "iact", iact, error)
       }
     }
     return true
@@ -307,7 +311,12 @@ export class InteractionManager {
     if (!state) return false
     state.prov.toLocal(x, y, pos)
     for (const iact of state.iacts) {
-      cancel ? iact.cancel() : iact.release(event, pos)
+      try {
+        cancel ? iact.cancel() : iact.release(event, pos)
+      } catch (error) {
+        const what = cancel ? "cancel" : "release"
+        log.warn(`Interaction choked in '${what}'`, "event", event, "pos", pos, "iact", iact, error)
+      }
     }
     delete this.istate[button]
     return true
