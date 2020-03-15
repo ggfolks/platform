@@ -1,6 +1,8 @@
 import {dim2, rect} from "../core/math"
-import {Source} from "../core/react"
+import {Buffer, Source} from "../core/react"
+import {Scale} from "../core/ui"
 import {Element} from "./element"
+import {ModelValue} from "./model"
 import {Spec} from "./style"
 
 type ImageSpec = {path :string, scaleFactor :number}
@@ -61,27 +63,17 @@ export class Image extends Element {
   protected scale (size :number) { return size / this.scaleFactor }
 }
 
-/** Defines configuration for [[Canvas]] elements. */
-export interface CanvasConfig extends Element.Config {
-  type :"canvas"
-  width :number
-  height :number
-}
-
-/** Displays an image, which potentially varies based on the element state. */
-export class Canvas extends Element {
-  private readonly canvas :HTMLCanvasElement
+export class CanvasImage implements ModelValue {
+  readonly canvas :Buffer<HTMLCanvasElement>
   private readonly rctx :CanvasRenderingContext2D
 
-  constructor (ctx :Element.Context, parent :Element, readonly config :CanvasConfig) {
-    super(ctx, parent, config)
-    const canvas = this.canvas = document.createElement("canvas")
-
-    const scale = this.root.scale
-    canvas.width = Math.ceil(scale.scaled(config.width))
-    canvas.height = Math.ceil(scale.scaled(config.height))
-    canvas.style.width = `${config.width}px`
-    canvas.style.height = `${config.height}px`
+  constructor (readonly scale :Scale, readonly width :number, readonly height :number) {
+    const canvas = document.createElement("canvas")
+    canvas.width = Math.ceil(scale.scaled(width))
+    canvas.height = Math.ceil(scale.scaled(height))
+    canvas.style.width = `${width}px`
+    canvas.style.height = `${height}px`
+    this.canvas = Buffer.create(canvas)
 
     const rctx = canvas.getContext("2d")
     if (rctx) this.rctx = rctx
@@ -89,20 +81,37 @@ export class Canvas extends Element {
     rctx.scale(scale.factor, scale.factor)
   }
 
-  redraw (fn :(ctx :CanvasRenderingContext2D) => void) {
+  render (fn :(ctx :CanvasRenderingContext2D) => void) {
     fn(this.rctx)
-    this.invalidate()
+    this.canvas.updated()
+  }
+}
+
+/** Defines configuration for [[Canvas]] elements. */
+export interface CanvasConfig extends Element.Config {
+  type :"canvas"
+  image :Spec<CanvasImage>
+}
+
+/** Displays an image, which potentially varies based on the element state. */
+export class Canvas extends Element {
+  private readonly image :CanvasImage
+
+  constructor (ctx :Element.Context, parent :Element, readonly config :CanvasConfig) {
+    super(ctx, parent, config)
+    this.image = ctx.model.resolveAs(config.image, "image")
+    this.invalidateOnChange(this.image.canvas)
   }
 
   protected computePreferredSize (hintX :number, hintY :number, into :dim2) {
-    dim2.set(into, this.config.width, this.config.height)
+    dim2.set(into, this.image.width, this.image.height)
   }
 
   protected relayout () {} // nothing needed
 
-  protected rerender (canvas :CanvasRenderingContext2D, region :rect) {
-    const {width, height} = this.config, image = this.canvas
-    canvas.drawImage(image, this.x, this.y, width, height)
+  protected rerender (ctx :CanvasRenderingContext2D, region :rect) {
+    const {canvas, width, height} = this.image
+    ctx.drawImage(canvas.current, this.x, this.y, width, height)
   }
 }
 
