@@ -11,6 +11,7 @@ import {ButtonCatalog} from "./button"
 import {CursorCatalog} from "./cursor"
 import {Dropdown} from "./dropdown"
 import {GraphCatalog} from "./graph"
+import {Grid} from "./grid"
 import {GroupCatalog} from "./group"
 import {ImageCatalog} from "./image"
 import {List} from "./list"
@@ -77,8 +78,8 @@ class StyleResolver {
 
 const catalog = [
   BoxCatalog, ButtonCatalog, Control.Catalog, CursorCatalog, Dropdown.Catalog, GraphCatalog,
-  GroupCatalog, ImageCatalog, List.Catalog, Menu.Catalog, Property.Catalog, ScrollCatalog,
-  Styler.Catalog, TabCatalog, TextCatalog, TreeCatalog,
+  Grid.Catalog, GroupCatalog, ImageCatalog, List.Catalog, Menu.Catalog, Property.Catalog,
+  ScrollCatalog, Styler.Catalog, TabCatalog, TextCatalog, TreeCatalog,
 ].reduce(Object.assign, {})
 
 export class UI {

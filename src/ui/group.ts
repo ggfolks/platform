@@ -7,7 +7,7 @@ const tmpr = rect.create()
 
 /** Groups contain multiple child elements.
   * Different subclasses of group implement different layout policies. */
-abstract class Group extends Element {
+export abstract class Group extends Element {
   protected overflowed = false
   abstract get contents () :Element[]
 
@@ -39,8 +39,6 @@ abstract class Group extends Element {
       canvas.lineWidth = 1
     }
   }
-
-  protected get defaultOffPolicy () :OffAxisPolicy { return "constrain" }
 }
 
 /** Layout constraints for absolutely-positioned elements. */
@@ -134,7 +132,19 @@ export class AbsLayout extends AbsGroup {
   }
 }
 
-class Metrics {
+/** Layout constraints for elements contained by a group that lays out along an axis. */
+export type AxisConstraints = {
+  stretch? :boolean,
+  weight? :number
+}
+
+function axisConstraints (elem :Element) :AxisConstraints {
+  return elem.config.constraints || {}
+}
+
+function axisWeight (c :AxisConstraints) :number { return c.weight || 1 }
+
+class AxisMetrics {
   count = 0
   prefWidth = 0
   prefHeight = 0
@@ -150,26 +160,15 @@ class Metrics {
   gaps (gap :number) :number { return gap * Math.max(0, this.count-1) }
 }
 
-/** Layout constraints for elements contained by a group that lays out along an axis. */
-export type AxisConstraints = {
-  stretch? :boolean,
-  weight? :number
-}
-
-function axisConstraints (elem :Element) :AxisConstraints {
-  return elem.config.constraints || {}
-}
-
-function axisWeight (c :AxisConstraints) :number { return c.weight || 1 }
-
 function computeSize (c :AxisConstraints, size :number, totalWeight :number,
                       availSize :number) :number {
   return c.stretch ? Math.round(availSize * axisWeight(c) / totalWeight) : size
 }
 
-function computeMetrics (group :Group, hintX :number, hintY :number,
-                         gap :number, vert :boolean) {
-  const m = new Metrics()
+function computeAxisMetrics (
+  group :Group, hintX :number, hintY :number, gap :number, vert :boolean
+) {
+  const m = new AxisMetrics()
   for (const elem of group.contents) {
     if (!elem.visible.current) continue
     m.count += 1
@@ -237,11 +236,20 @@ export interface AxisConfig extends Element.Config {
   offPolicy? :OffAxisPolicy
 }
 
-export abstract class VGroup extends Group {
+export abstract class AxisGroup extends Group {
+
+  constructor (ctx :Element.Context, parent :Element, readonly config :AxisConfig) {
+    super(ctx, parent, config)
+  }
+
+  protected get defaultOffPolicy () :OffAxisPolicy { return "constrain" }
+}
+
+export abstract class VGroup extends AxisGroup {
 
   protected computePreferredSize (hintX :number, hintY :number, into :dim2) {
     const gap = this.config.gap || 0
-    const m = computeMetrics(this, hintX, hintY, gap, true)
+    const m = computeAxisMetrics(this, hintX, hintY, gap, true)
     dim2.set(into, m.maxWidth, m.prefHeight + m.gaps(gap))
   }
 
@@ -250,7 +258,7 @@ export abstract class VGroup extends Group {
     const gap = this.config.gap || 0
     const bounds = this.bounds
     const left = bounds[0], top = bounds[1], width = bounds[2], height = bounds[3]
-    const m = computeMetrics(this, width, height, gap, true)
+    const m = computeAxisMetrics(this, width, height, gap, true)
     const stretchHeight = Math.max(0, height - m.gaps(gap) - m.fixHeight)
     let stretchRemain = stretchHeight
     let y = top
@@ -292,11 +300,11 @@ export class Column extends VGroup {
   }
 }
 
-export abstract class HGroup extends Group {
+export abstract class HGroup extends AxisGroup {
 
   protected computePreferredSize (hintX :number, hintY :number, into :dim2) {
     const gap = this.config.gap || 0
-    const m = computeMetrics(this, hintX, hintY, gap, false)
+    const m = computeAxisMetrics(this, hintX, hintY, gap, false)
     dim2.set(into, m.prefWidth + m.gaps(gap), m.maxHeight)
   }
 
@@ -305,7 +313,7 @@ export abstract class HGroup extends Group {
     const gap = this.config.gap || 0
     const bounds = this.bounds
     const left = bounds[0], top = bounds[1], width = bounds[2], height = bounds[3]
-    const m = computeMetrics(this, width, height, gap, false)
+    const m = computeAxisMetrics(this, width, height, gap, false)
     const stretchWidth = Math.max(0, width - m.gaps(gap) - m.fixWidth)
     let stretchRemain = stretchWidth
     let x = left
