@@ -1,7 +1,7 @@
 import {dim2, vec2, rect} from "../core/math"
 import {refEquals} from "../core/data"
 import {Noop, NoopRemover, Remover, PMap, getValue} from "../core/util"
-import {Mutable, Subject, Value} from "../core/react"
+import {Mutable, Source, Subject, Value} from "../core/react"
 import {PointerInteraction} from "../input/interact"
 import {Control, Element, Host} from "./element"
 import {Spec, FontConfig, Paint, PaintConfig, ShadowConfig, Span, EmptySpan} from "./style"
@@ -36,7 +36,7 @@ export abstract class AbstractLabel extends Element {
   readonly selection = Mutable.localData<[number,number]>([0,0])
   readonly span = this.observe(EmptySpan)
   readonly selFill = this.observe<Paint|undefined>(undefined)
-  readonly text :Value<string>
+  readonly text :Source<string>
   private selOff = 0
   private selWid = 0
   // sneaky toggle that allows `text` element to disable rendering of its internal label when it is
@@ -58,7 +58,8 @@ export abstract class AbstractLabel extends Element {
                                         f => ctx.style.resolvePaint(f), undefined))
   }
 
-  protected abstract resolveText (ctx :Element.Context, config :AbstractLabelConfig) :Value<string>
+  protected abstract resolveText (
+    ctx :Element.Context, config :AbstractLabelConfig) :Source<string>
 
   protected computePreferredSize (hintX :number, hintY :number, into :dim2) {
     if (this.config.wrapText) this.span.current.updateWraps(hintX, into)
@@ -116,7 +117,7 @@ export abstract class AbstractLabel extends Element {
 /** Defines configuration for [[Label]]. */
 export interface LabelConfig extends AbstractLabelConfig {
   type :"label"
-  text? :Spec<Value<string>>
+  text? :Spec<Source<string>>
 }
 
 /** Displays styled text. */
@@ -359,16 +360,16 @@ export abstract class AbstractText extends Control {
 
   handlePointerDown (event :MouseEvent|TouchEvent, pos :vec2, into :PointerInteraction[]) {
     // figure out where the click landed
-    const label = this.label, dp = pos[0] - label.x - label.xoffset.current
+    const {label, textState} = this, dp = pos[0] - label.x - label.xoffset.current
     const doff = label.span.current.computeOffset(dp)
 
     // update selection depending on number of clicks
     let sel :Selector
     switch (event.detail) {
-    case 1: sel = charSelector(label.text.current, doff, this.textState) ; break
-    case 2: sel = wordSelector(label.text.current, doff, this.textState) ; break
+    case 1: sel = charSelector(textState.text.current, doff, textState) ; break
+    case 2: sel = wordSelector(textState.text.current, doff, textState) ; break
     default:
-    case 3: sel = allSelector(label.text.current, doff, this.textState) ; break
+    case 3: sel = allSelector(textState.text.current, doff, textState) ; break
     }
 
     // if we're already focused, jiggle the cursor blinker so it restarts; this ensures that the
@@ -383,7 +384,7 @@ export abstract class AbstractText extends Control {
       move: (event, pos) => {
         const mp = pos[0] - label.x - label.xoffset.current
         if (dp !== mp) claim = true
-        sel(label.span.current.computeOffset(mp), this.textState)
+        sel(label.span.current.computeOffset(mp), textState)
         return claim
       },
       release: Noop,
