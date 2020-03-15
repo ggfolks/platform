@@ -1,5 +1,5 @@
 import {Remover, PMap, log} from "../core/util"
-import {Command, Model} from "./model"
+import {Command, Model, ModelValue} from "./model"
 
 export const ShiftMask = 1 << 0
 export const AltMask   = 1 << 1
@@ -110,7 +110,7 @@ export class Keymap {
     for (const layer of this.layers) {
       const binding = layer.getBinding(event)
       if (binding) {
-        const action = layer.model.resolveOpt(binding)
+        const action = layer.model.resolveOpt<ModelValue>(binding)
         if (action instanceof Command) {
           action.enabled.once(enabled => {
             if (enabled) action.action(...args)

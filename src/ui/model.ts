@@ -2,11 +2,14 @@ import {Noop} from "../core/util"
 import {Source, Value, Mutable} from "../core/react"
 import {RMap, MutableMap} from "../core/rcollect"
 
+/** Implemented by things that can be resolved from models. */
+export interface ModelValue {}
+
 /** Model actions executed in response to user actions (like button clicks). */
 export type Action = (...args :any) => void
 
 /** An action that carries its enabled state with it. */
-export class Command {
+export class Command implements ModelValue {
   static Noop = new Command(Noop, Value.true)
   constructor (readonly action :Action, readonly enabled :Value<boolean> = Value.true) {}
 }
@@ -15,9 +18,9 @@ export class Command {
 export const NoopAction :Action = () => Noop
 
 /** Defines the allowed values in a model. */
-export type ModelValue = Source<unknown> | Action | Command | ElementsModel<any>
+export type Resolvable = Source<unknown> | Action | ModelValue
 
-type ModelElem = ModelValue | ModelData
+type ModelElem = Resolvable | ModelData
 
 /** Defines a POJO that contains model values. */
 export interface ModelData { [key :string] :ModelElem }
@@ -32,7 +35,7 @@ export class MissingConfig extends Error {
   constructor (name :string) { super(`Missing config '${name}'`) }
 }
 
-function find<V extends ModelValue> (data :ModelData, path :string[], pos :number, defval? :V) :V {
+function find<V extends Resolvable> (data :ModelData, path :string[], pos :number, defval? :V) :V {
   const value = findOpt(data, path, pos)
   if (!value) {
     if (defval) return defval
@@ -42,7 +45,7 @@ function find<V extends ModelValue> (data :ModelData, path :string[], pos :numbe
   else return value as V
 }
 
-function findOpt<V extends ModelValue> (data :ModelData, path :string[], pos :number) :V|undefined {
+function findOpt<V extends Resolvable> (data :ModelData, path :string[], pos :number) :V|undefined {
   const next = data[path[pos]]
   if (!next) return
   // TODO: would be nice if we could check the types here and freak out if we hit something
@@ -64,14 +67,14 @@ export class Model {
 
   /** Resolves the model component at `path`.
     * @throws `Error` if no component exists at that path. */
-  resolve<V extends ModelValue> (path :string) :V {
+  resolve<V extends Resolvable> (path :string) :V {
     return find(this.data, path.split("."), 0)
   }
 
   /** Resolves the model component identified by `spec`. This may be an immediate value of the
     * desired type or be a path which will be resolved from this model's data.
     * @throws `Error` if `spec` is a model component path and no component exists at that path. */
-  resolveAs<V extends ModelValue> (spec :Spec<V>, name :string) :V {
+  resolveAs<V extends Resolvable> (spec :Spec<V>, name :string) :V {
     if (spec === undefined) throw new MissingConfig(name)
     return (typeof spec !== "string") ? spec : find(this.data, spec.split("."), 0)
   }
@@ -79,7 +82,7 @@ export class Model {
   /** Resolves the model component identified by `spec`. This may be an immediate value of the
     * desired type or be a path which will be resolved from this model's data. If `spec` is
     * undefined or references a missing model element, `defval` will be returned. */
-  resolveOr<V extends ModelValue> (spec :Spec<V>|undefined, defval :V) :V {
+  resolveOr<V extends Resolvable> (spec :Spec<V>|undefined, defval :V) :V {
     if (spec === undefined) return defval
     return (typeof spec !== "string") ? spec : find(this.data, spec.split("."), 0, defval)
   }
@@ -87,7 +90,7 @@ export class Model {
   /** Resolves the model component identified by `spec`. The may be an immediate value of the
     * desired type or be a path which will be resolved from this model's data. Returns `undefined`
     * if 'spec' is undefined or any of its path's model elements are missing. */
-  resolveOpt<V extends ModelValue> (spec :Spec<V>|undefined) :V|undefined {
+  resolveOpt<V extends Resolvable> (spec :Spec<V>|undefined) :V|undefined {
     return (typeof spec !== "string") ? spec : findOpt(this.data, spec.split("."), 0)
   }
 
@@ -127,7 +130,7 @@ export type ModelKey = number|string
 /** Defines the model for a dynamic UI component (like `List`). The component will display some
   * dynamic list of elements which are identified by the `keys` array, and the data models for each
   * individual element are fetched via `resolve`. */
-export interface ElementsModel<K> {
+export interface ElementsModel<K> extends ModelValue {
 
   /** The keys identifying the elements in this model. */
   keys :Source<Iterable<K>>
