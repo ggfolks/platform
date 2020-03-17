@@ -247,6 +247,14 @@ export class Timestamp {
 // TODO: replace JSON.stringify with dataToString
 // TODO: allow log filtering (>= level), capture & rerouting
 
+const termColors = {
+  brightRed: "\u001b[31;1m",
+  brightMagenta: "\u001b[35;1m",
+  brightCyan: "\u001b[36;1m",
+  reset: "\u001b[0m",
+}
+const useColors = developMode && "context" in console // console.context only defined in node
+
 export type Level = "debug" | "info" | "warn" | "error"
 
 export class Logger {
@@ -291,14 +299,34 @@ export class Logger {
   }
 
   logAt (level :Level, msg :string, ...args :any[]) {
-    let logfn = console.log
+    let logfn = console.log, pre = "", post = ""
     switch (level) {
-    case "error": logfn = console.error ; break
-    case "warn": logfn = console.warn ; break
-    case "info": logfn = console.info ; break
+    case "error":
+      logfn = console.error
+      if (useColors) {
+        pre = termColors.brightRed
+        post = termColors.reset
+      }
+      break
+    case "warn":
+      logfn = console.warn
+      if (useColors) {
+        pre = termColors.brightMagenta
+        post = termColors.reset
+      }
+      break
+    case "info":
+      logfn = console.info
+      break
+    case "debug":
+      if (useColors) {
+        pre = termColors.brightCyan
+        post = termColors.reset
+      }
+      break
     }
     const fargs = this.formatArgs(...args)
-    logfn(fargs.length > 0 ? `${msg} [${fargs}]` : msg)
+    logfn(fargs.length > 0 ? `${pre}${msg}${post} [${fargs}]` : msg)
     if (args.length % 2 === 1) logfn(args[args.length-1])
   }
 
@@ -307,7 +335,6 @@ export class Logger {
   info (msg :string, ...args :any[]) { this.logAt("info" , msg, ...args) }
   warn (msg :string, ...args :any[]) { this.logAt("warn" , msg, ...args) }
   error (msg :string, ...args :any[]) { this.logAt("error", msg, ...args) }
-
 }
 
 export const log = new Logger()
