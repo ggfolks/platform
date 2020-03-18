@@ -257,36 +257,45 @@ const useColors = developMode && "context" in console // console.context only de
 
 export type Level = "debug" | "info" | "warn" | "error"
 
+function format (val :any, maxDecimals :number|undefined) :string {
+  function formatArgs (values :Iterable<string>, pre = "", post = "") :string {
+    let str = pre, ii = 0
+    for (const value of values) {
+      if (ii > 0) str += ","
+      str += format(value, maxDecimals)
+      ii += 1
+    }
+    return str + post
+  }
+
+  try {
+    const vtype = typeof val
+    switch (vtype) {
+    case "undefined": return "<undef>"
+    case "string": return val
+    case "number":
+      if (maxDecimals === undefined) return String(val)
+      else return val.toLocaleString(undefined, {maximumFractionDigits: maxDecimals})
+    case "object":
+      if (Array.isArray(val)) return formatArgs(val, "[", "]")
+      else if (val instanceof Set) return formatArgs(val, "(", ")")
+      else if (val instanceof Map) return formatArgs(
+        Array.from(val).map(kv => `${kv[0]}=${format(kv[1], maxDecimals)}`), "{", "}")
+      else if (Object.getPrototypeOf(val).toString !== Object.prototype.toString) return String(val)
+      else return JSON.stringify(val)
+    default: return val.toString()
+    }
+  } catch (err) {
+    return String(val)
+  }
+}
+
 export class Logger {
 
   constructor (readonly maxDecimals? :number) {}
 
   formatArg (val :any) :string {
-    try {
-      const vtype = typeof val
-      switch (vtype) {
-      case "undefined": return "<undef>"
-      case "string": return val
-      case "number":
-        const maxDecimals = this.maxDecimals
-        if (maxDecimals === undefined) return String(val)
-        else return val.toLocaleString(undefined, {maximumFractionDigits: maxDecimals})
-      case "object":
-        if (Array.isArray(val)) {
-          let str = ""
-          for (let ii = 0, ll = val.length; ii < ll; ii += 1) {
-            if (ii > 0) str += ","
-            str += this.formatArg(val[ii])
-          }
-          return str
-        }
-        else if (Object.getPrototypeOf(val).toString !== Object.prototype.toString) return String(val)
-        else return JSON.stringify(val)
-      default: return val.toString()
-      }
-    } catch (err) {
-      return String(val)
-    }
+    return format(val, this.maxDecimals)
   }
 
   formatArgs (...args :any[]) :string {
