@@ -80,7 +80,7 @@ export function arrayContentsRefEquals<T> (a :Array<T>, b :Array<T>) {
  * Tests the structural equality of two data values. This compares all elements of arrays, sets,
  * maps and record valued subproperties.
  */
-export function dataEquals (a :Data, b :Data) :boolean {
+export function dataEquals (a :Data|undefined, b :Data|undefined) :boolean {
   if (a === b) return true
   if (typeof a !== "object" || typeof b !== "object" || a === null || b === null) return false
   if (Array.isArray(a)) {
