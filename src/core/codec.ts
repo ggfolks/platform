@@ -568,7 +568,10 @@ export class Decoder {
     }
     for (let ii = 0; ii < size; ii += 1) {
       try { into.set(keys[ii], vals[ii], true) }
-      catch (err) { errors.push(err) }
+      catch (err) {
+        log.warn("Failed to sync set", "key", keys[ii], "value", vals[ii])
+        errors.push(err)
+      }
     }
   }
 
