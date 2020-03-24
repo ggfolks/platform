@@ -58,7 +58,7 @@ export class Anim {
       while (remain <= 0) {
         curidx += 1
         // apply the leftover delta to the next animation
-        if (curidx < anims.length) remain = anims[curidx](dt+remain)
+        if (curidx < anims.length) remain = anims[curidx](-remain)
         else break
       }
       return remain
