@@ -63,6 +63,79 @@ export type Spec<T> = string | T
   * components and the game/application logic. */
 export class Model {
 
+  /** Creates an elements model that computes each element model via a `fn` of its `key`. */
+  static make<K extends ModelKey> (
+    keys :Source<Iterable<K>>, fn :(key :K) => ModelData
+  ) :ElementsModel<K> {
+    return {keys, resolve: resolver(fn)}
+  }
+
+  /** Provides element models from a model data object. The keys default to the keys of the data
+    * object in iteration order, but a custom keys value can be provided. */
+  static fromData (
+    data :ModelData,
+    keys :Value<string[]> = Value.constant(Object.keys(data))
+  ) :ReadableElementsModel<string> {
+    return {
+      keys: keys as any as Value<Iterable<string>>,
+      resolve: resolver(key => data[key] as ModelData)
+    }
+  }
+
+  /** Creates an elements model from the supplied `map` and model data `maker` function. The `maker`
+    * function should project the needed values from the map value using `Value.map`. For example:
+    *
+    * ```ts
+    * const map :RMap<string, {name :string, age :number}> = ...
+    * const keys = map.keysValue // could opt to sort or filter or whatnot
+    * const model = Model.fromMap(keys, map, v => ({
+    *   name: v.map(r => r.name), age: v.map(r => r.age)
+    * }))
+    * ```
+    *
+    * Note: the maker function is passed a value that assumes the correct mapping always exists.
+    * This is necessary to avoid a lot of painful checking for undefined values. But if you build a
+    * component where the list of keys is not in sync with its associated map, things will blow up.
+    * Be careful. */
+  static fromMap<K extends ModelKey, V> (
+    keys :Source<Iterable<K>>, map :RMap<K,V>, maker :(v :Value<V>, k :K) => ModelData
+  ) :ElementsModel<K> {
+    return {keys, resolve: resolver(key => maker(map.getValue(key as K) as Value<V>, key as K))}
+  }
+
+  /** Creates an elements model from the supplied `map` and model data `maker` function. The `maker`
+    * function should project the needed values from the map value using `Value.map` and needed
+    * mutable values using `Mutable.bimap`. For example:
+    *
+    * ```ts
+    * const map :MutableMap<string, {name :string, age :number}> = ...
+    * const keys = map.keysValue // could opt to sort or filter or whatnot
+    * const model = Model.fromMap(keys, map, m => ({
+    *   name: m.bimap(r => r.name, (r, name) => ({...r, name})), // editable
+    *   age: m.map(r => r.age) // not editable
+    * }))
+    * ```
+    *
+    * Note: the maker function is passed a value that assumes the correct mapping always exists.
+    * This is necessary to avoid a lot of painful checking for undefined values. But if you build a
+    * component where the list of keys is not in sync with its associated map, things will blow up.
+    * Be careful. */
+  static fromMutableMap<K extends ModelKey, V> (
+    keys :Source<Iterable<K>>, map :MutableMap<K,V>, maker :(m:Mutable<V>) => ModelData
+  ) :ElementsModel<K> {
+    return {keys, resolve: resolver(key => maker(map.getMutable(key as K) as Mutable<V>))}
+  }
+
+  /** Creates an elements model from the supplied `source` array and model data `maker` function.
+    * The keys default to the indices of the array in their natural order, but can be customized if
+    * desired. */
+  static fromArray<A> (
+    source :Value<A[]>, maker :(v :Value<A>, idx :number) => ModelData,
+    keys = source.map(a => a.map((_, ii) => ii))
+  ) :ElementsModel<number>{
+    return {keys, resolve: resolver(idx => maker(source.map(a => a[idx]), idx))}
+  }
+
   constructor (readonly data :ModelData) {}
 
   /** Resolves the model component at `path`.
