@@ -1,9 +1,9 @@
 import {dim2, rect} from "../core/math"
 import {log, developMode} from "../core/util"
-import {ModelKey} from "./model"
+import {ElementsModel, ModelKey, Spec} from "./model"
 import {Element} from "./element"
 import {Group} from "./group"
-import {List} from "./list"
+import {ElementConfigMaker, List} from "./list"
 
 const tmpr = rect.create()
 const gaps = (gap :number|undefined, count :number) => (gap||0) * Math.max(0, count-1)
@@ -106,6 +106,8 @@ export namespace Grid {
   /** Defines configuration for [[VertList]] elements. */
   export interface VertListConfig extends VertConfig {
     type :"vlistgrid"
+    element :Element.Config|ElementConfigMaker
+    model :Spec<ElementsModel<ModelKey>>
   }
 
   /** Displays a dynamic list of elements in a vertically oriented grid. Each element is
