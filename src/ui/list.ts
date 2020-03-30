@@ -151,8 +151,9 @@ export namespace List {
     if (element === undefined) throw new Error(`Missing 'element' config`)
     return model.keys.onValue(keys => {
       const {contents, elements} = list
-      // first dispose no longer used elements
+      // convert keys (which maybe be a single use iterable) into a set
       const kset = new Set(keys)
+      // first dispose no longer used elements
       for (const [ekey, elem] of elements) {
         if (!kset.has(ekey)) {
           elements.delete(ekey)
@@ -161,7 +162,7 @@ export namespace List {
       }
       // now create/reuse elements for the new keys
       contents.length = 0
-      for (const key of keys) {
+      for (const key of kset) {
         let elem = elements.get(key)
         if (!elem) {
           const emodel = model.resolve(key)
