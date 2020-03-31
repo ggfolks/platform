@@ -563,7 +563,7 @@ export class Value<T> extends ReadableSource<T> {
     * state. */
   static deriveValue<T> (eq :Eq<T>, connect :(dispatch :ChangeFn<T>) => Remover,
                          current :() => T) :Value<T> {
-    const listeners :ValueFn<T>[] = []
+    const listeners :ChangeFn<T>[] = []
     let disconnect = NoopRemover
     function checkEmpty () {
       if (listeners.length === 0) {
@@ -717,7 +717,7 @@ export class Mutable<T> extends Value<T> implements Prop<T> {
   /** Creates a local mutable value, which starts with value `start`.
     * Changes to this value will be determined using `eq` which defaults to `refEquals`. */
   static local<T> (start :T, eq :Eq<T> = refEquals) :Mutable<T> {
-    const listeners :ValueFn<T>[] = []
+    const listeners :ChangeFn<T>[] = []
     let current = start
     return new Mutable(eq, lner => addListener(listeners, lner), () => current, newValue => {
       const oldValue = current
@@ -750,7 +750,7 @@ export class Mutable<T> extends Value<T> implements Prop<T> {
     * state. */
   static deriveMutable<T> (connect :(dispatch :ChangeFn<T>) => Remover,
                            current :() => T, update :(t:T) => void, eq :Eq<T>) :Mutable<T> {
-    const listeners :ValueFn<T>[] = []
+    const listeners :ChangeFn<T>[] = []
     let disconnect = NoopRemover
     function checkEmpty () {
       if (listeners.length === 0) {
