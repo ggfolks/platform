@@ -167,7 +167,7 @@ export namespace List {
         if (!elem) {
           const emodel = model.resolve(key)
           elem = ctx.elem.create(ctx.remodel(emodel), list, elementConfig(element, emodel, key))
-          list.elements.set(key, elem)
+          elements.set(key, elem)
         }
         contents.push(elem)
       }

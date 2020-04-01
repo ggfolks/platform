@@ -19,6 +19,7 @@ import {Menu} from "./menu"
 import {Property} from "./property"
 import {ScrollCatalog} from "./scroll"
 import {TabCatalog} from "./tabs"
+import {Table} from "./table"
 import {TextCatalog} from "./text"
 import {TreeCatalog} from "./tree"
 
@@ -79,7 +80,7 @@ class StyleResolver {
 const catalog = [
   BoxCatalog, ButtonCatalog, Control.Catalog, CursorCatalog, Dropdown.Catalog, GraphCatalog,
   Grid.Catalog, GroupCatalog, ImageCatalog, List.Catalog, Menu.Catalog, Property.Catalog,
-  ScrollCatalog, Styler.Catalog, TabCatalog, TextCatalog, TreeCatalog,
+  ScrollCatalog, Styler.Catalog, TabCatalog, Table.Catalog, TextCatalog, TreeCatalog,
 ].reduce(Object.assign, {})
 
 export class UI {
