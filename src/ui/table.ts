@@ -2,12 +2,18 @@ import {dim2, rect} from "../core/math"
 import {log, developMode} from "../core/util"
 import {ElementsModel, ModelKey, Spec} from "./model"
 import {Element} from "./element"
+import {Model} from "./model"
 import {Group} from "./group"
-import {ElementConfigMaker, elementConfig} from "./list"
 
 const tmpr = rect.create()
 const gaps = (gap :number|undefined, count :number) => (gap||0) * Math.max(0, count-1)
 const sum = (ns :number[]) => ns.reduce((a, b) => a+b, 0)
+
+export type ElementConfigsMaker = (model :Model, key :ModelKey) => Element.Config[]
+
+const elementConfigs = (elements :Element.Config[]|ElementConfigsMaker,
+                        model :Model, key :ModelKey) =>
+  typeof elements === "function" ? elements(model, key) : elements
 
 export namespace Table {
 
@@ -44,7 +50,7 @@ export namespace Table {
     hgap? :number
     vgap? :number
     // the elements that make up a row
-    elements :Array<Element.Config|ElementConfigMaker>
+    elements :Element.Config[]|ElementConfigsMaker
     model :Spec<ElementsModel<ModelKey>>
   }
 
@@ -72,8 +78,8 @@ export namespace Table {
           let elems = elements.get(key)
           if (!elems) {
             const emodel = model.resolve(key)
-            elems = config.elements.map(elem => ctx.elem.create(
-              ctx.remodel(emodel), this, elementConfig(elem, emodel, key)))
+            elems = elementConfigs(config.elements, emodel, key).map(
+              elem => ctx.elem.create(ctx.remodel(emodel), this, elem))
             elements.set(key, elems)
           }
           contents.push(...elems)
