@@ -57,6 +57,7 @@ export namespace Table {
   export class Table extends Group {
     readonly elements = new Map<ModelKey, Element[]>()
     readonly contents :Element[] = []
+    private cols = 0
 
     constructor (ctx :Element.Context, parent :Element, readonly config :Config) {
       super(ctx, parent, config)
@@ -80,6 +81,7 @@ export namespace Table {
             const emodel = model.resolve(key)
             elems = elementConfigs(config.elements, emodel, key).map(
               elem => ctx.elem.create(ctx.remodel(emodel), this, elem))
+            this.cols = elems.length
             elements.set(key, elems)
           }
           contents.push(...elems)
@@ -90,7 +92,7 @@ export namespace Table {
     }
 
     protected computePreferredSize (hintX :number, hintY :number, into :dim2) {
-      const {elements, hgap, vgap} = this.config, cols = elements.length
+      const {hgap, vgap} = this.config, cols = this.cols
       const m = computeMetrics(this.contents, cols, hgap, hintX, hintY)
       const width = sum(m.cols.map(c => c.max)) + gaps(hgap, cols)
       const height = sum(m.rows.map(c => c.max)) + gaps(vgap, m.rows.length)
@@ -98,7 +100,7 @@ export namespace Table {
     }
 
     protected relayout () {
-      const {elements, hgap, vgap} = this.config, bounds = this.bounds, cols = elements.length
+      const {hgap, vgap} = this.config, bounds = this.bounds, cols = this.cols
       const left = bounds[0], top = bounds[1], width = bounds[2], height = bounds[3]
       const m = computeMetrics(this.contents, cols, hgap||0, width, height)
 
