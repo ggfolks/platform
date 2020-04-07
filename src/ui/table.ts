@@ -33,7 +33,7 @@ export namespace Table {
   function computeMetrics (
     elems :Element[], cols :number, hgap :number|undefined, hintX :number, hintY :number
   ) :Metrics {
-    const hintCol = (hintX - gaps(hgap, cols)) / cols
+    const hintCol = (hintX - gaps(hgap, cols))
     const m :Metrics = {rows: [], cols: []}
     let col = 0, row = 0
     for (const elem of elems) {
