@@ -49,6 +49,7 @@ export namespace Table {
   export interface Config extends Element.Config {
     hgap? :number
     vgap? :number
+    header? :Element.Config[]
     // the elements that make up a row
     elements :Element.Config[]|ElementConfigsMaker
     model :Spec<ElementsModel<ModelKey>>
@@ -56,14 +57,16 @@ export namespace Table {
 
   export class Table extends Group {
     readonly elements = new Map<ModelKey, Element[]>()
+    readonly header :Element[] = []
     readonly contents :Element[] = []
     private cols = 0
 
     constructor (ctx :Element.Context, parent :Element, readonly config :Config) {
       super(ctx, parent, config)
       const model = ctx.model.resolveAs(config.model, "model")
+      this.header = (config.header || []).map(cc => ctx.elem.create(ctx, this, cc))
       this.disposer.add(model.keys.onValue(keys => {
-        const {elements, contents} = this
+        const {elements, header, contents} = this
         // convert keys (which maybe be a single use iterable) into a set
         const kset = new Set(keys)
         // first dispose no longer used elements
@@ -75,6 +78,7 @@ export namespace Table {
         }
         // now create/reuse elements for the new keys
         contents.length = 0
+        contents.push(...header)
         for (const key of kset) {
           let elems = elements.get(key)
           if (!elems) {
