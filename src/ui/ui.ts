@@ -102,6 +102,10 @@ export class UI {
     return new Root(new Element.Context(model, this.style, this.elem), config)
   }
 
+  createPopupRoot (parent :Root, config :Root.Config, model :Model) :Root {
+    return parent.createPopup(new Element.Context(model, this.style, this.elem), config)
+  }
+
   createElement (ctx :Element.Context, parent :Element, config :Element.Config) :Element {
     try {
       const maker = catalog[config.type]
