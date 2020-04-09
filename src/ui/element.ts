@@ -795,7 +795,7 @@ export class Root extends Container {
     if (this.eventTarget.maybeHandleWheel(event, pos)) {
       // if there are no active interactions, update our hover elements as scrolling may have moved
       // elements under or out from under the mouse
-      if (!host.interact.hasInteractions) this._updateElementsOver(pos)
+      if (!host.interact.hasInteractions) this._updateElementsOver(pos, true)
     }
   }
 
@@ -833,12 +833,12 @@ export class Root extends Container {
           this.menuPopup.update(undefined)
           // if we're clearing a menu popup, recompute the hovered elements because they will
           // previously have been blocked by the menu modality
-          if (event.type.startsWith("mouse")) this._updateElementsOver(pos)
+          if (event.type.startsWith("mouse")) this._updateElementsOver(pos, true)
         }
       },
 
       handleDoubleClick: (event, pos) => this.eventTarget.maybeHandleDoubleClick(event, pos),
-      updateMouseHover: (event, pos) => this._updateElementsOver(pos),
+      updateMouseHover: (event, pos, topHit) => this._updateElementsOver(pos, topHit),
       endMouseHover: () => this._clearElementsOver(),
     })
     this.events.whenOnce(e => e === "removed", uninteract)
@@ -911,14 +911,16 @@ export class Root extends Container {
     return true
   }
 
-  private _updateElementsOver (pos :vec2) {
+  private _updateElementsOver (pos :vec2, topRoot :boolean) {
     // TODO: why are we scaling the canvas here? applyToContaining is just adding containing
     // elements to a set, surely nothing is rendering to canvas?
     const sf = this.scale.factor
     this.canvas.save()
     this.canvas.scale(sf, sf)
     const {_elementsOver, _lastElementsOver} = this
-    this.eventTarget.applyToContaining(this.canvas, pos, elem => _elementsOver.add(elem))
+    // if we're not the top root, don't accumulate any hovered elements
+    if (topRoot) this.eventTarget.applyToContaining(
+      this.canvas, pos, elem => _elementsOver.add(elem))
     this.canvas.restore()
     for (const element of _lastElementsOver) {
       if (!_elementsOver.has(element)) element.handleMouseLeave(pos)

@@ -74,8 +74,10 @@ export interface InteractionProvider {
 
   /** Called when the mouse moves but there are no active interactions as well as immediately after
     * any interactions complete, with the mouse position at the time of completion. A provider
-    * should use this to provide hover feedback. */
-  updateMouseHover (event :MouseEvent, pos :vec2) :void
+    * should use this to provide hover feedback.
+    * @param topHit true if the mouse is in this provider's bounds and it is the highest provider on
+    * the stack (i.e. it "owns" the hover). */
+  updateMouseHover (event :MouseEvent, pos :vec2, topHit :boolean) :void
 
   /** Called when the mouse stops hovering over a provider. */
   endMouseHover () :void
@@ -151,8 +153,10 @@ export class InteractionManager {
       }
       providers.splice(index, 0, provider)
     }
+    // TODO: we should update mouse hover in case this provider now obscures some other provider
     return () => {
       this.lastHoveredProviders.delete(provider)
+      // TODO: ditto re: provider hovering
       if (this.dispatching) this.afterDispatch.push(() => removeListener(providers, provider))
       else removeListener(providers, provider)
     }
@@ -324,10 +328,14 @@ export class InteractionManager {
 
   private updateMouseHover (event :MouseEvent) {
     const {hoveredProviders, lastHoveredProviders} = this
+    let sentTopHit = false
     this.dispatch(p => {
-      p.toLocal(event.clientX, event.clientY, pos)
-      p.updateMouseHover(event, pos)
-      hoveredProviders.add(p)
+      const inBounds = p.toLocal(event.clientX, event.clientY, pos)
+      p.updateMouseHover(event, pos, inBounds && !sentTopHit)
+      if (inBounds) {
+        sentTopHit = true
+        hoveredProviders.add(p)
+      }
       return false
     })
     for (const provider of lastHoveredProviders) {
