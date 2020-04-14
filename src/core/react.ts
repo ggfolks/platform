@@ -616,6 +616,16 @@ export class Value<T> extends ReadableSource<T> {
     return this.join<any>(a, b, c) as any as Value<[A,B,C]>
   }
 
+  /** Returns a value which is false if any of `values` are false, `true` otherwise. */
+  static and (...values :Value<boolean>[]) :Value<boolean> {
+    return this.join(...values).map(vs => vs.reduce((a, b) => a && b, true))
+  }
+
+  /** Returns a value which is true if any of `values` are true, `false` otherwise. */
+  static or (...values :Value<boolean>[]) :Value<boolean> {
+    return this.join(...values).map(vs => vs.reduce((a, b) => a || b, false))
+  }
+
   /** Returns a value which "switches" between successive underlying values. The switched value will
     * always reflect the contents and events of the "latest" value from `values`. When `values`
     * changes, the switched value will only emit a change if the current (inner) value of the old

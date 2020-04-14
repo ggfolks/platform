@@ -993,7 +993,7 @@ const DebugColors = ["#FF0000", "#00FF00", "#0000FF", "#00FFFF", "#FF00FF", "#FF
 let debugColorIndex = 0
 
 function bothEitherOrTrue (a :Value<boolean>|undefined, b :Value<boolean>|undefined) {
-  if (a && b) return Value.join2(a, b).map(ab => ab[0] && ab[1])
+  if (a && b) return Value.and(a, b)
   else if (a) return a
   else if (b) return b
   else return Value.true

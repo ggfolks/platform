@@ -51,9 +51,7 @@ export class GraphViewer extends VGroup {
     const applyEdit = ctx.model.resolve<(edit :NodeEdit) => void>("applyEdit")
 
     const haveSelection = this.selection.sizeValue.map(size => size > 0)
-    const editableSelection = Value.join(haveSelection, this._editable).map(
-      ([selection, editable]) => selection && editable,
-    )
+    const editableSelection = Value.and(haveSelection, this._editable)
 
     const graphModelAction = (op :(model :Model) => void) => () => op(graphModel.current)
     const pageModelAction = (op :(model :Model) => void) => () => {
@@ -85,8 +83,7 @@ export class GraphViewer extends VGroup {
 
       paste: new Command(pageModelAction(model => {
         this._nodeCreator.current(dataCopy(clipboard.current!))
-      }), Value.join2(clipboard, this._editable).map(
-        ([clipboard, editable]) => editable && !!clipboard)),
+      }), Value.and(clipboard.map(c => !!c), this._editable)),
 
       delete: new Command(pageModelAction(model => {
         const page = model.resolve<Value<string>>("id").current
@@ -745,9 +742,7 @@ export class NodeView extends VGroup {
     const inputsVisible = Value.from(inputsModel.keys.map(keys => !isEmpty(keys)), false)
     const outputModel = ctx.model.resolve<ElementsModel<string>>("outputsModel")
     const outputsVisible = Value.from(outputModel.keys.map(keys => !isEmpty(keys)), false)
-    const terminalsVisible = Value.join(inputsVisible, outputsVisible).map(
-      ([inputs, outputs]) => inputs || outputs,
-    )
+    const terminalsVisible = Value.or(inputsVisible, outputsVisible)
     bodyContents.push({
       type: "row",
       visible: terminalsVisible,
