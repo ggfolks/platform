@@ -37,8 +37,7 @@ export namespace Table {
     const m :Metrics = {rows: [], cols: []}
     let col = 0, row = 0
     for (const elem of elems) {
-      if (!elem.visible.current) continue
-      const psize = elem.preferredSize(hintCol, hintY)
+      const psize = elem.visible.current ? elem.preferredSize(hintCol, hintY) : dim2.zero
       note(psize[0], m.cols, col)
       note(psize[1], m.rows, row)
       if (++col === cols) { col = 0 ; row += 1 }
@@ -110,9 +109,8 @@ export namespace Table {
 
       let x = left, y = top, col = 0, row = 0
       for (const elem of this.contents) {
-        if (!elem.visible.current) continue
         const cwidth = m.cols[col].max, cheight = m.rows[row].max
-        elem.setBounds(rect.set(tmpr, x, y, cwidth, cheight))
+        if (elem.visible.current) elem.setBounds(rect.set(tmpr, x, y, cwidth, cheight))
         x += cwidth+ (hgap||0)
         if (++col === cols) {
           col = 0
