@@ -422,7 +422,7 @@ export abstract class RMap<K,V> extends Source<ReadonlyMap<K,V>> implements Read
     return this.projectValue(key, v => v, eq)
   }
 
-  /** Returns a [[Value]] that reflects a projection (via `fn)`) of the value of this map at `key`.
+  /** Returns a [[Value]] that reflects a projection (via `fn`) of the value of this map at `key`.
     * When mapping changes, `fn` will be applied to the new value to obtain the projected value, and
     * if it differs from the previously projected value, a change will be emitted. The projection
     * function will only ever be called with an actual value; while no mapping exists for key, the
@@ -561,15 +561,33 @@ export abstract class MutableMap<K,V> extends RMap<K,V> implements Map<K,V> {
     * applied to the underlying map (including mapping `undefined` to deletion).
     * @param eq the equality function to use to compare successive values. */
   getMutable (key :K, eq :Eq<V|undefined> = refEquals) :Mutable<V|undefined> {
+    return this.projectMutable<V|undefined>(key, v => v, v => v, eq)
+  }
+
+  /** Returns a [[Mutable]] that reflects a projection (via `proj`) of the value of this map at
+    * `key`. When mapping changes, `proj` will be applied to the new value (or `undefined` if the
+    * mapping was deleted) to obtain the projected value, and if it differs from the previously
+    * projected value, a change will be emitted. When the mutable is updated, `inj` will be called
+    * with the current map value and the updated mutable value and should compute a new map value,
+    * which will be used to update the map entry. If `inj` returns `undefined` the map entry will be
+    * deleted.
+    * @param eq the equality function to use to compare successive projected values. */
+  projectMutable<W> (key :K, proj :(v:V|undefined) => W, inj :(v:V|undefined, w:W) => V|undefined,
+                     eq :Eq<W|undefined> = refEquals) :Mutable<W> {
     return Mutable.deriveMutable(
       disp => this.onChange(change => {
         if (change.key === key) {
-          const ovalue = change.prev, nvalue = change.type === "set" ? change.value : undefined
+          const ovalue = proj(change.prev)
+          const nvalue = proj(change.type === "set" ? change.value : undefined)
           if (!eq(ovalue, nvalue)) disp(nvalue, ovalue)
         }
       }),
-      () => this.get(key),
-      value => value ? this.set(key, value) : this.delete(key),
+      () => proj(this.get(key)),
+      value => {
+        const nvalue = inj(this.get(key), value)
+        if (nvalue === undefined) this.delete(key)
+        else this.set(key, nvalue)
+      },
       eq)
   }
 
