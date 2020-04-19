@@ -561,7 +561,7 @@ export abstract class MutableMap<K,V> extends RMap<K,V> implements Map<K,V> {
     * applied to the underlying map (including mapping `undefined` to deletion).
     * @param eq the equality function to use to compare successive values. */
   getMutable (key :K, eq :Eq<V|undefined> = refEquals) :Mutable<V|undefined> {
-    return this.projectMutable<V|undefined>(key, v => v, v => v, eq)
+    return this.projectMutable<V|undefined>(key, v => v, (_, v) => v, eq)
   }
 
   /** Returns a [[Mutable]] that reflects a projection (via `proj`) of the value of this map at
