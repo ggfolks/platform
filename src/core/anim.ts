@@ -153,7 +153,7 @@ export class Animator {
     * @return a thunk that can be invoked to cancel the animation and remove it from the animator
     * (whether or not it has already started). */
   add (anim :Animation) :Remover {
-    const batch = this.batches.length > 0 ? this.batches[0] : this.active
+    const batch = this.batches.length > 0 ? this.batches[this.batches.length-1] : this.active
     return addListener(batch, anim)
   }
 
