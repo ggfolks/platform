@@ -1,1 +1,67 @@
-../lib/package.json
+{
+  "name": "@tfwdev/platform",
+  "version": "0.2.0",
+  "description": "The tfw multiplayer game platform",
+  "author": "tfw, inc. (https://tfw.dev)",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/tfwdev/platform.git"
+  },
+  "publishConfig": {
+    "registry": "https://build1.tfw.dev/registry/"
+  },
+  "sideEffects": false,
+  "files": [
+    "**/*.js",
+    "**/*.d.ts",
+    "**/*.d.ts.map"
+  ],
+  "scripts": {
+    "build": "tsc -b",
+    "test": "jest --verbose",
+    "wtest": "jest --verbose --watch",
+    "docs": "typedoc ."
+  },
+  "jest": {
+    "moduleFileExtensions": [
+      "ts",
+      "js"
+    ],
+    "transform": {
+      "^.+\\.ts$": "ts-jest"
+    },
+    "globals": {
+      "ts-jest": {
+        "tsConfig": "tsconfig.json"
+      }
+    },
+    "testMatch": [
+      "**/test.*.(ts|js)"
+    ],
+    "setupFiles": [
+      "jest-canvas-mock"
+    ]
+  },
+  "dependencies": {
+    "@types/cannon": "^0.1.4",
+    "@types/gl-matrix": "^2.4.5",
+    "cannon": "^0.6.2",
+    "firebase": "^7.4.0",
+    "firebase-admin": "^8.8.0",
+    "gl-matrix": "^3.0.0",
+    "three": "^0.110.0",
+    "ws": "^7.1.2"
+  },
+  "devDependencies": {
+    "@types/jest": "^24.0.11",
+    "@types/ws": "^6.0.2",
+    "awesome-typescript-loader": "^5.2.0",
+    "jest": "^24.5.0",
+    "jest-canvas-mock": "^2.1.0",
+    "lodash": "^4.17.21",
+    "ts-jest": "^24.0.0",
+    "typedoc": "^0.14.2",
+    "typescript": "^3.5.1"
+  }
+}
