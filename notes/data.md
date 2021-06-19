@@ -13,4 +13,5 @@
 - Come up with some helper for dealing with T|Error reactive sources
 
 - Add "intern" or "token" key type, which will assign 16-bit integers to each word as it goes over
-  the wire and decode based on that (maintaining table per connection)
+  the wire and decode based on that (maintaining table per connection); also use this for Record
+  key strings, and path components?
