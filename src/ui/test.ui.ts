@@ -1,3 +1,7 @@
+/**
+ * @jest-environment jsdom
+ */
+
 import {ResourceLoader} from "../asset/loader"
 import {StyleDefs} from "./style"
 import {UI, Theme} from "./ui"
