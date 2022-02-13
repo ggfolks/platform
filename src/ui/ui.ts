@@ -112,7 +112,7 @@ export class UI {
       if (maker) return maker(ctx, parent, config)
       else throw new Error(`Unknown element type '${config.type}'.`)
 
-    } catch (error) {
+    } catch (error :any) {
       log.warn(`Failed to create '${config.type}' element: ${error.message}`)
       const logError = !(error instanceof MissingModelElem || error instanceof MissingConfig)
       if (logError) console.warn(error)

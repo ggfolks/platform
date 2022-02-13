@@ -1,4 +1,4 @@
-import {Color, Euler, Math as ThreeMath, Matrix4, Quaternion, Vector3} from "three"
+import {Color, Euler, MathUtils as ThreeMath, Matrix4, Quaternion, Vector3} from "three"
 
 import {Value} from "../core/react"
 import {getValueStyleComponent} from "../core/ui"

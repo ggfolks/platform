@@ -3,7 +3,7 @@ import {
   CanvasTexture,
   Group,
   LinearFilter,
-  Math as ThreeMath,
+  MathUtils as ThreeMath,
   Mesh,
   MeshBasicMaterial,
   PerspectiveCamera,

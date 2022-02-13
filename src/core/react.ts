@@ -44,7 +44,7 @@ export function dispatchValue<T> (listeners :ValueFn<T>[], value :T) :boolean {
         removeListener(listeners, listener)
         removed = true
       }
-    } catch (error) {
+    } catch (error :any) {
       if (!errors) errors = []
       errors.push(error)
     }
@@ -64,7 +64,7 @@ export type ChangeFn<T> = (value :T, oldValue :T) => any
  * Dispatches the change from `oldValue` to `value` to `listeners`.
  * @return true if any listeners were removed. */
 export function dispatchChange<T> (listeners :ChangeFn<T>[], value :T, oldValue :T) :boolean {
-  let removed = false, errors
+  let removed = false, errors :Error[]|void
   // TODO: revamp to avoid duping array
   for (let listener of listeners.slice()) {
     try {
@@ -72,7 +72,7 @@ export function dispatchChange<T> (listeners :ChangeFn<T>[], value :T, oldValue 
         removeListener(listeners, listener)
         removed = true
       }
-    } catch (error) {
+    } catch (error :any) {
       if (!errors) {
         errors = []
       }

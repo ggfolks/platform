@@ -54,7 +54,7 @@ function getObject (dec :Decoder, into :DObject) :DObject {
     case "value":
       const nvalue = dec.getValue(meta.vtype)
       try { (prop as DMutable<any>).update(nvalue, true) }
-      catch (err) { errors.push(err) }
+      catch (err :any) { errors.push(err) }
       break
     case "set":
       dec.syncSet(meta.etype, (prop as Set<any>), errors)
@@ -79,7 +79,7 @@ const readObject = async (file :string, into :DObject) => {
     const buffer = await fs.promises.readFile(file)
     const dec = new Decoder(buffer)
     getObject(dec, into)
-  } catch (err) {
+  } catch (err :any) {
     if (err.code !== "ENOENT") throw err
   }
 }
@@ -97,7 +97,7 @@ const readRecord = async (file :string) => {
     const buffer = await fs.promises.readFile(file)
     const dec = new Decoder(buffer)
     return dec.getValue("record")
-  } catch (err) {
+  } catch (err :any) {
     if (err.code !== "ENOENT") throw err
     else return {}
   }

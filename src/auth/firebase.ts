@@ -97,7 +97,7 @@ export async function showGoogleLogin () {
   var provider = new firebase.auth.GoogleAuthProvider()
   try {
     await firebase.auth().signInWithPopup(provider)
-  } catch (error) {
+  } catch (error :any) {
     // TODO: some means of reporting auth errors?
     log.warn("Auth error", "code", error.code, "msg", error.message, "cred", error.credential)
   }

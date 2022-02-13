@@ -530,11 +530,11 @@ export class Decoder {
     for (let ii = 0; ii < size; ii += 1) tmp.add(this.getValue(etype))
     for (const elem of into) if (!tmp.has(elem)) {
       try { into.delete(elem, true) }
-      catch (err) { errors.push(err) }
+      catch (err :any) { errors.push(err) }
     }
     for (const elem of tmp) {
       try { into.add(elem, true) }
-      catch (err) { errors.push(err) }
+      catch (err :any) { errors.push(err) }
     }
   }
 
@@ -564,11 +564,11 @@ export class Decoder {
     }
     for (const key of into.keys()) if (!keys.includes(key)) {
       try { into.delete(key, true) }
-      catch (err) { errors.push(err) }
+      catch (err :any) { errors.push(err) }
     }
     for (let ii = 0; ii < size; ii += 1) {
       try { into.set(keys[ii], vals[ii], true) }
-      catch (err) {
+      catch (err :any) {
         log.warn("Failed to sync set", "key", keys[ii], "value", vals[ii])
         errors.push(err)
       }

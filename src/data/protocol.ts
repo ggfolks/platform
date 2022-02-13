@@ -111,7 +111,7 @@ export function getObject (dec :Decoder, into :DObject) :DObject {
     case "value":
       const nvalue = dec.getValue(meta.vtype)
       try { (prop as DMutable<any>).update(nvalue, true) }
-      catch (err) { errors.push(err) }
+      catch (err :any) { errors.push(err) }
       break
     case "set":
       dec.syncSet(meta.etype, (prop as Set<any>), errors)

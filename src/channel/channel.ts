@@ -212,7 +212,7 @@ export class ChannelManager {
       this.channels.set(localId, channel)
       this.meta.sendMsg({type: ChanType.READY, id, remoteId: localId})
       channel.state.update("open")
-    } catch (error) {
+    } catch (error :any) {
       this.meta.sendMsg({type: ChanType.FAILED, id, cause: error.message})
       this.channels.delete(localId)
     }

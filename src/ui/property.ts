@@ -1,4 +1,4 @@
-import {Color as ThreeColor, Euler as ThreeEuler, Math as M, Vector3} from "three"
+import {Color as ThreeColor, Euler as ThreeEuler, MathUtils as M, Vector3} from "three"
 
 import {Color} from "../core/color"
 import {refEquals} from "../core/data"

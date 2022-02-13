@@ -3,13 +3,13 @@ import {
   BufferAttribute, BufferGeometry, ConeBufferGeometry, CylinderBufferGeometry,
   DefaultLoadingManager, DirectionalLight, DoubleSide, FrontSide, Group, Intersection,
   Light as LightObject, LoopOnce, LoopRepeat, LoopPingPong, Material as MaterialObject, Matrix3,
-  Matrix4, Mesh, MeshBasicMaterial, MeshStandardMaterial, NoColors, Object3D, OrthographicCamera,
+  Matrix4, Mesh, MeshBasicMaterial, MeshStandardMaterial, Object3D, OrthographicCamera,
   PCFSoftShadowMap, PerspectiveCamera, PlaneBufferGeometry, Quaternion, Ray as RayObject, Raycaster,
   Scene, ShaderMaterial as ShaderMaterialObject, SkinnedMesh, Sphere, SphereBufferGeometry, Texture,
-  TextureLoader, Vector2, Vector3, VertexColors, WebGLRenderer,
+  TextureLoader, Vector2, Vector3, WebGLRenderer
 } from "three"
 import {SkeletonUtils} from "three/examples/jsm/utils/SkeletonUtils"
-import {BufferGeometryUtils} from "three/examples/jsm/utils/BufferGeometryUtils"
+import * as BufferGeometryUtils from "three/examples/jsm/utils/BufferGeometryUtils"
 import {Clock} from "../../../core/clock"
 import {Color} from "../../../core/color"
 import {refEquals} from "../../../core/data"
@@ -100,12 +100,13 @@ export class ThreeRenderEngine implements RenderEngine {
     gameEngine._renderEngine = this
 
     this._disposer.add(this.renderer)
-    this._disposer.add(this.scene)
+    // three.js removed Scene.dispose in r119
+    // this._disposer.add(this.scene)
 
     // settings recommended for GLTF loader:
     // https://threejs.org/docs/index.html#examples/en/loaders/GLTFLoader
-    this.renderer.gammaOutput = true
-    this.renderer.gammaFactor = 2.2
+    // this.renderer.outputEncoding = GammaEncoding
+    // this.renderer.gammaFactor = 2.2
 
     this.renderer.shadowMap.enabled = true
     this.renderer.shadowMap.type = PCFSoftShadowMap
@@ -482,7 +483,7 @@ abstract class ThreeMaterial extends TypeScriptConfigurable implements Material 
       this.object.needsUpdate = true
     })
     this.getProperty<boolean>("vertexColors").onValue(vertexColors => {
-      this.object.vertexColors = vertexColors ? VertexColors : NoColors
+      this.object.vertexColors = vertexColors
       this.object.needsUpdate = true
     })
   }
@@ -1578,7 +1579,7 @@ class ThreeAnimation extends TypeScriptComponent implements Animation {
   update (clock :Clock) {
     if (this._mixer) {
       this._mixer.update(clock.dt)
-      updateChildren(this._mixer.getRoot())
+      updateChildren(this._mixer.getRoot() as Object3D)
     }
   }
 
@@ -1938,12 +1939,12 @@ class MergedMeshes {
           const destUV = destUVAttribute && destUVAttribute.array as Float32Array
           const srcUVAttribute = srcGeometry.getAttribute("uv")
           const srcUV = srcUVAttribute && srcUVAttribute.array as Float32Array
-          const destIndices = destGeometry.index.array as Uint16Array|Uint32Array
-          const srcIndices = srcGeometry.index.array
+          const destIndices = destGeometry.index!.array as Uint16Array|Uint32Array
+          const srcIndices = srcGeometry.index!.array
           for (const matrix of matrices) {
             partMatrix.multiplyMatrices(matrix, mesh.matrixWorld)
-            tmpBoundingBox.copy(srcGeometry.boundingBox).applyMatrix4(partMatrix)
-            destGeometry.boundingBox.union(tmpBoundingBox)
+            tmpBoundingBox.copy(srcGeometry.boundingBox!).applyMatrix4(partMatrix)
+            destGeometry.boundingBox!.union(tmpBoundingBox)
             flagStats.mesh.addToOctree(mesh, partMatrix.clone(), tmpBoundingBox.clone())
 
             // transfer positions with transform
@@ -2007,7 +2008,7 @@ class MergedMeshes {
         for (const textureStats of stats.values()) {
           for (const flagStats of textureStats.values()) {
             flagStats.mesh.geometry.boundingSphere =
-              flagStats.mesh.geometry.boundingBox.getBoundingSphere(new Sphere())
+              flagStats.mesh.geometry.boundingBox!.getBoundingSphere(new Sphere())
           }
         }
 
@@ -2055,7 +2056,7 @@ class OctreeMesh extends Mesh {
 
   raycast (raycaster :Raycaster, intersects :Intersection[]) {
     // first check against sphere in world space (as Three.js does)
-    tmpSphere.copy(this.geometry.boundingSphere).applyMatrix4(this.matrixWorld)
+    tmpSphere.copy(this.geometry.boundingSphere!).applyMatrix4(this.matrixWorld)
     if (!raycaster.ray.intersectsSphere(tmpSphere)) return
 
     // store the original ray and transform into local space

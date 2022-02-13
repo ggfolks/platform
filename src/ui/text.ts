@@ -394,12 +394,12 @@ export abstract class AbstractText extends Control {
 
   handleKeyEvent (event :KeyboardEvent) {
     if (event.type !== "keydown") return false
-    const supportsChar = typeof event.char === "string"
+    const supportsChar = typeof event["char"] === "string"
     const isPrintable = (
-      (supportsChar && event.char !== "") || // new hotness
+      (supportsChar && event["char"] !== "") || // new hotness
       (event.key.length === 1) // old and busted
     )
-    const typed = isPrintable ? (supportsChar ? event.char : event.key) : ""
+    const typed = isPrintable ? (supportsChar ? event["char"] : event.key) : ""
     const binding = textBindings.getBinding(event)
     const action = textBindings.model.resolveActionOpt<TextAction>(binding)
     const isCtrlOrMeta = event.ctrlKey || event.metaKey
