@@ -46,6 +46,7 @@
   "dependencies": {
     "@types/cannon": "^0.1.4",
     "@types/gl-matrix": "^2.4.5",
+    "@types/three": "^0.140.0",
     "cannon": "^0.6.2",
     "firebase": "^7.24.0",
     "firebase-admin": "^8.8.0",
@@ -55,7 +56,6 @@
   },
   "devDependencies": {
     "@types/jest": "^27.4.0",
-    "@types/three": "^0.141.0",
     "@types/ws": "^6.0.2",
     "jest": "^27.5.1",
     "jest-canvas-mock": "^2.1.0",
