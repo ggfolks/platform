@@ -50,14 +50,13 @@
     "firebase": "^7.24.0",
     "firebase-admin": "^8.8.0",
     "gl-matrix": "^3.0.0",
-    "three": "^0.137.5",
+    "three": "^0.141.0",
     "ws": "^7.1.2"
   },
   "devDependencies": {
     "@types/jest": "^27.4.0",
+    "@types/three": "^0.141.0",
     "@types/ws": "^6.0.2",
-    "@types/three": "^0.137.0",
-    "awesome-typescript-loader": "^5.2.1",
     "jest": "^27.5.1",
     "jest-canvas-mock": "^2.1.0",
     "lodash": "^4.17.13",
